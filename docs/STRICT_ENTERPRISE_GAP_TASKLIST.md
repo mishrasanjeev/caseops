@@ -261,25 +261,36 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `tests/conftest.py::pytest_collection_modifyitems` auto-skips
   postgres tests when `CASEOPS_TEST_POSTGRES_URL` is not set, so
   developer laptops + the existing api job are unaffected.
-  Test surface (6 cases, anchor coverage for the gaps SQLite cannot
+  Test surface (12 cases, anchor coverage for the gaps SQLite cannot
   prove):
   - alembic upgrade head runs cleanly on PG (catches batch-mode
     migrations that secretly assume SQLite)
+  - every declared foreign-key inventory column has a leading index
+  - conflict-check trigram indexes exist with the expected PostgreSQL shape
+  - authority exact-name prefilter matches party tokens on PostgreSQL
   - pgvector extension + HNSW index + cosine `<=>` operator end-to-end
     (the only place the corpus-retrieval shape is proven on prod
     semantics)
   - portal_user FK `ON DELETE SET NULL` actually nulls the FK on
-    parent delete (SQLite ignores ON DELETE without per-session
-    PRAGMA, so this was effectively unverified before)
+    parent delete (SQLite previously ignored ON DELETE because its connection
+    setup did not enable foreign keys; every current SQLite connection now
+    enables `PRAGMA foreign_keys=ON`)
   - JSONB column roundtrip preserves nested dict (vs SQLite's
     text-encoded JSON path)
   - UniqueConstraint on `matter_invoice_line_items.time_entry_id`
     raises IntegrityError on duplicate insert
+  - unique tenant keys block cross-tenant identity collisions
   - C-3c `oc_cross_visibility_enabled` `server_default=false()`
     actually inserts False on bare INSERT (proves migration server
     default applied)
-  Verified: 6/6 auto-skip locally (no PG URL); 18/18 sqlite-path
-  tests still green; CI on next commit will exercise PG path.
+  - standalone Notice composite tenant constraints and Matter delete policy
+    reject cross-tenant links and destructive parent deletion
+  - Notice direction/reply-state database checks reject invalid combinations
+  Verified locally on 2026-07-16 against a fresh isolated PostgreSQL 17 +
+  pgvector database: 13/13 passed after `alembic upgrade head`, including the
+  prior-revision lifecycle migration repair and durable provider-calendar
+  deletion test. The normal
+  SQLite suite continues to auto-skip this marked module without a PG URL.
   Per-area test-matrix expansion + Postgres CI for ALL DB-sensitive
   tests (not just the validation file) remains a separate gap  -
   this commit lays the foundation.
@@ -862,3 +873,57 @@ steps in `docs/runbooks/sendgrid-event-webhook.md` are complete.
 `EH-PROV-02` is closed for bounded manual calendar sync. Durable
 always-on calendar automation is not closed by that work and remains
 tracked under `WTD-5.1` / `WTD-5.3`.
+
+---
+
+## 2026-07-15 Lifecycle And Regression-Discovery Hardening
+
+### EH-LC-01 - Matter terminal-state concurrency and operational boundary
+
+- **Status:** Locally implemented; production verification pending.
+- **Gap found:** matter status and `is_active` were patchable through a broad
+  metadata route; the UI replayed full stale snapshots; disposal did not
+  consistently govern operational children or background provider writers.
+- **Required invariant:** generic PATCH cannot dispose/reopen or edit a disposed
+  matter; lifecycle changes use capability + reason + source status + timestamp;
+  stale writes return 409; reopen lands in Intake; old conflict clearance is
+  invalid; post-disposal tasks/deadlines/hearings/jobs cannot make the matter
+  operational again. Legacy terminal rows and already-synced provider calendar
+  artifacts are neutralized/tombstoned on migration and again before reopen.
+  Every operational portal, integration, AI/provider,
+  metadata, bulk, assignment, and linked-record writer uses the shared fresh-
+  parent guard; provider paths recheck after I/O or an intermediate commit.
+- **Closure evidence required:** backend transition/concurrency/side-effect tests,
+  a repository-wide inventory proving every generic Matter PATCH caller sends
+  mandatory CAS, forced provider/matching interleavings with no durable output,
+  legacy migration/reopen child-neutralization proof, React dirty-payload and
+  explicit lifecycle tests, two-session Playwright with final read-back, and the
+  same committed production spec passing on the deployed commit.
+- **Learning:** a one-session `disposed` reload assertion proves persistence at
+  one instant; it does not prove terminality across concurrent writers or jobs.
+  A lock acquired before a commit or provider call also proves nothing about
+  the final persistence boundary because a commit releases that lock.
+
+### EH-DB-02 - Database-test fixture integrity
+
+- **Status:** Implemented for the July 15 batch; retained as a permanent review
+  control.
+- **Gap found:** permissive SQLite execution allowed positive-path tests to use
+  nonexistent notification-rule and custom-role parents, creating impossible
+  production states and hiding missing constraint enforcement.
+- **Control:** all SQLite connections enable foreign keys; positive fixtures
+  seed valid parents or omit truly optional relationships; negative tests assert
+  dangling/cross-tenant rejection; PostgreSQL remains mandatory for dialect,
+  migration, lock, and constraint proof.
+
+### EH-QA-05 - Automatic discovery of dated bug regressions
+
+- **Status:** Implemented in repository; production suite run pending this batch's
+  deployment.
+- **Gap found:** local and production Playwright configs manually enumerated dated
+  bug specs, so a committed test could silently be absent from routine runs.
+- **Control:** canonical `hari|ram-YYYY-MM-DD-bugs.spec.ts` and
+  `hari|ram-YYYY-MM-DD-prod.spec.ts` patterns are selected automatically; the
+  functional-QA process test locks both patterns.
+- **Evidence:** `playwright.app.config.ts`, `playwright.prod-ram.config.ts`, and
+  `scripts/functional-qa-process.test.mjs`.

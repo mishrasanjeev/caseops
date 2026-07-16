@@ -261,3 +261,140 @@ Fail closed:
   not issue a clean `GO`.
 - If the environment is too broken to run the strongest practical verification,
   lower confidence and downgrade the release verdict.
+
+## Permanent Lifecycle And Feature-Boundary Rules (added 2026-07-15)
+
+These rules were added after the July 15 Ram workbook showed that a reload-only
+status test and a matter-scoped substitute can both stay green while the user's
+actual contract remains broken.
+
+### Do not silently narrow an acceptance contract
+
+- Classify the workbook row against its exact nouns and boundaries before
+  touching code. `Global`, `standalone`, `main navigation`, `independent`,
+  `unlinked`, and `one or more matters` are acceptance criteria, not optional
+  wording.
+- A scoped subset is not a fix for the broader contract. A matter Notices tab
+  does not satisfy a standalone company Notice Management module, even if its
+  upload workflow is otherwise complete.
+- Regression proof must exercise every boundary-changing word in the report.
+  For a global optional-link feature, that means at least: create with zero
+  links, link multiple records, find it from main navigation, search/filter it,
+  assign it, and track both received and sent variants.
+
+### Terminal lifecycle changes require a state machine, not a dropdown
+
+- Maintain one explicit transition matrix. Generic metadata PATCH routes must
+  not dispose, reopen, archive, restore, or mutate any terminal record.
+- Every lifecycle write must compare both the observed source status and a
+  concurrency token (`updated_at`, version, or ETag). A stale browser tab must
+  receive `409` and must never replay an old status during an unrelated edit.
+- Terminal actions require the dedicated capability, a meaningful reason, an
+  audit/activity event, and an explicit confirmation surface. Reopen must return
+  to a safe non-operational stage (normally Intake), never directly to Active.
+- Do not keep two independently patchable lifecycle sources such as `status`
+  and `is_active`. Derive or update them together inside the transition service
+  and enforce the invariant in tests and, where practical, the database.
+- Frontends send only dirty fields plus the concurrency token. Terminal status
+  is not an option in a generic status select or record editor.
+- Disposal is a product-wide operational boundary. Audit tasks, deadlines,
+  hearings, reminders, calendar/today feeds, provider sync, court tracking,
+  imports, workers, queued jobs, and webhook consumers. They must cancel, hide,
+  or reject work for disposed matters and must not write operational state after
+  disposal.
+- Define operational state once and fail closed on both lifecycle status and
+  the derived activity flag. Access authorization is not an operational-state
+  check. Portal, integration, AI/provider, metadata, bulk, assignment, and
+  linked-record writers must all call the shared fresh-parent guard.
+- Upgrade-time cleanup is not enough by itself. Neutralize legacy operational
+  children during migration and defensively repeat neutralization under the
+  parent lock immediately before reopening a terminal row. Durable-tombstone
+  any already-synced external calendar artifact tied to those children.
+- Prior conflict clearance is not permanent permission to reactivate a disposed
+  matter. Reopen invalidates it and requires a new check before Active.
+
+### Mandatory reopen regressions
+
+For every terminal lifecycle repair, add all of the following where applicable:
+
+1. Two-session stale edit: session A loads Active, session B disposes, session A
+   saves a title-only edit; expect `409` and a final Disposed read-back.
+2. Generic PATCH attempts to dispose, reopen, change `is_active`, or edit a
+   disposed record; all fail closed.
+3. Explicit disposal and reopen verify capability, reason, source-status, and
+   timestamp preconditions plus audit evidence.
+4. A queued/background provider update after disposal cannot alter the matter or
+   reintroduce it into active feeds.
+5. Reopen lands in Intake and old conflict clearance cannot activate it.
+6. The dated Playwright spec is selected by the normal local and production
+   configs. A committed spec omitted by a manual `testMatch` allowlist is not
+   regression coverage.
+7. Seed a legacy terminal Matter with open operational children, migrate and
+   reopen it, and prove those children remain cancelled/closed rather than
+   becoming actionable again; an existing provider calendar sync must be queued
+   for deletion and never returned to `synced`.
+
+### Database locking and terminal-state race rules
+
+- SQLite passing is not proof that lifecycle locking works on PostgreSQL.
+  SQLite ignores `FOR UPDATE`; every new parent-row locking query must also be
+  compiled or exercised with the PostgreSQL dialect.
+- SQLite does not enforce declared foreign keys unless every connection enables
+  `PRAGMA foreign_keys=ON`. The application connection hook and a regression
+  that deliberately violates a representative foreign key are mandatory; a
+  schema containing `ForeignKey` objects is not evidence that local integrity
+  checks are active.
+- Tenant-integrity fixes implemented with composite foreign keys must be tested
+  as direct database violations on both the local SQLite path and PostgreSQL.
+  Service-only rejection tests cannot prove that imports, maintenance scripts,
+  or future writers are structurally tenant safe.
+- Never apply an unrestricted `FOR UPDATE` to a query that eager-loads nullable
+  relationships with outer joins. PostgreSQL rejects locking the nullable side.
+  Lock the bare authoritative parent row (or use `FOR UPDATE OF` for that table)
+  first, then load optional relationships separately.
+- Every operational child writer must acquire/recheck the parent Matter lock in
+  the same ordering used by Dispose. A precheck followed by an unlocked child
+  insert/update can commit after disposal and resurrect work.
+- A status check before provider or AI I/O is necessary but insufficient. Long
+  operations require a fresh, locked post-I/O check immediately before durable
+  side effects. If the terminal transition won, preserve the terminal database
+  state and compensate external state (for example, delete a just-created
+  calendar event) where possible.
+- A transaction commit releases every row lock acquired earlier in that
+  transaction. Treat any intermediate commit exactly like an external-I/O
+  boundary: reacquire and refresh the authoritative parent before staging the
+  next durable child, ModelRun, notification, or audit. Add a callback-driven
+  regression that disposes between the commit and the final persistence.
+- Multi-parent mutations lock authoritative parents in deterministic ID order
+  before loading or mutating child rows. This prevents both partial bulk writes
+  and opposite-order deadlocks with lifecycle transitions.
+- Workers must not overwrite terminal reconciliation states such as
+  `CANCELLED`, `BLOCKED`, or `DELETED` from stale ORM objects. Claim/finalize
+  transitions need compare-and-set semantics or a row lock plus fresh reload.
+- Add at least one forced-interleaving regression for each repaired race, not
+  only sequential "dispose, then call writer" tests.
+
+### Mutation-contract propagation and fixture-integrity rules
+
+- A new required mutation precondition (version, timestamp, ETag, source state,
+  idempotency key) is a repository-wide contract change. Inventory API, service,
+  UI, worker, import, and E2E callers before closure; targeted endpoint tests do
+  not prove propagation. Add a static audit that permits omissions only in
+  explicit negative tests.
+- Never make a test convenient by writing a dangling foreign key. Seed a valid
+  parent, omit the relationship when it is truly optional, or make database
+  rejection the assertion. A fixture state that production constraints reject
+  cannot be used as positive-path evidence.
+- When fixtures connect rows only through scalar foreign-key IDs, do not assume
+  one ORM `add_all` establishes insert order. Persist the parent first (or set a
+  real ORM relationship) and replay the fixture on PostgreSQL; permissive local
+  ordering is not integrity evidence.
+- Create, import, bulk-update, and generic metadata PATCH must not provide a
+  shortcut into terminal states or their aliases. Lifecycle tests create a
+  valid operational record and enter the terminal state only through the
+  dedicated transition service.
+- A targeted green run after changing schema constraints, lifecycle rules, or a
+  shared mutation contract is provisional. Run the complete collected test
+  inventory (or documented non-overlapping shards covering it), plus the real
+  production database dialect where behavior differs, before calling the local
+  implementation verified.

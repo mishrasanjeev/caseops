@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -18,6 +19,7 @@ from caseops_api.db.models import (
     Team,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import affidavit_intelligence as affidavit_service
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -95,6 +97,16 @@ def _seed_attachment(
             )
         session.commit()
     return attachment_id
+
+
+def _dispose_matter(matter_id: str) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
 
 
 def _invite_member(
@@ -285,6 +297,91 @@ def test_affidavit_analysis_rerun_versions_cleanly_without_duplicate_latest_resu
             )
         )
         assert len(runs) == 2
+
+
+def test_disposed_matter_blocks_affidavit_analysis_without_persisting_a_run(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s2-disposed-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "LI-S2-DISPOSED")
+    attachment_id = _seed_attachment(
+        matter_id,
+        text=(
+            "I state that on 04.05.2026 the respondent received Rs. 25,000. "
+            "The respondent defaulted on repayment despite repeated demands."
+        ),
+    )
+    _dispose_matter(matter_id)
+
+    response = client.post(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/"
+        "affidavit-intelligence/analyze",
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.json()["detail"].lower()
+    listed = client.get(
+        f"/api/matters/{matter_id}/affidavit-intelligence",
+        headers=_auth(token),
+    )
+    assert listed.status_code == 200, listed.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(AffidavitIntelligenceRun).where(
+                AffidavitIntelligenceRun.matter_id == matter_id
+            )
+        ) is None
+
+
+def test_affidavit_analysis_rechecks_after_concurrent_disposal_without_side_effects(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = _bootstrap(client, f"li-s2-race-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "LI-S2-RACE")
+    attachment_id = _seed_attachment(
+        matter_id,
+        text=(
+            "I state that on 04.05.2026 the respondent received Rs. 25,000. "
+            "The respondent defaulted on repayment despite repeated demands."
+        ),
+    )
+    original_load_chunks = affidavit_service._load_chunks
+    disposal_interposed = False
+
+    def load_chunks_then_dispose(session, loaded_attachment_id):
+        nonlocal disposal_interposed
+        chunks = original_load_chunks(session, loaded_attachment_id)
+        if not disposal_interposed:
+            _dispose_matter(matter_id)
+            disposal_interposed = True
+        return chunks
+
+    monkeypatch.setattr(affidavit_service, "_load_chunks", load_chunks_then_dispose)
+
+    response = client.post(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/"
+        "affidavit-intelligence/analyze",
+        headers=_auth(token),
+    )
+
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(AffidavitIntelligenceRun).where(
+                AffidavitIntelligenceRun.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(AffidavitStatement).where(AffidavitStatement.matter_id == matter_id)
+        ) is None
+        assert session.scalar(
+            select(AffidavitQuestion).where(AffidavitQuestion.matter_id == matter_id)
+        ) is None
 
 
 def test_cross_tenant_attachment_cannot_be_analyzed(client: TestClient) -> None:

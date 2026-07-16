@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -126,6 +127,7 @@ class MatterTaskStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     BLOCKED = "blocked"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
 class MatterTaskPriority(StrEnum):
@@ -747,7 +749,14 @@ class User(Base):
 
 class CompanyMembership(Base):
     __tablename__ = "company_memberships"
-    __table_args__ = (UniqueConstraint("company_id", "user_id", name="uq_company_membership"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "user_id", name="uq_company_membership"),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            name="uq_company_memberships_id_company_id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -1199,7 +1208,19 @@ class EmployeeBulkImportRow(Base):
 
 class Matter(Base):
     __tablename__ = "matters"
-    __table_args__ = (UniqueConstraint("company_id", "matter_code", name="uq_company_matter_code"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "matter_code", name="uq_company_matter_code"),
+        UniqueConstraint("id", "company_id", name="uq_matters_id_company_id"),
+        CheckConstraint(
+            "(status IN ('disposed', 'closed') AND is_active = false) OR "
+            "(status NOT IN ('disposed', 'closed') AND is_active = true)",
+            name="ck_matters_status_active_consistent",
+        ),
+        CheckConstraint(
+            "lifecycle_version >= 0",
+            name="ck_matters_lifecycle_version_nonnegative",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -1263,6 +1284,12 @@ class Matter(Base):
     claim_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     claim_amount_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    lifecycle_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     # PRD §13.4 / §5.6: when True, only explicit matter_access_grants
     # open the matter; when False (default) every company member with
     # the company-level role can see it. Ethical walls always apply
@@ -1655,6 +1682,12 @@ class MatterTask(Base):
         default=MatterTaskPriority.MEDIUM,
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_matter_disposal: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1706,6 +1739,12 @@ class MatterConflictCheck(Base):
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
     )
+    matter_lifecycle_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     opposing_party_name: Mapped[str] = mapped_column(String(255), nullable=False)
     related_party_names_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     candidates_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
@@ -1753,6 +1792,12 @@ class MatterHearing(Base):
         default=MatterHearingStatus.SCHEDULED,
     )
     outcome_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_by_matter_disposal: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1818,6 +1863,7 @@ class CalendarEventSyncStatus(StrEnum):
     RETRY_SCHEDULED = "retry_scheduled"
     DEAD_LETTER = "dead_letter"
     DELETED = "deleted"
+    DELETE_PENDING = "delete_pending"
 
 
 class MailboxProvider(StrEnum):
@@ -4691,6 +4737,230 @@ class MatterAttachment(Base):
         foreign_keys=[linked_court_order_id]
     )
     hearing: Mapped[MatterHearing | None] = relationship(foreign_keys=[hearing_id])
+
+
+class CompanyNotice(Base):
+    """Tenant-owned notice metadata with an optional document.
+
+    Notices used to exist only as ``MatterAttachment`` rows, which made both a
+    matter and a file mandatory.  This model is the standalone source of truth
+    for the company-wide notice register; legacy attachment notices remain
+    readable through the notice service during the transition.
+    """
+
+    __tablename__ = "company_notices"
+    __table_args__ = (
+        CheckConstraint(
+            "direction IN ('received', 'sent')",
+            name="ck_company_notices_direction",
+        ),
+        CheckConstraint(
+            "amount_minor IS NULL OR amount_minor >= 0",
+            name="ck_company_notices_amount_nonnegative",
+        ),
+        CheckConstraint(
+            "dispute_amount_minor IS NULL OR dispute_amount_minor >= 0",
+            name="ck_company_notices_dispute_amount_nonnegative",
+        ),
+        CheckConstraint(
+            "recovered_amount_minor IS NULL OR recovered_amount_minor >= 0",
+            name="ck_company_notices_recovered_amount_nonnegative",
+        ),
+        CheckConstraint(
+            "length(currency) = 3",
+            name="ck_company_notices_currency_length",
+        ),
+        CheckConstraint(
+            "reply_sent_on IS NULL OR (reply_sent = true AND reply_required = true)",
+            name="ck_company_notices_reply_sent_date_state",
+        ),
+        CheckConstraint(
+            "(direction = 'received' AND sent_on IS NULL) OR "
+            "(direction = 'sent' AND received_on IS NULL "
+            "AND received_from IS NULL AND reply_due_on IS NULL "
+            "AND reply_required = false AND reply_sent = false "
+            "AND reply_sent_on IS NULL)",
+            name="ck_company_notices_direction_fields_consistent",
+        ),
+        CheckConstraint(
+            "reply_sent = false OR reply_required = true",
+            name="ck_company_notices_reply_sent_requires_required",
+        ),
+        CheckConstraint(
+            "reply_due_on IS NULL OR reply_required = true",
+            name="ck_company_notices_reply_due_requires_required",
+        ),
+        CheckConstraint(
+            "(storage_key IS NULL AND original_filename IS NULL "
+            "AND content_type IS NULL AND size_bytes IS NULL "
+            "AND sha256_hex IS NULL) OR "
+            "(storage_key IS NOT NULL AND original_filename IS NOT NULL "
+            "AND size_bytes IS NOT NULL AND size_bytes >= 0 "
+            "AND sha256_hex IS NOT NULL)",
+            name="ck_company_notices_file_metadata_state",
+        ),
+        ForeignKeyConstraint(
+            ["owner_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_company_notices_owner_membership_company",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_company_notices_creator_membership_company",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            name="uq_company_notices_id_company_id",
+        ),
+        UniqueConstraint("storage_key", name="uq_company_notices_storage_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    direction: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="received",
+        index=True,
+    )
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    notice_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, default="Open", index=True)
+    authority: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    received_from: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    internal_spoc: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    internal_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    counsel_engaged: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    received_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    sent_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    reply_due_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    reply_required: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    reply_sent: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    reply_sent_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    dispute_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    recovered_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    sha256_hex: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    owner_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[owner_membership_id]
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id]
+    )
+    matter_links: Mapped[list[CompanyNoticeMatterLink]] = relationship(
+        back_populates="notice",
+        cascade="all, delete-orphan",
+        order_by="CompanyNoticeMatterLink.created_at.asc()",
+        overlaps="company,matter",
+    )
+
+
+class CompanyNoticeMatterLink(Base):
+    """Many-to-many link between a standalone notice and tenant matters."""
+
+    __tablename__ = "company_notice_matter_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["notice_id", "company_id"],
+            ["company_notices.id", "company_notices.company_id"],
+            name="fk_company_notice_links_notice_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_company_notice_links_matter_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "notice_id",
+            "matter_id",
+            name="uq_company_notice_matter_link",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    notice_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(
+        overlaps="matter,matter_links,notice",
+    )
+    notice: Mapped[CompanyNotice] = relationship(
+        back_populates="matter_links",
+        overlaps="company,matter",
+    )
+    matter: Mapped[Matter] = relationship(
+        overlaps="company,matter_links,notice",
+    )
 
 
 class MatterAttachmentChunk(Base):
@@ -10679,6 +10949,12 @@ class MatterDeadline(Base):
         onupdate=utcnow,
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_matter_disposal: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
 
 
 class TenantAIPolicy(Base):

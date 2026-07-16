@@ -351,6 +351,43 @@ def test_hearing_coach_rerun_is_deterministic_without_duplicate_state(
     assert [event.action for event in events].count("hearing_coach.generated") == 2
 
 
+def test_disposed_matter_rejects_hearing_coach_generation(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s13-disposed-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "LI-S13-DISPOSED")
+    session_id, _ = _create_session_with_response(
+        client,
+        token=token,
+        matter_id=matter_id,
+    )
+    factory = get_session_factory()
+    with factory() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+    generated = client.post(
+        f"/api/matters/{matter_id}/mock-hearings/{session_id}/coach",
+        headers=_auth(token),
+        json={"acknowledged": True},
+    )
+    assert generated.status_code == 409, generated.text
+    assert "disposed" in generated.text.lower()
+
+    # Historical status remains readable, but no new generated audit survives.
+    status_response = client.get(
+        f"/api/matters/{matter_id}/hearing-coach",
+        headers=_auth(token),
+    )
+    assert status_response.status_code == 200, status_response.text
+    events = _audit_events(str(boot["company"]["id"]))
+    assert all(event.action != "hearing_coach.generated" for event in events)
+
+
 def test_hearing_coach_requires_typed_mock_hearing_responses(
     client: TestClient,
 ) -> None:

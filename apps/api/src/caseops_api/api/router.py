@@ -28,6 +28,7 @@ from caseops_api.api.routes import (
     matters,
     me,
     meta,
+    notices,
     notifications,
     outside_counsel,
     payments,
@@ -47,6 +48,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(companies.router, prefix="/companies", tags=["companies"])
 api_router.include_router(matters.router, prefix="/matters", tags=["matters"])
+api_router.include_router(notices.router, prefix="/notices", tags=["notices"])
 api_router.include_router(matter_tags.router, prefix="/matter-tags", tags=["matter-tags"])
 api_router.include_router(me.router, prefix="/me", tags=["me"])
 api_router.include_router(drafting.router, prefix="/drafting", tags=["drafting"])

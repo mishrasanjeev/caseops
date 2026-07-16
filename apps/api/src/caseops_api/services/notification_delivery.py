@@ -20,6 +20,10 @@ from caseops_api.db.models import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.matter_access import can_access
+from caseops_api.services.matter_operational_guard import (
+    MatterNotOperationalError,
+    assert_operational_matter,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_RETRY_INITIAL_INTERVAL,
@@ -174,6 +178,16 @@ def enqueue_notification_delivery_intent(
     if matter is not None:
         if matter.company_id != context.company.id:
             return None
+        try:
+            matter = assert_operational_matter(
+                session,
+                matter=matter,
+                lock_for_write=True,
+            )
+        except MatterNotOperationalError:
+            # Do not create a queue row that can never be delivered.  The
+            # worker repeats the lifecycle check for already-existing intents.
+            return None
         if not can_access(
             session,
             context=_recipient_context(
@@ -317,6 +331,53 @@ def process_notification_delivery_intent(
         NotificationDeliveryStatus.BLOCKED,
         NotificationDeliveryStatus.DEAD_LETTER,
     }:
+        return _delivery_result(intent)
+
+    # Serialize the final delivery decision with matter disposal.  The initial
+    # eager load is intentionally treated as advisory: another transaction may
+    # have disposed the matter (and blocked this intent) since it entered the
+    # identity map.  Lock parent first, then refresh+lock the intent, matching
+    # the lifecycle transition's lock order.
+    matter_disposed = False
+    if intent.matter_id is not None:
+        matter = session.get(Matter, intent.matter_id)
+        if matter is None:
+            matter_disposed = True
+        else:
+            try:
+                assert_operational_matter(
+                    session,
+                    matter=matter,
+                    lock_for_write=True,
+                )
+            except MatterNotOperationalError:
+                matter_disposed = True
+
+    intent = session.scalar(
+        select(NotificationDeliveryIntent)
+        .where(
+            NotificationDeliveryIntent.id == intent_id,
+            NotificationDeliveryIntent.company_id == expected_company_id,
+        )
+        .with_for_update(of=NotificationDeliveryIntent)
+        .execution_options(populate_existing=True)
+    )
+    if intent is None:
+        raise ValueError("Notification delivery intent not found.")
+    if intent.status in {
+        NotificationDeliveryStatus.DELIVERED,
+        NotificationDeliveryStatus.BLOCKED,
+        NotificationDeliveryStatus.DEAD_LETTER,
+    }:
+        return _delivery_result(intent)
+    if matter_disposed:
+        intent.status = NotificationDeliveryStatus.BLOCKED
+        intent.dead_letter_reason = "matter_disposed"
+        intent.last_error_redacted = "Matter disposed before delivery."
+        intent.failed_at = _now()
+        intent.next_attempt_at = None
+        session.add(intent)
+        session.flush()
         return _delivery_result(intent)
     if intent.channel != NotificationDeliveryChannel.IN_APP:
         intent.status = NotificationDeliveryStatus.BLOCKED

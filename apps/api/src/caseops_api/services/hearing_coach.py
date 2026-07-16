@@ -28,6 +28,7 @@ from caseops_api.schemas.hearing_coach import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 DISCLAIMER = (
@@ -118,6 +119,11 @@ def generate_hearing_coach_report(
             status_code=status.HTTP_409_CONFLICT,
             detail="No typed mock-hearing responses are available for coaching.",
         )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="generate a hearing coach report",
+    )
 
     report = _report_record(matter=matter, mock_session=mock_session, responses=responses)
     record_from_context(

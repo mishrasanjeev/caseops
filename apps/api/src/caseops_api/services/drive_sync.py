@@ -45,6 +45,7 @@ from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_
 from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
@@ -913,6 +914,11 @@ def review_drive_candidate(
     if matter is None or matter.company_id != context.company.id:
         raise HTTPException(status_code=404, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="link or import a Drive candidate",
+    )
     if payload.action == "link_metadata":
         candidate.linked_matter_id = matter.id
         candidate.status = ReviewCandidateStatus.LINKED_METADATA

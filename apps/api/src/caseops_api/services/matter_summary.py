@@ -58,6 +58,7 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.matters import _get_matter_model
 from caseops_api.services.session_context import SessionContext
 
@@ -249,6 +250,19 @@ def generate_matter_summary(
         if cached is not None:
             return cached
 
+    # A cached summary is a read-only historical view and remains available
+    # after disposal. A cache miss or explicit regeneration creates new AI,
+    # billing, audit, and cache state, so it must fail before provider spend
+    # when the matter is already terminal. Do not hold a row lock across the
+    # provider call; the second guard below closes the concurrent-disposal
+    # window immediately before generate_structured can persist usage state.
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="generate a matter summary",
+        lock_for_write=False,
+    )
+
     dossier = _load_matter_context(session, matter)
     messages = [
         LLMMessage(role="system", content=_SYSTEM_PROMPT),
@@ -263,45 +277,55 @@ def generate_matter_summary(
         purpose="matter_summary",
     )
 
-    # Capture the LLM call for audit. ``generate_structured`` invokes
-    # this exactly once per successful provider call so we can pin the
-    # cache row to a specific ModelRun.
-    captured_run: list[ModelRun] = []
+    # ``generate_structured`` invokes this after the provider returns and
+    # before its billing write. Refresh-and-lock the Matter at that boundary:
+    # disposal either wins and this whole unit of work rolls back, or summary
+    # persistence wins while holding the parent lock. The callback itself must
+    # not write; the response still needs schema validation first.
+    final_guard_succeeded = False
+    final_guard_errors: list[Exception] = []
 
     def _on_model_run(completion, _ctx, _msgs) -> None:
-        run = ModelRun(
-            company_id=context.company.id,
-            matter_id=matter.id,
-            actor_membership_id=context.membership.id,
-            purpose="matter_summary",
-            provider=completion.provider,
-            model=completion.model,
-            prompt_tokens=completion.prompt_tokens,
-            completion_tokens=completion.completion_tokens,
-            latency_ms=completion.latency_ms,
-            status="ok",
-        )
-        session.add(run)
-        session.flush()
-        captured_run.append(run)
+        nonlocal final_guard_succeeded, matter
+        try:
+            matter = require_operational_matter(
+                session,
+                matter=matter,
+                operation="generate a matter summary",
+            )
+        except Exception as exc:  # re-raised after generate_structured unwinds
+            final_guard_errors.append(exc)
+            return
+        final_guard_succeeded = True
 
     def _call(p: LLMProvider) -> Any:
-        return generate_structured(
-            p,
-            session=session,
-            schema=_LLMSummary,
-            messages=messages,
-            context=call_ctx,
-            temperature=0.0,
-            max_tokens=4096,
-            on_model_run=_on_model_run,
-        )
+        try:
+            result = generate_structured(
+                p,
+                session=session,
+                schema=_LLMSummary,
+                messages=messages,
+                context=call_ctx,
+                temperature=0.0,
+                max_tokens=4096,
+                on_model_run=_on_model_run,
+            )
+        finally:
+            if final_guard_errors:
+                # generate_structured deliberately isolates callback failures;
+                # undo any later usage debit before surfacing the guard error.
+                session.rollback()
+                raise final_guard_errors[0]
+        if not final_guard_succeeded:
+            session.rollback()
+            raise RuntimeError("Matter summary persistence guard did not run.")
+        return result
 
     # 2026-04-30: gpt-5.1-only path. Single primary call → 502 on
     # failure. LLMProviderError is the parent of quota / format /
     # transient blips.
     try:
-        parsed, _completion = _call(llm)
+        parsed, completion = _call(llm)
     except LLMProviderError as exc:
         logger.warning(
             "matter summary: primary %s failed (%s): %s",
@@ -326,6 +350,21 @@ def generate_matter_summary(
         generated_at=datetime.now(UTC),
     )
 
+    model_run = ModelRun(
+        company_id=context.company.id,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        purpose="matter_summary",
+        provider=completion.provider,
+        model=completion.model,
+        prompt_tokens=completion.prompt_tokens,
+        completion_tokens=completion.completion_tokens,
+        latency_ms=completion.latency_ms,
+        status="ok",
+    )
+    session.add(model_run)
+    session.flush()
+
     # EG-005: persist to cache so subsequent GET / DOCX / PDF calls
     # skip the LLM. The cache columns + FK to model_runs are added by
     # alembic 20260423_0001_matter_summary_cache. Explicit commit
@@ -334,8 +373,7 @@ def generate_matter_summary(
     # services.recommendations use after writing their ModelRun rows.
     matter.executive_summary_json = _summary_to_cache_payload(summary)
     matter.executive_summary_generated_at = summary.generated_at
-    if captured_run:
-        matter.executive_summary_model_run_id = captured_run[-1].id
+    matter.executive_summary_model_run_id = model_run.id
     session.flush()
     session.commit()
 

@@ -46,6 +46,7 @@ REQUIRED_AUDIT_SERVICES: set[str] = {
     "recommendations",
     "identity",
     "notification_rules",
+    "notices",
     "strategy_entries",
 }
 

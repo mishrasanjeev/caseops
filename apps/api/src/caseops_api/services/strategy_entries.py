@@ -20,6 +20,7 @@ from caseops_api.schemas.recommendations import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -210,6 +211,11 @@ def create_strategy_entry(
     payload: MatterStrategyEntryCreateRequest,
 ) -> MatterStrategyEntryRecord:
     matter = _load_visible_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="create a strategy entry",
+    )
     owner_id = _validate_owner(
         session,
         context=context,
@@ -256,6 +262,12 @@ def update_strategy_entry(
     entry_id: str,
     payload: MatterStrategyEntryUpdateRequest,
 ) -> MatterStrategyEntryRecord:
+    matter = _load_visible_matter(session, context=context, matter_id=matter_id)
+    require_operational_matter(
+        session,
+        matter=matter,
+        operation="update a strategy entry",
+    )
     entry = _load_entry(session, context=context, matter_id=matter_id, entry_id=entry_id)
     before = _snapshot(entry)
     if "title" in payload.model_fields_set and payload.title is not None:
@@ -302,6 +314,12 @@ def delete_strategy_entry(
     matter_id: str,
     entry_id: str,
 ) -> None:
+    matter = _load_visible_matter(session, context=context, matter_id=matter_id)
+    require_operational_matter(
+        session,
+        matter=matter,
+        operation="delete a strategy entry",
+    )
     entry = _load_entry(session, context=context, matter_id=matter_id, entry_id=entry_id)
     before = _snapshot(entry)
     session.delete(entry)

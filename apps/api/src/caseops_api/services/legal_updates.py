@@ -47,6 +47,7 @@ from caseops_api.services.authority_sources import (
     list_legal_source_registry_entries,
 )
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
 )
@@ -258,6 +259,33 @@ def _load_matter_with_access(
     return matter
 
 
+def _require_operational_matter_scopes(
+    session: Session,
+    *,
+    matters: Iterable[Matter | None],
+    operation: str,
+    lock_for_write: bool = True,
+) -> dict[str, Matter]:
+    """Validate matter-scoped work, locking multiple parents deterministically.
+
+    A watchlist update can move from one matter to another.  Locking the two
+    parent rows by identifier avoids opposite-direction updates acquiring the
+    same locks in different orders.  Callers retain historical read access by
+    invoking this helper only from mutation paths.
+    """
+
+    by_id = {matter.id: matter for matter in matters if matter is not None}
+    current: dict[str, Matter] = {}
+    for matter_id in sorted(by_id):
+        current[matter_id] = require_operational_matter(
+            session,
+            matter=by_id[matter_id],
+            operation=operation,
+            lock_for_write=lock_for_write,
+        )
+    return current
+
+
 def _load_contract_or_404(
     session: Session,
     *,
@@ -376,10 +404,19 @@ def create_legal_update_watchlist(
     context: SessionContext,
     payload: LegalUpdateWatchlistCreateRequest,
 ) -> LegalUpdateWatchlistRecord:
+    matter = _load_matter_with_access(
+        session,
+        context=context,
+        matter_id=payload.matter_id,
+    )
+    _require_operational_matter_scopes(
+        session,
+        matters=[matter],
+        operation="create a matter-scoped legal update watchlist",
+    )
     _require_valid_dates(payload)
     _validate_source_filters(payload.source_key, payload.source_category)
     _load_statute_or_404(session, payload.statute_id)
-    _load_matter_with_access(session, context=context, matter_id=payload.matter_id)
     _load_contract_or_404(session, context=context, contract_id=payload.contract_id)
     watchlist = LegalUpdateWatchlist(
         company_id=context.company.id,
@@ -444,6 +481,23 @@ def update_legal_update_watchlist(
 ) -> LegalUpdateWatchlistRecord:
     watchlist = _get_watchlist(session, context=context, watchlist_id=watchlist_id)
     fields = payload.model_fields_set
+    existing_matter = _load_matter_with_access(
+        session,
+        context=context,
+        matter_id=watchlist.matter_id,
+    )
+    target_matter = existing_matter
+    if "matter_id" in fields and payload.matter_id != watchlist.matter_id:
+        target_matter = _load_matter_with_access(
+            session,
+            context=context,
+            matter_id=payload.matter_id,
+        )
+    _require_operational_matter_scopes(
+        session,
+        matters=[existing_matter, target_matter],
+        operation="update a matter-scoped legal update watchlist",
+    )
     if "name" in fields and payload.name:
         watchlist.name = payload.name
     if "practice_area" in fields:
@@ -468,7 +522,6 @@ def update_legal_update_watchlist(
     if "until_date" in fields:
         watchlist.until_date = payload.until_date
     if "matter_id" in fields:
-        _load_matter_with_access(session, context=context, matter_id=payload.matter_id)
         watchlist.matter_id = payload.matter_id
     if "contract_id" in fields:
         _load_contract_or_404(session, context=context, contract_id=payload.contract_id)
@@ -1204,7 +1257,24 @@ def run_legal_update_watchlist(
     payload: LegalUpdateRunRequest,
 ) -> LegalUpdateRunResponse:
     watchlist = _get_watchlist(session, context=context, watchlist_id=watchlist_id)
+    matter = _load_matter_with_access(
+        session,
+        context=context,
+        matter_id=watchlist.matter_id,
+    )
+    guarded_matters = _require_operational_matter_scopes(
+        session,
+        matters=[matter],
+        operation="run a matter-scoped legal update watchlist",
+        lock_for_write=False,
+    )
+    matter = guarded_matters.get(matter.id) if matter is not None else None
     if watchlist.is_archived:
+        _require_operational_matter_scopes(
+            session,
+            matters=[matter],
+            operation="run a matter-scoped legal update watchlist",
+        )
         record_from_context(
             session,
             context,
@@ -1232,6 +1302,16 @@ def run_legal_update_watchlist(
         )
 
     matches = _matches_for_watchlist(session, rule=watchlist)[: payload.limit]
+    # Matching can scan source data or follow a source-sync invocation.  Do not
+    # trust the Matter state captured before that work: refresh and lock the
+    # parent immediately before staging alerts, notification intents, or even
+    # the run audit.  A disposal that wins this race therefore leaves no
+    # matter-scoped side effects to commit.
+    _require_operational_matter_scopes(
+        session,
+        matters=[matter],
+        operation="run a matter-scoped legal update watchlist",
+    )
     created_count = 0
     notification_intent_count = 0
     if not payload.preview_only:

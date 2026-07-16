@@ -70,6 +70,10 @@ class CaseOpsSession(Session):
 def _configure_sqlite_connection(dbapi_connection: object, _connection_record: object) -> None:
     cursor = dbapi_connection.cursor()
     try:
+        # SQLite does not enforce declared foreign keys unless every
+        # connection opts in.  Without this, local/test databases silently
+        # accept cross-tenant rows that PostgreSQL rejects in production.
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=30000")
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
@@ -156,9 +160,7 @@ def get_engine(database_url: str | None = None) -> Engine:
                 "max_overflow": settings.db_max_overflow,
                 "pool_timeout": settings.db_pool_timeout,
             }
-        engine = create_engine(
-            resolved_url, connect_args=connect_args, **engine_kwargs
-        )
+        engine = create_engine(resolved_url, connect_args=connect_args, **engine_kwargs)
         if resolved_url.startswith("sqlite") and isinstance(engine, Engine):
             _install_sqlite_pragmas(engine)
         _ENGINE_CACHE[cache_key] = engine

@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from caseops_api.db.models import AuditEvent, CompanyMembership, CustomRole
 from caseops_api.db.session import get_session_factory
@@ -467,7 +469,7 @@ def test_revoked_custom_role_keeps_assigned_member_fail_closed(
     assert _create_matter(client, member_token, "S7-REVOKED") == 403
 
 
-def test_missing_custom_role_reference_keeps_member_fail_closed(
+def test_missing_custom_role_reference_is_structurally_rejected(
     client: TestClient,
 ) -> None:
     boot = _bootstrap(client, slug="lw-s7-missing", email="owner@missing.example")
@@ -488,13 +490,12 @@ def test_missing_custom_role_reference_keeps_member_fail_closed(
         )
         assert membership is not None
         membership.custom_role_id = "missing-custom-role"
-        session.commit()
-
-    member_token = _login(client, email="member@missing.example", slug="lw-s7-missing")
-    assert client.get("/api/auth/me", headers=auth_headers(member_token)).json()[
-        "capabilities"
-    ] == []
-    assert _create_matter(client, member_token, "S7-MISSING") == 403
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+        preserved = session.get(CompanyMembership, member["membership_id"])
+        assert preserved is not None
+        assert preserved.custom_role_id is None
 
 
 def test_custom_manage_users_holder_cannot_assign_elevated_employee_roles(

@@ -60,6 +60,7 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
   const canEdit = useCapability("matters:edit");
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [editBaseUpdatedAt, setEditBaseUpdatedAt] = useState<string | null>(null);
   const [selection, setSelection] = useState<ForumSelection>(() =>
     selectionFromMatter(matter),
   );
@@ -98,13 +99,20 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
       : selection;
 
   useEffect(() => {
-    if (!editing) setSelection(selectionFromMatter(matter));
+    if (matter.status === "disposed") {
+      setEditing(false);
+      setEditBaseUpdatedAt(null);
+      setSelection(selectionFromMatter(matter));
+    } else if (!editing) {
+      setSelection(selectionFromMatter(matter));
+    }
   }, [editing, matter]);
 
   const mutation = useMutation({
     mutationFn: () =>
       updateMatter({
         matterId: matter.id,
+        expected_updated_at: editBaseUpdatedAt ?? matter.updated_at,
         forum_level: normalizedSelection.forum_level,
         court_id: normalizedSelection.court_id,
         court_name: normalizedSelection.court_name,
@@ -121,6 +129,7 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
       ]);
       toast.success("Forum updated.");
       setEditing(false);
+      setEditBaseUpdatedAt(null);
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not update forum."));
@@ -168,12 +177,15 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
             Structured forum selection for court and filing context.
           </CardDescription>
         </div>
-        {canEdit && !editing ? (
+        {canEdit && matter.status !== "disposed" && !editing ? (
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              setEditBaseUpdatedAt(matter.updated_at);
+              setEditing(true);
+            }}
             data-testid="matter-forum-edit"
           >
             <Pencil className="h-4 w-4" aria-hidden />
@@ -201,6 +213,7 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
                 onClick={() => {
                   setSelection(selectionFromMatter(matter));
                   setEditing(false);
+                  setEditBaseUpdatedAt(null);
                 }}
               >
                 <X className="h-4 w-4" aria-hidden />

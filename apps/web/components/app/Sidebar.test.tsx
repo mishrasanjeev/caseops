@@ -47,6 +47,10 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/mailbox",
     );
+    expect(screen.getByRole("link", { name: "Notices" })).toHaveAttribute(
+      "href",
+      "/app/notices",
+    );
     expect(screen.getByRole("link", { name: "Drive" })).toHaveAttribute(
       "href",
       "/app/drive",
@@ -93,6 +97,19 @@ describe("SidebarBody resolved capability navigation", () => {
     expect(screen.getByRole("link", { name: "Case tracking" })).toHaveAttribute(
       "href",
       "/app/case-tracking",
+    );
+  });
+
+  it("marks the centralized Notices destination active", () => {
+    roleMock.mockReturnValue("viewer");
+    resolvedMock.mockReturnValue([]);
+    canMock.mockReturnValue(false);
+
+    render(<SidebarBody pathname="/app/notices" />);
+
+    expect(screen.getByRole("link", { name: "Notices" })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
   });
 });

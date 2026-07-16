@@ -43,6 +43,10 @@ from caseops_api.db.models import (
     MatterHearing,
     User,
 )
+from caseops_api.services.matter_operational_guard import (
+    MatterNotOperationalError,
+    assert_operational_matter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -427,7 +431,68 @@ def run_reminder_worker(
         "suppressed": 0,
     }
 
-    for r in due:
+    for candidate in due:
+        # Always serialize delivery with lifecycle transitions.  The due-list
+        # objects may have been loaded before a concurrent disposal, so first
+        # lock and refresh the parent Matter, then lock and refresh the child
+        # reminder.  This is the same parent -> child order used by disposal
+        # and prevents a stale QUEUED instance from overwriting CANCELLED.
+        hearing = session.get(MatterHearing, candidate.hearing_id)
+        if hearing is None:
+            r = session.scalar(
+                select(HearingReminder)
+                .where(HearingReminder.id == candidate.id)
+                .with_for_update(of=HearingReminder)
+                .execution_options(populate_existing=True)
+            )
+            if r is not None and r.status == HearingReminderStatus.QUEUED:
+                r.status = HearingReminderStatus.CANCELLED
+                r.updated_at = now
+            continue
+
+        try:
+            assert_operational_matter(
+                session,
+                matter=hearing.matter,
+                lock_for_write=True,
+            )
+        except MatterNotOperationalError:
+            r = session.scalar(
+                select(HearingReminder)
+                .where(HearingReminder.id == candidate.id)
+                .with_for_update(of=HearingReminder)
+                .execution_options(populate_existing=True)
+            )
+            if r is not None and r.status == HearingReminderStatus.QUEUED:
+                r.status = HearingReminderStatus.CANCELLED
+                r.last_error = "Matter disposed before reminder delivery."
+                r.updated_at = now
+            continue
+
+        r = session.scalar(
+            select(HearingReminder)
+            .where(HearingReminder.id == candidate.id)
+            .with_for_update(of=HearingReminder)
+            .execution_options(populate_existing=True)
+        )
+        if r is None or r.status != HearingReminderStatus.QUEUED:
+            continue
+        hearing = session.scalar(
+            select(MatterHearing)
+            .where(MatterHearing.id == r.hearing_id)
+            .with_for_update(of=MatterHearing)
+            .execution_options(populate_existing=True)
+        )
+        if hearing is None:
+            r.status = HearingReminderStatus.CANCELLED
+            r.updated_at = now
+            continue
+        if hearing.status in {"cancelled", "completed"}:
+            r.status = HearingReminderStatus.CANCELLED
+            r.last_error = "Hearing is no longer scheduled."
+            r.updated_at = now
+            continue
+
         # Channel-specific recipient validation. Email needs an email;
         # SMS / WhatsApp need a phone. Missing-recipient is FAILED so
         # the dashboard surfaces it (operator must add a phone before
@@ -447,12 +512,6 @@ def run_reminder_worker(
             )
             r.updated_at = now
             report["skipped_missing_phone"] += 1
-            continue
-
-        hearing = session.get(MatterHearing, r.hearing_id)
-        if hearing is None:
-            r.status = HearingReminderStatus.CANCELLED
-            r.updated_at = now
             continue
 
         hearing_at = _hearing_start_at(hearing)

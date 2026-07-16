@@ -399,10 +399,18 @@ def test_tasks_and_deadlines_enforce_access_scopes(client: TestClient) -> None:
     team_matter = _create_matter(
         client, token=owner_token, code="WTD72-TEAM", title="Team tasks"
     )
+    current_matter = client.get(
+        f"/api/matters/{team_matter}",
+        headers=owner_headers,
+    )
+    assert current_matter.status_code == 200, current_matter.text
     assign = client.patch(
         f"/api/matters/{team_matter}",
         headers=owner_headers,
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": current_matter.json()["updated_at"],
+        },
     )
     assert assign.status_code == 200, assign.text
     scope = client.put(

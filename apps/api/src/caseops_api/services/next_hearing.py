@@ -22,6 +22,7 @@ from caseops_api.schemas.matters import (
 )
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -481,12 +482,28 @@ def decide_next_hearing_suggestion(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Next hearing suggestion not found.",
         )
-    if suggestion.status != MatterNextHearingSuggestionStatus.PENDING:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Next hearing suggestion is already decided.",
-        )
     if action == "accept":
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="accept a next-hearing suggestion",
+        )
+        suggestion = session.scalar(
+            select(MatterNextHearingSuggestion)
+            .where(
+                MatterNextHearingSuggestion.id == suggestion_id,
+                MatterNextHearingSuggestion.matter_id == matter.id,
+                MatterNextHearingSuggestion.company_id == context.company.id,
+            )
+            .with_for_update(of=MatterNextHearingSuggestion)
+            .execution_options(populate_existing=True)
+        )
+        assert suggestion is not None
+        if suggestion.status != MatterNextHearingSuggestionStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Next hearing suggestion is already decided.",
+            )
         accept_next_hearing_suggestion(
             session,
             matter=matter,
@@ -494,6 +511,11 @@ def decide_next_hearing_suggestion(
             context=context,
         )
     elif action == "reject":
+        if suggestion.status != MatterNextHearingSuggestionStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Next hearing suggestion is already decided.",
+            )
         reject_next_hearing_suggestion(
             session,
             matter=matter,

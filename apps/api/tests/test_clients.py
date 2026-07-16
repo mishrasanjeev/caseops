@@ -11,7 +11,10 @@ Covers:
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from caseops_api.db.models import Client, Matter, MatterClientAssignment
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -38,7 +41,7 @@ def _mk_matter(client: TestClient, token: str, code: str = "CL-001") -> dict:
     activate = client.patch(
         f"/api/matters/{matter['id']}",
         headers=auth_headers(token),
-        json={"status": "active"},
+        json={"status": "active", "expected_updated_at": matter["updated_at"]},
     )
     assert activate.status_code == 200, activate.text
     return activate.json()
@@ -410,6 +413,78 @@ def test_unassign_client_from_matter(client: TestClient) -> None:
         f"/api/clients/{cid}", headers=auth_headers(token),
     ).json()
     assert profile["total_matters_count"] == 0
+
+
+def test_disposed_matter_rejects_client_link_and_verification_mutations(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="CL-DISPOSED")
+    linked_client = _mk_client(client, token).json()
+    other_client = _mk_client(
+        client,
+        token,
+        name="Other Disposed Matter Client",
+        primary_contact_email="other-disposed@example.in",
+    ).json()
+    assigned = client.post(
+        f"/api/matters/{matter['id']}/clients",
+        headers=auth_headers(token),
+        json={"client_id": linked_client["id"], "role": "petitioner"},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        matter_row = session.get(Matter, matter["id"])
+        assert matter_row is not None
+        matter_row.status = "disposed"
+        matter_row.is_active = False
+        session.commit()
+
+    responses = [
+        client.post(
+            f"/api/matters/{matter['id']}/clients",
+            headers=auth_headers(token),
+            json={"client_id": linked_client["id"], "role": "respondent"},
+        ),
+        client.post(
+            f"/api/matters/{matter['id']}/clients",
+            headers=auth_headers(token),
+            json={"client_id": other_client["id"], "role": "petitioner"},
+        ),
+        client.delete(
+            f"/api/matters/{matter['id']}/clients/{linked_client['id']}",
+            headers=auth_headers(token),
+        ),
+        client.patch(
+            f"/api/matters/{matter['id']}/client-verification/"
+            f"{linked_client['id']}",
+            headers=auth_headers(token),
+            json={"status": "submitted", "documents": []},
+        ),
+    ]
+    assert [response.status_code for response in responses] == [409, 409, 409, 409]
+    assert all("disposed" in response.text.lower() for response in responses)
+
+    listing = client.get(
+        f"/api/matters/{matter['id']}/client-verification",
+        headers=auth_headers(token),
+    )
+    assert listing.status_code == 200, listing.text
+    with factory() as session:
+        assignments = list(
+            session.scalars(
+                select(MatterClientAssignment).where(
+                    MatterClientAssignment.matter_id == matter["id"]
+                )
+            )
+        )
+        linked = session.get(Client, linked_client["id"])
+        assert len(assignments) == 1
+        assert assignments[0].client_id == linked_client["id"]
+        assert assignments[0].role == "petitioner"
+        assert linked is not None and linked.kyc_status == "not_required"
 
 
 def test_assign_nonexistent_client_404s(client: TestClient) -> None:
@@ -873,7 +948,10 @@ def test_matter_client_verification_respects_restricted_wall_and_team_access(
     assign_team = client.patch(
         f"/api/matters/{team_matter['id']}",
         headers=auth_headers(owner_token),
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": team_matter["updated_at"],
+        },
     )
     assert assign_team.status_code == 200, assign_team.text
     scope = client.put(

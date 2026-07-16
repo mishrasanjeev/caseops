@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from caseops_api.core.problem_details import PROBLEM_CONTENT_TYPE
+from caseops_api.core.problem_details import PROBLEM_CONTENT_TYPE, _problem_payload
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -72,6 +72,28 @@ def test_422_validation_has_errors_array(client: TestClient) -> None:
     # Type falls back to a URL because no specific slug matches generic
     # validation failures.
     assert body["type"].startswith("https://") or isinstance(body["type"], str)
+
+
+def test_structured_detail_keeps_extensions_without_overriding_rfc_members() -> None:
+    body = _problem_payload(
+        status_code=409,
+        detail={
+            "message": "The record changed.",
+            "code": "stale_write",
+            "current_status": "disposed",
+            "status": 200,
+            "title": "Success",
+            "instance": "/spoofed",
+        },
+        instance="/api/matters/m-1",
+    )
+
+    assert body["detail"] == "The record changed."
+    assert body["code"] == "stale_write"
+    assert body["current_status"] == "disposed"
+    assert body["status"] == 409
+    assert body["title"] == "Conflict"
+    assert body["instance"] == "/api/matters/m-1"
 
 
 def test_verified_citations_required_has_specific_slug(client: TestClient) -> None:

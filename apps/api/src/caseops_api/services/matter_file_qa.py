@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    Matter,
     MatterAttachment,
     MatterAttachmentChunk,
     MatterFileQAEntry,
@@ -44,7 +45,11 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
-from caseops_api.services.matters import _append_activity, _get_matter_model
+from caseops_api.services.matters import (
+    _append_activity,
+    _assert_matter_not_disposed,
+    _get_matter_model,
+)
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 from caseops_api.services.session_context import SessionContext
 
@@ -159,6 +164,10 @@ def ask_matter_file_question(
     payload: MatterFileQARequest,
 ) -> MatterFileQAResponse:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    _assert_matter_not_disposed(
+        matter,
+        operation="ask a Matter File Q&A question",
+    )
     question = _normalize_text(payload.question)
     document_type_filter = _normalize_document_type_filter(payload.document_type_filter)
     analysis_language = payload.analysis_language
@@ -233,20 +242,15 @@ def ask_matter_file_question(
     )
     prompt_hash = _prompt_hash(messages)
     model_run: ModelRun | None = None
+    model_completion: LLMCompletion | None = None
 
-    def _on_model_run(
+    def _capture_model_completion(
         completion: LLMCompletion,
         _ctx: LLMCallContext,
         _messages: list[LLMMessage],
     ) -> None:
-        nonlocal model_run
-        model_run = _write_model_run(
-            session,
-            context=context,
-            matter_id=matter.id,
-            completion=completion,
-            prompt_hash=prompt_hash,
-        )
+        nonlocal model_completion
+        model_completion = completion
 
     try:
         provider = build_provider(purpose=PURPOSE)
@@ -268,10 +272,24 @@ def ask_matter_file_question(
             ),
             temperature=0.0,
             max_tokens=2600 if analysis_language != "en" else 1800,
-            on_model_run=_on_model_run,
+            on_model_run=_capture_model_completion,
             session=session,
         )
     except LLMResponseFormatError as exc:
+        _lock_operational_matter(
+            session,
+            context=context,
+            matter_id=matter.id,
+            operation="ask a Matter File Q&A question",
+        )
+        if model_completion is not None:
+            model_run = _write_model_run(
+                session,
+                context=context,
+                matter_id=matter.id,
+                completion=model_completion,
+                prompt_hash=prompt_hash,
+            )
         if model_run is not None:
             model_run.status = "failed_schema_validation"
             model_run.error = _truncate_error(str(exc))
@@ -298,6 +316,19 @@ def ask_matter_file_question(
     except LLMProviderError as exc:
         raise provider_failure_http_exception(noun="matter file answer", exc=exc) from exc
 
+    _lock_operational_matter(
+        session,
+        context=context,
+        matter_id=matter.id,
+        operation="ask a Matter File Q&A question",
+    )
+    model_run = _write_model_run(
+        session,
+        context=context,
+        matter_id=matter.id,
+        completion=_completion,
+        prompt_hash=prompt_hash,
+    )
     response = _response_from_llm(
         matter_id=matter.id,
         question=question,
@@ -362,6 +393,10 @@ def export_matter_file_qa_note(
     entry_id: str,
 ) -> MatterFileQAExportNoteResponse:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    _assert_matter_not_disposed(
+        matter,
+        operation="export a Matter File Q&A note",
+    )
     entry = session.scalar(
         select(MatterFileQAEntry).where(
             MatterFileQAEntry.id == entry_id,
@@ -381,6 +416,12 @@ def export_matter_file_qa_note(
         note = session.get(MatterNote, entry.exported_note_id)
         already_exported = note is not None and note.matter_id == matter.id
 
+    matter = _lock_operational_matter(
+        session,
+        context=context,
+        matter_id=matter.id,
+        operation="export a Matter File Q&A note",
+    )
     if note is None or not already_exported:
         note = MatterNote(
             matter_id=matter.id,
@@ -1274,6 +1315,12 @@ def _finalize_response(
     answer_mode: str,
     response: MatterFileQAResponse,
 ) -> MatterFileQAResponse:
+    _lock_operational_matter(
+        session,
+        context=context,
+        matter_id=matter_id,
+        operation="ask a Matter File Q&A question",
+    )
     entry = _persist_history_entry(
         session,
         context=context,
@@ -1308,6 +1355,23 @@ def _finalize_response(
     )
     session.commit()
     return response
+
+
+def _lock_operational_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    operation: str,
+) -> Matter:
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation=operation)
+    return matter
 
 
 def _write_model_run(

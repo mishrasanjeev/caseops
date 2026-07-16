@@ -38,6 +38,9 @@ export default defineConfig({
     /research\.spec\.ts/,
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,
+    // Dated tester batches must be discovered automatically. Manual entries
+    // allowed committed regressions to silently fall out of the normal suite.
+    /(?:hari|ram)-\d{4}-\d{2}-\d{2}-bugs\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
     /hari-2026-05-09-outlook-sync\.spec\.ts/,

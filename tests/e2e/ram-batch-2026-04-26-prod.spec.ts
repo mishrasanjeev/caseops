@@ -103,11 +103,17 @@ async function activateMatterAfterConflictClearance(
   opposingPartyName: string,
 ): Promise<void> {
   await clearConflictGate(request, headers, matterId, opposingPartyName);
+  const currentResp = await request.get(
+    `${PROD_API_BASE_URL}/api/matters/${matterId}`,
+    { headers },
+  );
+  await expectApiOk(currentResp, "GET matter before activation");
+  const current = (await currentResp.json()) as { updated_at: string };
   const activateResp = await request.patch(
     `${PROD_API_BASE_URL}/api/matters/${matterId}`,
     {
       headers,
-      data: { status: "active" },
+      data: { status: "active", expected_updated_at: current.updated_at },
     },
   );
   await expectApiOk(activateResp, "PATCH matter active");

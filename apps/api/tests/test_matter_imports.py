@@ -265,13 +265,57 @@ def test_bulk_matter_import_reports_invalid_rows_and_unsupported_documents(
     assert "Document category is unsupported." in rows[0]["errors"]
     assert "Document filename reference is not present in the manifest." in rows[0]["errors"]
     assert "Document filename reference is invalid." in rows[0]["errors"]
-    assert "Matter import dry-run cannot plan direct active-status creation." in rows[0]["errors"]
     assert [ref["status"] for ref in rows[0]["document_references"]] == [
         "missing",
         "invalid",
     ]
     assert rows[1]["status"] == "invalid"
     assert "Duplicate matter code in this import file." in rows[1]["errors"]
+
+
+def test_bulk_matter_import_omitted_or_explicit_active_status_is_valid(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    csv_body = (
+        b"MatterCode,Title,PracticeArea,ForumLevel,Status\n"
+        b"ADP11-DEFAULT,Default active,Civil,high_court,\n"
+        b"ADP11-ACTIVE,Explicit active,Civil,high_court,active\n"
+    )
+    response = client.post(
+        "/api/matters/imports/dry-run",
+        headers=auth_headers(token),
+        files={"mapping_file": ("matters.csv", csv_body, "text/csv")},
+    )
+    assert response.status_code == 200, response.text
+    rows = response.json()["rows"]
+    assert [(row["status"], row["matter_status"]) for row in rows] == [
+        ("valid", "active"),
+        ("valid", "active"),
+    ]
+
+
+def test_bulk_matter_import_rejects_terminal_status_bypass(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    csv_body = (
+        b"MatterCode,Title,PracticeArea,ForumLevel,Status\n"
+        b"ADP11-DISPOSED,Disposed bypass,Civil,high_court,disposed\n"
+        b"ADP11-CLOSED,Legacy closed bypass,Civil,high_court,closed\n"
+    )
+    response = client.post(
+        "/api/matters/imports/dry-run",
+        headers=auth_headers(token),
+        files={"mapping_file": ("matters.csv", csv_body, "text/csv")},
+    )
+    assert response.status_code == 200, response.text
+    rows = response.json()["rows"]
+    assert [row["status"] for row in rows] == ["invalid", "invalid"]
+    assert all(
+        any("cannot be imported in a disposed state" in error for error in row["errors"])
+        for row in rows
+    )
 
 
 def test_bulk_matter_import_duplicate_detection_is_tenant_scoped(

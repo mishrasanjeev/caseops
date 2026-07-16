@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ const {
   useMatterWorkspaceMock,
   fetchBenchStrategyMock,
   listConflictChecksMock,
+  transitionMatterStatusMock,
   updateMatterMock,
   useCapabilityMock,
   toastSuccess,
@@ -16,6 +17,7 @@ const {
   useMatterWorkspaceMock: vi.fn(),
   fetchBenchStrategyMock: vi.fn(),
   listConflictChecksMock: vi.fn(),
+  transitionMatterStatusMock: vi.fn(),
   updateMatterMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   toastSuccess: vi.fn(),
@@ -32,6 +34,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   listConflictChecks: listConflictChecksMock,
   resolveConflictCheck: vi.fn(),
   runConflictCheck: vi.fn(),
+  transitionMatterStatus: transitionMatterStatusMock,
   updateMatter: updateMatterMock,
   fetchCounselRecommendations: vi.fn().mockResolvedValue({
     matter_id: "m-1",
@@ -65,9 +68,12 @@ const BASE_DATA = {
     id: "m-1",
     title: "Test Matter",
     matter_code: "T-1",
+    opposing_party: null as string | null,
     description: "A short description.",
     status: "active",
+    practice_area: "Civil",
     forum_level: "high_court",
+    updated_at: "2026-07-15T08:30:00Z",
   },
   tasks: [],
   hearings: [],
@@ -81,6 +87,7 @@ describe("MatterOverviewPage", () => {
     useMatterWorkspaceMock.mockReset();
     fetchBenchStrategyMock.mockReset();
     updateMatterMock.mockReset();
+    transitionMatterStatusMock.mockReset();
     updateMatterMock.mockResolvedValue(BASE_DATA.matter);
     listConflictChecksMock.mockReset();
     listConflictChecksMock.mockResolvedValue({ matter_id: "m-1", checks: [] });
@@ -211,6 +218,7 @@ describe("MatterOverviewPage", () => {
     expect(updateMatterMock).toHaveBeenCalledWith(
       expect.objectContaining({
         matterId: "m-1",
+        expected_updated_at: "2026-07-15T08:30:00Z",
         title: "Corrected Matter",
         matter_code: "FIXED-2026-001",
         client_name: "Correct Client",
@@ -219,6 +227,7 @@ describe("MatterOverviewPage", () => {
         cnr_number: "CNR99",
       }),
     );
+    expect(updateMatterMock.mock.calls[0]?.[0]).not.toHaveProperty("status");
   });
 
   it("keeps conflict-gate activation guidance visible and links to the conflict card", async () => {
@@ -283,5 +292,116 @@ describe("MatterOverviewPage", () => {
     await userEvent.click(screen.getByTestId("matter-edit-review-conflict"));
     expect(scrollIntoView).toHaveBeenCalled();
     expect(focus).toHaveBeenCalled();
+  });
+
+  it("does not replay untouched status and surfaces a rejected stale metadata edit", async () => {
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:edit",
+    );
+    useMatterWorkspaceMock.mockReturnValue({ data: BASE_DATA });
+    updateMatterMock.mockRejectedValue({
+      name: "ApiError",
+      status: 409,
+      detail: "Matter changed after this page was loaded. Refresh and try again.",
+      problemType: null,
+      data: null,
+    });
+    fetchBenchStrategyMock.mockResolvedValue({
+      matter_id: "m-1",
+      bench_judge_ids: [],
+      total_decisions_indexed: 0,
+      evidence_quality: "insufficient",
+      top_authorities: [],
+      top_statute_sections: [],
+      disclaimer: "Not legal advice.",
+    });
+
+    render(withClient(<MatterOverviewPage />));
+    await userEvent.click(screen.getByTestId("matter-edit-open"));
+    fireEvent.change(screen.getByTestId("matter-edit-title"), {
+      target: { value: "Stale title edit" },
+    });
+    await userEvent.click(screen.getByTestId("matter-edit-save"));
+
+    expect(await screen.findByTestId("matter-edit-stale-write")).toHaveTextContent(
+      /changed in another session/i,
+    );
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-1",
+      expected_updated_at: "2026-07-15T08:30:00Z",
+      title: "Stale title edit",
+    });
+  });
+
+  it("keeps the editor's original OCC token and dirty-field baseline across a refetch", async () => {
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:edit",
+    );
+    let currentData = BASE_DATA;
+    useMatterWorkspaceMock.mockImplementation(() => ({ data: currentData }));
+    fetchBenchStrategyMock.mockResolvedValue({
+      matter_id: "m-1",
+      bench_judge_ids: [],
+      total_decisions_indexed: 0,
+      evidence_quality: "insufficient",
+      top_authorities: [],
+      top_statute_sections: [],
+      disclaimer: "Not legal advice.",
+    });
+
+    const view = render(withClient(<MatterOverviewPage />));
+    await userEvent.click(screen.getByTestId("matter-edit-open"));
+    fireEvent.change(screen.getByTestId("matter-edit-title"), {
+      target: { value: "User draft from the original record" },
+    });
+
+    currentData = {
+      ...BASE_DATA,
+      matter: {
+        ...BASE_DATA.matter,
+        title: "Server title after refetch",
+        opposing_party: "Server-side opposing party",
+        status: "on_hold",
+        updated_at: "2026-07-15T09:45:00Z",
+      },
+    };
+    view.rerender(withClient(<MatterOverviewPage />));
+
+    expect(screen.getByTestId("matter-edit-title")).toHaveValue(
+      "User draft from the original record",
+    );
+    await userEvent.click(screen.getByTestId("matter-edit-save"));
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-1",
+      expected_updated_at: "2026-07-15T08:30:00Z",
+      title: "User draft from the original record",
+    });
+  });
+
+  it("hides metadata and hearing write affordances for a disposed matter", () => {
+    useCapabilityMock.mockReturnValue(true);
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        matter: { ...BASE_DATA.matter, status: "disposed" },
+      },
+    });
+    fetchBenchStrategyMock.mockResolvedValue({
+      matter_id: "m-1",
+      bench_judge_ids: [],
+      total_decisions_indexed: 0,
+      evidence_quality: "insufficient",
+      top_authorities: [],
+      top_statute_sections: [],
+      disclaimer: "Not legal advice.",
+    });
+
+    render(withClient(<MatterOverviewPage />));
+
+    expect(screen.queryByTestId("matter-edit-open")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("matter-forum-edit")).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId("schedule-hearing-open")).toHaveLength(0);
   });
 });

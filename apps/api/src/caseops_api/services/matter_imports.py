@@ -603,7 +603,7 @@ def dry_run_bulk_matter_import(
         client_name = row.get("client_name", "").strip() or None
         practice_area = row.get("practice_area", "").strip() or None
         matter_type = row.get("matter_type", "").strip() or None
-        matter_status = row.get("status", "").strip() or MatterStatus.INTAKE.value
+        matter_status = row.get("status", "").strip() or MatterStatus.ACTIVE.value
         forum_level = row.get("forum_level", "").strip() or None
         court_name = row.get("court_name", "").strip() or None
         owner_email = row.get("owner_email", "").strip() or None
@@ -621,11 +621,6 @@ def dry_run_bulk_matter_import(
         if category == "unsupported":
             errors.append("Document category is unsupported.")
             category = None
-        if matter_status == MatterStatus.ACTIVE.value:
-            errors.append(
-                "Matter import dry-run cannot plan direct active-status creation."
-            )
-
         document_references: list[BulkMatterImportDocumentReference] = []
         for document_name in _split_document_references(row.get("document_filenames")):
             safe_name = _safe_document_name(document_name)
@@ -672,6 +667,12 @@ def dry_run_bulk_matter_import(
         )
         if duplicate_candidates:
             errors.append("Duplicate matter candidate exists for this company.")
+
+        if matter_status in {"disposed", "closed"}:
+            errors.append(
+                "A matter cannot be imported in a disposed state; use the "
+                "audited lifecycle workflow after creation."
+            )
 
         if title and matter_code and practice_area and forum_level:
             try:

@@ -84,10 +84,18 @@ def _resolve_check(
 
 
 def _activate_matter(client: TestClient, *, token: str, matter_id: str):
+    current = client.get(
+        f"/api/matters/{matter_id}",
+        headers=auth_headers(token),
+    )
+    assert current.status_code == 200, current.text
     return client.patch(
         f"/api/matters/{matter_id}",
         headers=auth_headers(token),
-        json={"status": "active"},
+        json={
+            "status": "active",
+            "expected_updated_at": current.json()["updated_at"],
+        },
     )
 
 
@@ -319,7 +327,7 @@ def test_intake_to_active_requires_completed_conflict_check(
     assert events[0].result == "denied"
 
 
-def test_direct_active_matter_create_is_blocked_for_normal_api_user(
+def test_direct_active_matter_create_does_not_require_conflict_check(
     client: TestClient,
 ) -> None:
     boot = bootstrap_company(client)
@@ -341,22 +349,14 @@ def test_direct_active_matter_create_is_blocked_for_normal_api_user(
         },
     )
 
-    assert create.status_code == 409, create.text
-    detail = create.json()["detail"].lower()
-    assert "conflict" in detail
-    assert "Acme" not in create.text
-    assert "Beta" not in create.text
+    assert create.status_code == 200, create.text
+    assert create.json()["status"] == "active"
+    assert create.json()["is_active"] is True
     events = _audit_events(
         company_id=company_id,
         action="matter.status_transition.blocked",
     )
-    assert len(events) == 1
-    metadata = json.loads(events[0].metadata_json or "{}")
-    assert metadata["from_status"] is None
-    assert metadata["to_status"] == "active"
-    assert metadata["conflict_gate"]["reason"] == "direct_active_create_blocked"
-    assert "Acme" not in json.dumps(metadata)
-    assert "Beta" not in json.dumps(metadata)
+    assert events == []
 
 
 def test_clear_conflict_check_allows_intake_activation(
@@ -476,7 +476,11 @@ def test_active_to_active_update_does_not_recheck_conflict_gate(
     update = client.patch(
         f"/api/matters/{matter_id}",
         headers=auth_headers(token),
-        json={"status": "active", "court_name": "Bombay High Court"},
+        json={
+            "status": "active",
+            "court_name": "Bombay High Court",
+            "expected_updated_at": activate.json()["updated_at"],
+        },
     )
 
     assert update.status_code == 200, update.text
@@ -630,7 +634,14 @@ def test_clear_check_for_different_opposing_party_is_stale_for_activation(
     activate = client.patch(
         f"/api/matters/{matter_id}",
         headers=auth_headers(token),
-        json={"status": "active", "opposing_party": "Acme Pvt Ltd"},
+        json={
+            "status": "active",
+            "opposing_party": "Acme Pvt Ltd",
+            "expected_updated_at": client.get(
+                f"/api/matters/{matter_id}",
+                headers=auth_headers(token),
+            ).json()["updated_at"],
+        },
     )
 
     assert activate.status_code == 409, activate.text
@@ -837,7 +848,13 @@ def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
     denied = client.patch(
         f"/api/matters/{restricted_matter}",
         headers=member_headers,
-        json={"status": "active"},
+        json={
+            "status": "active",
+            "expected_updated_at": client.get(
+                f"/api/matters/{restricted_matter}",
+                headers=owner_headers,
+            ).json()["updated_at"],
+        },
     )
     assert denied.status_code == 404
 
@@ -858,7 +875,13 @@ def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
     walled = client.patch(
         f"/api/matters/{walled_matter}",
         headers=member_headers,
-        json={"status": "active"},
+        json={
+            "status": "active",
+            "expected_updated_at": client.get(
+                f"/api/matters/{walled_matter}",
+                headers=owner_headers,
+            ).json()["updated_at"],
+        },
     )
     assert walled.status_code == 404
 
@@ -879,7 +902,13 @@ def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
     assign = client.patch(
         f"/api/matters/{team_matter}",
         headers=owner_headers,
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": client.get(
+                f"/api/matters/{team_matter}",
+                headers=owner_headers,
+            ).json()["updated_at"],
+        },
     )
     assert assign.status_code == 200, assign.text
     scope = client.put(
@@ -891,7 +920,10 @@ def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
     team_denied = client.patch(
         f"/api/matters/{team_matter}",
         headers=member_headers,
-        json={"status": "active"},
+        json={
+            "status": "active",
+            "expected_updated_at": assign.json()["updated_at"],
+        },
     )
     assert team_denied.status_code == 404
 
@@ -910,7 +942,10 @@ def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
     cross = client.patch(
         f"/api/matters/{team_matter}",
         headers=auth_headers(str(other.json()["access_token"])),
-        json={"status": "active"},
+        json={
+            "status": "active",
+            "expected_updated_at": assign.json()["updated_at"],
+        },
     )
     assert cross.status_code == 404
 
@@ -929,8 +964,8 @@ def test_pg001_docs_mark_conflict_gate_implemented() -> None:
 
     assert "`PG-001` conflict check workflow" not in future
     assert "Status: **`Implemented`**" in pg001
-    assert "create a matter directly as `active`" in pg001
-    assert "non-active status transition into `active`" in pg001
+    assert "created directly as `active`" in pg001
+    assert "`intake` or `on_hold`" in pg001
     assert "Follow-on caveats:" in pg001
 
 

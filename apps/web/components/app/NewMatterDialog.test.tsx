@@ -273,7 +273,7 @@ describe("NewMatterDialog", () => {
         forum_district: null,
         forum_city: "New Delhi",
         forum_consumer_level: null,
-        status: "intake",
+        status: "active",
       }),
     );
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
@@ -298,14 +298,14 @@ describe("NewMatterDialog", () => {
     expect(createMatterMock).not.toHaveBeenCalled();
   });
 
-  it("shows Dispose instead of Close or Closed and submits disposed status", async () => {
+  it("defaults new matters to Active and does not offer a terminal state at creation", async () => {
     const user = userEvent.setup();
     createMatterMock.mockResolvedValue({
       id: "m-1",
       matter_code: "BLR-001",
-      title: "Disposed matter",
+      title: "Active matter",
       created_at: "2026-04-17T10:00:00Z",
-      status: "disposed",
+      status: "active",
     });
     render(withClient(<NewMatterDialog />));
 
@@ -316,18 +316,20 @@ describe("NewMatterDialog", () => {
     await fillRequiredMatterFields(user);
 
     const statusTrigger = screen.getByRole("combobox", { name: "Status" });
+    expect(statusTrigger).toHaveTextContent("Active");
     await user.click(statusTrigger);
     const listbox = await screen.findByRole("listbox");
-    expect(within(listbox).getByText("Dispose")).toBeInTheDocument();
+    expect(within(listbox).getByText("Active")).toBeInTheDocument();
+    expect(within(listbox).queryByText("Dispose")).not.toBeInTheDocument();
     expect(within(listbox).queryByText("Close")).not.toBeInTheDocument();
     expect(within(listbox).queryByText("Closed")).not.toBeInTheDocument();
-    await user.click(within(listbox).getByText("Dispose"));
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
 
     await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
     expect(createMatterMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "disposed",
+        status: "active",
       }),
     );
   });

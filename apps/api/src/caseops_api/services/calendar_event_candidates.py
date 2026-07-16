@@ -23,6 +23,7 @@ from caseops_api.schemas.calendar import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -253,6 +254,11 @@ def review_calendar_event_candidate(
         session,
         context=context,
         matter_id=payload.matter_id or row.linked_matter_id or row.suggested_matter_id,
+    )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="accept a calendar candidate",
     )
     if matter.next_hearing_manual_lock and not payload.force_overwrite_locked:
         row.status = CalendarEventCandidateStatus.CONFLICT

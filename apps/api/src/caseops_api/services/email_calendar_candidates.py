@@ -28,6 +28,7 @@ from caseops_api.schemas.calendar import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 _MAX_PREVIEW_CHARS = 280
@@ -233,6 +234,11 @@ def review_email_invitation_candidate(
         session.refresh(candidate)
         return _candidate_record(candidate, matter)
 
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="approve an email-calendar candidate",
+    )
     deadline = MatterDeadline(
         matter_id=matter.id,
         source="email_invitation",

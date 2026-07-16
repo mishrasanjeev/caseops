@@ -21,6 +21,10 @@ Why these specific tests:
 - `test_alembic_upgrade_to_head_runs_cleanly`: catches every batch-
   mode migration that secretly assumes SQLite (e.g. our C-3
   20260424_0002 that uses `op.batch_alter_table`).
+- `test_lifecycle_migration_neutralizes_legacy_children_on_postgres`:
+  proves the July 15 data repair against the production dialect, not
+  merely the SQLite migration harness. A legacy closed Matter is
+  upgraded with its old task/deadline/hearing permanently cancelled.
 - `test_pgvector_extension_and_hnsw_index_work`: the entire RAG
   retrieval path depends on pgvector's `<=>` cosine operator + an
   HNSW index. SQLite has no equivalent; this is the only place we
@@ -42,6 +46,7 @@ Why these specific tests:
   the C-3 `server_default=false()` on `Matter.oc_cross_visibility_enabled`
   actually fires on Postgres (the migration uses `sa.false()`).
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -136,6 +141,73 @@ def _seed_matter(session: Session, company_id: str) -> str:
     return matter_id
 
 
+def _seed_membership(session: Session, company_id: str) -> str:
+    user_id = str(uuid4())
+    membership_id = str(uuid4())
+    now = datetime.now(UTC)
+    session.execute(
+        text(
+            "INSERT INTO users "
+            "(id, email, full_name, password_hash, is_active, created_at) "
+            "VALUES (:id, :email, 'Notice PG User', 'not-used', true, :ts)"
+        ),
+        {
+            "id": user_id,
+            "email": f"notice-pg-{user_id[:8]}@example.com",
+            "ts": now,
+        },
+    )
+    session.execute(
+        text(
+            "INSERT INTO company_memberships "
+            "(id, company_id, user_id, role, is_active, created_at) "
+            "VALUES (:id, :company, :user, 'member', true, :ts)"
+        ),
+        {
+            "id": membership_id,
+            "company": company_id,
+            "user": user_id,
+            "ts": now,
+        },
+    )
+    return membership_id
+
+
+def _seed_notice(
+    session: Session,
+    company_id: str,
+    membership_id: str,
+    **overrides: object,
+) -> str:
+    notice_id = str(uuid4())
+    values: dict[str, object] = {
+        "id": notice_id,
+        "company": company_id,
+        "owner": membership_id,
+        "creator": membership_id,
+        "direction": "received",
+        "subject": f"PG notice {notice_id[:8]}",
+        "status": "Open",
+        "reply_required": False,
+        "reply_sent": False,
+        "currency": "INR",
+        "ts": datetime.now(UTC),
+    }
+    values.update(overrides)
+    session.execute(
+        text(
+            "INSERT INTO company_notices "
+            "(id, company_id, owner_membership_id, created_by_membership_id, "
+            "direction, subject, status, reply_required, reply_sent, currency, "
+            "created_at, updated_at) VALUES "
+            "(:id, :company, :owner, :creator, :direction, :subject, :status, "
+            ":reply_required, :reply_sent, :currency, :ts, :ts)"
+        ),
+        values,
+    )
+    return notice_id
+
+
 def _seed_portal_user(session: Session, company_id: str) -> str:
     pu_id = str(uuid4())
     session.execute(
@@ -191,6 +263,209 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
         f"DB at {rows[0][0]} but latest revision file is {latest_rev}; "
         "alembic upgrade head did not advance the DB"
     )
+
+
+def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Upgrade a real legacy terminal row and prove children cannot revive."""
+    from alembic.config import Config
+
+    from alembic import command
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.models import (
+        CalendarEventSync,
+        Company,
+        CompanyMembership,
+        Matter,
+        MatterDeadline,
+        MatterHearing,
+        MatterTask,
+        User,
+        UserCalendarConnection,
+    )
+
+    url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
+    get_settings.cache_clear()
+    project_root = Path(__file__).resolve().parents[1]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "alembic"))
+    config.set_main_option("sqlalchemy.url", url)
+
+    company_id = str(uuid4())
+    user_id = str(uuid4())
+    membership_id = str(uuid4())
+    matter_id = str(uuid4())
+    task_id = str(uuid4())
+    deadline_id = str(uuid4())
+    hearing_id = str(uuid4())
+    calendar_sync_id = str(uuid4())
+    with Session(pg_engine) as session:
+        session.add_all(
+            [
+                Company(
+                    id=company_id,
+                    name="Legacy PostgreSQL Lifecycle Firm",
+                    slug=f"legacy-pg-lifecycle-{company_id[:8]}",
+                    company_type="law_firm",
+                    tenant_key=company_id,
+                ),
+                User(
+                    id=user_id,
+                    email=f"legacy-pg-lifecycle-{user_id[:8]}@example.com",
+                    full_name="Legacy PostgreSQL Lifecycle Owner",
+                    password_hash="not-used",
+                ),
+            ]
+        )
+        session.commit()
+        session.add_all(
+            [
+                CompanyMembership(
+                    id=membership_id,
+                    company_id=company_id,
+                    user_id=user_id,
+                    role="owner",
+                ),
+                Matter(
+                    id=matter_id,
+                    company_id=company_id,
+                    title="Legacy PostgreSQL closed matter",
+                    matter_code=f"LEGACY-PG-{matter_id[:8].upper()}",
+                    client_name="Legacy Client",
+                    status="disposed",
+                    practice_area="litigation",
+                    forum_level="high_court",
+                    is_active=False,
+                    next_hearing_on=date(2099, 4, 10),
+                    next_hearing_source="manual",
+                    next_hearing_source_ref_type="matter_hearing",
+                    next_hearing_source_ref_id=hearing_id,
+                    next_hearing_manual_lock=True,
+                ),
+            ]
+        )
+        # These models are linked by scalar IDs, not in-memory relationships,
+        # so SQLAlchemy has no unit-of-work edge from each child to the pending
+        # Matter. Persist valid FK parents first; SQLite's permissive insert
+        # ordering must not make an impossible production fixture look green.
+        session.commit()
+        session.add_all(
+            [
+                MatterTask(
+                    id=task_id,
+                    matter_id=matter_id,
+                    title="Legacy PostgreSQL open task",
+                    status="todo",
+                ),
+                MatterDeadline(
+                    id=deadline_id,
+                    matter_id=matter_id,
+                    source="manual",
+                    kind="filing",
+                    title="Legacy PostgreSQL open deadline",
+                    due_on=date(2099, 4, 9),
+                    status="open",
+                ),
+                MatterHearing(
+                    id=hearing_id,
+                    matter_id=matter_id,
+                    hearing_on=date(2099, 4, 10),
+                    forum_name="Delhi High Court",
+                    purpose="Legacy PostgreSQL open hearing",
+                    status="scheduled",
+                ),
+            ]
+        )
+        session.commit()
+        connection = UserCalendarConnection(
+            company_id=company_id,
+            membership_id=membership_id,
+            provider="outlook",
+            status="connected",
+        )
+        session.add(connection)
+        session.commit()
+        session.add(
+            CalendarEventSync(
+                id=calendar_sync_id,
+                company_id=company_id,
+                calendar_connection_id=connection.id,
+                source_type="matter_hearing",
+                source_id=hearing_id,
+                provider_event_id="legacy-pg-provider-event",
+                sync_status="synced",
+            )
+        )
+        session.commit()
+
+    pg_engine.dispose()
+    command.downgrade(config, "20260708_0001")
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE matters SET status = 'closed', is_active = true, "
+                "next_hearing_on = '2099-04-10', next_hearing_source = 'manual', "
+                "next_hearing_source_ref_type = 'matter_hearing', "
+                "next_hearing_source_ref_id = :hearing_id, "
+                "next_hearing_manual_lock = true WHERE id = :matter_id"
+            ),
+            {"hearing_id": hearing_id, "matter_id": matter_id},
+        )
+    pg_engine.dispose()
+    command.upgrade(config, "head")
+
+    with pg_engine.connect() as connection:
+        matter_row = connection.execute(
+            text(
+                "SELECT status, is_active, next_hearing_on, next_hearing_source, "
+                "next_hearing_source_ref_type, next_hearing_source_ref_id, "
+                "next_hearing_manual_lock FROM matters WHERE id = :id"
+            ),
+            {"id": matter_id},
+        ).one()
+        task_row = connection.execute(
+            text(
+                "SELECT status, completed_at, cancelled_by_matter_disposal "
+                "FROM matter_tasks WHERE id = :id"
+            ),
+            {"id": task_id},
+        ).one()
+        deadline_row = connection.execute(
+            text(
+                "SELECT status, completed_at, cancelled_by_matter_disposal "
+                "FROM matter_deadlines WHERE id = :id"
+            ),
+            {"id": deadline_id},
+        ).one()
+        hearing_row = connection.execute(
+            text(
+                "SELECT status, cancelled_by_matter_disposal "
+                "FROM matter_hearings WHERE id = :id"
+            ),
+            {"id": hearing_id},
+        ).one()
+        calendar_sync_row = connection.execute(
+            text(
+                "SELECT sync_status, next_attempt_at, dead_letter_reason "
+                "FROM calendar_event_syncs WHERE id = :id"
+            ),
+            {"id": calendar_sync_id},
+        ).one()
+
+    assert tuple(matter_row) == ("disposed", False, None, "unknown", None, None, False)
+    assert task_row.status == "cancelled"
+    assert task_row.completed_at is not None
+    assert task_row.cancelled_by_matter_disposal is True
+    assert deadline_row.status == "cancelled"
+    assert deadline_row.completed_at is not None
+    assert deadline_row.cancelled_by_matter_disposal is True
+    assert tuple(hearing_row) == ("cancelled", True)
+    assert calendar_sync_row.sync_status == "delete_pending"
+    assert calendar_sync_row.next_attempt_at is not None
+    assert calendar_sync_row.dead_letter_reason == "matter_disposed_delete"
 
 
 def test_foreign_key_indexes_exist_after_head(pg_engine):
@@ -287,12 +562,7 @@ def test_pgvector_extension_and_hnsw_index_work(pg_engine):
         ).scalar()
         assert ext is not None, "pgvector extension must be installed"
         # Create a temp table — auto-dropped at session end.
-        conn.execute(
-            text(
-                "CREATE TEMP TABLE pg_aq005_vec_test "
-                "(id int PRIMARY KEY, v vector(3))"
-            )
-        )
+        conn.execute(text("CREATE TEMP TABLE pg_aq005_vec_test (id int PRIMARY KEY, v vector(3))"))
         conn.execute(
             text(
                 "INSERT INTO pg_aq005_vec_test (id, v) VALUES "
@@ -302,19 +572,11 @@ def test_pgvector_extension_and_hnsw_index_work(pg_engine):
             )
         )
         # HNSW index — same shape as production
-        conn.execute(
-            text(
-                "CREATE INDEX ON pg_aq005_vec_test USING hnsw "
-                "(v vector_cosine_ops)"
-            )
-        )
+        conn.execute(text("CREATE INDEX ON pg_aq005_vec_test USING hnsw (v vector_cosine_ops)"))
         # Cosine-distance nearest-neighbour to [1,0,0]: id=1 first,
         # id=3 second, id=2 last.
         rows = conn.execute(
-            text(
-                "SELECT id FROM pg_aq005_vec_test "
-                "ORDER BY v <=> '[1.0, 0.0, 0.0]' LIMIT 3"
-            )
+            text("SELECT id FROM pg_aq005_vec_test ORDER BY v <=> '[1.0, 0.0, 0.0]' LIMIT 3")
         ).fetchall()
         assert [r[0] for r in rows] == [1, 3, 2]
 
@@ -385,10 +647,7 @@ def test_portal_user_fk_set_null_on_delete_propagates(pg_engine):
     # Verify FK is set BEFORE delete
     with pg_engine.connect() as conn:
         before = conn.execute(
-            text(
-                "SELECT submitted_by_portal_user_id FROM matter_attachments "
-                "WHERE id = :id"
-            ),
+            text("SELECT submitted_by_portal_user_id FROM matter_attachments WHERE id = :id"),
             {"id": att_id},
         ).scalar()
         assert before == pu_id
@@ -400,10 +659,7 @@ def test_portal_user_fk_set_null_on_delete_propagates(pg_engine):
     # FK should now be NULL (SET NULL behavior)
     with pg_engine.connect() as conn:
         after = conn.execute(
-            text(
-                "SELECT submitted_by_portal_user_id FROM matter_attachments "
-                "WHERE id = :id"
-            ),
+            text("SELECT submitted_by_portal_user_id FROM matter_attachments WHERE id = :id"),
             {"id": att_id},
         ).scalar()
     assert after is None, (
@@ -441,9 +697,7 @@ def test_jsonb_column_roundtrip_preserves_nested_dict(pg_engine):
 
     with pg_engine.connect() as conn:
         got = conn.execute(
-            text(
-                "SELECT executive_summary_json FROM matters WHERE id = :id"
-            ),
+            text("SELECT executive_summary_json FROM matters WHERE id = :id"),
             {"id": matter_id},
         ).scalar()
     # psycopg returns a dict for JSON/JSONB columns
@@ -620,13 +874,186 @@ def test_oc_cross_visibility_server_default_inserts_false(pg_engine):
 
     with pg_engine.connect() as conn:
         v = conn.execute(
-            text(
-                "SELECT oc_cross_visibility_enabled FROM matters "
-                "WHERE id = :id"
-            ),
+            text("SELECT oc_cross_visibility_enabled FROM matters WHERE id = :id"),
             {"id": matter_id},
         ).scalar()
     assert v is False, (
         f"Expected server_default=false to land False, got {v!r}. "
         "Migration 20260424_0002 server_default may not have applied."
     )
+
+
+def test_notice_tenant_constraints_and_delete_policy_on_postgres(pg_engine):
+    """Production DB must reject tenant drift and notice globalization."""
+    with Session(pg_engine) as session:
+        company_a = _seed_company(session)
+        company_b = _seed_company(session)
+        membership_a = _seed_membership(session, company_a)
+        membership_b = _seed_membership(session, company_b)
+        matter_a = _seed_matter(session, company_a)
+        matter_b = _seed_matter(session, company_b)
+        notice_a = _seed_notice(session, company_a, membership_a)
+        session.execute(
+            text(
+                "INSERT INTO company_notice_matter_links "
+                "(id, company_id, notice_id, matter_id, created_at) "
+                "VALUES (:id, :company, :notice, :matter, :ts)"
+            ),
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "notice": notice_a,
+                "matter": matter_a,
+                "ts": datetime.now(UTC),
+            },
+        )
+        session.commit()
+
+    for overrides in (
+        {"owner": membership_b},
+        {"creator": membership_b},
+        {"creator": None},
+    ):
+        with pytest.raises(IntegrityError):
+            with Session(pg_engine) as session:
+                _seed_notice(session, company_a, membership_a, **overrides)
+                session.commit()
+
+    invalid_links = (
+        (company_a, notice_a, matter_b),
+        (company_b, notice_a, matter_b),
+    )
+    for company_id, notice_id, matter_id in invalid_links:
+        with pytest.raises(IntegrityError):
+            with pg_engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO company_notice_matter_links "
+                        "(id, company_id, notice_id, matter_id, created_at) "
+                        "VALUES (:id, :company, :notice, :matter, :ts)"
+                    ),
+                    {
+                        "id": str(uuid4()),
+                        "company": company_id,
+                        "notice": notice_id,
+                        "matter": matter_id,
+                        "ts": datetime.now(UTC),
+                    },
+                )
+
+    with pytest.raises(IntegrityError):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM matters WHERE id = :id"),
+                {"id": matter_a},
+            )
+    with pytest.raises(IntegrityError):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM company_memberships WHERE id = :id"),
+                {"id": membership_a},
+            )
+
+
+def test_notice_direction_and_reply_checks_on_postgres(pg_engine):
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        membership_id = _seed_membership(session, company_id)
+        session.commit()
+
+    invalid_states = (
+        {
+            "direction": "received",
+            "received_on": None,
+            "received_from": None,
+            "sent_on": date(2026, 7, 15),
+            "reply_due_on": None,
+            "reply_required": False,
+            "reply_sent": False,
+            "reply_sent_on": None,
+        },
+        {
+            "direction": "sent",
+            "received_on": date(2026, 7, 15),
+            "received_from": None,
+            "sent_on": None,
+            "reply_due_on": None,
+            "reply_required": False,
+            "reply_sent": False,
+            "reply_sent_on": None,
+        },
+        {
+            "direction": "sent",
+            "received_on": None,
+            "received_from": "Invalid sender",
+            "sent_on": None,
+            "reply_due_on": None,
+            "reply_required": False,
+            "reply_sent": False,
+            "reply_sent_on": None,
+        },
+        {
+            "direction": "sent",
+            "received_on": None,
+            "received_from": None,
+            "sent_on": date(2026, 7, 15),
+            "reply_due_on": None,
+            "reply_required": True,
+            "reply_sent": False,
+            "reply_sent_on": None,
+        },
+        {
+            "direction": "received",
+            "received_on": date(2026, 7, 15),
+            "received_from": None,
+            "sent_on": None,
+            "reply_due_on": None,
+            "reply_required": False,
+            "reply_sent": True,
+            "reply_sent_on": None,
+        },
+        {
+            "direction": "received",
+            "received_on": date(2026, 7, 15),
+            "received_from": None,
+            "sent_on": None,
+            "reply_due_on": date(2026, 7, 20),
+            "reply_required": False,
+            "reply_sent": False,
+            "reply_sent_on": None,
+        },
+        {
+            "direction": "received",
+            "received_on": date(2026, 7, 15),
+            "received_from": None,
+            "sent_on": None,
+            "reply_due_on": None,
+            "reply_required": False,
+            "reply_sent": False,
+            "reply_sent_on": date(2026, 7, 19),
+        },
+    )
+    statement = text(
+        "INSERT INTO company_notices "
+        "(id, company_id, owner_membership_id, created_by_membership_id, "
+        "direction, subject, status, received_on, received_from, sent_on, "
+        "reply_due_on, reply_required, reply_sent, reply_sent_on, currency, "
+        "created_at, updated_at) VALUES "
+        "(:id, :company, :membership, :membership, :direction, :subject, "
+        "'Open', :received_on, :received_from, :sent_on, :reply_due_on, "
+        ":reply_required, :reply_sent, :reply_sent_on, 'INR', :ts, :ts)"
+    )
+    for index, invalid_state in enumerate(invalid_states):
+        with pytest.raises(IntegrityError):
+            with pg_engine.begin() as connection:
+                connection.execute(
+                    statement,
+                    {
+                        "id": str(uuid4()),
+                        "company": company_id,
+                        "membership": membership_id,
+                        "subject": f"Invalid PG notice state {index}",
+                        "ts": datetime.now(UTC),
+                        **invalid_state,
+                    },
+                )

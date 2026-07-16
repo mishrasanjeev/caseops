@@ -47,6 +47,7 @@ from caseops_api.schemas.predictive_intelligence import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.authority_sources import is_source_allowed_for_predictive_aggregates
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.predictive_outcomes import (
     load_predictive_aggregate_snapshots_for_matter,
 )
@@ -159,6 +160,12 @@ def build_predictive_intelligence(
             detail="Predictive intelligence is disabled by tenant AI policy.",
         )
 
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="build predictive intelligence",
+        lock_for_write=False,
+    )
     bench_judge_ids = _resolve_bench_judge_ids(session, matter)
     aggregate_snapshots = load_predictive_aggregate_snapshots_for_matter(
         session,
@@ -188,6 +195,11 @@ def build_predictive_intelligence(
     matter_risk = _build_matter_risk_summary(matter.id, signals)
     hearing_scorecard = _build_hearing_scorecard(matter.id)
 
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="build predictive intelligence",
+    )
     run = _persist_run(
         session,
         context=context,

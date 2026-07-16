@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     AuthorityDocumentType,
     Matter,
     MatterCourtOrder,
+    MatterStatus,
     MatterStatuteReference,
     MatterStrategyEntry,
     ModelRun,
@@ -242,6 +243,90 @@ def test_generate_recommendation_returns_verified_citations(client: TestClient) 
     assert any(option["supporting_citations"] for option in payload["options"])
     primary = payload["options"][payload["primary_option_index"]]
     assert primary["supporting_citations"]
+
+
+def test_generate_recommendation_rechecks_matter_after_provider_callback_disposal(
+    client: TestClient, monkeypatch
+) -> None:
+    """A disposal that wins after bench-rerank commit blocks every final row.
+
+    Authority generation records and commits the bench-rerank trace before the
+    provider call.  That commit used to release the request-entry Matter lock,
+    allowing a provider-time disposal to race with final recommendation and
+    ModelRun persistence.
+    """
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    factory = get_session_factory()
+
+    class _DisposingProvider:
+        name = "mock"
+        model = "mock-disposal-race"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            with factory() as disposal_session:
+                matter = disposal_session.get(Matter, matter_id)
+                assert matter is not None
+                matter.status = MatterStatus.DISPOSED
+                matter.is_active = False
+                disposal_session.commit()
+
+            return LLMCompletion(
+                text=json.dumps(
+                    {
+                        "title": "Must not persist after disposal",
+                        "options": [
+                            {
+                                "label": "Rely on the verified authority",
+                                "rationale": "The retrieved authority supports the position.",
+                                "confidence": "medium",
+                                "supporting_citations": [
+                                    "Ssangyong Engg v. NHAI (2019)"
+                                ],
+                                "risk_notes": None,
+                            }
+                        ],
+                        "primary_recommendation_label": (
+                            "Rely on the verified authority"
+                        ),
+                        "rationale": "Source-grounded analysis.",
+                        "assumptions": [],
+                        "missing_facts": [],
+                        "confidence": "medium",
+                        "next_action": None,
+                    }
+                ),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *args, **kwargs: _DisposingProvider(),
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+
+    assert response.status_code == 409, response.text
+    with factory() as session:
+        assert session.scalar(
+            select(Recommendation.id).where(Recommendation.matter_id == matter_id)
+        ) is None
+        assert session.scalar(
+            select(ModelRun.id).where(
+                ModelRun.matter_id == matter_id,
+                ModelRun.purpose == "recommendation:authority",
+            )
+        ) is None
 
 
 def test_generate_recommendation_refuses_when_no_verified_citations(
@@ -1838,10 +1923,18 @@ def test_recommendation_decision_requires_visible_matter_for_team_scoping(
     assert litigation_team.status_code == 201, litigation_team.text
     team_id = litigation_team.json()["id"]
     matter_id = _create_matter(client, owner_token, code="REC-DEC-TEAM")
+    current_matter = client.get(
+        f"/api/matters/{matter_id}",
+        headers=owner_headers,
+    )
+    assert current_matter.status_code == 200, current_matter.text
     assign_team = client.patch(
         f"/api/matters/{matter_id}",
         headers=owner_headers,
-        json={"team_id": team_id},
+        json={
+            "team_id": team_id,
+            "expected_updated_at": current_matter.json()["updated_at"],
+        },
     )
     assert assign_team.status_code == 200, assign_team.text
     recommendation_id = _seed_recommendation_for_matter(matter_id)

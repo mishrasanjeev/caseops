@@ -30,6 +30,10 @@ from caseops_api.schemas.proceeding_intelligence import (
 )
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import (
+    assert_operational_matter,
+    require_operational_matter,
+)
 from caseops_api.services.next_hearing import apply_next_hearing_update
 from caseops_api.services.session_context import SessionContext
 
@@ -176,6 +180,11 @@ def extract_order_proceeding_intelligence(
     order_id: str,
 ) -> ProceedingIntelligenceResponse:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="extract proceeding intelligence",
+    )
     order = _load_order(session, matter_id=matter.id, order_id=order_id)
     _extract_and_persist(
         session,
@@ -289,6 +298,7 @@ def _extract_and_persist(
     actor_membership_id: str | None,
     context: SessionContext | None,
 ) -> list[MatterProceedingSignal]:
+    matter = assert_operational_matter(session, matter=matter)
     source_text = _usable_source_text(order.order_text)
     if source_text is None:
         _audit(

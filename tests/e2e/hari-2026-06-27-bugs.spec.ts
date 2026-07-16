@@ -89,9 +89,9 @@ test.describe("Hari 2026-06-27 bugs", () => {
     await api.dispose();
     await signIn(page, slug, ownerEmail);
 
-    let searchPayload: Record<string, unknown> | null = null;
+    const searchPayloads: Record<string, unknown>[] = [];
     await page.route("**/api/authorities/search", async (route) => {
-      searchPayload = route.request().postDataJSON() as Record<string, unknown>;
+      searchPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -178,8 +178,11 @@ test.describe("Hari 2026-06-27 bugs", () => {
     ).toHaveCount(0);
     await expect(page.getByTestId("research-result-garbled")).toHaveCount(0);
     await expect(page.getByText(/\$O \?J/)).toHaveCount(0);
-    expect(searchPayload?.mode).toBe("contextual");
-    expect(searchPayload?.query).toBe(CHEQUE_QUERY);
+    expect(searchPayloads).toHaveLength(1);
+    expect(searchPayloads[0]).toMatchObject({
+      mode: "contextual",
+      query: CHEQUE_QUERY,
+    });
   });
 
   for (const mode of ["keyword", "contextual"] as const) {
@@ -246,21 +249,48 @@ test.describe("Hari 2026-06-27 bugs", () => {
     await signIn(page, slug, ownerEmail);
 
     await page.goto("/app/matters");
-    const statusSelect = page.getByLabel("Status for H627-STATUS");
-    await expect(statusSelect).toBeVisible({ timeout: 15_000 });
+    // Clickable DataTable rows intentionally expose role="button" for keyboard
+    // activation, so locate the semantic <tr> directly instead of asking for
+    // the overridden ARIA row role.
+    const matterRow = page
+      .locator('tr[role="button"]')
+      .filter({ hasText: "H627-STATUS" });
+    await expect(matterRow).toBeVisible({ timeout: 15_000 });
 
     const patchResponse = page.waitForResponse(
       (response) =>
-        response.url().includes(`/api/matters/${matterId}`) &&
+        response.url().includes(
+          `/api/matters/${matterId}/lifecycle/status`,
+        ) &&
         response.request().method() === "PATCH",
     );
-    await statusSelect.selectOption("disposed");
-    expect((await patchResponse).status()).toBe(200);
-    await expect(page.getByLabel("Status for H627-STATUS")).toHaveValue("disposed");
+    await matterRow.getByTestId("matter-dispose-trigger").click();
+    const lifecycleDialog = page.getByRole("dialog", {
+      name: "Dispose matter",
+    });
+    await lifecycleDialog
+      .getByTestId("matter-lifecycle-reason")
+      .fill("Final order closed the June 27 regression matter.");
+    await lifecycleDialog.getByTestId("matter-lifecycle-confirm").click();
+    const disposedResponse = await patchResponse;
+    expect(disposedResponse.status()).toBe(200);
+    expect(((await disposedResponse.json()) as { status: string }).status).toBe(
+      "disposed",
+    );
+    await expect(
+      matterRow.getByTestId("matter-reopen-trigger"),
+    ).toBeVisible();
+    await expect(matterRow.getByLabel("Status for H627-STATUS")).toHaveCount(0);
 
     await page.reload();
-    await expect(page.getByLabel("Status for H627-STATUS")).toHaveValue("disposed", {
-      timeout: 15_000,
-    });
+    const reloadedMatterRow = page
+      .locator('tr[role="button"]')
+      .filter({ hasText: "H627-STATUS" });
+    await expect(
+      reloadedMatterRow.getByTestId("matter-reopen-trigger"),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      reloadedMatterRow.getByLabel("Status for H627-STATUS"),
+    ).toHaveCount(0);
   });
 });

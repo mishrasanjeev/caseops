@@ -193,6 +193,52 @@ def test_ethical_wall_blocks_member_even_with_grant(client: TestClient) -> None:
     assert unblocked.status_code == 200
 
 
+def test_attachment_download_honours_restriction_grant_and_ethical_wall(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    matter_id = _create_matter(client, owner_token, "ACL-DOWNLOAD")
+    member_mid, member_token = _invite_member(
+        client, owner_token, "download-wall@asterlegal.in"
+    )
+    upload = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(owner_token),
+        files={"file": ("privileged.txt", b"privileged material", "text/plain")},
+    )
+    assert upload.status_code == 200, upload.text
+    download_url = (
+        f"/api/matters/{matter_id}/attachments/{upload.json()['id']}/download"
+    )
+
+    restricted = client.post(
+        f"/api/matters/{matter_id}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    assert client.get(download_url, headers=auth_headers(member_token)).status_code == 404
+
+    grant = client.post(
+        f"/api/matters/{matter_id}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": member_mid, "reason": "Document review assignment"},
+    )
+    assert grant.status_code == 200, grant.text
+    allowed = client.get(download_url, headers=auth_headers(member_token))
+    assert allowed.status_code == 200
+    assert allowed.content == b"privileged material"
+
+    wall = client.post(
+        f"/api/matters/{matter_id}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": member_mid, "reason": "Conflict discovered"},
+    )
+    assert wall.status_code == 200, wall.text
+    assert client.get(download_url, headers=auth_headers(member_token)).status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # Owners bypass walls so they can't be locked out of their own firm.
 # ---------------------------------------------------------------------------

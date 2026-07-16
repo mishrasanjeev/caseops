@@ -36,6 +36,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.clients import KycDocumentRecord
 from caseops_api.services.audit import record_audit
+from caseops_api.services.matter_operational_guard import require_operational_matter
 
 
 def _assert_grant(
@@ -200,7 +201,7 @@ def post_matter_reply(
     """Portal user replies on a matter. Lands as an INBOUND
     Communication row visible to the firm's internal Comms tab,
     with metadata pointing back to the originating PortalUser id."""
-    _matter, grant = _assert_grant(
+    matter, grant = _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
     can_reply = bool(
@@ -217,9 +218,20 @@ def post_matter_reply(
         )
     if len(text) > 8000:
         text = text[:8000]
+    # The grant check intentionally runs first so an ungranted/cross-tenant
+    # probe keeps the indistinguishable 404 response.  Once authorised, lock
+    # and refresh the parent Matter before inserting the child Communication.
+    # ``populate_existing`` inside the shared guard prevents a disposal that
+    # raced with ``_assert_grant`` from being masked by this session's stale
+    # identity-map object.
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="post a portal reply",
+    )
     comm = Communication(
         company_id=portal_user.company_id,
-        matter_id=matter_id,
+        matter_id=matter.id,
         direction=CommunicationDirection.INBOUND,
         channel=CommunicationChannel.NOTE,
         subject=None,
@@ -246,7 +258,7 @@ def post_matter_reply(
         action="portal.communication.posted",
         target_type="communication",
         target_id=comm.id,
-        matter_id=matter_id,
+        matter_id=matter.id,
         result=AuditResult.SUCCESS,
         metadata={"portal_user_id": portal_user.id},
         ip=request_ip,
@@ -307,6 +319,14 @@ def submit_matter_kyc(
     """
     matter, _ = _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
+    )
+    # Lock the Matter before reading or mutating client-side child state.  This
+    # serialises KYC submission with lifecycle disposal and preserves the
+    # repository-wide parent-first lock order.
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="submit KYC",
     )
     from caseops_api.db.models import MatterClientAssignment
 

@@ -61,17 +61,16 @@ const schema = z.object({
   opposing_party: z.string().optional(),
   case_number: z.string().max(120, "Case number is too long.").optional(),
   cnr_number: z.string().max(32, "CNR number is too long.").optional(),
-  status: z.enum(["intake", "active", "on_hold", "disposed"]),
+  status: z.enum(["intake", "active", "on_hold"]),
   description: z.string().max(2000).optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 const STATUSES: { value: FormValues["status"]; label: string }[] = [
-  { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
+  { value: "intake", label: "Intake" },
   { value: "on_hold", label: "On hold" },
-  { value: "disposed", label: "Dispose" },
 ];
 
 export function NewMatterDialog() {
@@ -94,7 +93,7 @@ export function NewMatterDialog() {
       case_number: "",
       cnr_number: "",
       practice_area: "",
-      status: "intake",
+      status: "active",
       description: "",
     },
   });
@@ -298,21 +297,27 @@ export function NewMatterDialog() {
           </div>
           <Field label="Status">
             {({ fieldId }) => (
-              <Select
-                value={form.watch("status")}
-                onValueChange={(v) => form.setValue("status", v as FormValues["status"])}
-              >
-                <SelectTrigger id={fieldId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-1.5">
+                <Select
+                  value={form.watch("status")}
+                  onValueChange={(v) => form.setValue("status", v as FormValues["status"])}
+                >
+                  <SelectTrigger id={fieldId} data-testid="new-matter-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUSES.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[var(--color-mute)]">
+                  New matters start Active by default. Conflict checks remain available but are
+                  not an intake gate.
+                </p>
+              </div>
             )}
           </Field>
           <Field

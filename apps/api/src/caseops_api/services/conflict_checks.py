@@ -25,6 +25,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    AuditEvent,
     Client,
     Matter,
     MatterConflictCheck,
@@ -38,6 +39,7 @@ from caseops_api.schemas.conflicts import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -68,6 +70,12 @@ _PREFILTER_STOPWORDS = {
     "target",
     "the",
 }
+
+
+def _utc_timestamp(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 @dataclass(frozen=True)
@@ -267,6 +275,7 @@ def _record(check: MatterConflictCheck) -> ConflictCheckRecord:
         resolved_by_membership_id=check.resolved_by_membership_id,
         resolved_at=check.resolved_at,
         ran_by_membership_id=check.ran_by_membership_id,
+        matter_lifecycle_version=check.matter_lifecycle_version,
         ran_at=check.ran_at,
         created_at=check.created_at,
     )
@@ -279,7 +288,12 @@ def run_conflict_check(
     matter_id: str,
     payload: ConflictCheckRunRequest,
 ) -> ConflictCheckRecord:
-    matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=_load_matter(session, context=context, matter_id=matter_id),
+        operation="run a conflict check",
+    )
+    captured_lifecycle_version = matter.lifecycle_version
 
     query_names: list[str] = [payload.opposing_party_name.strip()]
     for related in payload.related_party_names:
@@ -324,6 +338,7 @@ def run_conflict_check(
         company_id=context.company.id,
         matter_id=matter.id,
         ran_by_membership_id=context.membership.id,
+        matter_lifecycle_version=captured_lifecycle_version,
         opposing_party_name=payload.opposing_party_name.strip()[:255],
         related_party_names_json=json.dumps([n for n in query_names[1:]]),
         candidates_json=json.dumps([c.model_dump() for c in deduped]),
@@ -404,6 +419,45 @@ def evaluate_matter_opening_gate(
     )
     if latest is None:
         return ConflictGateDecision(allowed=False, reason="missing_check")
+
+    current_lifecycle_version = session.scalar(
+        select(Matter.lifecycle_version).where(
+            Matter.company_id == company_id,
+            Matter.id == matter_id,
+        )
+    )
+    if (
+        current_lifecycle_version is None
+        or latest.matter_lifecycle_version != current_lifecycle_version
+    ):
+        return ConflictGateDecision(
+            allowed=False,
+            reason="stale_after_reopen",
+            latest_check_id=latest.id,
+            latest_status=latest.status,
+            latest_ran_at=latest.ran_at,
+        )
+
+    latest_reopen_at = session.scalar(
+        select(AuditEvent.created_at)
+        .where(
+            AuditEvent.company_id == company_id,
+            AuditEvent.matter_id == matter_id,
+            AuditEvent.action == "matter.lifecycle.reopened",
+        )
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        .limit(1)
+    )
+    if latest_reopen_at is not None and _utc_timestamp(latest.ran_at) <= _utc_timestamp(
+        latest_reopen_at
+    ):
+        return ConflictGateDecision(
+            allowed=False,
+            reason="stale_after_reopen",
+            latest_check_id=latest.id,
+            latest_status=latest.status,
+            latest_ran_at=latest.ran_at,
+        )
 
     if latest.status in _GATE_ALLOWED_STATUSES:
         if (

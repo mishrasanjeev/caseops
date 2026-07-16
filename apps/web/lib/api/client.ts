@@ -11,6 +11,11 @@ const REFRESH_PATH = "/api/auth/refresh";
 const CSRF_COOKIE = "caseops_csrf";
 const CSRF_HEADER = "X-CSRF-Token";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const AUTH_REFRESH_TRIGGERS = new Set([
+  "invalid_token",
+  "missing_bearer_token",
+  "expired_token",
+]);
 
 function readCsrfCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -237,11 +242,6 @@ export async function apiRequest<TResponse>(
     // the cookie path (no explicit bearer), the second attempt will
     // hit the same 401, _retry=true so we won't loop, and the helper
     // below redirects to /sign-in instead of throwing into a toast.
-    const AUTH_REFRESH_TRIGGERS = new Set([
-      "invalid_token",
-      "missing_bearer_token",
-      "expired_token",
-    ]);
     if (
       !_retry &&
       !portalRequest &&
@@ -301,4 +301,110 @@ export async function apiRequest<TResponse>(
     );
   }
   return parsed as TResponse;
+}
+
+/**
+ * Authenticated binary response transport.
+ *
+ * Keep downloads on the same cookie, explicit-bearer, single-flight refresh,
+ * one-retry, and unrecoverable sign-in redirect path as `apiRequest`. The
+ * successful response is intentionally left unread so the caller can consume
+ * its Blob and Content-Disposition headers.
+ */
+export async function apiBlobRequest(
+  path: string,
+  init: Omit<ApiRequestInit, "body"> = {},
+  _retry = false,
+): Promise<Response> {
+  const { method = "GET", headers = {}, signal } = init;
+  const explicitToken = init.token;
+  const portalRequest = isPortalApiPath(path);
+  const requestHeaders: Record<string, string> = {
+    Accept: "*/*",
+    ...headers,
+  };
+  if (explicitToken) {
+    requestHeaders.Authorization = `Bearer ${explicitToken}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(resolveUrl(path), {
+      method,
+      credentials: "include",
+      headers: requestHeaders,
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw new NetworkError(
+      "Could not reach the workspace API. Check your connection and try again.",
+      error,
+    );
+  }
+
+  if (response.ok) return response;
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  let parsed: unknown = null;
+  if (mediaType === "application/json" || mediaType.endsWith("+json")) {
+    parsed = await response.json().catch(() => null);
+  } else {
+    parsed = await response.text().catch(() => "");
+  }
+  const problemType =
+    parsed &&
+    typeof parsed === "object" &&
+    typeof (parsed as Record<string, unknown>).type === "string"
+      ? ((parsed as Record<string, unknown>).type as string)
+      : null;
+
+  if (
+    !_retry &&
+    !portalRequest &&
+    response.status === 401 &&
+    problemType !== null &&
+    AUTH_REFRESH_TRIGGERS.has(problemType) &&
+    !path.endsWith(REFRESH_PATH)
+  ) {
+    const fresh = await refreshAccessToken();
+    if (fresh || explicitToken === undefined) {
+      return apiBlobRequest(
+        path,
+        fresh ? { ...init, token: fresh } : init,
+        true,
+      );
+    }
+  }
+
+  if (
+    response.status === 401 &&
+    typeof window !== "undefined" &&
+    !path.endsWith(REFRESH_PATH)
+  ) {
+    if (portalRequest) {
+      const onPortalSignIn =
+        window.location.pathname === "/portal/sign-in" ||
+        window.location.pathname.startsWith("/portal/sign-in/");
+      if (!onPortalSignIn) window.location.assign("/portal/sign-in");
+    } else if (
+      explicitToken === undefined &&
+      !window.location.pathname.startsWith("/sign-in")
+    ) {
+      const next = encodeURIComponent(
+        window.location.pathname + window.location.search,
+      );
+      window.location.assign(`/sign-in?next=${next}`);
+    }
+  }
+
+  throw new ApiError(
+    response.status,
+    extractDetail(parsed, `Request failed (${response.status}).`),
+    parsed,
+    problemType,
+  );
 }

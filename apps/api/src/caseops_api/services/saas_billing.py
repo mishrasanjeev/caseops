@@ -36,6 +36,7 @@ from caseops_api.db.models import (
     BillingUsageEvent,
     Company,
     CompanyMembership,
+    CompanyNotice,
     Matter,
     MatterAttachment,
     MatterStatus,
@@ -383,12 +384,17 @@ def resolve_entitlements(session: Session, subscription: BillingSubscription) ->
 
 
 def _storage_used_bytes(session: Session, company_id: str) -> int:
-    value = session.scalar(
+    matter_attachment_bytes = session.scalar(
         select(func.coalesce(func.sum(MatterAttachment.size_bytes), 0))
         .join(Matter, Matter.id == MatterAttachment.matter_id)
         .where(Matter.company_id == company_id)
     )
-    return int(value or 0)
+    standalone_notice_bytes = session.scalar(
+        select(func.coalesce(func.sum(CompanyNotice.size_bytes), 0)).where(
+            CompanyNotice.company_id == company_id
+        )
+    )
+    return int(matter_attachment_bytes or 0) + int(standalone_notice_bytes or 0)
 
 
 def _active_matter_count(session: Session, company_id: str) -> int:

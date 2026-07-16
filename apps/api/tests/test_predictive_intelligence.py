@@ -4,6 +4,7 @@ import json
 from datetime import date
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -28,6 +29,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.predictive_intelligence import PredictiveEvidence
+from caseops_api.services import predictive_intelligence as predictive_service
 from caseops_api.services.predictive_outcomes import (
     classify_authority_document,
     refresh_predictive_aggregate_snapshots,
@@ -51,6 +53,15 @@ def _create_matter(client: TestClient, token: str, code: str) -> str:
     )
     assert response.status_code == 200, response.text
     return str(response.json()["id"])
+
+
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
 
 
 def _enable_predictive_policy(client: TestClient, token: str) -> None:
@@ -358,6 +369,82 @@ def test_weak_evidence_returns_insufficient_evidence(client: TestClient) -> None
         for signal in body["calibrated_signals"]
     )
     assert all(signal["observed_rate"] is None for signal in body["calibrated_signals"])
+
+
+def test_disposed_matter_blocks_predictive_generation_without_persisting_a_run(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    _enable_predictive_policy(client, token)
+    matter_id = _create_matter(client, token, "PI-DISPOSED")
+    _dispose_matter(matter_id)
+
+    response = _predictive_response(client, token, matter_id)
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.json()["detail"].lower()
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(PredictiveSignalRun).where(
+                PredictiveSignalRun.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(PredictiveSignalItem).where(
+                PredictiveSignalItem.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(PredictiveSignalEvidence).where(
+                PredictiveSignalEvidence.matter_id == matter_id
+            )
+        ) is None
+
+
+def test_predictive_generation_rechecks_after_concurrent_disposal(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    _enable_predictive_policy(client, token)
+    matter_id = _create_matter(client, token, "PI-RACE")
+    original_build_hearing_scorecard = predictive_service._build_hearing_scorecard
+    disposal_interposed = False
+
+    def build_scorecard_then_dispose(loaded_matter_id):
+        nonlocal disposal_interposed
+        scorecard = original_build_hearing_scorecard(loaded_matter_id)
+        if not disposal_interposed:
+            _dispose_matter(matter_id)
+            disposal_interposed = True
+        return scorecard
+
+    monkeypatch.setattr(
+        predictive_service,
+        "_build_hearing_scorecard",
+        build_scorecard_then_dispose,
+    )
+
+    response = _predictive_response(client, token, matter_id)
+
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(PredictiveSignalRun).where(
+                PredictiveSignalRun.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(PredictiveSignalItem).where(
+                PredictiveSignalItem.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(PredictiveSignalEvidence).where(
+                PredictiveSignalEvidence.matter_id == matter_id
+            )
+        ) is None
 
 
 def test_summary_only_sources_do_not_support_predictive_markers_or_excerpts() -> None:

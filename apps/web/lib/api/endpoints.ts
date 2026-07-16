@@ -671,10 +671,14 @@ export async function generateHearingCoach(input: {
 export async function setMatterOcCrossVisibility(
   matterId: string,
   enabled: boolean,
+  expectedUpdatedAt: string,
 ): Promise<Matter> {
   const data = await apiRequest<unknown>(`/api/matters/${matterId}`, {
     method: "PATCH",
-    body: { oc_cross_visibility_enabled: enabled },
+    body: {
+      oc_cross_visibility_enabled: enabled,
+      expected_updated_at: expectedUpdatedAt,
+    },
   });
   return matter.parse(data);
 }
@@ -1085,7 +1089,7 @@ export type MatterTaskRecord = {
   title: string;
   description: string | null;
   due_on: string | null;
-  status: "todo" | "in_progress" | "blocked" | "completed";
+  status: "todo" | "in_progress" | "blocked" | "completed" | "cancelled";
   priority: "low" | "medium" | "high" | "urgent";
   source_type: "user" | "proceeding_intelligence";
   source_ref_id: string | null;
@@ -1100,7 +1104,7 @@ export type MatterTaskCreateInput = {
   description?: string | null;
   owner_membership_id?: string | null;
   due_on?: string | null;
-  status?: MatterTaskRecord["status"];
+  status?: "todo" | "in_progress" | "blocked" | "completed";
   priority?: MatterTaskRecord["priority"];
 };
 
@@ -4227,10 +4231,14 @@ export async function setTeamScoping(enabled: boolean): Promise<{ enabled: boole
 export async function assignMatterTeam(input: {
   matterId: string;
   teamId: string | null;
+  expectedUpdatedAt: string;
 }): Promise<Matter> {
   const data = await apiRequest<unknown>(`/api/matters/${input.matterId}`, {
     method: "PATCH",
-    body: { team_id: input.teamId },
+    body: {
+      team_id: input.teamId,
+      expected_updated_at: input.expectedUpdatedAt,
+    },
   });
   return matter.parse(data);
 }
@@ -5330,7 +5338,7 @@ export async function createMatter(input: {
   claim_amount_minor?: number | null;
   claim_currency?: string;
   claim_amount_notes?: string | null;
-  status: "intake" | "active" | "on_hold" | "disposed";
+  status?: "intake" | "active" | "on_hold";
 }): Promise<Matter> {
   const data = await apiRequest<unknown>("/api/matters/", {
     method: "POST",
@@ -5341,6 +5349,7 @@ export async function createMatter(input: {
 
 export async function updateMatter(input: {
   matterId: string;
+  expected_updated_at: string;
   title?: string;
   matter_code?: string;
   client_name?: string | null;
@@ -5362,13 +5371,34 @@ export async function updateMatter(input: {
   claim_amount_minor?: number | null;
   claim_currency?: string | null;
   claim_amount_notes?: string | null;
-  status?: "intake" | "active" | "on_hold" | "disposed";
+  status?: "intake" | "active" | "on_hold";
 }): Promise<Matter> {
   const { matterId, ...body } = input;
   const data = await apiRequest<unknown>(`/api/matters/${matterId}`, {
     method: "PATCH",
     body,
   });
+  return matter.parse(data);
+}
+
+/**
+ * Terminal matter lifecycle changes intentionally use a separate endpoint.
+ * A generic metadata edit must never be able to dispose or reopen a matter.
+ * Both the observed status and timestamp are submitted so a stale browser tab
+ * cannot overwrite a more recent lifecycle decision.
+ */
+export async function transitionMatterStatus(input: {
+  matterId: string;
+  to_status: "disposed" | "intake";
+  expected_from_status: "intake" | "active" | "on_hold" | "disposed";
+  expected_updated_at: string;
+  reason: string;
+}): Promise<Matter> {
+  const { matterId, ...body } = input;
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/lifecycle/status`,
+    { method: "PATCH", body },
+  );
   return matter.parse(data);
 }
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from caseops_api.schemas.billing import InvoiceRecord, TimeEntryRecord
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
@@ -21,7 +21,14 @@ MatterForumLevelLiteral = Literal[
     "arbitration",
     "advisory",
 ]
-MatterTaskStatusLiteral = Literal["todo", "in_progress", "blocked", "completed"]
+MatterTaskStatusLiteral = Literal[
+    "todo",
+    "in_progress",
+    "blocked",
+    "completed",
+    "cancelled",
+]
+MatterTaskWriteStatusLiteral = Literal["todo", "in_progress", "blocked", "completed"]
 MatterTaskPriorityLiteral = Literal["low", "medium", "high", "urgent"]
 MatterTaskSourceTypeLiteral = Literal["user", "proceeding_intelligence"]
 MatterDeadlineStatusLiteral = Literal["open", "done", "cancelled", "missed"]
@@ -143,7 +150,10 @@ class MatterCreateRequest(BaseModel):
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
     case_number: str | None = Field(default=None, max_length=120)
     cnr_number: str | None = Field(default=None, max_length=32)
-    status: MatterStatusInputLiteral = "intake"
+    # New matters are operational by default. Conflict clearance remains a
+    # gate when an existing intake/on-hold matter is later activated; it is
+    # not a prerequisite for creating an already-active matter.
+    status: MatterStatusInputLiteral = "active"
     practice_area: str = Field(min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral
     court_id: str | None = Field(default=None, max_length=36)
@@ -192,7 +202,7 @@ class MatterCreateRequest(BaseModel):
                     "matter_code": "CR-2026-014",
                     "client_name": "Rahul Verma",
                     "opposing_party": "State of NCT of Delhi",
-                    "status": "intake",
+                    "status": "active",
                     "practice_area": "criminal",
                     "forum_level": "high_court",
                     "court_name": "Delhi High Court",
@@ -209,6 +219,8 @@ class MatterCreateRequest(BaseModel):
 
 
 class MatterUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = Field(default=None, min_length=3, max_length=255)
     matter_code: str | None = Field(
         default=None,
@@ -238,7 +250,12 @@ class MatterUpdateRequest(BaseModel):
     claim_amount_minor: int | None = Field(default=None, ge=0)
     claim_currency: str | None = Field(default=None, min_length=3, max_length=3)
     claim_amount_notes: str | None = Field(default=None, max_length=2000)
-    is_active: bool | None = None
+    # Optimistic-concurrency token from MatterRecord.updated_at. Empty PATCH
+    # bodies remain a harmless no-op; every actual metadata mutation must carry
+    # the token returned by the read that the edit was based on.
+    # ``is_active`` is deliberately absent: lifecycle state is derived from
+    # status and can only be changed through the dedicated lifecycle route.
+    expected_updated_at: datetime | None = None
     # Sprint 8c: optional team assignment. Pass null to detach; omit
     # the field to leave unchanged.
     team_id: str | None = None
@@ -273,6 +290,54 @@ class MatterUpdateRequest(BaseModel):
             stripped = value.strip()
             return stripped or None
         return value
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def require_timezone_for_expected_updated_at(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            # SQLite-backed deployments/tests serialize DateTime(timezone=True)
+            # values without an offset. Treat the API's own naive timestamp as
+            # UTC so a read token can always be round-tripped safely.
+            return value.replace(tzinfo=UTC)
+        return value
+
+    @model_validator(mode="after")
+    def require_concurrency_token_for_mutation(self) -> MatterUpdateRequest:
+        mutation_fields = self.model_fields_set - {"expected_updated_at"}
+        if mutation_fields and self.expected_updated_at is None:
+            raise ValueError("expected_updated_at is required for every matter update")
+        return self
+
+
+class MatterLifecycleStatusRequest(BaseModel):
+    """Explicit terminal lifecycle transition with compare-and-swap guards."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    to_status: MatterStatusInputLiteral
+    expected_from_status: MatterStatusInputLiteral
+    expected_updated_at: datetime
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("to_status", "expected_from_status", mode="before")
+    @classmethod
+    def normalize_statuses(cls, value: object) -> object:
+        return normalize_matter_status(value)
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def require_nontrivial_reason(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) < 10 or len(re.findall(r"\w+", normalized)) < 2:
+            raise ValueError("reason must contain at least two words and 10 characters")
+        return normalized
 
 
 class MatterRecord(BaseModel):
@@ -345,6 +410,7 @@ class MatterRecord(BaseModel):
     has_stay: bool = False
     has_interim_order: bool = False
     is_active: bool
+    lifecycle_version: int = 0
     team_id: str | None = None
     # Phase C-3c (MOD-TS-016, 2026-04-25). See MatterUpdateRequest for
     # semantics. Read-side default mirrors the DB default (False).
@@ -454,7 +520,7 @@ class MatterTaskCreateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     owner_membership_id: str | None = None
     due_on: date | None = None
-    status: MatterTaskStatusLiteral = "todo"
+    status: MatterTaskWriteStatusLiteral = "todo"
     priority: MatterTaskPriorityLiteral = "medium"
 
 
@@ -463,7 +529,7 @@ class MatterTaskUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     owner_membership_id: str | None = None
     due_on: date | None = None
-    status: MatterTaskStatusLiteral | None = None
+    status: MatterTaskWriteStatusLiteral | None = None
     priority: MatterTaskPriorityLiteral | None = None
 
 
@@ -483,6 +549,7 @@ class MatterTaskRecord(BaseModel):
     source_ref_id: str | None = None
     source_label: str | None = None
     completed_at: datetime | None
+    cancelled_by_matter_disposal: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -523,6 +590,7 @@ class MatterDeadlineRecord(BaseModel):
     source_ref_id: str | None
     created_by_membership_id: str | None
     completed_at: datetime | None
+    cancelled_by_matter_disposal: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -562,6 +630,7 @@ class MatterHearingRecord(BaseModel):
     purpose: str
     status: Literal["scheduled", "completed", "adjourned", "cancelled"]
     outcome_note: str | None
+    cancelled_by_matter_disposal: bool = False
     created_at: datetime
 
 

@@ -24,6 +24,10 @@ from caseops_api.services.matters import _get_matter_model, _persist_court_sync_
 from caseops_api.services.session_context import SessionContext
 
 
+def _matter_is_disposed(matter: Matter) -> bool:
+    return str(matter.status) in {"closed", "disposed"} or not matter.is_active
+
+
 def _job_record(job: MatterCourtSyncJob) -> MatterCourtSyncJobRecord:
     return MatterCourtSyncJobRecord(
         id=job.id,
@@ -58,6 +62,11 @@ def create_matter_court_sync_job(
     source_reference: str | None,
 ) -> MatterCourtSyncJobRecord:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    if _matter_is_disposed(matter):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot queue court sync because this matter is disposed.",
+        )
 
     # When the client omits `source`, derive it from the matter's court.
     # Most matters only ever want one live adapter — forcing the lawyer
@@ -210,6 +219,22 @@ def run_matter_court_sync_job(job_id: str) -> None:
         }:
             return
 
+        matter = session.scalar(select(Matter).where(Matter.id == job.matter_id))
+        if matter is None:
+            job.status = MatterCourtSyncJobStatus.FAILED
+            job.error_message = "Matter not found for court sync job."
+            job.completed_at = utcnow()
+            session.add(job)
+            session.commit()
+            return
+        if _matter_is_disposed(matter):
+            job.status = MatterCourtSyncJobStatus.FAILED
+            job.error_message = "Cancelled because the matter was disposed."
+            job.completed_at = utcnow()
+            session.add(job)
+            session.commit()
+            return
+
         job.status = MatterCourtSyncJobStatus.PROCESSING
         job.started_at = utcnow()
         job.completed_at = None
@@ -218,12 +243,21 @@ def run_matter_court_sync_job(job_id: str) -> None:
         session.commit()
 
         try:
-            matter = session.scalar(select(Matter).where(Matter.id == job.matter_id))
-            if matter is None:
-                raise ValueError("Matter not found for court sync job.")
-
             adapter = get_court_sync_adapter(job.source)
             result = adapter.fetch(matter=matter, source_reference=job.source_reference)
+            # Re-read and lock after the external call. Disposal may have won
+            # while the adapter was fetching; populate_existing prevents the
+            # session identity map from handing us the stale pre-fetch row.
+            matter = session.scalar(
+                select(Matter)
+                .where(Matter.id == job.matter_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if matter is None:
+                raise ValueError("Matter not found for court sync job.")
+            if _matter_is_disposed(matter):
+                raise ValueError("Court sync cancelled because the matter was disposed.")
             sync_run = _persist_court_sync_import(
                 session,
                 matter=matter,

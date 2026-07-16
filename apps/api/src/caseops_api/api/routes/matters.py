@@ -114,6 +114,7 @@ from caseops_api.schemas.matters import (
     MatterHearingRecord,
     MatterHearingUpdateRequest,
     MatterLifecycleStageLiteral,
+    MatterLifecycleStatusRequest,
     MatterListFilters,
     MatterListResponse,
     MatterNextHearingHistoryResponse,
@@ -268,6 +269,7 @@ from caseops_api.services.matters import (
     list_matters,
     matter_code_available,
     request_matter_attachment_processing,
+    transition_matter_lifecycle_status,
     update_matter,
     update_matter_attachment_metadata,
     update_matter_court_order,
@@ -292,6 +294,7 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 MatterCreator = Annotated[SessionContext, Depends(require_capability("matters:create"))]
 MatterWriter = Annotated[SessionContext, Depends(require_capability("matters:write"))]
 MatterEditor = Annotated[SessionContext, Depends(require_capability("matters:edit"))]
+MatterArchiver = Annotated[SessionContext, Depends(require_capability("matters:archive"))]
 DraftCreator = Annotated[SessionContext, Depends(require_capability("drafts:create"))]
 DraftEditor = Annotated[SessionContext, Depends(require_capability("drafts:edit"))]
 DraftGenerator = Annotated[SessionContext, Depends(require_capability("drafts:generate"))]
@@ -1952,6 +1955,25 @@ async def patch_current_company_matter(
     session: DbSession,
 ) -> MatterRecord:
     return update_matter(session, context=context, matter_id=matter_id, payload=payload)
+
+
+@router.patch(
+    "/{matter_id}/lifecycle/status",
+    response_model=MatterRecord,
+    summary="Dispose or reopen a matter with concurrency guards",
+)
+async def patch_current_company_matter_lifecycle_status(
+    matter_id: str,
+    payload: MatterLifecycleStatusRequest,
+    context: MatterArchiver,
+    session: DbSession,
+) -> MatterRecord:
+    return transition_matter_lifecycle_status(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
 
 
 @router.post(

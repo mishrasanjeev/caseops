@@ -19,9 +19,13 @@ const NONE_VALUE = "__none__";
 export function MatterTeamPicker({
   matterId,
   currentTeamId,
+  expectedUpdatedAt,
+  disabled = false,
 }: {
   matterId: string;
   currentTeamId: string | null | undefined;
+  expectedUpdatedAt: string;
+  disabled?: boolean;
 }) {
   const canManage = useCapability("matters:edit");
   const queryClient = useQueryClient();
@@ -36,7 +40,7 @@ export function MatterTeamPicker({
 
   const mutation = useMutation({
     mutationFn: (teamId: string | null) =>
-      assignMatterTeam({ matterId, teamId }),
+      assignMatterTeam({ matterId, teamId, expectedUpdatedAt }),
     onSettled: () => {
       setPending(null);
       void queryClient.invalidateQueries({ queryKey: ["matter-workspace", matterId] });
@@ -64,7 +68,7 @@ export function MatterTeamPicker({
           setPending(next);
           mutation.mutate(next === NONE_VALUE ? null : next);
         }}
-        disabled={mutation.isPending}
+        disabled={disabled || mutation.isPending}
       >
         <SelectTrigger className="h-7 w-44 border-none bg-transparent px-2 text-xs shadow-none focus-visible:ring-1">
           <SelectValue placeholder="Unassigned" />

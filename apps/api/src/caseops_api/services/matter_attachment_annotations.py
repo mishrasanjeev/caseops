@@ -25,6 +25,8 @@ from caseops_api.db.models import (
     MatterAttachmentAnnotation,
     MatterAttachmentAnnotationKind,
 )
+from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 AnnotationKindLiteral = Literal["highlight", "note", "flag"]
@@ -82,7 +84,12 @@ def create_annotation(
     body: str | None = None,
     color: str | None = None,
 ) -> AnnotationRecord:
-    _resolve_attachment(session, context, matter_id, attachment_id)
+    matter, _attachment = _resolve_attachment(
+        session,
+        context,
+        matter_id,
+        attachment_id,
+    )
     if page < 1:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -99,10 +106,15 @@ def create_annotation(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"kind must be one of {allowed}.",
         )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="annotate a matter attachment",
+    )
 
     row = MatterAttachmentAnnotation(
         company_id=context.company.id,
-        matter_id=matter_id,
+        matter_id=matter.id,
         matter_attachment_id=attachment_id,
         created_by_membership_id=context.membership.id,
         kind=kind,
@@ -126,7 +138,12 @@ def archive_annotation(
     attachment_id: str,
     annotation_id: str,
 ) -> None:
-    _resolve_attachment(session, context, matter_id, attachment_id)
+    matter, _attachment = _resolve_attachment(
+        session,
+        context,
+        matter_id,
+        attachment_id,
+    )
     row = session.scalar(
         select(MatterAttachmentAnnotation)
         .where(MatterAttachmentAnnotation.id == annotation_id)
@@ -137,6 +154,11 @@ def archive_annotation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Annotation not found.",
         )
+    require_operational_matter(
+        session,
+        matter=matter,
+        operation="archive a matter attachment annotation",
+    )
     row.is_archived = True
     session.commit()
 
@@ -146,7 +168,7 @@ def _resolve_attachment(
     context: SessionContext,
     matter_id: str,
     attachment_id: str,
-) -> MatterAttachment:
+) -> tuple[Matter, MatterAttachment]:
     """Enforce tenant scope: matter belongs to company, attachment
     belongs to matter. Raises 404 on any mismatch."""
     matter = session.scalar(
@@ -158,6 +180,7 @@ def _resolve_attachment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.",
         )
+    assert_access(session, context=context, matter=matter)
     attachment = session.scalar(
         select(MatterAttachment)
         .where(MatterAttachment.id == attachment_id)
@@ -167,7 +190,7 @@ def _resolve_attachment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.",
         )
-    return attachment
+    return matter, attachment
 
 
 def _row_to_record(row: MatterAttachmentAnnotation) -> AnnotationRecord:

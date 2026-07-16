@@ -26,6 +26,7 @@ from caseops_api.db.models import (
     MailboxMessageImport,
     MailboxWebhookEvent,
     MailboxWebhookStatus,
+    Matter,
     UserMailboxConnection,
 )
 from caseops_api.db.session import get_session_factory
@@ -350,6 +351,75 @@ def test_gmail_import_is_metadata_only_review_first_and_token_safe(
             assert "provider-attachment-secret" not in (
                 candidate.encrypted_provider_attachment_ref
             )
+    finally:
+        set_gmail_provider_for_tests(None)
+
+
+def test_disposed_matter_blocks_gmail_attachment_fetch_and_persistence(
+    client: TestClient,
+) -> None:
+    provider = StubGmailProvider(
+        messages=[
+            _message(
+                message_id="msg-disposed-attachment",
+                subject="Evidence for GMAIL-DISPOSED",
+                snippet="Review the attached evidence.",
+                attachments=(
+                    GmailAttachmentMetadata(
+                        attachment_id="provider-disposed-secret",
+                        filename="disposed-evidence.txt",
+                        content_type="text/plain",
+                        size_bytes=21,
+                    ),
+                ),
+            )
+        ],
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-disposed",
+            email="owner@gmail-disposed.example",
+        )
+        token = str(bootstrap["access_token"])
+        _connect_gmail(client, token, provider)
+        matter = _create_matter(client, token, "GMAIL-DISPOSED")
+
+        imported = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert imported.status_code == 200, imported.text
+        candidates = client.get(
+            "/api/mailbox/attachment-candidates",
+            headers=_auth(token),
+        )
+        assert candidates.status_code == 200, candidates.text
+        candidate_id = candidates.json()["candidates"][0]["id"]
+
+        factory = get_session_factory()
+        with factory() as session:
+            db_matter = session.get(Matter, str(matter["id"]))
+            assert db_matter is not None
+            db_matter.status = "disposed"
+            db_matter.is_active = False
+            session.commit()
+
+        approved = client.patch(
+            f"/api/mailbox/attachment-candidates/{candidate_id}",
+            headers=_auth(token),
+            json={"action": "approve_import"},
+        )
+        assert approved.status_code == 409, approved.text
+        assert "disposed" in approved.text.lower()
+        assert provider.fetch_calls == []
+
+        with factory() as session:
+            candidate = session.get(MailboxAttachmentCandidate, candidate_id)
+            assert candidate is not None
+            assert candidate.status == MailboxAttachmentCandidateStatus.NEEDS_REVIEW
+            assert candidate.imported_attachment_id is None
     finally:
         set_gmail_provider_for_tests(None)
 

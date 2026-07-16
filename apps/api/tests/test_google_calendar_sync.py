@@ -11,19 +11,25 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm import object_session
 
 from caseops_api.db.models import (
     AuditEvent,
     CalendarEventSync,
     CalendarEventSyncStatus,
     CalendarProvider,
+    Company,
+    CompanyMembership,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.calendar_sync import (
     GOOGLE_CALENDAR_SCOPES,
+    process_calendar_deletion_tombstones,
     set_google_calendar_provider_for_tests,
+    sync_hearing_to_google_calendar,
 )
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import bootstrap_company
 from tests.test_legalworkspace_calendar_sync import (
     _auth,
@@ -401,6 +407,133 @@ def test_google_calendar_synced_hearing_is_deleted_when_hearing_is_cancelled(
             metadata = json.loads(audit.metadata_json or "{}")
             assert metadata["provider"] == "google_calendar"
             assert "google-access-credential" not in audit.metadata_json
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+def test_disposal_enqueues_and_drains_provider_deletion_tombstone(
+    client: TestClient,
+) -> None:
+    provider = StubGoogleCalendarProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _connect_google(client, token, provider)
+        matter = _create_matter(client, token, "BUG-053-DISPOSAL-TOMBSTONE")
+        hearing = _schedule_hearing(client, token, str(matter["id"]))
+        synced = client.post(
+            f"/api/calendar/sync/google-calendar/hearings/{hearing['id']}",
+            headers=_auth(token),
+        )
+        assert synced.status_code == 200, synced.text
+
+        current = client.get(
+            f"/api/matters/{matter['id']}",
+            headers=_auth(token),
+        ).json()
+        disposed = client.patch(
+            f"/api/matters/{matter['id']}/lifecycle/status",
+            headers=_auth(token),
+            json={
+                "to_status": "disposed",
+                "expected_from_status": current["status"],
+                "expected_updated_at": current["updated_at"],
+                "reason": "Final order entered and matter file formally closed",
+            },
+        )
+        assert disposed.status_code == 200, disposed.text
+        assert provider.delete_calls == []
+
+        factory = get_session_factory()
+        with factory() as session:
+            sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_id == hearing["id"]
+                )
+            )
+            assert sync is not None
+            assert sync.sync_status == CalendarEventSyncStatus.DELETE_PENDING
+            company = session.get(Company, bootstrap["company"]["id"])
+            membership = session.get(
+                CompanyMembership,
+                bootstrap["membership"]["id"],
+            )
+            assert company is not None and membership is not None
+            result = process_calendar_deletion_tombstones(
+                session,
+                context=SessionContext(
+                    company=company,
+                    membership=membership,
+                    user=membership.user,
+                ),
+                calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+            )
+            assert result.deleted == 1
+
+        assert provider.delete_calls == ["google-event-1"]
+        with factory() as session:
+            sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_id == hearing["id"]
+                )
+            )
+            assert sync is not None
+            assert sync.sync_status == CalendarEventSyncStatus.DELETED
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+def test_provider_upsert_cannot_overwrite_lifecycle_change_with_synced(
+    client: TestClient,
+) -> None:
+    class LifecycleChangingProvider(StubGoogleCalendarProvider):
+        def upsert_hearing_event(self, **kwargs) -> str:
+            provider_event_id = super().upsert_hearing_event(**kwargs)
+            matter = kwargs["matter"]
+            matter.status = "disposed"
+            matter.is_active = False
+            matter.lifecycle_version += 1
+            lifecycle_session = object_session(matter)
+            assert lifecycle_session is not None
+            lifecycle_session.commit()
+            return provider_event_id
+
+    provider = LifecycleChangingProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _connect_google(client, token, provider)
+        matter = _create_matter(client, token, "BUG-053-INFLIGHT-DISPOSAL")
+        hearing = _schedule_hearing(client, token, str(matter["id"]))
+
+        factory = get_session_factory()
+        with factory() as session:
+            company = session.get(Company, bootstrap["company"]["id"])
+            membership = session.get(
+                CompanyMembership,
+                bootstrap["membership"]["id"],
+            )
+            assert company is not None and membership is not None
+            response = sync_hearing_to_google_calendar(
+                session,
+                context=SessionContext(
+                    company=company,
+                    membership=membership,
+                    user=membership.user,
+                ),
+                hearing_id=str(hearing["id"]),
+            )
+            assert response.sync.sync_status == CalendarEventSyncStatus.DELETED
+
+        assert provider.delete_calls == ["google-event-1"]
+        with factory() as session:
+            sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_id == hearing["id"]
+                )
+            )
+            assert sync is not None
+            assert sync.sync_status == CalendarEventSyncStatus.DELETED
     finally:
         set_google_calendar_provider_for_tests(None)
 

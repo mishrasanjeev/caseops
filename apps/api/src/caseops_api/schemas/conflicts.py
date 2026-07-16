@@ -51,6 +51,7 @@ class ConflictCheckRecord(BaseModel):
     resolved_by_membership_id: str | None
     resolved_at: datetime | None
     ran_by_membership_id: str | None
+    matter_lifecycle_version: int = 0
     ran_at: datetime
     created_at: datetime
 

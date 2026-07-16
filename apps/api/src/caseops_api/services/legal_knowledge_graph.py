@@ -34,6 +34,7 @@ from caseops_api.schemas.legal_knowledge_graph import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 DISCLAIMER = (
@@ -133,6 +134,18 @@ def materialize_legal_knowledge_graph(
     matter_id: str,
 ) -> LegalKnowledgeGraphResponse:
     matter = _load_visible_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="materialize a legal knowledge graph",
+        lock_for_write=False,
+    )
+    builder = _build_graph_specs(session, matter)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="materialize a legal knowledge graph",
+    )
     run = _latest_run(session, matter)
     now = utcnow()
     if run is None:
@@ -167,7 +180,6 @@ def materialize_legal_knowledge_graph(
         )
         session.flush()
 
-    builder = _build_graph_specs(session, matter)
     node_rows: dict[str, LegalKnowledgeGraphNode] = {}
     for spec in builder.nodes.values():
         row = LegalKnowledgeGraphNode(

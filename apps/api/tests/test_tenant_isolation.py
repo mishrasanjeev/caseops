@@ -104,11 +104,16 @@ def test_tenant_cannot_mutate_other_tenants_matter(client: TestClient) -> None:
     token_b = str(b["access_token"])
 
     matter_a = _create_matter(client, token_a, "ALPHA-003")
+    current_matter = client.get(f"/api/matters/{matter_a}", headers=_auth(token_a))
+    assert current_matter.status_code == 200, current_matter.text
 
     patched = client.patch(
         f"/api/matters/{matter_a}",
         headers=_auth(token_b),
-        json={"title": "Pwned"},
+        json={
+            "title": "Pwned",
+            "expected_updated_at": current_matter.json()["updated_at"],
+        },
     )
     assert patched.status_code in {403, 404}
 

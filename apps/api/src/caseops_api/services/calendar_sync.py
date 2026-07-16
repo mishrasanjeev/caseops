@@ -12,7 +12,7 @@ import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, status
 from jwt import InvalidTokenError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.settings import get_settings
@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     MatterHearing,
     MatterHearingStatus,
     MatterTask,
+    MatterTaskStatus,
     TenantOutlookConfiguration,
     UserCalendarConnection,
 )
@@ -61,6 +62,7 @@ from caseops_api.services.matter_access import (
     assert_access,
     visible_matters_filter,
 )
+from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.notification_delivery import (
     redact_provider_error,
     retry_delay_for_attempt,
@@ -118,6 +120,15 @@ class DurableOutlookSyncProcessResult:
     dead_lettered: int
     skipped: int
     replayed: int
+    provider_calls: int
+
+
+@dataclass(frozen=True, slots=True)
+class CalendarDeletionProcessResult:
+    examined: int
+    deleted: int
+    retry_scheduled: int
+    dead_lettered: int
     provider_calls: int
 
 
@@ -960,6 +971,7 @@ def _source_payload_for(
             )
         hearing, matter = row
         assert_access(session, context=context, matter=matter)
+        _assert_calendar_matter_operational(matter)
         if hearing.status == MatterHearingStatus.CANCELLED:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -983,6 +995,7 @@ def _source_payload_for(
             )
         task, matter = row
         assert_access(session, context=context, matter=matter)
+        _assert_calendar_matter_operational(matter)
         if task.due_on is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1006,11 +1019,21 @@ def _source_payload_for(
             )
         deadline, matter = row
         assert_access(session, context=context, matter=matter)
+        _assert_calendar_matter_operational(matter)
         return _deadline_source_payload(deadline, matter)
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Unsupported calendar source type.",
+    )
+
+
+def _assert_calendar_matter_operational(matter: Matter) -> None:
+    if str(matter.status) not in {"closed", "disposed"} and matter.is_active:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Disposed matters cannot create or update calendar events.",
     )
 
 
@@ -1439,6 +1462,150 @@ def _aware(value: datetime) -> datetime:
     return value
 
 
+def process_calendar_deletion_tombstones(
+    session: Session,
+    *,
+    context: SessionContext,
+    calendar_provider: CalendarProvider | None = None,
+    limit: int = 100,
+) -> CalendarDeletionProcessResult:
+    """Drain durable provider-event deletion work created by disposal.
+
+    A matter lifecycle transaction only writes ``DELETE_PENDING`` rows.  The
+    external provider call happens here, after that transaction has committed,
+    so a slow or unavailable calendar API cannot hold the lifecycle row lock or
+    roll back the disposal itself.
+    """
+
+    now = _current_time()
+    stmt = (
+        select(CalendarEventSync.id)
+        .join(
+            UserCalendarConnection,
+            UserCalendarConnection.id == CalendarEventSync.calendar_connection_id,
+        )
+        .where(
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.sync_status == CalendarEventSyncStatus.DELETE_PENDING,
+            or_(
+                CalendarEventSync.next_attempt_at.is_(None),
+                CalendarEventSync.next_attempt_at <= now,
+            ),
+        )
+        .order_by(CalendarEventSync.created_at, CalendarEventSync.id)
+        .limit(limit)
+    )
+    if calendar_provider is not None:
+        stmt = stmt.where(UserCalendarConnection.provider == calendar_provider)
+    sync_ids = list(session.scalars(stmt))
+    counters = {
+        "examined": 0,
+        "deleted": 0,
+        "retry_scheduled": 0,
+        "dead_lettered": 0,
+        "provider_calls": 0,
+    }
+
+    for sync_id in sync_ids:
+        sync = session.scalar(
+            select(CalendarEventSync)
+            .where(
+                CalendarEventSync.id == sync_id,
+                CalendarEventSync.company_id == context.company.id,
+            )
+            .with_for_update(of=CalendarEventSync)
+            .execution_options(populate_existing=True)
+        )
+        if sync is None or sync.sync_status != CalendarEventSyncStatus.DELETE_PENDING:
+            continue
+        if (
+            sync.next_attempt_at is not None
+            and _aware(sync.next_attempt_at) > _current_time()
+        ):
+            continue
+        counters["examined"] += 1
+        connection = session.get(UserCalendarConnection, sync.calendar_connection_id)
+
+        try:
+            if connection is None:
+                raise CalendarProviderError("Calendar connection no longer exists.")
+            if not sync.provider_event_id:
+                # There is no remote artifact to delete; complete the tombstone
+                # without a provider call.
+                sync.sync_status = CalendarEventSyncStatus.DELETED
+            else:
+                token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+                provider_kind = CalendarProvider(connection.provider)
+                counters["provider_calls"] += 1
+                _provider_for(
+                    provider_kind,
+                    session,
+                    context=context,
+                ).delete_event(
+                    token_payload=token_payload,
+                    provider_event_id=sync.provider_event_id,
+                )
+                sync.sync_status = CalendarEventSyncStatus.DELETED
+            completed_at = _current_time()
+            sync.last_error = None
+            sync.last_synced_at = completed_at
+            sync.next_attempt_at = None
+            sync.dead_letter_reason = None
+            sync.durable_last_attempt_at = completed_at
+            if connection is not None:
+                connection.last_sync_at = completed_at
+                session.add(connection)
+            counters["deleted"] += 1
+            record_from_context(
+                session,
+                context,
+                action="calendar.deletion_tombstone.completed",
+                target_type="calendar_event_sync",
+                target_id=sync.id,
+                metadata={
+                    "provider": connection.provider if connection is not None else None,
+                    "source_type": sync.source_type,
+                    "source_ref": redact_identifier(sync.source_id),
+                    "provider_event_ref": redact_identifier(sync.provider_event_id),
+                },
+            )
+        except Exception as exc:
+            failed_at = _current_time()
+            sync.attempts = min(sync.attempts + 1, sync.max_attempts)
+            sync.last_error = redact_provider_error(exc)
+            sync.durable_last_attempt_at = failed_at
+            if sync.attempts >= sync.max_attempts:
+                sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+                sync.next_attempt_at = None
+                sync.dead_letter_reason = "provider_delete_retry_limit_exhausted"
+                counters["dead_lettered"] += 1
+            else:
+                sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+                sync.next_attempt_at = failed_at + retry_delay_for_attempt(sync.attempts)
+                sync.dead_letter_reason = "matter_disposed_delete"
+                counters["retry_scheduled"] += 1
+            record_from_context(
+                session,
+                context,
+                action="calendar.deletion_tombstone.failed",
+                target_type="calendar_event_sync",
+                target_id=sync.id,
+                result="failed",
+                metadata={
+                    "provider": connection.provider if connection is not None else None,
+                    "source_type": sync.source_type,
+                    "source_ref": redact_identifier(sync.source_id),
+                    "attempts": sync.attempts,
+                    "max_attempts": sync.max_attempts,
+                    "error": sync.last_error,
+                },
+            )
+        session.add(sync)
+        session.commit()
+
+    return CalendarDeletionProcessResult(**counters)
+
+
 def _membership_context(
     *,
     company: Company,
@@ -1546,7 +1713,11 @@ def _process_durable_hearing_sync(
         )
     )
     if sync is not None and not replay:
-        if sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER:
+        if sync.sync_status in {
+            CalendarEventSyncStatus.DEAD_LETTER,
+            CalendarEventSyncStatus.DELETED,
+            CalendarEventSyncStatus.DELETE_PENDING,
+        }:
             return "skipped"
         if (
             sync.sync_status == CalendarEventSyncStatus.RETRY_SCHEDULED
@@ -1565,6 +1736,11 @@ def _process_durable_hearing_sync(
         return "failed"
     if response.sync.sync_status == CalendarEventSyncStatus.SYNCED:
         return "synced"
+    if response.sync.sync_status in {
+        CalendarEventSyncStatus.DELETE_PENDING,
+        CalendarEventSyncStatus.DELETED,
+    }:
+        return "skipped"
     return _record_calendar_sync_retry_failure(
         session,
         sync=stored,
@@ -1595,6 +1771,7 @@ def _process_durable_source_sync(
         if sync.sync_status in {
             CalendarEventSyncStatus.DEAD_LETTER,
             CalendarEventSyncStatus.DELETED,
+            CalendarEventSyncStatus.DELETE_PENDING,
         }:
             return "skipped"
         if (
@@ -1616,6 +1793,11 @@ def _process_durable_source_sync(
         return "failed"
     if response.sync.sync_status == CalendarEventSyncStatus.SYNCED:
         return "synced"
+    if response.sync.sync_status in {
+        CalendarEventSyncStatus.DELETE_PENDING,
+        CalendarEventSyncStatus.DELETED,
+    }:
+        return "skipped"
     return _record_calendar_sync_retry_failure(
         session,
         sync=stored,
@@ -1705,7 +1887,11 @@ def _replay_durable_outlook_sync_rows(
             .where(
                 MatterHearing.id == sync.source_id,
                 Matter.company_id == context.company.id,
-                MatterHearing.status != MatterHearingStatus.CANCELLED,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("closed", "disposed")),
+                MatterHearing.status.in_(
+                    (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+                ),
             )
         ).first()
         if row is None:
@@ -1776,6 +1962,12 @@ def process_durable_outlook_sync(
     replay_failed_only: bool = False,
     limit: int = 200,
 ) -> DurableOutlookSyncProcessResult:
+    process_calendar_deletion_tombstones(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.OUTLOOK,
+        limit=limit,
+    )
     if replay_failed_only:
         return _replay_durable_outlook_sync_rows(
             session,
@@ -1855,10 +2047,14 @@ def process_durable_outlook_sync(
                 .join(Matter, Matter.id == MatterHearing.matter_id)
                 .where(
                     Matter.company_id == context.company.id,
+                    Matter.is_active.is_(True),
+                    Matter.status.notin_(("closed", "disposed")),
                     visible_matters_filter(session, context=connection_context),
                     MatterHearing.hearing_on >= range_from,
                     MatterHearing.hearing_on <= range_to,
-                    MatterHearing.status != MatterHearingStatus.CANCELLED,
+                    MatterHearing.status.in_(
+                        (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+                    ),
                 )
                 .order_by(MatterHearing.hearing_on, MatterHearing.id)
                 .limit(remaining)
@@ -2112,6 +2308,12 @@ def process_durable_google_calendar_sync(
     replay_failed_only: bool = False,
     limit: int = 200,
 ) -> DurableOutlookSyncProcessResult:
+    process_calendar_deletion_tombstones(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+        limit=limit,
+    )
     if replay_failed_only:
         return _replay_durable_google_calendar_sync_rows(
             session,
@@ -2699,6 +2901,131 @@ def _sync_hearing_to_provider(
     )
 
 
+def _post_provider_deletion_winner(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    expected_lifecycle_version: int,
+    sync_id: str,
+    connection: UserCalendarConnection,
+    calendar_provider: CalendarProvider,
+    provider: OutlookProvider | None,
+    token_payload: dict[str, Any] | None,
+    returned_provider_event_id: str | None,
+) -> CalendarEventSyncResponse | None:
+    """Recheck lifecycle/tombstone state after an external provider call.
+
+    Provider I/O is necessarily outside the Matter lock.  Disposal can win
+    during that window, so the response is not allowed to blindly overwrite a
+    tombstone with ``SYNCED``/``FAILED``.  Locking parent then sync mirrors the
+    lifecycle writer and closes that TOCTOU window.
+    """
+
+    matter = session.scalar(
+        select(Matter)
+        .where(
+            Matter.id == matter_id,
+            Matter.company_id == context.company.id,
+        )
+        .with_for_update(of=Matter)
+        .execution_options(populate_existing=True)
+    )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    if sync is None:
+        raise CalendarProviderError("Calendar sync state disappeared after provider call.")
+
+    deletion_state = sync.sync_status in {
+        CalendarEventSyncStatus.DELETE_PENDING,
+        CalendarEventSyncStatus.DELETED,
+    } or (
+        sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
+        and str(sync.dead_letter_reason or "").startswith("provider_delete_")
+    )
+    lifecycle_changed = (
+        matter is None
+        or not matter_is_operational(matter)
+        or matter.lifecycle_version != expected_lifecycle_version
+    )
+    if not deletion_state and not lifecycle_changed:
+        return None
+
+    now = _current_time()
+    cleanup_error: str | None = None
+    if returned_provider_event_id:
+        # A provider may have created/updated the event after disposal had
+        # already written the tombstone.  Delete that exact returned artifact;
+        # if deletion fails, retain durable DELETE_PENDING work.
+        sync.provider_event_id = returned_provider_event_id
+        try:
+            if provider is None or token_payload is None:
+                raise CalendarProviderError(
+                    "Provider response could not be cleaned up after lifecycle change."
+                )
+            provider.delete_event(
+                token_payload=token_payload,
+                provider_event_id=returned_provider_event_id,
+            )
+        except Exception as exc:
+            cleanup_error = redact_provider_error(exc)
+            sync.attempts = min(sync.attempts + 1, sync.max_attempts)
+            sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+            sync.last_error = cleanup_error
+            sync.next_attempt_at = now + retry_delay_for_attempt(sync.attempts)
+            sync.dead_letter_reason = "matter_disposed_delete"
+            sync.durable_last_attempt_at = now
+        else:
+            sync.sync_status = CalendarEventSyncStatus.DELETED
+            sync.last_error = None
+            sync.last_synced_at = now
+            sync.next_attempt_at = None
+            sync.dead_letter_reason = None
+            sync.durable_last_attempt_at = now
+            connection.last_sync_at = now
+            session.add(connection)
+    elif sync.provider_event_id and sync.sync_status != CalendarEventSyncStatus.DELETED:
+        # The upsert failed or returned no new id, but a previously-synced
+        # remote event still needs the durable worker to remove it.
+        sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+        sync.next_attempt_at = now
+        sync.dead_letter_reason = "matter_disposed_delete"
+    elif sync.sync_status != CalendarEventSyncStatus.DELETED:
+        sync.sync_status = CalendarEventSyncStatus.DELETED
+        sync.last_error = None
+        sync.last_synced_at = now
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = None
+
+    session.add(sync)
+    record_from_context(
+        session,
+        context,
+        action="calendar.sync.lifecycle_change_won",
+        target_type="calendar_event_sync",
+        target_id=sync.id,
+        matter_id=matter_id,
+        result="denied" if cleanup_error else "success",
+        metadata={
+            "provider": calendar_provider,
+            "source_type": sync.source_type,
+            "source_ref": redact_identifier(sync.source_id),
+            "sync_status": sync.sync_status,
+            "lifecycle_changed": lifecycle_changed,
+            "cleanup_error": cleanup_error,
+        },
+    )
+    session.commit()
+    return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+
 def _sync_source_to_provider(
     session: Session,
     *,
@@ -2736,6 +3063,9 @@ def _sync_source_to_provider(
         )
         session.add(sync)
         session.flush()
+    expected_lifecycle_version = item.matter.lifecycle_version
+    provider: OutlookProvider | None = None
+    token_payload: dict[str, Any] | None = None
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
         provider = _provider_for(calendar_provider, session, context=context)
@@ -2758,6 +3088,20 @@ def _sync_source_to_provider(
                 existing_provider_event_id=sync.provider_event_id,
             )
     except Exception as exc:
+        deletion_response = _post_provider_deletion_winner(
+            session,
+            context=context,
+            matter_id=item.matter.id,
+            expected_lifecycle_version=expected_lifecycle_version,
+            sync_id=sync.id,
+            connection=connection,
+            calendar_provider=calendar_provider,
+            provider=provider,
+            token_payload=token_payload,
+            returned_provider_event_id=None,
+        )
+        if deletion_response is not None:
+            return deletion_response
         sync.sync_status = CalendarEventSyncStatus.FAILED
         sync.last_error = _safe_error(exc)
         session.add(sync)
@@ -2779,6 +3123,26 @@ def _sync_source_to_provider(
         session.commit()
         return CalendarEventSyncResponse(sync=_sync_record(sync))
 
+    deletion_response = _post_provider_deletion_winner(
+        session,
+        context=context,
+        matter_id=item.matter.id,
+        expected_lifecycle_version=expected_lifecycle_version,
+        sync_id=sync.id,
+        connection=connection,
+        calendar_provider=calendar_provider,
+        provider=provider,
+        token_payload=token_payload,
+        returned_provider_event_id=provider_event_id,
+    )
+    if deletion_response is not None:
+        return deletion_response
+
+    # _post_provider_deletion_winner refreshed and locked this row.  Resolve it
+    # again from the identity map so the success write targets the fresh state.
+    sync = session.get(CalendarEventSync, sync.id)
+    if sync is None:  # pragma: no cover - protected by the locked recheck
+        raise CalendarProviderError("Calendar sync state disappeared after provider call.")
     now = datetime.now(UTC)
     sync.provider_event_id = provider_event_id
     sync.sync_status = CalendarEventSyncStatus.SYNCED
@@ -3093,10 +3457,14 @@ def sync_outlook_bulk(
             .join(Matter, Matter.id == MatterHearing.matter_id)
             .where(
                 Matter.company_id == context.company.id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("closed", "disposed")),
                 visible_matters_filter(session, context=context),
                 MatterHearing.hearing_on >= payload.range_from,
                 MatterHearing.hearing_on <= payload.range_to,
-                MatterHearing.status != MatterHearingStatus.CANCELLED,
+                MatterHearing.status.in_(
+                    (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+                ),
             )
             .order_by(MatterHearing.hearing_on, MatterHearing.id)
             .limit(payload.limit)
@@ -3221,10 +3589,14 @@ def _google_bulk_source_payloads(
             .join(Matter, Matter.id == MatterHearing.matter_id)
             .where(
                 Matter.company_id == context.company.id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("closed", "disposed")),
                 visible_matters_filter(session, context=context),
                 MatterHearing.hearing_on >= payload.range_from,
                 MatterHearing.hearing_on <= payload.range_to,
-                MatterHearing.status != MatterHearingStatus.CANCELLED,
+                MatterHearing.status.in_(
+                    (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+                ),
             )
             .order_by(MatterHearing.hearing_on, MatterHearing.id)
             .limit(limit)
@@ -3241,8 +3613,13 @@ def _google_bulk_source_payloads(
             .join(Matter, Matter.id == MatterTask.matter_id)
             .where(
                 Matter.company_id == context.company.id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("closed", "disposed")),
                 visible_matters_filter(session, context=context),
                 MatterTask.due_on.is_not(None),
+                MatterTask.status.notin_(
+                    (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
+                ),
                 MatterTask.due_on >= payload.range_from,
                 MatterTask.due_on <= payload.range_to,
             )
@@ -3261,7 +3638,10 @@ def _google_bulk_source_payloads(
             .join(Matter, Matter.id == MatterDeadline.matter_id)
             .where(
                 Matter.company_id == context.company.id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("closed", "disposed")),
                 visible_matters_filter(session, context=context),
+                MatterDeadline.status.notin_(("done", "cancelled")),
                 MatterDeadline.due_on >= payload.range_from,
                 MatterDeadline.due_on <= payload.range_to,
             )
@@ -3473,6 +3853,7 @@ def sync_status(
 
 
 __all__ = [
+    "CalendarDeletionProcessResult",
     "complete_google_calendar_connection",
     "complete_outlook_connection",
     "delete_hearing_from_google_calendar",
@@ -3481,6 +3862,7 @@ __all__ = [
     "GOOGLE_CALENDAR_SCOPES",
     "list_connections",
     "outlook_tenant_configuration_status",
+    "process_calendar_deletion_tombstones",
     "process_durable_google_calendar_sync",
     "process_durable_google_calendar_sync_by_company",
     "process_durable_outlook_sync",

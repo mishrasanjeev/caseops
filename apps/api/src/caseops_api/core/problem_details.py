@@ -115,12 +115,37 @@ def _problem_payload(
     # for the human-readable `detail` field but keep the structured
     # breakdown under `errors` for machine readers.
     errors: list[Any] | None = None
+    detail_extensions: dict[str, Any] = {}
     if isinstance(detail, list):
         errors = jsonable_encoder(detail)
         detail_text = "; ".join(
             str(item.get("msg") if isinstance(item, dict) else item)
             for item in detail
         )
+    elif isinstance(detail, dict):
+        # HTTPException callers use dictionaries for machine-readable conflict
+        # metadata. Keep RFC 7807's human-readable ``detail`` as a string and
+        # expose the remaining keys as extension members instead of collapsing
+        # the dictionary into an unusable Python repr.
+        encoded_detail = jsonable_encoder(detail)
+        detail_text = str(
+            encoded_detail.pop("detail", None)
+            or encoded_detail.pop("message", None)
+            or STATUS_TITLES.get(status_code, "Error")
+        )
+        reserved_problem_members = {
+            "type",
+            "title",
+            "status",
+            "detail",
+            "instance",
+            "errors",
+        }
+        detail_extensions = {
+            key: value
+            for key, value in encoded_detail.items()
+            if key not in reserved_problem_members
+        }
     else:
         detail_text = str(detail)
 
@@ -134,6 +159,8 @@ def _problem_payload(
     }
     if errors:
         body["errors"] = errors
+    if detail_extensions:
+        body.update(detail_extensions)
     if extras:
         body.update(extras)
     return body

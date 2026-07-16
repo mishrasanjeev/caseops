@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import Company, CompanyMembership, Contract, Matter, User
+from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.contracts import ContractUpdateRequest
+from caseops_api.services.contracts import update_contract
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -621,3 +628,180 @@ def test_ai_contract_review_uses_uploaded_contract_text_and_playbook_hits(
     assert any("Indemnity fallback required" in risk for risk in payload["risks"])
     assert any("Security and breach posture" in item for item in payload["recommended_actions"])
     assert payload["source_attachments"] == ["cloud-msa.txt"]
+
+
+def test_contract_link_writes_reject_disposed_matter_but_keep_history_readable(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    headers = auth_headers(token)
+
+    matter_response = client.post(
+        "/api/matters/",
+        headers=headers,
+        json={
+            "title": "Historic contract dispute",
+            "matter_code": "COMM-CTR-TERMINAL",
+            "practice_area": "Commercial",
+            "forum_level": "advisory",
+            "status": "active",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter = matter_response.json()
+
+    historical_contract = client.post(
+        "/api/contracts/",
+        headers=headers,
+        json={
+            "title": "Agreement linked before disposal",
+            "contract_code": "CTR-TERMINAL-HISTORY",
+            "linked_matter_id": matter["id"],
+            "contract_type": "Agreement",
+        },
+    )
+    assert historical_contract.status_code == 200, historical_contract.text
+
+    unlinked_contract = client.post(
+        "/api/contracts/",
+        headers=headers,
+        json={
+            "title": "Agreement awaiting matter link",
+            "contract_code": "CTR-TERMINAL-UPDATE",
+            "contract_type": "Agreement",
+        },
+    )
+    assert unlinked_contract.status_code == 200, unlinked_contract.text
+
+    disposal = client.patch(
+        f"/api/matters/{matter['id']}/lifecycle/status",
+        headers=headers,
+        json={
+            "to_status": "disposed",
+            "expected_from_status": matter["status"],
+            "expected_updated_at": matter["updated_at"],
+            "reason": "Engagement concluded and file disposition completed",
+        },
+    )
+    assert disposal.status_code == 200, disposal.text
+
+    create_rejected = client.post(
+        "/api/contracts/",
+        headers=headers,
+        json={
+            "title": "Late agreement link",
+            "contract_code": "CTR-TERMINAL-CREATE",
+            "linked_matter_id": matter["id"],
+            "contract_type": "Agreement",
+        },
+    )
+    assert create_rejected.status_code == 409, create_rejected.text
+    assert "disposed" in create_rejected.text.lower()
+
+    update_rejected = client.patch(
+        f"/api/contracts/{unlinked_contract.json()['id']}",
+        headers=headers,
+        json={"linked_matter_id": matter["id"]},
+    )
+    assert update_rejected.status_code == 409, update_rejected.text
+    assert "disposed" in update_rejected.text.lower()
+
+    history = client.get(
+        f"/api/contracts/{historical_contract.json()['id']}",
+        headers=headers,
+    )
+    assert history.status_code == 200, history.text
+    assert history.json()["linked_matter_id"] == matter["id"]
+
+    unchanged = client.get(
+        f"/api/contracts/{unlinked_contract.json()['id']}",
+        headers=headers,
+    )
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["linked_matter_id"] is None
+
+    matterless = client.post(
+        "/api/contracts/",
+        headers=headers,
+        json={
+            "title": "Independent corporate agreement",
+            "contract_code": "CTR-NO-MATTER-AFTER-DISPOSAL",
+            "contract_type": "Agreement",
+        },
+    )
+    assert matterless.status_code == 200, matterless.text
+    assert matterless.json()["linked_matter_id"] is None
+
+
+def test_contract_relink_refreshes_stale_matter_after_concurrent_disposal(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    headers = auth_headers(token)
+    company_id = str(bootstrap_payload["company"]["id"])
+    membership_id = str(bootstrap_payload["membership"]["id"])
+    user_id = str(bootstrap_payload["user"]["id"])
+
+    matter_response = client.post(
+        "/api/matters/",
+        headers=headers,
+        json={
+            "title": "Concurrent disposal contract matter",
+            "matter_code": "COMM-CTR-RACE",
+            "practice_area": "Commercial",
+            "forum_level": "advisory",
+            "status": "active",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = str(matter_response.json()["id"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=headers,
+        json={
+            "title": "Agreement awaiting concurrent link",
+            "contract_code": "CTR-CONCURRENT-DISPOSAL",
+            "contract_type": "Agreement",
+        },
+    )
+    assert contract_response.status_code == 200, contract_response.text
+    contract_id = str(contract_response.json()["id"])
+
+    factory = get_session_factory()
+    with factory() as stale_session:
+        stale_matter = stale_session.get(Matter, matter_id)
+        company = stale_session.get(Company, company_id)
+        membership = stale_session.get(CompanyMembership, membership_id)
+        user = stale_session.get(User, user_id)
+        assert stale_matter is not None and stale_matter.is_active is True
+        assert company is not None
+        assert membership is not None
+        assert user is not None
+        context = SessionContext(company=company, membership=membership, user=user)
+
+        with factory() as disposal_session:
+            current = disposal_session.get(Matter, matter_id)
+            assert current is not None
+            current.status = "disposed"
+            current.is_active = False
+            disposal_session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            update_contract(
+                stale_session,
+                context=context,
+                contract_id=contract_id,
+                payload=ContractUpdateRequest(linked_matter_id=matter_id),
+            )
+        assert exc_info.value.status_code == 409
+        assert "disposed" in str(exc_info.value.detail).lower()
+        assert stale_matter.status == "disposed"
+        assert stale_matter.is_active is False
+
+    with factory() as verification_session:
+        contract = verification_session.get(Contract, contract_id)
+        assert contract is not None
+        assert contract.linked_matter_id is None

@@ -1,0 +1,319 @@
+# Ram 2026-07-15 Bug/Enhancement Audit And Permanent Reopen Learnings
+
+Source workbook: `CaseOps_Bugs_Ram15Jul2026.xlsx`
+Audit date: 2026-07-15
+Production tenant used for baseline: `legal` (the tester password is not stored
+in the repository)
+
+## Honest classification
+
+| ID | Workbook area | Classification | Baseline evidence | Working verdict |
+| --- | --- | --- | --- | --- |
+| BUG-001 | Matter Management / Standalone Notice Module | Valid product enhancement; the requested boundary was never implemented | Production main navigation had no Notices entry and `/app/notices` returned 404. Existing documentation explicitly described the implementation as matter-scoped with no global dashboard. | `Inconclusive` until the new standalone workflow passes committed Playwright on the deployed commit. |
+| BUG-002 | Matter Creation | Valid workflow/policy enhancement; current behavior was intentional but contradicted the new requirement | Production `POST /api/matters/` with `status=active` returned 409 directing users through Intake/conflict clearance. UI and schema defaulted to Intake. | `Inconclusive` until direct Active creation passes committed Playwright on the deployed commit. |
+| Reopening investigation | Matter lifecycle | Valid systemic defect discovered during the requested adjacent-path audit | Disposed persistence had only been tested after reload in one session. Generic PATCH accepted terminal status and replayed the editor's full stale snapshot; background and operational paths did not consistently treat disposal as terminal. | Locally implemented and verified; formal verdict remains `Inconclusive` until deployed-build identity and production browser proof pass. |
+
+## Production baseline (before this change)
+
+An authenticated Playwright baseline against the production `legal` tenant on
+2026-07-15 established:
+
+- login API: `200`
+- main-navigation Notice links: `0`
+- direct Active matter create: `409`, with the existing mandatory Intake and
+  conflict-clearance message
+- create in Intake: `200`
+- generic PATCH to Disposed: `200`
+- Disposed read-back immediately after PATCH: `disposed`
+- `/app/notices`: `404`
+
+This is baseline/reproduction evidence only. It does not prove the local changes
+are deployed.
+
+## Local verification evidence (candidate working tree)
+
+The local replay began on 2026-07-15 and final regression shards completed on
+2026-07-16, with the exact `legal` / Hari tester identity recreated in an
+isolated workstation database. The supplied
+password was injected only through the process environment and is not stored in
+source or this report.
+
+- complete **2,120-test API inventory collected** and covered through three
+  disjoint product-final-tree shards: **2,089 passed, 31 environment-gated
+  skips, 0 outstanding failures**. The shards initially exposed one exact-text
+  documentation assertion; only that PG-001 line changed, and its previously
+  failing test passed on the immediate rerun. The 13 PostgreSQL-only tests were
+  executed separately against PostgreSQL 17 rather than counted as ordinary
+  SQLite passes. This includes lifecycle,
+  standalone notices, storage/audit, conflicts/imports, ethical walls/teams,
+  Calendar/Today, Gmail/proceeding/document workers, reminders, deadlines, and
+  task/deadline cockpit behavior. Counts from overlapping focused and shard
+  runs are not added together;
+- fresh PostgreSQL 17 + pgvector validation: **13/13 passed** after applying the
+  full migration chain to an isolated database, including a prior-revision
+  legacy-data replay that cancels operational children and queues deletion of
+  their already-synced provider calendar event;
+- complete React/Vitest suite: **115 files, 540 tests passed**;
+- API Ruff lint verification: **490 Python files passed** (the unrelated
+  pre-existing untracked Cloud Run scheduler test was outside this batch);
+- TypeScript route generation/typecheck: passed;
+- optimized production web build: passed, including `/app/notices`;
+- Alembic: exactly one head, `20260715_0001`;
+- checked-in OpenAPI TypeScript contract regenerated from the live local
+  FastAPI schema;
+- local Playwright production-build replay:
+  `tests/e2e/ram-2026-07-15-bugs.spec.ts` — **3/3 passed** with no mocks;
+- regression-discovery runner: **5/5 passed**; both local and production
+  configurations collect all **3** July 15 tests;
+- the July local/production specs and the repaired June 27 lifecycle regression
+  pass strict standalone TypeScript checking.
+
+These results prove the candidate locally. They do not change the two workbook
+rows or the adjacent lifecycle defect to a production-fixed verdict.
+
+## Brutal analysis: where the earlier work went wrong
+
+### 1. We implemented a smaller feature than the acceptance contract
+
+The earlier Notice work produced a useful per-matter tab, but the July 15
+contract says **standalone**, **global**, **main navigation**, **independently**,
+and **optionally link one or more matters**. The old implementation required a
+matter and therefore could never create an unlinked notice or link one notice to
+multiple matters. Calling the scoped tab a completed Notice module was a scope
+substitution, not acceptance-contract delivery.
+
+### 2. We tested implementation details instead of the user promise
+
+Prior browser proof uploaded a notice from one matter. It did not assert that a
+global page existed, that a notice could exist with zero matter links, or that
+one notice could link multiple matters. Green tests therefore fossilized the
+narrow implementation rather than protecting the reported workflow.
+
+### 3. We hardened only one lifecycle edge
+
+The conflict-check repair protected `Intake -> Active`, but generic matter PATCH
+still accepted terminal status and `is_active`. Disposal and reopening did not
+have a dedicated transition authority, reason, capability, or state matrix.
+This is why a status could appear stable in a one-session reload test while the
+system remained reopenable elsewhere.
+
+### 4. The editor replayed a whole stale record
+
+The matter detail editor copied all fields, including status, and sent them all
+on every save. With no `expected_updated_at`/version check, the sequence was:
+
+1. session A loads an Active matter;
+2. session B disposes it;
+3. session A changes only the title and saves its old full snapshot;
+4. the old Active status is replayed.
+
+The final status depended on old conflict data, but the architectural defect was
+already present: an unrelated metadata save carried lifecycle authority.
+
+### 5. Disposal was not an operational boundary
+
+Tasks, deadlines, hearings, reminders, Today/calendar feeds, case tracking, and
+court/provider jobs were not all reconciled or guarded consistently. Even when
+the row remained `disposed`, operational children could continue to appear and
+background updates could make the case look active again. A lifecycle fix that
+checks only the matter row is shallow.
+
+### 6. Regression registration was manual and drift-prone
+
+Dated specs were manually enumerated in Playwright configuration. A committed
+test could therefore be absent from the normal regression run. A test file that
+is never selected is documentation, not a regression guard.
+
+### 7. Local success was allowed to sound like production closure
+
+The deployed commit identity and deployed browser pass were not always tied to
+the verdict. The permanent rule is fail-closed: local unit/API/Playwright proof
+can justify “locally implemented,” but the formal product verdict remains
+`Inconclusive` until the committed spec passes against the observed deployed
+build.
+
+### 8. SQLite-only proof hid PostgreSQL and TOCTOU failures
+
+The first local green run still was not enough. An adversarial review found
+that the parent `FOR UPDATE` query eager-loaded nullable assignee/user joins;
+PostgreSQL can reject that lock shape even though SQLite silently accepts it.
+It also found several check-then-act races: an operational writer or provider
+worker could read an Active matter, disposal could commit, and the stale writer
+could then create a child, restore a sync row, or send a notification.
+
+The permanent correction is two-part: lock the bare Matter row using a
+PostgreSQL-safe statement, and require every long-running path to recheck the
+fresh parent state under lock immediately before durable side effects. Where an
+external side effect already occurred, compensate it rather than overwriting
+the disposal state.
+
+The same review exposed a second false-green mechanism: local SQLite
+connections had never enabled `PRAGMA foreign_keys=ON`. The models declared
+foreign keys, but SQLite silently accepted invalid tenant relationships during
+local execution and tests. The connection setup now enables enforcement for
+every SQLite connection, and regressions deliberately attempt cross-tenant
+Notice ownership/linkage plus destructive Matter deletion. PostgreSQL remains
+the release proof for the migration and lock behavior; SQLite is now a useful
+early integrity check instead of a permissive imitation.
+
+### 9. Invalid fixtures were mistaken for useful isolation
+
+Enabling SQLite foreign keys immediately exposed tests that attached a queued
+notification to a nonexistent rule and assigned a membership to a nonexistent
+custom role. Those fixtures were not testing optional relationships; they were
+silently creating impossible production rows. The corrected tests either seed
+the real parent, omit a genuinely optional foreign key, or assert that the
+database rejects the dangling reference.
+
+The PostgreSQL legacy-data migration replay exposed a subtler version of the
+same mistake: adding a Matter and scalar-ID children to one ORM unit of work did
+not establish an in-memory relationship dependency, so PostgreSQL correctly
+rejected a child inserted before its parent. Migration fixtures now commit valid
+parents first and then children. A convenient `add_all` call is not proof of a
+valid foreign-key fixture.
+
+### 10. Targeted CAS tests missed repository-wide contract propagation
+
+Making `expected_updated_at` mandatory correctly closed stale Matter writes,
+but the first targeted lifecycle suite did not prove that every existing API,
+UI, and E2E caller had adopted the new precondition. The complete suite found
+legacy generic PATCH call sites that still sent the old payload. A mutation
+precondition is not complete until a repository-wide call-site inventory and
+static negative audit show that only intentional 422 tests omit it.
+
+### 11. A terminal-create shortcut bypassed the state machine
+
+One legacy GBA regression created a Matter directly with `status=closed` and
+treated that setup shortcut as a valid lifecycle transition. Terminal aliases
+must never enter through create, import, or generic metadata PATCH. Tests now
+create an operational record and reach Disposed only through the dedicated
+lifecycle endpoint, with its capability, reason, source-state, and concurrency
+checks.
+
+### 12. Reopen trusted legacy terminal rows to have been neutralized
+
+The disposal transition now cancels open tasks, deadlines, hearings, reminders,
+sync work, and notification intents, but that alone did not repair Matters that
+were already `closed`/`disposed` before the invariant existed. A legacy terminal
+row could still contain open operational children. Reopening that parent to
+Intake made the old children visible and actionable again even though no new
+child had been created.
+
+The correction is deliberately redundant: the migration neutralizes existing
+terminal data and durable-tombstones their already-synced provider calendar
+events; the Disposed-to-Intake transition repeats neutralization under the
+Matter lock before changing status. Migration and lifecycle regressions seed
+legacy open children and prove neither the children nor their external calendar
+artifacts can resurrect.
+
+### 13. The operational boundary was duplicated instead of structural
+
+Many services correctly checked tenant access yet had no shared answer to a
+different question: may this Matter still receive operational work? The missed
+seams included client and outside-counsel portal writes, Drive review, outside-
+counsel spend, attachment Q&A/export, annotations, hearing coaching, AI and
+intelligence generation, recommendation persistence, tags, statute references,
+matter notification rules, legal-update watchlists, and contract linking.
+
+All operational writers now use one fail-closed definition: the status must be
+Intake, Active, or On Hold **and** `is_active` must be true. Writers reload the
+bare parent with `populate_existing` and lock it before child mutation;
+multi-parent operations lock sorted Matter IDs. Historical reads, explicit
+cleanup, security governance, and post-disposal financial settlement remain
+available only where that policy is intentional and tested.
+
+### 14. An intermediate commit silently invalidated an earlier lock
+
+Recommendation generation acquired the correct Matter lock at entry, but the
+authority bench-rerank branch committed its diagnostic ModelRun before calling
+the provider. That commit released the lock. A disposal could then win during
+the provider call and the request could still save a final ModelRun,
+Recommendation, options, and audit.
+
+An entry guard is therefore not proof across a commit or external-provider
+boundary. Long-running flows now re-read and lock the parent immediately before
+durable output. Provider-callback race regressions interpose disposal and assert
+that no output, child, final ModelRun, or audit survives.
+
+## Corrective design
+
+### Standalone Notice Management
+
+- tenant-scoped notice record independent of MatterAttachment
+- zero, one, or multiple matter links
+- main-navigation `/app/notices` workflow
+- received/sent direction, owner assignment, workflow status, dates, authority,
+  source, monetary metadata, summary/remarks, search and filters
+- file upload/download with the existing storage security and quota controls
+- legacy matter-scoped notice documents visible from the global workflow without
+  unsafe automatic migration or duplication
+- tenant and restricted-matter visibility enforced server-side
+
+### Matter creation policy
+
+- omitted status and the New Matter UI default to Active
+- direct Active creation is allowed without a conflict check
+- Conflict Check remains available and useful, but it is not a mandatory intake
+  gate for a newly created matter
+- explicit transitions from Intake/On hold to Active retain the conflict gate
+- adjacent create/import paths are audited so defaults do not drift
+
+### Terminal matter lifecycle
+
+- generic metadata PATCH sends dirty fields only, requires a timestamp
+  precondition, and cannot dispose, reopen, change `is_active`, or edit a
+  disposed matter
+- dedicated lifecycle endpoint requires `matters:archive`, source status,
+  timestamp, and reason
+- disposal is non-terminal-to-Disposed only; reopen is Disposed-to-Intake only
+- reopen invalidates prior conflict clearance; Active requires a fresh check
+- disposal reconciles operational children and blocks later background writes
+- migration and reopen both neutralize legacy open children so old work cannot
+  resurrect
+- every operational child writer uses the shared fresh-parent guard, with a
+  post-provider recheck where work crosses an external boundary
+- explicit Dispose/Reopen UI replaces the terminal dropdown option
+
+## Mandatory regression matrix
+
+| Layer | Required assertion |
+| --- | --- |
+| API | notice zero-link create, multi-link create/update, search/filter/assignment, legacy visibility, tenant/restricted-matter isolation, file security |
+| API | omitted/explicit Active matter create succeeds; Intake activation still conflict-gated |
+| API | generic terminal/status/is_active writes fail; stale metadata write fails 409; lifecycle capability/reason/status/timestamp enforced |
+| API inventory | every non-negative generic Matter PATCH caller supplies the concurrency token; repository-wide static audit has no silent legacy payloads |
+| DB integrity | SQLite FK-on negative controls and fresh PostgreSQL migration/constraint proof reject dangling parents and cross-tenant Notice ownership/linkage |
+| Entry paths | create/import/generic PATCH cannot enter a terminal state or use a terminal alias; terminal entry occurs only through the lifecycle service |
+| API/jobs | queued provider/court tracking update cannot mutate a disposed matter; disposed operational children are cancelled/hidden |
+| API/writer inventory | portal, integration, AI/provider, metadata, watchlist, assignment, and linked-record writes all use the shared operational definition; intentional read/cleanup/settlement exceptions are named |
+| API/races | disposal interposed during provider/matching work leaves no child, final ModelRun, notification intent, or audit; multi-parent mutations lock parents in deterministic order |
+| Migration/reopen | legacy terminal rows with open tasks/deadlines/hearings are neutralized on upgrade and again before reopen; the old children never reactivate |
+| React | global Notice page contract, Active default, dirty-field PATCH, explicit Dispose/Reopen dialog, stale-write error |
+| Playwright local | the exact two workbook journeys plus two-session stale-write/reopen workflow with final read-back |
+| Playwright production | the same committed user workflows on the deployed commit; no mocks or conditional skips count as proof |
+| Discovery | new dated specs are selected by the normal local/production configurations |
+
+## Permanent repository changes
+
+- `.claude/skills/bug-fixing/SKILL.md` now codifies feature-boundary tracing,
+  lifecycle state-machine/CAS/side-effect rules, and mandatory two-session tests.
+- `docs/runbooks/release-signoff-template.md` now requires acceptance-contract,
+  lifecycle concurrency, terminal side-effect, regression-discovery, and
+  deployed-workflow evidence.
+- `docs/STRICT_BUG_TASKLIST_2026-04-22.md` records this batch and keeps formal
+  production verdicts fail-closed.
+- `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` tracks lifecycle concurrency and
+  regression-discovery hardening as platform invariants.
+
+## Closure rule for this batch
+
+Do not replace `Inconclusive` with `Properly fixed` until all of the following
+are true:
+
+1. local API, React, typecheck/build, migration, and committed Playwright suites
+   pass;
+2. the changes are committed and deployed;
+3. the deployed build identity is proven;
+4. the production Playwright spec passes using the supplied tester account;
+5. the summary workbook names the exact spec, test, environment, and deployed
+   commit for each final verdict.

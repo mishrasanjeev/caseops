@@ -25,6 +25,7 @@ from caseops_api.schemas.calendar import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     process_notification_delivery_intent,
@@ -143,6 +144,35 @@ def _validate_scope(
     )
 
 
+def _lock_operational_matter_scopes(
+    session: Session,
+    *,
+    context: SessionContext,
+    scope_ids: Iterable[str | None],
+    operation: str,
+) -> None:
+    """Authorize and lock all affected Matter parents before rule writes."""
+
+    for scope_id in sorted({scope_id for scope_id in scope_ids if scope_id}):
+        matter = session.scalar(
+            select(Matter).where(
+                Matter.id == scope_id,
+                Matter.company_id == context.company.id,
+            )
+        )
+        if matter is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Matter not found.",
+            )
+        assert_access(session, context=context, matter=matter)
+        require_operational_matter(
+            session,
+            matter=matter,
+            operation=operation,
+        )
+
+
 def list_notification_rules(
     session: Session,
     *,
@@ -170,6 +200,13 @@ def create_notification_rule(
         scope_type=payload.scope_type,
         scope_id=payload.scope_id,
     )
+    if payload.scope_type == NotificationRuleScopeType.MATTER:
+        _lock_operational_matter_scopes(
+            session,
+            context=context,
+            scope_ids=[payload.scope_id],
+            operation="create a notification rule for this matter",
+        )
     rule = NotificationRule(
         company_id=context.company.id,
         scope_type=payload.scope_type,
@@ -237,6 +274,18 @@ def update_notification_rule(
         scope_type=normalized.scope_type,
         scope_id=normalized.scope_id,
     )
+    matter_scope_ids = []
+    if rule.scope_type == NotificationRuleScopeType.MATTER:
+        matter_scope_ids.append(rule.scope_id)
+    if normalized.scope_type == NotificationRuleScopeType.MATTER:
+        matter_scope_ids.append(normalized.scope_id)
+    if matter_scope_ids:
+        _lock_operational_matter_scopes(
+            session,
+            context=context,
+            scope_ids=matter_scope_ids,
+            operation="update a notification rule for this matter",
+        )
     rule.scope_type = normalized.scope_type
     rule.scope_id = normalized.scope_id
     rule.event_type = normalized.event_type

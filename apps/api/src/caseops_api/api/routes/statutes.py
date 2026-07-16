@@ -63,6 +63,8 @@ from caseops_api.services.legal_updates import (
     update_legal_update,
     update_legal_update_watchlist,
 )
+from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -576,18 +578,22 @@ def _serialise_matter_ref(
 
 
 def _scoped_matter_or_404(
-    session, *, matter_id: str, company_id: str,
+    session,
+    *,
+    matter_id: str,
+    context: SessionContext,
 ) -> Matter:
     matter = session.scalar(
         select(Matter)
         .where(Matter.id == matter_id)
-        .where(Matter.company_id == company_id)
+        .where(Matter.company_id == context.company.id)
     )
     if matter is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Matter not found.",
         )
+    assert_access(session, context=context, matter=matter)
     return matter
 
 
@@ -606,7 +612,9 @@ def list_matter_statute_references(
     session: DbSession,
 ) -> MatterStatuteReferenceListResponse:
     matter = _scoped_matter_or_404(
-        session, matter_id=matter_id, company_id=context.company.id,
+        session,
+        matter_id=matter_id,
+        context=context,
     )
     rows = list(
         session.execute(
@@ -651,7 +659,14 @@ def add_matter_statute_reference(
     session: DbSession,
 ) -> MatterStatuteReferenceRecord:
     matter = _scoped_matter_or_404(
-        session, matter_id=matter_id, company_id=context.company.id,
+        session,
+        matter_id=matter_id,
+        context=context,
+    )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="add a statute reference to this matter",
     )
     section = session.scalar(
         select(StatuteSection).where(
@@ -716,7 +731,14 @@ def delete_matter_statute_reference(
     session: DbSession,
 ):
     matter = _scoped_matter_or_404(
-        session, matter_id=matter_id, company_id=context.company.id,
+        session,
+        matter_id=matter_id,
+        context=context,
+    )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="remove a statute reference from this matter",
     )
     ref = session.scalar(
         select(MatterStatuteReference).where(

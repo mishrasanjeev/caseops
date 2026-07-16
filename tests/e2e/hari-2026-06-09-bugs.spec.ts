@@ -149,8 +149,12 @@ test.describe("Hari 2026-06-09 bugs", () => {
     await page.goto("/app/matters");
     const statusSelect = page.getByLabel("Status for H609-56");
     await expect(statusSelect).toBeVisible({ timeout: 15_000 });
-    await statusSelect.selectOption("disposed");
-    await expect(statusSelect).toHaveValue("disposed");
+    // Terminal disposal now uses the audited lifecycle dialog, while moving an
+    // Intake matter directly to Active can require the tenant's clearance
+    // policy.  This original regression continues to prove that an ordinary
+    // non-terminal status edit remains available from the portfolio.
+    await statusSelect.selectOption("on_hold");
+    await expect(statusSelect).toHaveValue("on_hold");
   });
 
   test("BUG-057: case-tracking source link is a CaseOps proxy URL", async ({

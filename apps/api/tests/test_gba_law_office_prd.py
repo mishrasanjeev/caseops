@@ -82,11 +82,25 @@ def _create_bookmark(client: TestClient, token: str, cnr: str) -> dict[str, obje
     return response.json()
 
 
-def test_matter_status_closed_input_normalizes_to_disposed(client: TestClient) -> None:
+def test_matter_status_closed_alias_uses_controlled_disposal(
+    client: TestClient,
+) -> None:
     boot = _bootstrap(client, slug_seed="gba-status")
     token = str(boot["access_token"])
 
-    matter = _create_matter(client, token, "GBA-STATUS", status="closed")
+    matter = _create_matter(client, token, "GBA-STATUS", status="active")
+    dispose = client.patch(
+        f"/api/matters/{matter['id']}/lifecycle/status",
+        headers=auth_headers(token),
+        json={
+            "to_status": "closed",
+            "expected_from_status": "active",
+            "expected_updated_at": matter["updated_at"],
+            "reason": "Final order closed the GBA regression matter.",
+        },
+    )
+    assert dispose.status_code == 200, dispose.text
+    matter = dispose.json()
 
     assert matter["status"] == "disposed"
     listed = client.get(

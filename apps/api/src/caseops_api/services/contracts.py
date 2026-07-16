@@ -63,6 +63,7 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
     sanitize_filename,
 )
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -383,7 +384,7 @@ def _get_company_membership(
     return membership
 
 
-def _get_linked_matter(
+def _get_operational_linked_matter(
     session: Session,
     *,
     context: SessionContext,
@@ -397,7 +398,11 @@ def _get_linked_matter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Linked matter not found in the current company.",
         )
-    return matter
+    return require_operational_matter(
+        session,
+        matter=matter,
+        operation="link a contract to this matter",
+    )
 
 
 def _get_contract_model(session: Session, *, context: SessionContext, contract_id: str) -> Contract:
@@ -791,7 +796,7 @@ def create_contract(
 
     linked_matter = None
     if payload.linked_matter_id:
-        linked_matter = _get_linked_matter(
+        linked_matter = _get_operational_linked_matter(
             session,
             context=context,
             matter_id=payload.linked_matter_id,
@@ -919,18 +924,25 @@ def update_contract(
     contract_id: str,
     payload: ContractUpdateRequest,
 ) -> ContractRecord:
-    contract = _get_contract_model(session, context=context, contract_id=contract_id)
     raw_updates = payload.model_dump(exclude_unset=True)
     original_update_keys = set(raw_updates.keys())
+    locked_linked_matter = None
+    if raw_updates.get("linked_matter_id"):
+        locked_linked_matter = _get_operational_linked_matter(
+            session,
+            context=context,
+            matter_id=raw_updates["linked_matter_id"],
+        )
+
+    # Lock the Matter parent before loading or mutating the Contract child. This
+    # keeps lifecycle disposal and contract linking in one deterministic lock
+    # order and makes the operational check authoritative through commit.
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
     metadata_before = _contract_metadata_snapshot(contract)
 
     if "linked_matter_id" in raw_updates:
         linked_matter_id = raw_updates.pop("linked_matter_id")
-        contract.linked_matter_id = (
-            _get_linked_matter(session, context=context, matter_id=linked_matter_id).id
-            if linked_matter_id
-            else None
-        )
+        contract.linked_matter_id = locked_linked_matter.id if linked_matter_id else None
 
     if "owner_membership_id" in raw_updates:
         owner_membership_id = raw_updates.pop("owner_membership_id")

@@ -11,7 +11,10 @@ from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from caseops_api.db.models import Matter, ModelRun
+from caseops_api.db.session import get_session_factory
 from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
     MatterSummaryTimelineEvent,
@@ -63,6 +66,15 @@ def _timeline() -> MatterTimeline:
             ),
         ],
     )
+
+
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
 
 
 def test_render_summary_docx_produces_valid_docx_bytes() -> None:
@@ -544,3 +556,174 @@ def _reset_stub_llm_counter() -> None:
     """Module-scoped class counter; reset before each test so the
     assertion totals are per-test, not cumulative across the file."""
     _StubLLM.call_count = 0
+
+
+def test_disposed_summary_preserves_cached_read_and_rejects_new_generation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services import matter_summary as summary_mod
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    real_generate = summary_mod.generate_matter_summary
+
+    def _with_stub(session, *, context, matter_id, provider=None, force_refresh=False):
+        return real_generate(
+            session,
+            context=context,
+            matter_id=matter_id,
+            provider=_StubLLM(),
+            force_refresh=force_refresh,
+        )
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.matters.generate_matter_summary", _with_stub
+    )
+    cached_create = client.post(
+        "/api/matters",
+        headers=headers,
+        json={
+            "matter_code": "SUMMARY-DISPOSED-CACHED",
+            "title": "Cached summary survives disposal",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+        },
+    )
+    assert cached_create.status_code == 200, cached_create.text
+    cached_matter_id = cached_create.json()["id"]
+    generated = client.get(
+        f"/api/matters/{cached_matter_id}/summary",
+        headers=headers,
+    )
+    assert generated.status_code == 200, generated.text
+    assert _StubLLM.call_count == 1
+    _dispose_matter(cached_matter_id)
+
+    cached_read = client.get(
+        f"/api/matters/{cached_matter_id}/summary",
+        headers=headers,
+    )
+    regeneration = client.post(
+        f"/api/matters/{cached_matter_id}/summary/regenerate",
+        headers=headers,
+    )
+    assert cached_read.status_code == 200, cached_read.text
+    assert cached_read.json() == generated.json()
+    assert regeneration.status_code == 409, regeneration.text
+    assert "disposed" in regeneration.text.lower()
+    assert _StubLLM.call_count == 1
+
+    uncached_create = client.post(
+        "/api/matters",
+        headers=headers,
+        json={
+            "matter_code": "SUMMARY-DISPOSED-UNCACHED",
+            "title": "Uncached disposed summary",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+        },
+    )
+    assert uncached_create.status_code == 200, uncached_create.text
+    uncached_matter_id = uncached_create.json()["id"]
+    _dispose_matter(uncached_matter_id)
+    cache_miss = client.get(
+        f"/api/matters/{uncached_matter_id}/summary",
+        headers=headers,
+    )
+    assert cache_miss.status_code == 409, cache_miss.text
+    assert "disposed" in cache_miss.text.lower()
+    assert _StubLLM.call_count == 1
+
+    with get_session_factory()() as session:
+        cached = session.get(Matter, cached_matter_id)
+        uncached = session.get(Matter, uncached_matter_id)
+        assert cached is not None
+        assert uncached is not None
+        assert cached.executive_summary_json is not None
+        assert uncached.executive_summary_json is None
+        cached_runs = list(
+            session.scalars(
+                select(ModelRun).where(ModelRun.matter_id == cached_matter_id)
+            )
+        )
+        uncached_runs = list(
+            session.scalars(
+                select(ModelRun).where(ModelRun.matter_id == uncached_matter_id)
+            )
+        )
+        assert len(cached_runs) == 1
+        assert uncached_runs == []
+
+
+def test_summary_disposal_during_provider_call_rolls_back_run_and_cache(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services import matter_summary as summary_mod
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    created = client.post(
+        "/api/matters",
+        headers=headers,
+        json={
+            "matter_code": "SUMMARY-DISPOSAL-RACE",
+            "title": "Disposed while provider is running",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+        },
+    )
+    assert created.status_code == 200, created.text
+    matter_id = created.json()["id"]
+    real_generate = summary_mod.generate_matter_summary
+
+    class _DisposingStubLLM(_StubLLM):
+        def generate(self, *, messages, temperature, max_tokens):
+            _dispose_matter(matter_id)
+            return super().generate(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
+    def _with_disposal(
+        session,
+        *,
+        context,
+        matter_id,
+        provider=None,
+        force_refresh=False,
+    ):
+        return real_generate(
+            session,
+            context=context,
+            matter_id=matter_id,
+            provider=_DisposingStubLLM(),
+            force_refresh=force_refresh,
+        )
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.matters.generate_matter_summary",
+        _with_disposal,
+    )
+    response = client.get(f"/api/matters/{matter_id}/summary", headers=headers)
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.text.lower()
+
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert matter.executive_summary_json is None
+        assert matter.executive_summary_generated_at is None
+        assert matter.executive_summary_model_run_id is None
+        assert (
+            session.scalar(
+                select(ModelRun).where(ModelRun.matter_id == matter_id)
+            )
+            is None
+        )

@@ -39,6 +39,12 @@ if ($Quick) {
 
 # REBUILD-FIRST is the whole point of this script.
 Write-Host "[verify-web] npm run build (mandatory; prevents stale-bundle false negatives)"
+# Next.js resolves NEXT_PUBLIC_* values at build time.  A developer's
+# .env.local may intentionally point at localhost, but the canonical marketing
+# assertions verify production canonical/OG URLs.  Pin those public origins
+# for the release build instead of setting them only on `next start`.
+$env:NEXT_PUBLIC_SITE_URL = "https://caseops.ai"
+$env:NEXT_PUBLIC_APP_URL = "https://caseops.ai/app"
 & npm run build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

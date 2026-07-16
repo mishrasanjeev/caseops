@@ -5,7 +5,7 @@ import json
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import AuditEvent
+from caseops_api.db.models import AuditEvent, Matter, OutsideCounselSpendRecord
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -253,6 +253,86 @@ def test_spend_record_update_tracks_paid_pending_and_redacts_audit(
         assert "Reviewer note example" not in row.metadata_json
 
 
+def test_disposed_matter_rejects_outside_counsel_spend_create_and_update(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter = _create_matter(
+        client,
+        token,
+        title="Disposed spend matter",
+        matter_code="OC-DISPOSED-2026-001",
+    )
+    counsel = client.post(
+        "/api/outside-counsel/profiles",
+        headers=auth_headers(token),
+        json={"name": "Terminal Boundary Chambers"},
+    ).json()
+    assignment = client.post(
+        "/api/outside-counsel/assignments",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "budget_amount_minor": 400000,
+        },
+    ).json()
+    created_response = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "assignment_id": assignment["id"],
+            "description": "Pre-disposal fee",
+            "amount_minor": 100000,
+        },
+    )
+    assert created_response.status_code == 200, created_response.text
+    spend_record_id = created_response.json()["id"]
+
+    Session = get_session_factory()
+    with Session() as session:
+        matter_row = session.get(Matter, matter["id"])
+        assert matter_row is not None
+        matter_row.status = "disposed"
+        matter_row.is_active = False
+        session.commit()
+
+    update_response = client.patch(
+        f"/api/outside-counsel/spend-records/{spend_record_id}",
+        headers=auth_headers(token),
+        json={"description": "Must not replace closed-file spend"},
+    )
+    create_response = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "assignment_id": assignment["id"],
+            "description": "Must not enter a closed file",
+            "amount_minor": 50000,
+        },
+    )
+    assert update_response.status_code == 409, update_response.text
+    assert create_response.status_code == 409, create_response.text
+    assert "disposed" in update_response.text.lower()
+    assert "disposed" in create_response.text.lower()
+
+    with Session() as session:
+        records = list(
+            session.scalars(
+                select(OutsideCounselSpendRecord).where(
+                    OutsideCounselSpendRecord.matter_id == matter["id"]
+                )
+            )
+        )
+        assert len(records) == 1
+        assert records[0].description == "Pre-disposal fee"
+
+
 def test_spend_payment_tracking_and_currency_rollup_are_explicit(
     client: TestClient,
 ) -> None:
@@ -446,7 +526,10 @@ def test_spend_update_respects_restricted_wall_and_team_visibility(
     assign_team = client.patch(
         f"/api/matters/{team_matter['id']}",
         headers=auth_headers(owner_token),
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": team_matter["updated_at"],
+        },
     )
     assert assign_team.status_code == 200, assign_team.text
     scope = client.put(

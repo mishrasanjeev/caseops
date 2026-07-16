@@ -40,6 +40,7 @@ from caseops_api.schemas.inbound_email import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -392,6 +393,11 @@ def review_inbound_email_event(
     if matter is None or matter.company_id != context.company.id:
         raise HTTPException(status_code=404, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="link inbound email work",
+    )
     if payload.action in {"link_to_matter", "create_note", "create_task"}:
         event.linked_matter_id = matter.id
         event.status = InboundEmailEventStatus.LINKED_METADATA

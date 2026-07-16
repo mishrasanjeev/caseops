@@ -95,7 +95,12 @@ export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             {matter.court_name ?? "No court"}
           </div>
-          <MatterTeamPicker matterId={matter.id} currentTeamId={matter.team_id} />
+          <MatterTeamPicker
+            matterId={matter.id}
+            currentTeamId={matter.team_id}
+            expectedUpdatedAt={matter.updated_at}
+            disabled={matter.status === "disposed"}
+          />
         </div>
       </div>
 

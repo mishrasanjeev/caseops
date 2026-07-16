@@ -16,6 +16,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     MatterAttachmentChunk,
+    MockHearingQuestion,
     MockHearingResponse,
     MockHearingSession,
     Team,
@@ -198,6 +199,15 @@ def _audit_actions(company_id: str) -> list[str]:
         ]
 
 
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+
 def test_cannot_start_mock_hearing_without_affidavit_questions(client: TestClient) -> None:
     boot = _bootstrap(client, f"li-s3-empty-{uuid4().hex[:6]}")
     token = str(boot["access_token"])
@@ -211,6 +221,42 @@ def test_cannot_start_mock_hearing_without_affidavit_questions(client: TestClien
 
     assert response.status_code == 409, response.text
     assert "affidavit intelligence" in response.text.lower()
+
+
+def test_disposed_matter_rejects_mock_hearing_start_but_keeps_list_readable(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s3-disposed-start-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "LI-S3-DISPOSED-START")
+    _seed_affidavit_question(matter_id)
+    _dispose_matter(matter_id)
+
+    rejected = client.post(
+        f"/api/matters/{matter_id}/mock-hearings",
+        headers=_auth(token),
+        json={"mode": "client_preparation"},
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert "disposed" in rejected.text.lower()
+
+    listed = client.get(
+        f"/api/matters/{matter_id}/mock-hearings",
+        headers=_auth(token),
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["sessions"] == []
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(MockHearingSession).where(
+                    MockHearingSession.matter_id == matter_id
+                )
+            )
+            is None
+        )
+    assert "mock_hearing.created" not in _audit_actions(company_id)
 
 
 def test_mock_hearing_session_uses_source_backed_affidavit_questions(
@@ -348,6 +394,72 @@ def test_complete_mock_hearing_is_idempotent_and_audited(client: TestClient) -> 
     actions = _audit_actions(str(boot["company"]["id"]))
     assert "mock_hearing.created" in actions
     assert actions.count("mock_hearing.completed") == 1
+
+
+def test_disposal_rejects_response_and_completion_without_mutating_session(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s3-disposed-session-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "LI-S3-DISPOSED-SESSION")
+    _seed_affidavit_question(matter_id)
+    created = client.post(
+        f"/api/matters/{matter_id}/mock-hearings",
+        headers=_auth(token),
+        json={},
+    )
+    assert created.status_code == 200, created.text
+    session_id = created.json()["id"]
+    question_id = created.json()["questions"][0]["id"]
+    _dispose_matter(matter_id)
+
+    response = client.post(
+        f"/api/matters/{matter_id}/mock-hearings/{session_id}/responses",
+        headers=_auth(token),
+        json={
+            "question_id": question_id,
+            "response_text": "Invoice A supports the payment.",
+        },
+    )
+    completed = client.post(
+        f"/api/matters/{matter_id}/mock-hearings/{session_id}/complete",
+        headers=_auth(token),
+    )
+    assert response.status_code == 409, response.text
+    assert completed.status_code == 409, completed.text
+    assert "disposed" in response.text.lower()
+    assert "disposed" in completed.text.lower()
+
+    # The historical session remains readable but unchanged.
+    read = client.get(
+        f"/api/matters/{matter_id}/mock-hearings/{session_id}",
+        headers=_auth(token),
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["status"] == "active"
+    assert read.json()["questions"][0]["status"] == "pending"
+    assert read.json()["questions"][0]["responses"] == []
+
+    with get_session_factory()() as session:
+        mock_session = session.get(MockHearingSession, session_id)
+        question = session.get(MockHearingQuestion, question_id)
+        assert mock_session is not None
+        assert question is not None
+        assert mock_session.status == "active"
+        assert mock_session.completed_at is None
+        assert question.status == "pending"
+        assert (
+            session.scalar(
+                select(MockHearingResponse).where(
+                    MockHearingResponse.matter_id == matter_id
+                )
+            )
+            is None
+        )
+    actions = _audit_actions(company_id)
+    assert "mock_hearing.response_recorded" not in actions
+    assert "mock_hearing.completed" not in actions
 
 
 def test_mock_hearing_routes_enforce_cross_tenant_restricted_team_and_ethical_wall(

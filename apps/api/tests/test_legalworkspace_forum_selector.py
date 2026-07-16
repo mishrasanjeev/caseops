@@ -401,6 +401,7 @@ def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback
             "forum_level": "high_court",
             "court_id": "karnataka-hc",
             "court_name": "Karnataka High Court",
+            "expected_updated_at": legacy["updated_at"],
         },
     )
     assert legacy_update.status_code == 200, legacy_update.text
@@ -436,14 +437,22 @@ def test_lw_s4_forum_update_is_tenant_scoped_and_audited(
     blocked = client.patch(
         f"/api/matters/{matter['id']}",
         headers=auth_headers(other_token),
-        json={"forum_catalog_entry_id": "hc:karnataka", "forum_level": "high_court"},
+        json={
+            "forum_catalog_entry_id": "hc:karnataka",
+            "forum_level": "high_court",
+            "expected_updated_at": matter["updated_at"],
+        },
     )
     assert blocked.status_code == 404, blocked.text
 
     update = client.patch(
         f"/api/matters/{matter['id']}",
         headers=auth_headers(owner_token),
-        json={"forum_catalog_entry_id": "hc:karnataka", "forum_level": "high_court"},
+        json={
+            "forum_catalog_entry_id": "hc:karnataka",
+            "forum_level": "high_court",
+            "expected_updated_at": matter["updated_at"],
+        },
     )
     assert update.status_code == 200, update.text
     updated = update.json()

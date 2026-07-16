@@ -10,7 +10,10 @@ from caseops_api.db.models import (
     DocumentProcessingAction,
     DocumentProcessingJob,
     DocumentProcessingJobStatus,
+    DocumentProcessingStatus,
     DocumentProcessingTargetType,
+    Matter,
+    MatterActivity,
     MatterAttachment,
     MatterCourtSyncJob,
     MatterCourtSyncJobStatus,
@@ -25,6 +28,7 @@ from caseops_api.services.document_jobs import (
     drain_document_processing_jobs,
     enqueue_scheduled_document_reprocessing,
     recover_stale_document_processing_jobs,
+    run_document_processing_job,
 )
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -145,6 +149,115 @@ def test_scheduled_reprocessing_retry_can_be_drained_by_worker(
         assert attachment is not None
         assert attachment.processing_status == "indexed"
         assert attachment.extracted_char_count > 0
+
+
+def test_disposed_matter_document_job_never_indexes_embeds_or_requeues(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    provider_calls = {"index": 0, "embed": 0}
+
+    def fail_if_indexed(_attachment) -> None:
+        provider_calls["index"] += 1
+
+    def fail_if_embedded(_session, _attachment) -> None:
+        provider_calls["embed"] += 1
+
+    monkeypatch.setattr(
+        "caseops_api.services.document_jobs.index_matter_attachment",
+        fail_if_indexed,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.document_jobs.embed_matter_attachment_chunks",
+        fail_if_embedded,
+    )
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    created = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Disposed document worker",
+            "matter_code": "WORKER-DISPOSED-001",
+            "practice_area": "Litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert created.status_code == 200, created.text
+    matter_id = created.json()["id"]
+    uploaded = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("disposed.txt", b"Never index this after disposal", "text/plain")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    attachment_id = uploaded.json()["id"]
+    # TestClient drains the upload route's background task before returning.
+    # Reset the provider counters and replay that durable job to model a job
+    # that was queued before disposal but claimed afterwards.
+    provider_calls.update(index=0, embed=0)
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        job = session.scalar(
+            select(DocumentProcessingJob)
+            .where(
+                DocumentProcessingJob.attachment_id == attachment_id,
+                DocumentProcessingJob.target_type
+                == DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            )
+            .order_by(DocumentProcessingJob.queued_at.desc())
+        )
+        assert job is not None
+        job.status = DocumentProcessingJobStatus.QUEUED
+        job.error_message = None
+        job.started_at = None
+        job.completed_at = None
+        job_id = job.id
+        activity_count_before = len(
+            list(
+                session.scalars(
+                    select(MatterActivity).where(MatterActivity.matter_id == matter_id)
+                )
+            )
+        )
+        session.commit()
+
+    run_document_processing_job(job_id)
+
+    assert provider_calls == {"index": 0, "embed": 0}
+    with session_factory() as session:
+        job = session.get(DocumentProcessingJob, job_id)
+        assert job is not None
+        assert job.status == DocumentProcessingJobStatus.FAILED
+        assert job.error_message == "Matter disposed; document processing skipped."
+        attachment = session.get(MatterAttachment, attachment_id)
+        assert attachment is not None
+        attachment.processing_status = DocumentProcessingStatus.INDEXED
+        attachment.processed_at = utcnow() - timedelta(days=10)
+        session.add(attachment)
+        activity_count_after = len(
+            list(
+                session.scalars(
+                    select(MatterActivity).where(MatterActivity.matter_id == matter_id)
+                )
+            )
+        )
+        assert activity_count_after == activity_count_before
+        session.commit()
+
+    queued = enqueue_scheduled_document_reprocessing(
+        limit=10,
+        retry_after_hours=999999,
+        reindex_after_hours=0,
+    )
+    assert queued == 0
 
 
 def test_scheduled_reprocessing_can_queue_contract_reindex(client: TestClient) -> None:

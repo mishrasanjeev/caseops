@@ -12,6 +12,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -22,6 +23,7 @@ from caseops_api.db.models import (
     Matter,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import drive_sync as drive_sync_service
 from tests.test_legalworkspace_calendar_sync import (
     _auth,
     _bootstrap_company,
@@ -283,6 +285,155 @@ def test_drive_candidate_queue_is_review_first_and_metadata_only(
     assert reviewed.status_code == 200, reviewed.text
     assert reviewed.json()["candidate"]["status"] == "linked_metadata"
     assert reviewed.json()["candidate"]["imported_attachment_id"] is None
+
+
+def test_drive_candidate_review_cannot_link_or_import_after_disposal(
+    client: TestClient,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="drive-disposed-candidates",
+        email="owner@drive-disposed-candidates.example",
+    )
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, "DRIVE-DISPOSED-1")
+
+    factory = get_session_factory()
+    candidate_ids: list[str] = []
+    with factory() as session:
+        for suffix in ("link", "import"):
+            candidate = DriveFileCandidate(
+                company_id=str(bootstrap["company"]["id"]),
+                provider="google_drive",
+                provider_file_id=f"drive-disposed-{suffix}",
+                provider_version="metadata-v1",
+                name=f"Disposed {suffix}.pdf",
+                mime_type="application/pdf",
+                size_bytes=2048,
+                modified_time=datetime.now(UTC),
+                folder_path="Legal Intake",
+                suggested_matter_id=str(matter["id"]),
+                confidence=0.95,
+                provenance_json={"content_imported": False},
+            )
+            session.add(candidate)
+            session.flush()
+            candidate_ids.append(candidate.id)
+
+        matter_row = session.get(Matter, matter["id"])
+        assert matter_row is not None
+        matter_row.status = "disposed"
+        matter_row.is_active = False
+        session.commit()
+
+    responses = [
+        client.patch(
+            f"/api/drive/candidates/{candidate_ids[0]}",
+            headers=_auth(token),
+            json={"action": "link_metadata", "matter_id": matter["id"]},
+        ),
+        client.patch(
+            f"/api/drive/candidates/{candidate_ids[1]}",
+            headers=_auth(token),
+            json={"action": "import_file", "matter_id": matter["id"]},
+        ),
+    ]
+    assert [response.status_code for response in responses] == [409, 409]
+    assert all("disposed" in response.text.lower() for response in responses)
+
+    with factory() as session:
+        rows = [
+            session.get(DriveFileCandidate, candidate_id)
+            for candidate_id in candidate_ids
+        ]
+        assert all(row is not None for row in rows)
+        assert all(row.status == "new" for row in rows if row is not None)
+        assert all(row.linked_matter_id is None for row in rows if row is not None)
+        assert all(row.imported_attachment_id is None for row in rows if row is not None)
+
+
+def test_drive_candidate_review_rechecks_parent_after_disposal_race(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="drive-candidate-race",
+        email="owner@drive-candidate-race.example",
+    )
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, "DRIVE-RACE-1")
+    control = client.patch(
+        "/api/drive/google/controls",
+        headers=_auth(token),
+        json={
+            "allowed_folders": ["Legal Intake"],
+            "blocked_folders": [],
+            "max_file_size_bytes": 1048576,
+            "allowed_mime_types": ["application/pdf"],
+            "mode": "review_import",
+            "auto_import_enabled": False,
+        },
+    )
+    assert control.status_code == 200, control.text
+    factory = get_session_factory()
+    with factory() as session:
+        candidate = DriveFileCandidate(
+            company_id=str(bootstrap["company"]["id"]),
+            provider="google_drive",
+            provider_file_id="drive-candidate-race",
+            provider_version="metadata-v1",
+            name="Race candidate.pdf",
+            mime_type="application/pdf",
+            size_bytes=1024,
+            suggested_matter_id=str(matter["id"]),
+            provenance_json={"content_imported": False},
+        )
+        session.add(candidate)
+        session.commit()
+        candidate_id = candidate.id
+
+    original_assert_access = drive_sync_service.assert_access
+    disposed = False
+
+    def assert_access_then_dispose(access_session, *args, **kwargs):
+        nonlocal disposed
+        result = original_assert_access(access_session, *args, **kwargs)
+        if not disposed:
+            disposed = True
+            # Force the state change at the exact access-check/operational-lock
+            # boundary. Using the request Session keeps this SQLite regression
+            # deterministic: a second writer can deadlock if an unrelated
+            # fixture write is still pending, which tests the journal rather
+            # than the stale-identity refresh. The commit also expires the
+            # loaded candidate/Matter, just as a transaction boundary would.
+            matter_row = access_session.get(Matter, matter["id"])
+            assert matter_row is not None
+            matter_row.status = "disposed"
+            matter_row.is_active = False
+            access_session.commit()
+        return result
+
+    monkeypatch.setattr(
+        drive_sync_service,
+        "assert_access",
+        assert_access_then_dispose,
+    )
+    response = client.patch(
+        f"/api/drive/candidates/{candidate_id}",
+        headers=_auth(token),
+        json={"action": "link_metadata", "matter_id": matter["id"]},
+    )
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.text.lower()
+
+    with factory() as session:
+        candidate_row = session.get(DriveFileCandidate, candidate_id)
+        matter_row = session.get(Matter, matter["id"])
+        assert candidate_row is not None
+        assert candidate_row.status == "new"
+        assert candidate_row.linked_matter_id is None
+        assert matter_row is not None and matter_row.status == "disposed"
 
 
 def test_calendar_candidate_respects_manual_locked_hearing(

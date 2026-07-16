@@ -3,6 +3,7 @@ export type WorkspaceMatter = {
   matter_code: string;
   title: string;
   status: string;
+  updated_at: string;
   practice_area?: string | null;
   forum_level?: string | null;
   court_id?: string | null;

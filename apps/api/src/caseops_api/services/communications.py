@@ -65,6 +65,7 @@ from caseops_api.services.document_storage import (
 )
 from caseops_api.services.email_templates import render_template
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -487,6 +488,11 @@ def create_matter_communication(
     payload: CommunicationCreateRequest,
 ) -> CommunicationRecord:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="log a communication",
+    )
     occurred = payload.occurred_at or datetime.now(UTC)
     row = Communication(
         company_id=context.company.id,
@@ -683,6 +689,11 @@ def import_inbound_email(
     Communications and the full body/attachments through MatterAttachment.
     """
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="import an email",
+    )
     provider = _normalised_provider(payload.provider)
     provider_message_id = payload.provider_message_id.strip()
     external_id = _external_message_id(provider, provider_message_id)
@@ -862,6 +873,11 @@ def send_matter_email(
     - SendGrid isn't configured in this env (503)
     """
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="send an email",
+    )
 
     template = session.scalar(
         select(EmailTemplate).where(

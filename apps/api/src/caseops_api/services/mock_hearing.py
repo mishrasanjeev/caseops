@@ -38,6 +38,7 @@ from caseops_api.schemas.mock_hearing import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 DISCLAIMER = (
@@ -167,6 +168,11 @@ def start_mock_hearing(
     payload: MockHearingStartRequest,
 ) -> MockHearingSessionRecord:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="start a mock hearing",
+    )
     affidavit_run = _latest_affidavit_run(session, matter)
     source_questions = _select_source_questions(affidavit_run, payload)
     if not source_questions:
@@ -245,7 +251,17 @@ def record_mock_hearing_response(
     payload: MockHearingResponseCreateRequest,
 ) -> MockHearingSessionRecord:
     matter = _load_matter(session, context=context, matter_id=matter_id)
-    mock_session = _load_session(session, matter=matter, session_id=session_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="record a mock hearing response",
+    )
+    mock_session = _load_session(
+        session,
+        matter=matter,
+        session_id=session_id,
+        lock_for_write=True,
+    )
     if mock_session.status != MockHearingSessionStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -323,7 +339,17 @@ def complete_mock_hearing(
     session_id: str,
 ) -> MockHearingSessionRecord:
     matter = _load_matter(session, context=context, matter_id=matter_id)
-    mock_session = _load_session(session, matter=matter, session_id=session_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="complete a mock hearing",
+    )
+    mock_session = _load_session(
+        session,
+        matter=matter,
+        session_id=session_id,
+        lock_for_write=True,
+    )
     if mock_session.status != MockHearingSessionStatus.COMPLETED:
         mock_session.status = MockHearingSessionStatus.COMPLETED
         mock_session.completed_at = datetime.now(UTC)
@@ -388,8 +414,9 @@ def _load_session(
     *,
     matter: Matter,
     session_id: str,
+    lock_for_write: bool = False,
 ) -> MockHearingSession:
-    mock_session = session.scalar(
+    statement = (
         select(MockHearingSession)
         .options(
             selectinload(MockHearingSession.questions).selectinload(
@@ -401,6 +428,11 @@ def _load_session(
             MockHearingSession.matter_id == matter.id,
             MockHearingSession.company_id == matter.company_id,
         )
+    )
+    if lock_for_write:
+        statement = statement.with_for_update(of=MockHearingSession)
+    mock_session = session.scalar(
+        statement.execution_options(populate_existing=lock_for_write)
     )
     if mock_session is None:
         raise HTTPException(

@@ -27,6 +27,7 @@ from caseops_api.db.models import (
 from caseops_api.schemas.matters import MatterDeadlineRecord, MatterDeadlineUpdateRequest
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 _VALID_SOURCES = {"hearing", "draft", "contract", "intake", "custom", "followup"}
@@ -164,7 +165,11 @@ def create_deadline(
     source_ref_type: str | None = None,
     source_ref_id: str | None = None,
 ) -> MatterDeadline:
-    matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=_load_matter(session, context, matter_id),
+        operation="create a deadline",
+    )
     if assignee_membership_id:
         assignee = _get_company_membership(
             session,
@@ -233,12 +238,18 @@ def update_deadline(
     deadline_id: str,
     payload: MatterDeadlineUpdateRequest,
 ) -> MatterDeadline:
-    matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=_load_matter(session, context, matter_id),
+        operation="update a deadline",
+    )
     deadline = session.scalar(
         select(MatterDeadline).where(
             MatterDeadline.id == deadline_id,
             MatterDeadline.matter_id == matter_id,
         )
+        .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
     )
     if deadline is None:
         raise HTTPException(
@@ -246,6 +257,18 @@ def update_deadline(
         )
 
     updates = payload.model_dump(exclude_unset=True)
+    if (
+        deadline.cancelled_by_matter_disposal
+        and "status" in updates
+        and updates["status"] != MatterDeadlineStatus.CANCELLED.value
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This deadline was cancelled by matter disposal and cannot be "
+                "resurrected after reopening. Create a new deadline instead."
+            ),
+        )
     assignee_membership_id = updates.pop("assignee_membership_id", None)
     assignee_changed = "assignee_membership_id" in payload.model_dump(exclude_unset=True)
     if assignee_changed:
@@ -341,7 +364,26 @@ def transition_deadline(
             status_code=status.HTTP_404_NOT_FOUND, detail="Deadline not found."
         )
     # Tenant scope via matter.
-    _load_matter(session, context, deadline.matter_id)
+    require_operational_matter(
+        session,
+        matter=_load_matter(session, context, deadline.matter_id),
+        operation="transition a deadline",
+    )
+    deadline = session.scalar(
+        select(MatterDeadline)
+        .where(MatterDeadline.id == deadline_id)
+        .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
+    )
+    assert deadline is not None
+    if deadline.cancelled_by_matter_disposal and action != "cancel":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This deadline was cancelled by matter disposal and cannot be "
+                "resurrected after reopening. Create a new deadline instead."
+            ),
+        )
     now = datetime.now(UTC)
     if action == "complete":
         deadline.status = MatterDeadlineStatus.DONE

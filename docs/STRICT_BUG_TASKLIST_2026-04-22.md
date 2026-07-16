@@ -898,3 +898,65 @@ Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-07-02_HARI.md`.
 - `BUG-005`: Notice upload must capture notice source, notice subject/about, date received, and reply/response as durable schema fields. The Notices page must display those facts, not only the uploaded filename.
 - Every Hari workbook fix must update API schema/service tests, React UI tests, and a registered Playwright spec for the exact reported page flow.
 - Do not mark a workbook item production-fixed until the deployed build has been re-tested with the supplied tester credentials or an explicitly created local equivalent when deployment has not occurred.
+
+---
+
+## Ram 2026-07-15 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps_Bugs_Ram15Jul2026.xlsx`.
+Detailed root-cause record:
+`docs/BUG_REOPEN_LEARNINGS_2026-07-15_RAM.md`.
+
+| ID | Severity | Classification | Formal verdict | Scope |
+| --- | --- | --- | --- | --- |
+| BUG-001 | Medium | Valid product enhancement | `Inconclusive` pending deployed-commit Playwright | Standalone tenant-wide Notice Management from main navigation; create received/sent notices independently with zero or multiple matter links, search/filter/assign/track, and retain secure file handling plus legacy matter-notice visibility. |
+| BUG-002 | Medium | Valid workflow/policy enhancement | `Inconclusive` pending deployed-commit Playwright | New matters default to Active and direct Active creation is allowed without mandatory conflict clearance; conflict checks remain available and explicit Intake/On-hold activation remains gated. |
+| Lifecycle adjacent defect | High | Valid systemic defect | Locally verified; formal verdict `Inconclusive` pending deployed-commit Playwright | Explicit terminal state machine, optimistic concurrency, dirty metadata PATCH, reason/capability/audit, reopen to Intake with fresh conflict requirement, and post-disposal operational/background guards. |
+
+Pre-change production reproduction on the `legal` tester tenant:
+
+- authenticated login succeeded;
+- main navigation exposed zero Notice links and `/app/notices` returned 404;
+- direct Active matter create returned 409 with the mandatory
+  Intake/conflict-clearance message;
+- generic Disposed PATCH returned 200 and read back as Disposed, demonstrating
+  persistence but not protection from stale or background writers.
+
+Required closure evidence for this batch:
+
+- API tests for Notice independence/multi-link/security, Active create policy,
+  lifecycle transition matrix/concurrency/side effects;
+- React tests for the global Notice workflow, Active default, dirty-field edits,
+  and explicit Dispose/Reopen actions;
+- registered `tests/e2e/ram-2026-07-15-bugs.spec.ts` local proof;
+- registered `tests/e2e/ram-2026-07-15-prod.spec.ts` deployed proof;
+- exact deployed commit/build identity paired with each final verdict.
+
+Do not rewrite any verdict above as `Properly fixed` from local evidence alone.
+
+Local candidate evidence from the 2026-07-15 workstation replay, with final
+regression shards completed on 2026-07-16:
+
+- complete 2,120-test API inventory collected and covered through three
+  disjoint product-final-tree shards: 2,089 passed, 31 environment-gated skips,
+  and 0 outstanding failures. One exact-text PG-001 documentation assertion
+  exposed by the shards passed immediately after correcting only that ledger
+  line. The 13 PostgreSQL-only tests executed separately on PostgreSQL 17;
+  overlapping focused and shard run counts were not summed;
+- fresh PostgreSQL 17 + pgvector suite: 13/13 passed after upgrade to head,
+  including prior-revision legacy-child and provider-calendar tombstone repair;
+- complete web suite: 115 files / 540 tests passed;
+- Ruff lint across 490 in-scope Python files, TypeScript typecheck, optimized
+  production build, strict dated-spec compilation, and single-head Alembic
+  verification passed;
+- `tests/e2e/ram-2026-07-15-bugs.spec.ts`: 3/3 passed against fresh local
+  `legal` tenant data and the exact tester identity, using the production web
+  build and no mocks;
+- the complete run exposed and corrected three false-green patterns: dangling
+  notification/custom-role foreign-key fixtures, legacy Matter PATCH callers
+  missing mandatory CAS, and a test shortcut that created a terminal alias
+  instead of using the lifecycle endpoint. Permanent controls now require valid
+  parent fixtures, repository-wide mutation-call-site audits, and denial of
+  terminal entry through create/import/generic PATCH;
+- production post-fix execution remains intentionally pending deployment and
+  deployed-build identity proof.

@@ -38,6 +38,7 @@ from caseops_api.schemas.litigation_intelligence import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 DISCLAIMER = (
@@ -148,6 +149,11 @@ def mutate_litigation_intelligence_review_item(
     payload: LitigationIntelligenceReviewMutationRequest,
 ) -> LitigationIntelligenceReviewMutationResponse:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="mutate a litigation intelligence review item",
+    )
     source_id = _parse_review_item_id(payload.item_id, payload.item_type)
     target = _load_review_target(
         session,
@@ -764,6 +770,8 @@ def _latest_action_for_item(
         )
         .order_by(LitigationIntelligenceReviewAction.created_at.desc())
         .limit(1)
+        .with_for_update(of=LitigationIntelligenceReviewAction)
+        .execution_options(populate_existing=True)
     )
 
 
@@ -802,6 +810,8 @@ def _load_review_target(
                 MatterProceedingSignal.company_id == matter.company_id,
                 MatterProceedingSignal.matter_id == matter.id,
             )
+            .with_for_update(of=MatterProceedingSignal)
+            .execution_options(populate_existing=True)
         )
     elif item_type == "affidavit_statement":
         target = session.scalar(
@@ -810,6 +820,8 @@ def _load_review_target(
                 AffidavitStatement.company_id == matter.company_id,
                 AffidavitStatement.matter_id == matter.id,
             )
+            .with_for_update(of=AffidavitStatement)
+            .execution_options(populate_existing=True)
         )
     elif item_type == "affidavit_question":
         target = session.scalar(
@@ -818,6 +830,8 @@ def _load_review_target(
                 AffidavitQuestion.company_id == matter.company_id,
                 AffidavitQuestion.matter_id == matter.id,
             )
+            .with_for_update(of=AffidavitQuestion)
+            .execution_options(populate_existing=True)
         )
     elif item_type == "mock_hearing_session":
         target = session.scalar(
@@ -826,6 +840,8 @@ def _load_review_target(
                 MockHearingSession.company_id == matter.company_id,
                 MockHearingSession.matter_id == matter.id,
             )
+            .with_for_update(of=MockHearingSession)
+            .execution_options(populate_existing=True)
         )
     elif item_type == "mock_hearing_response":
         target = session.scalar(
@@ -834,6 +850,8 @@ def _load_review_target(
                 MockHearingResponse.company_id == matter.company_id,
                 MockHearingResponse.matter_id == matter.id,
             )
+            .with_for_update(of=MockHearingResponse)
+            .execution_options(populate_existing=True)
         )
     elif item_type == "predictive_signal":
         target = session.scalar(
@@ -842,6 +860,8 @@ def _load_review_target(
                 PredictiveSignalItem.company_id == matter.company_id,
                 PredictiveSignalItem.matter_id == matter.id,
             )
+            .with_for_update(of=PredictiveSignalItem)
+            .execution_options(populate_existing=True)
         )
     elif item_type == "bench_context":
         target = session.scalar(
@@ -850,6 +870,8 @@ def _load_review_target(
                 PredictiveSignalRun.company_id == matter.company_id,
                 PredictiveSignalRun.matter_id == matter.id,
             )
+            .with_for_update(of=PredictiveSignalRun)
+            .execution_options(populate_existing=True)
         )
     else:
         target = None

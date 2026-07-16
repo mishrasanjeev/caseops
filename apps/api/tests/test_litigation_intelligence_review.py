@@ -5,6 +5,7 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -16,6 +17,7 @@ from caseops_api.db.models import (
     AffidavitStatement,
     AuditEvent,
     Company,
+    CompanyMembership,
     DocumentProcessingStatus,
     LitigationIntelligenceReviewAction,
     Matter,
@@ -30,13 +32,19 @@ from caseops_api.db.models import (
     PredictiveSignalItem,
     PredictiveSignalRun,
     Team,
+    User,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.litigation_intelligence import (
     LitigationIntelligenceReviewItem,
+    LitigationIntelligenceReviewMutationRequest,
     LitigationIntelligenceReviewMutationResponse,
     LitigationIntelligenceReviewSource,
 )
+from caseops_api.services.litigation_intelligence_review import (
+    mutate_litigation_intelligence_review_item,
+)
+from caseops_api.services.session_context import SessionContext
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -379,6 +387,15 @@ def _review_actions(matter_id: str) -> list[LitigationIntelligenceReviewAction]:
         )
 
 
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+
 def test_litigation_intelligence_review_aggregates_source_linked_items_and_audits(
     client: TestClient,
 ) -> None:
@@ -707,6 +724,106 @@ def test_litigation_intelligence_review_mutation_actions_are_audited_and_idempot
     assert accept_conflict_metadata["applied"] is False
     assert accept_conflict_metadata["no_op_reason"] == "conflict_terminal_state"
     assert accept_conflict_metadata["conflict_reason"] == "conflict_terminal_state"
+
+
+def test_disposed_matter_keeps_review_readable_but_rejects_mutation_without_side_effects(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s9-disposed-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "LI-S9-DISPOSED")
+    _seed_review_records(matter_id)
+
+    before = client.get(
+        f"/api/matters/{matter_id}/litigation-intelligence/review",
+        headers=_auth(token),
+    )
+    assert before.status_code == 200, before.text
+    item = next(
+        row for row in before.json()["items"] if row["item_type"] == "affidavit_question"
+    )
+    _dispose_matter(matter_id)
+
+    rejected = client.post(
+        f"/api/matters/{matter_id}/litigation-intelligence/review/actions",
+        headers=_auth(token),
+        json={
+            "item_id": item["id"],
+            "item_type": item["item_type"],
+            "action": "accept",
+            "note": "This must not be persisted after disposal.",
+        },
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert "disposed" in rejected.text.lower()
+
+    # Disposal terminates operational work, not authorized historical reads.
+    after = client.get(
+        f"/api/matters/{matter_id}/litigation-intelligence/review",
+        headers=_auth(token),
+    )
+    assert after.status_code == 200, after.text
+    assert item["id"] in {row["id"] for row in after.json()["items"]}
+    assert _review_actions(matter_id) == []
+    assert not [
+        event
+        for event in _audit_events(company_id)
+        if event.action == "litigation_intelligence_review.item_mutated"
+    ]
+
+
+def test_review_mutation_refreshes_stale_matter_before_any_child_write(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s9-stale-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "LI-S9-STALE")
+    _seed_review_records(matter_id)
+    review = client.get(
+        f"/api/matters/{matter_id}/litigation-intelligence/review",
+        headers=_auth(token),
+    )
+    assert review.status_code == 200, review.text
+    item = next(
+        row for row in review.json()["items"] if row["item_type"] == "affidavit_question"
+    )
+
+    factory = get_session_factory()
+    with factory() as stale_session:
+        stale_matter = stale_session.get(Matter, matter_id)
+        company = stale_session.get(Company, company_id)
+        membership = stale_session.scalar(
+            select(CompanyMembership).where(CompanyMembership.company_id == company_id)
+        )
+        assert stale_matter is not None
+        assert stale_matter.is_active is True
+        assert company is not None
+        assert membership is not None
+        user = stale_session.get(User, membership.user_id)
+        assert user is not None
+        context = SessionContext(company=company, membership=membership, user=user)
+
+        _dispose_matter(matter_id)
+
+        with pytest.raises(HTTPException) as exc_info:
+            mutate_litigation_intelligence_review_item(
+                stale_session,
+                context=context,
+                matter_id=matter_id,
+                payload=LitigationIntelligenceReviewMutationRequest(
+                    item_id=item["id"],
+                    item_type=item["item_type"],
+                    action="accept",
+                ),
+            )
+        assert exc_info.value.status_code == 409
+        assert "disposed" in str(exc_info.value.detail).lower()
+        assert stale_matter.status == "disposed"
+        assert stale_matter.is_active is False
+
+    assert _review_actions(matter_id) == []
 
 
 def test_litigation_intelligence_review_mutation_rejects_unsafe_notes(

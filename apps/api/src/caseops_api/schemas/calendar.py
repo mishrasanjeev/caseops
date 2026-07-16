@@ -29,6 +29,7 @@ CalendarEventSyncStatusLiteral = Literal[
     "retry_scheduled",
     "dead_letter",
     "deleted",
+    "delete_pending",
 ]
 CalendarSyncModeLiteral = Literal["manual_bounded"]
 CalendarDurableAutomationLiteral = Literal[

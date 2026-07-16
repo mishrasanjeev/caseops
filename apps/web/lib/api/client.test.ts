@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./config";
-import { apiRequest, getCsrfHeaders } from "./client";
+import { apiBlobRequest, apiRequest, getCsrfHeaders } from "./client";
 
 function response(
   body: unknown,
@@ -87,6 +87,60 @@ describe("apiRequest", () => {
       credentials: "include",
       headers: expect.objectContaining({
         Authorization: "Bearer fresh-token",
+      }),
+    });
+  });
+
+  it("refreshes and retries an authenticated binary download after a 401", async () => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        response(
+          {
+            type: "expired_token",
+            status: 401,
+            detail: "Session token expired.",
+          },
+          401,
+          "application/problem+json",
+        ),
+      )
+      .mockResolvedValueOnce(
+        response(
+          {
+            access_token: "fresh-download-token",
+            token_type: "bearer",
+            company: {},
+            user: {},
+            membership: {},
+          },
+          200,
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response("notice bytes", {
+          status: 200,
+          headers: {
+            "content-type": "application/octet-stream",
+            "content-disposition": 'attachment; filename="notice.txt"',
+          },
+        }),
+      );
+
+    const result = await apiBlobRequest("/api/notices/notice-1/download", {
+      token: "stale-download-token",
+    });
+
+    await expect(result.text()).resolves.toBe("notice bytes");
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe(
+      "http://localhost:8000/api/auth/refresh",
+    );
+    expect(vi.mocked(fetch).mock.calls[2]?.[1]).toMatchObject({
+      credentials: "include",
+      headers: expect.objectContaining({
+        Accept: "*/*",
+        Authorization: "Bearer fresh-download-token",
       }),
     });
   });

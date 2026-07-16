@@ -46,7 +46,12 @@ fi
 
 # REBUILD-FIRST is the whole point of this script.
 echo "[verify-web] npm run build (mandatory; prevents stale-bundle false negatives)"
-npm run build
+# Next.js resolves NEXT_PUBLIC_* values at build time.  Keep a developer's
+# localhost .env.local from leaking into canonical/OG assertions in the release
+# build.
+NEXT_PUBLIC_SITE_URL="https://caseops.ai" \
+NEXT_PUBLIC_APP_URL="https://caseops.ai/app" \
+  npm run build
 
 cd "$REPO_ROOT"
 echo "[verify-web] Playwright app suite ${PLAYWRIGHT_ARGS[*]:-(all)}"

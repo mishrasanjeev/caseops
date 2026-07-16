@@ -21,9 +21,12 @@ Tests in this file:
 """
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import select
 
+import caseops_api.services.portal_outside_counsel as portal_oc_service
 from caseops_api.db.models import (
     AuditEvent,
     InvoiceStatus,
@@ -76,6 +79,71 @@ def _set_oc_cross_visibility(matter_id: str, enabled: bool) -> None:
         assert m is not None
         m.oc_cross_visibility_enabled = enabled
         session.commit()
+
+
+def _dispose_matter(matter_id: str) -> None:
+    Session = get_session_factory()
+    with Session() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+
+def _submit_oc_operational_write(
+    client: TestClient,
+    *,
+    matter_id: str,
+    write_kind: str,
+) -> Response:
+    headers = _portal_csrf_headers(client)
+    if write_kind == "work_product":
+        pdf = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\ntrailer<<>>\n%%EOF"
+        return client.post(
+            f"/api/portal/oc/matters/{matter_id}/work-product",
+            files={"file": ("terminal.pdf", pdf, "application/pdf")},
+            headers=headers,
+        )
+    if write_kind == "invoice":
+        return client.post(
+            f"/api/portal/oc/matters/{matter_id}/invoices",
+            json={
+                "invoice_number": "OC-TERMINAL-1",
+                "issued_on": "2026-07-16",
+                "currency": "INR",
+                "line_items": [{"description": "Must not persist", "amount_minor": 1000}],
+            },
+            headers=headers,
+        )
+    if write_kind == "time_entry":
+        return client.post(
+            f"/api/portal/oc/matters/{matter_id}/time-entries",
+            json={
+                "work_date": "2026-07-16",
+                "description": "Must not persist",
+                "duration_minutes": 60,
+                "billable": True,
+                "rate_currency": "INR",
+                "rate_amount_minor": 1000,
+            },
+            headers=headers,
+        )
+    raise AssertionError(f"Unknown outside-counsel write kind: {write_kind}")
+
+
+def _assert_no_oc_operational_rows(matter_id: str) -> None:
+    Session = get_session_factory()
+    with Session() as session:
+        assert session.scalar(
+            select(MatterAttachment.id).where(MatterAttachment.matter_id == matter_id).limit(1)
+        ) is None
+        assert session.scalar(
+            select(MatterInvoice.id).where(MatterInvoice.matter_id == matter_id).limit(1)
+        ) is None
+        assert session.scalar(
+            select(MatterTimeEntry.id).where(MatterTimeEntry.matter_id == matter_id).limit(1)
+        ) is None
 
 
 # ---------- list assigned matters / role gate ----------
@@ -378,6 +446,113 @@ def test_oc_invoice_and_time_respect_can_invoice_scope(
     assert "can_invoice" in time_entry.json()["detail"]
 
 
+# ---------- disposed-matter operational boundary ----------
+
+
+@pytest.mark.parametrize("write_kind", ["work_product", "invoice", "time_entry"])
+def test_disposed_matter_blocks_every_oc_operational_write(
+    client: TestClient,
+    write_kind: str,
+) -> None:
+    slug_suffix = write_kind.replace("_", "-")
+    boot = _bootstrap(
+        client,
+        slug=f"c3-disposed-{slug_suffix}",
+        email=f"c3-disposed-{slug_suffix}@firm.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(
+        boot["company"]["id"],
+        code=f"C3-DISPOSED-{write_kind.upper()}",
+    )
+    _, debug = _invite_oc_portal_user(
+        client,
+        token,
+        matter_id,
+        email=f"{write_kind}@disposed-oc.example",
+    )
+    _verify_and_session(client, debug)
+    _dispose_matter(matter_id)
+
+    response = _submit_oc_operational_write(
+        client,
+        matter_id=matter_id,
+        write_kind=write_kind,
+    )
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.json()["detail"].lower()
+    _assert_no_oc_operational_rows(matter_id)
+
+
+@pytest.mark.parametrize("write_kind", ["work_product", "invoice", "time_entry"])
+def test_oc_operational_write_refreshes_stale_matter_after_concurrent_disposal(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    write_kind: str,
+) -> None:
+    """Disposal after the grant read must win before any child row is written.
+
+    The patched grant lookup creates the same stale identity-map window that a
+    concurrent lifecycle request can create.  The shared operational guard must
+    reload and lock the Matter parent, rather than trusting that stale object.
+    """
+
+    slug_suffix = write_kind.replace("_", "-")
+    boot = _bootstrap(
+        client,
+        slug=f"c3-race-{slug_suffix}",
+        email=f"c3-race-{slug_suffix}@firm.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(
+        boot["company"]["id"],
+        code=f"C3-RACE-{write_kind.upper()}",
+    )
+    _, debug = _invite_oc_portal_user(
+        client,
+        token,
+        matter_id,
+        email=f"{write_kind}@race-oc.example",
+    )
+    _verify_and_session(client, debug)
+
+    original_assert_grant = portal_oc_service._assert_oc_grant
+    disposal_interposed = False
+
+    def dispose_after_grant_read(session, *, portal_user, matter_id):
+        nonlocal disposal_interposed
+        matter, grant = original_assert_grant(
+            session,
+            portal_user=portal_user,
+            matter_id=matter_id,
+        )
+        assert matter.is_active is True
+        if not disposal_interposed:
+            _dispose_matter(matter_id)
+            disposal_interposed = True
+        # The request session still holds the pre-disposal identity-map value.
+        assert matter.is_active is True
+        return matter, grant
+
+    monkeypatch.setattr(
+        portal_oc_service,
+        "_assert_oc_grant",
+        dispose_after_grant_read,
+    )
+
+    response = _submit_oc_operational_write(
+        client,
+        matter_id=matter_id,
+        write_kind=write_kind,
+    )
+
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.json()["detail"].lower()
+    _assert_no_oc_operational_rows(matter_id)
+
+
 # ---------- time entries ----------
 
 
@@ -488,10 +663,18 @@ def test_admin_can_toggle_oc_cross_visibility_via_matter_patch(
     # strips cookies for this call but the portal cookies stay in the
     # client jar so OC #2's next call re-uses the same session
     # (magic-link tokens are single-use, so we cannot re-verify).
+    current_matter = client.get(
+        f"/api/matters/{matter_id}",
+        headers=auth_headers(owner_token),
+    )
+    assert current_matter.status_code == 200, current_matter.text
     resp = client.patch(
         f"/api/matters/{matter_id}",
         headers=auth_headers(owner_token),
-        json={"oc_cross_visibility_enabled": True},
+        json={
+            "oc_cross_visibility_enabled": True,
+            "expected_updated_at": current_matter.json()["updated_at"],
+        },
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["oc_cross_visibility_enabled"] is True

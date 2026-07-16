@@ -165,7 +165,10 @@ def test_team_scoping_gates_visibility_for_member(client: TestClient) -> None:
             patch = client.patch(
                 f"/api/matters/{matter['id']}",
                 headers=owner_headers,
-                json={"team_id": team_id},
+                json={
+                    "team_id": team_id,
+                    "expected_updated_at": matter["updated_at"],
+                },
             )
             assert patch.status_code == 200, patch.text
             matter = patch.json()
@@ -211,6 +214,21 @@ def test_team_scoping_gates_visibility_for_member(client: TestClient) -> None:
     codes_after = {m["matter_code"] for m in after["matters"]}
     assert codes_after == {"IP-001", "FIRM-001"}
     assert "LIT-001" not in codes_after
+
+    attachment = client.post(
+        f"/api/matters/{lit_matter['id']}/attachments",
+        headers=owner_headers,
+        files={"file": ("team-secret.txt", b"team scoped", "text/plain")},
+    )
+    assert attachment.status_code == 200, attachment.text
+    hidden_download = client.get(
+        (
+            f"/api/matters/{lit_matter['id']}/attachments/"
+            f"{attachment.json()['id']}/download"
+        ),
+        headers=member_headers,
+    )
+    assert hidden_download.status_code == 404
 
     # Owner still sees everything regardless of scoping.
     owner_all = client.get("/api/matters/", headers=owner_headers).json()

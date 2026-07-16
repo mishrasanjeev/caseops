@@ -35,6 +35,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.legal_knowledge_graph import LegalKnowledgeGraphNodeRecord
+from caseops_api.services import legal_knowledge_graph as graph_service
 from caseops_api.services.legal_knowledge_graph import SOURCE_SNIPPET_LIMIT
 
 
@@ -75,6 +76,15 @@ def _create_matter(client: TestClient, token: str, code: str) -> str:
     )
     assert response.status_code == 200, response.text
     return str(response.json()["id"])
+
+
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
 
 
 def _long_quote(label: str) -> str:
@@ -423,6 +433,95 @@ def test_legal_knowledge_graph_materializes_source_backed_matter_graph(
         ]
     assert "legal_knowledge_graph.materialized" in actions
     assert "legal_knowledge_graph.viewed" in actions
+
+
+def test_disposed_matter_blocks_graph_materialization_without_graph_side_effects(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"li-s11-disposed-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "LI-S11-DISPOSED")
+    _seed_graph_records(matter_id)
+    _dispose_matter(matter_id)
+
+    response = client.post(
+        f"/api/matters/{matter_id}/legal-knowledge-graph/materialize",
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.json()["detail"].lower()
+    listed = client.get(
+        f"/api/matters/{matter_id}/legal-knowledge-graph",
+        headers=_auth(token),
+    )
+    assert listed.status_code == 200, listed.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(LegalKnowledgeGraphRun).where(
+                LegalKnowledgeGraphRun.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(LegalKnowledgeGraphNode).where(
+                LegalKnowledgeGraphNode.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(LegalKnowledgeGraphEdge).where(
+                LegalKnowledgeGraphEdge.matter_id == matter_id
+            )
+        ) is None
+
+
+def test_graph_materialization_rechecks_after_concurrent_disposal(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = _bootstrap(client, f"li-s11-race-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "LI-S11-RACE")
+    _seed_graph_records(matter_id)
+    original_build_graph_specs = graph_service._build_graph_specs
+    disposal_interposed = False
+
+    def build_graph_then_dispose(session, matter):
+        nonlocal disposal_interposed
+        graph = original_build_graph_specs(session, matter)
+        if not disposal_interposed:
+            _dispose_matter(matter_id)
+            disposal_interposed = True
+        return graph
+
+    monkeypatch.setattr(
+        graph_service,
+        "_build_graph_specs",
+        build_graph_then_dispose,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/legal-knowledge-graph/materialize",
+        headers=_auth(token),
+    )
+
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(LegalKnowledgeGraphRun).where(
+                LegalKnowledgeGraphRun.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(LegalKnowledgeGraphNode).where(
+                LegalKnowledgeGraphNode.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(LegalKnowledgeGraphEdge).where(
+                LegalKnowledgeGraphEdge.matter_id == matter_id
+            )
+        ) is None
 
 
 def test_legal_knowledge_graph_materialization_is_idempotent(client: TestClient) -> None:

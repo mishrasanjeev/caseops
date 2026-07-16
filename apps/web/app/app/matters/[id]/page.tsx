@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
 import { ConflictCheckCard } from "@/components/matters/ConflictCheckCard";
+import { MatterLifecycleDialog } from "@/components/matters/MatterLifecycleDialog";
 import { MatterForumCard } from "@/components/matters/MatterForumCard";
 import { NextActionCard } from "@/components/matters/NextActionCard";
 import { OrderBadges } from "@/components/matters/OrderBadges";
@@ -82,7 +83,6 @@ const STATUS_OPTIONS: Array<{ value: MatterEditDraft["status"]; label: string }>
   { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
   { value: "on_hold", label: "On hold" },
-  { value: "disposed", label: "Disposed" },
 ];
 
 const FORUM_LEVEL_OPTIONS = [
@@ -117,6 +117,71 @@ function draftFromMatter(matter: Matter): MatterEditDraft {
   };
 }
 
+type MatterUpdateInput = Parameters<typeof updateMatter>[0];
+
+/** Build a PATCH from fields the user actually changed.
+ *
+ * Sending a whole record from a stale editor was the primary accidental
+ * reopening path: a title edit could replay an old Active status after another
+ * user disposed the matter. The timestamp precondition is still mandatory,
+ * but omitting untouched fields also makes the intent explicit.
+ */
+function buildMatterUpdateInput(
+  matterId: string,
+  matter: Matter,
+  draft: MatterEditDraft,
+): MatterUpdateInput {
+  const input: MatterUpdateInput = {
+    matterId,
+    expected_updated_at: matter.updated_at,
+  };
+  const title = draft.title.trim();
+  const matterCode = normalizeMatterCodeInput(draft.matterCode);
+  const practiceArea = draft.practiceArea.trim();
+  const forumLevel = draft.forumLevel.trim();
+  const clientName = blankToNull(draft.clientName);
+  const opposingParty = blankToNull(draft.opposingParty);
+  const caseNumber = blankToNull(draft.caseNumber);
+  const cnrNumber = blankToNull(draft.cnrNumber);
+  const courtName = blankToNull(draft.courtName);
+  const judgeName = blankToNull(draft.judgeName);
+  const nextHearingOn = draft.nextHearingOn || null;
+  const description = blankToNull(draft.description);
+
+  if (title !== matter.title) input.title = title;
+  if (matterCode !== matter.matter_code) input.matter_code = matterCode;
+  if (clientName !== (matter.client_name ?? null)) input.client_name = clientName;
+  if (opposingParty !== (matter.opposing_party ?? null)) {
+    input.opposing_party = opposingParty;
+  }
+  if (caseNumber !== (matter.case_number ?? null)) input.case_number = caseNumber;
+  if (cnrNumber !== (matter.cnr_number ?? null)) input.cnr_number = cnrNumber;
+  if (practiceArea !== (matter.practice_area ?? "")) {
+    input.practice_area = practiceArea;
+  }
+  if (forumLevel !== (matter.forum_level ?? "")) input.forum_level = forumLevel;
+  if (courtName !== (matter.court_name ?? null)) input.court_name = courtName;
+  if (judgeName !== (matter.judge_name ?? null)) input.judge_name = judgeName;
+  if (nextHearingOn !== (matter.next_hearing_on ?? null)) {
+    input.next_hearing_on = nextHearingOn;
+  }
+  if (description !== (matter.description ?? null)) input.description = description;
+  if (
+    draft.status !== matter.status &&
+    draft.status !== "disposed" &&
+    matter.status !== "disposed"
+  ) {
+    input.status = draft.status;
+  }
+  return input;
+}
+
+function hasMatterChanges(input: MatterUpdateInput): boolean {
+  return Object.keys(input).some(
+    (key) => key !== "matterId" && key !== "expected_updated_at",
+  );
+}
+
 function isConflictGateActivationError(err: unknown, message: string): boolean {
   if (!isApiErrorShape(err) || err.status !== 409) return false;
   const haystack = `${err.detail} ${err.problemType ?? ""} ${message}`.toLowerCase();
@@ -145,28 +210,16 @@ export default function MatterOverviewPage() {
   const queryClient = useQueryClient();
   const { data } = useMatterWorkspace(params.id);
   const canEditMatter = useCapability("matters:edit");
+  const canArchiveMatter = useCapability("matters:archive");
   const [isEditingMatter, setIsEditingMatter] = useState(false);
   const [matterDraft, setMatterDraft] = useState<MatterEditDraft | null>(null);
+  const [matterEditBase, setMatterEditBase] = useState<Matter | null>(null);
   const [matterEditConflictGateError, setMatterEditConflictGateError] =
     useState<string | null>(null);
+  const [matterEditConcurrencyError, setMatterEditConcurrencyError] =
+    useState<string | null>(null);
   const matterMutation = useMutation({
-    mutationFn: (draft: MatterEditDraft) =>
-      updateMatter({
-        matterId: params.id,
-        title: draft.title.trim(),
-        matter_code: normalizeMatterCodeInput(draft.matterCode),
-        client_name: blankToNull(draft.clientName),
-        opposing_party: blankToNull(draft.opposingParty),
-        case_number: blankToNull(draft.caseNumber),
-        cnr_number: blankToNull(draft.cnrNumber),
-        status: draft.status,
-        practice_area: draft.practiceArea.trim(),
-        forum_level: draft.forumLevel.trim(),
-        court_name: blankToNull(draft.courtName),
-        judge_name: blankToNull(draft.judgeName),
-        next_hearing_on: draft.nextHearingOn || null,
-        description: blankToNull(draft.description),
-      }),
+    mutationFn: (input: MatterUpdateInput) => updateMatter(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["matters", params.id, "workspace"],
@@ -175,20 +228,31 @@ export default function MatterOverviewPage() {
       toast.success("Matter updated.");
       setIsEditingMatter(false);
       setMatterDraft(null);
+      setMatterEditBase(null);
       setMatterEditConflictGateError(null);
+      setMatterEditConcurrencyError(null);
     },
-    onError: (err) => {
+    onError: async (err) => {
       const message = apiErrorMessage(err, "Could not update the matter.");
-      setMatterEditConflictGateError(
-        isConflictGateActivationError(err, message) ? message : null,
-      );
+      const isConflictGate = isConflictGateActivationError(err, message);
+      setMatterEditConflictGateError(isConflictGate ? message : null);
+      const isStaleWrite = isApiErrorShape(err) && err.status === 409 && !isConflictGate;
+      setMatterEditConcurrencyError(isStaleWrite ? message : null);
+      if (isStaleWrite) {
+        await queryClient.invalidateQueries({
+          queryKey: ["matters", params.id, "workspace"],
+        });
+        await queryClient.invalidateQueries({ queryKey: ["matters"] });
+      }
       toast.error(message);
     },
   });
 
   if (!data) return null;
 
-  const activeTasks = data.tasks.filter((t) => t.status !== "done").slice(0, 5);
+  const activeTasks = data.tasks
+    .filter((task) => !["completed", "cancelled"].includes(task.status))
+    .slice(0, 5);
   const upcomingHearings = data.hearings
     .filter((h) => h.status !== "completed" && h.status !== "cancelled")
     .filter((h) => h.hearing_on || h.scheduled_for || h.listing_date)
@@ -198,9 +262,14 @@ export default function MatterOverviewPage() {
   const recentNotes = data.notes.slice(0, 3);
 
   function beginMatterEdit(matter: Matter) {
+    // Freeze both the comparison record and OCC token for the lifetime of the
+    // editor. A background query refetch must not silently adopt a newer token
+    // while retaining the user's older draft.
+    setMatterEditBase({ ...matter });
     setMatterDraft(draftFromMatter(matter));
     setIsEditingMatter(true);
     setMatterEditConflictGateError(null);
+    setMatterEditConcurrencyError(null);
   }
 
   function updateMatterDraft(patch: Partial<MatterEditDraft>) {
@@ -219,7 +288,7 @@ export default function MatterOverviewPage() {
   }
 
   const isActivatingMatter =
-    matterDraft?.status === "active" && data.matter.status !== "active";
+    matterDraft?.status === "active" && matterEditBase?.status !== "active";
 
   return (
     <div className="grid gap-5 lg:grid-cols-3">
@@ -239,41 +308,84 @@ export default function MatterOverviewPage() {
               The brief a partner should get in 30 seconds before a status call.
             </CardDescription>
           </div>
-          {canEditMatter ? (
-            <Button
-              type="button"
-              variant={isEditingMatter ? "ghost" : "outline"}
-              size="sm"
-              onClick={() => {
-                if (isEditingMatter) {
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {canArchiveMatter ? (
+              <MatterLifecycleDialog
+                matter={data.matter as Matter}
+                onChanged={async () => {
                   setIsEditingMatter(false);
                   setMatterDraft(null);
-                  setMatterEditConflictGateError(null);
-                } else {
-                  beginMatterEdit(data.matter as Matter);
-                }
-              }}
-              data-testid="matter-edit-open"
-            >
-              {isEditingMatter ? (
-                <X className="h-4 w-4" aria-hidden />
-              ) : (
-                <Pencil className="h-4 w-4" aria-hidden />
-              )}
-              {isEditingMatter ? "Cancel" : "Edit matter"}
-            </Button>
-          ) : null}
+                  setMatterEditBase(null);
+                  await queryClient.invalidateQueries({
+                    queryKey: ["matters", params.id, "workspace"],
+                  });
+                  await queryClient.invalidateQueries({ queryKey: ["matters"] });
+                }}
+              />
+            ) : null}
+            {canEditMatter && data.matter.status !== "disposed" ? (
+              <Button
+                type="button"
+                variant={isEditingMatter ? "ghost" : "outline"}
+                size="sm"
+                onClick={() => {
+                  if (isEditingMatter) {
+                    setIsEditingMatter(false);
+                    setMatterDraft(null);
+                    setMatterEditBase(null);
+                    setMatterEditConflictGateError(null);
+                    setMatterEditConcurrencyError(null);
+                  } else {
+                    beginMatterEdit(data.matter as Matter);
+                  }
+                }}
+                data-testid="matter-edit-open"
+              >
+                {isEditingMatter ? (
+                  <X className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Pencil className="h-4 w-4" aria-hidden />
+                )}
+                {isEditingMatter ? "Cancel" : "Edit matter"}
+              </Button>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent>
-          {isEditingMatter && matterDraft ? (
+          {isEditingMatter && matterDraft && matterEditBase ? (
             <form
               className="grid gap-3 md:grid-cols-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                matterMutation.mutate(matterDraft);
+                const input = buildMatterUpdateInput(
+                  params.id,
+                  matterEditBase,
+                  matterDraft,
+                );
+                if (!hasMatterChanges(input)) {
+                  setIsEditingMatter(false);
+                  setMatterDraft(null);
+                  setMatterEditBase(null);
+                  toast.success("No matter changes to save.");
+                  return;
+                }
+                matterMutation.mutate(input);
               }}
               data-testid="matter-edit-form"
             >
+              {matterEditConcurrencyError ? (
+                <div
+                  className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 md:col-span-2"
+                  role="alert"
+                  data-testid="matter-edit-stale-write"
+                >
+                  <p className="font-medium">This matter changed in another session.</p>
+                  <p className="mt-1 text-xs leading-5">
+                    {matterEditConcurrencyError} Your stale values were not applied. Cancel and
+                    reopen the editor to use the latest record.
+                  </p>
+                </div>
+              ) : null}
               {matterEditConflictGateError ? (
                 <div
                   className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 md:col-span-2"
@@ -478,6 +590,7 @@ export default function MatterOverviewPage() {
                     setIsEditingMatter(false);
                     setMatterDraft(null);
                     setMatterEditConflictGateError(null);
+                    setMatterEditConcurrencyError(null);
                   }}
                   data-testid="matter-edit-cancel"
                 >
@@ -626,7 +739,9 @@ export default function MatterOverviewPage() {
               <CardTitle>Upcoming hearings</CardTitle>
               <CardDescription>Next four on the calendar.</CardDescription>
             </div>
-            <ScheduleHearingDialog matterId={params.id} />
+            {data.matter.status !== "disposed" ? (
+              <ScheduleHearingDialog matterId={params.id} />
+            ) : null}
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-3">
@@ -659,10 +774,12 @@ export default function MatterOverviewPage() {
                 and unlock the hearing-pack workflow.
               </CardDescription>
             </div>
-            <ScheduleHearingDialog
-              matterId={params.id}
-              triggerLabel="Add hearing"
-            />
+            {data.matter.status !== "disposed" ? (
+              <ScheduleHearingDialog
+                matterId={params.id}
+                triggerLabel="Add hearing"
+              />
+            ) : null}
           </CardHeader>
         </Card>
       )}

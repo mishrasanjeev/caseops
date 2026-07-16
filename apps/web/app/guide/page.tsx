@@ -539,57 +539,59 @@ export default function GuidePage() {
 
                 <Section id="notices" title="8 · Notices and reply deadlines">
                   <p>
-                    Every matter has a <strong>Notices</strong> tab for incoming and outgoing
-                    notice work. Notice files remain normal matter documents, while the
-                    notice view adds direction, operational metadata, reply status, related
-                    files, search, and deadline monitoring.
+                    Open <a className="underline" href="/app/notices">Notices</a> from the
+                    main navigation to manage incoming and outgoing notices across the
+                    workspace. A notice can be standalone, linked to one matter, or linked
+                    to several matters. Existing matter attachment notices also appear in
+                    this register with a clear read-only legacy label.
                   </p>
                   <Steps
                     items={[
                       <>
-                        Open a matter → <strong>Notices</strong> and choose{" "}
-                        <strong>Notice Received</strong> or <strong>Notice Sent</strong>.
+                        Open <strong>Notices</strong>, choose <strong>New notice</strong>, and
+                        set the direction to <strong>Received</strong> or <strong>Sent</strong>.
                       </>,
                       <>
-                        For a received notice, record the subject, receipt date, type,
-                        authority/source, responsible department or SPOC, amount where
-                        relevant, reply-required flag, reply due date, and response plan.
+                        Record the subject, date, type, authority or counterparty,
+                        department, optional owner, summary, status, and received-notice
+                        reply due details where relevant.
                       </>,
                       <>
-                        Upload the primary file. If a reply is required and a due date is
-                        present, CaseOps creates or updates a linked matter deadline.
+                        Optionally select any number of accessible matters. Leave every
+                        matter clear when the notice is not yet associated with a case.
                       </>,
                       <>
-                        Use <strong>Reply document</strong> for the actual response and{" "}
-                        <strong>Add document</strong> for annexures, proof of service,
-                        acknowledgements, or other support. A reply upload marks the notice
-                        replied and completes its linked deadline.
+                        Optionally attach the primary notice file. CaseOps saves the notice
+                        record before uploading the file, so a file error cannot erase or
+                        duplicate the notice itself.
                       </>,
                       <>
-                        If a reply was sent outside CaseOps, enter the reply date and use{" "}
-                        <strong>Mark reply sent</strong>; the document can be added later.
+                        Track work from the register by changing an editable notice&apos;s
+                        status or owner. Use linked matter chips to return to the relevant
+                        matter workspace.
                       </>,
                     ]}
                   />
                   <ul className="mt-4 space-y-2 text-[15px]">
                     <li>
-                      <strong>Dashboard.</strong> Pending, overdue, due-today, and due-this-week
-                      counters use primary received notices only.
+                      <strong>Dashboard.</strong> Received, sent, replies-due, and overdue
+                      counters summarize the tenant-safe register.
                     </li>
                     <li>
-                      <strong>Filters.</strong> Search metadata and filter received notices by
-                      status, reply status, due range, authority, matter, or department.
+                      <strong>Filters.</strong> Use received and sent tabs, full-text search,
+                      status, matter, owner, and reply-due date filters.
                     </li>
                     <li>
-                      <strong>Permissions.</strong> Matter access controls visibility;
-                      <code>documents:upload</code> enables uploads and
-                      <code>documents:manage</code> exposes broader metadata management.
+                      <strong>Permissions.</strong> <code>documents:upload</code> enables
+                      creation and first-file upload; <code>documents:manage</code> enables
+                      metadata updates. Linked matter visibility remains server-enforced.
                     </li>
                   </ul>
-                  <Callout tone="warn" title="Current notice boundaries">
-                    Notices are matter-scoped; there is no global notice dashboard. Sent
-                    notices do not create reply deadlines, and reminder delivery depends on
-                    the configured notification infrastructure.
+                  <Callout tone="warn" title="Legacy notice boundary">
+                    Legacy notices created as matter attachments stay downloadable and
+                    searchable in the global register, but they are read-only there. Use
+                    the matter&apos;s Notices tab for its older attachment-specific reply and
+                    supporting-document workflow. Sent notices do not create reply deadlines.
                   </Callout>
                 </Section>
 

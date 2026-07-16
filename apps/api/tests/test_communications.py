@@ -39,6 +39,16 @@ def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> st
     return resp.json()["id"]
 
 
+def _matter_updated_at(
+    client: TestClient,
+    headers: dict[str, str],
+    matter_id: str,
+) -> str:
+    response = client.get(f"/api/matters/{matter_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    return str(response.json()["updated_at"])
+
+
 def _login(client: TestClient, email: str, password: str, slug: str) -> str:
     resp = client.post(
         "/api/auth/login",
@@ -708,7 +718,14 @@ def test_unified_communication_timeline_enforces_tenant_and_matter_access(
     assert client.patch(
         f"/api/matters/{team_matter}",
         headers=owner_headers,
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": _matter_updated_at(
+                client,
+                owner_headers,
+                team_matter,
+            ),
+        },
     ).status_code == 200
     assert client.put(
         "/api/teams/scoping",
@@ -942,7 +959,14 @@ def test_inbound_email_import_respects_restricted_wall_and_team_scoping(
     assign = client.patch(
         f"/api/matters/{team_matter}",
         headers=owner_headers,
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": _matter_updated_at(
+                client,
+                owner_headers,
+                team_matter,
+            ),
+        },
     )
     assert assign.status_code == 200, assign.text
     scope = client.put(

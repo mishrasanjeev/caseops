@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.core.settings import get_settings, is_non_local_env
@@ -64,6 +64,10 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import (
+    matter_is_operational,
+    require_operational_matter,
+)
 from caseops_api.services.next_hearing import apply_next_hearing_update
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
@@ -443,6 +447,12 @@ def _create_or_get_bookmark(
     payload: CaseTrackingBookmarkCreateRequest,
     matter: Matter | None,
 ) -> BookmarkMutationResult:
+    if matter is not None:
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="link case tracking",
+        )
     normalized_cnr = normalize_cnr(payload.cnr_number)
     normalized_case = normalize_case_number(payload.case_number)
     normalized_court = _normalize_court_code(payload.court_code)
@@ -627,6 +637,11 @@ def auto_link_matter_case_tracking(
     context: SessionContext,
     matter: Matter,
 ) -> MatterCaseTrackingAutoLinkResult:
+    if str(matter.status) in {"closed", "disposed"} or not matter.is_active:
+        return MatterCaseTrackingAutoLinkResult(
+            status="skipped",
+            reason="matter_disposed",
+        )
     enabled, provider, configured, reason = provider_status()
     if not enabled:
         return MatterCaseTrackingAutoLinkResult(
@@ -987,6 +1002,11 @@ def _notify_bookmark_users(
     )
     count = 0
     for bookmark in bookmarks:
+        if bookmark.matter is not None and (
+            str(bookmark.matter.status) in {"closed", "disposed"}
+            or not bookmark.matter.is_active
+        ):
+            continue
         intent = enqueue_notification_delivery_intent(
             session,
             context=context,
@@ -1094,6 +1114,43 @@ def apply_snapshot(
     snapshot: ProviderCaseSnapshot,
     provider: LLMProvider | None = None,
 ) -> list[TrackedCaseUpdate]:
+    active_bookmarks = [
+        bookmark for bookmark in tracked_case.bookmarks if not bookmark.is_archived
+    ]
+    linked_matter_ids = [
+        bookmark.matter_id for bookmark in active_bookmarks if bookmark.matter_id
+    ]
+    has_unlinked_bookmark = any(bookmark.matter_id is None for bookmark in active_bookmarks)
+    locked_linked_matters: list[Matter] = []
+    if linked_matter_ids:
+        locked_linked_matters = list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == context.company.id,
+                    Matter.id.in_(sorted(set(linked_matter_ids))),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            )
+        )
+    operational_linked_matters = [
+        matter for matter in locked_linked_matters if matter_is_operational(matter)
+    ]
+    if linked_matter_ids and not has_unlinked_bookmark:
+        if not operational_linked_matters:
+            record_from_context(
+                session,
+                context,
+                action="case_tracking.snapshot_ignored",
+                target_type="tracked_case",
+                target_id=tracked_case.id,
+                result="denied",
+                metadata={"reason": "all_linked_matters_disposed"},
+            )
+            return []
+
     created: list[TrackedCaseUpdate] = []
     for event in snapshot.orders:
         update = _create_update(
@@ -1196,21 +1253,8 @@ def apply_snapshot(
     }
     session.add(tracked_case)
     if snapshot.next_hearing_on is not None:
-        linked_matter_ids = [
-            bookmark.matter_id
-            for bookmark in tracked_case.bookmarks
-            if bookmark.matter_id and not bookmark.is_archived
-        ]
-        if linked_matter_ids:
-            matters = list(
-                session.scalars(
-                    select(Matter).where(
-                        Matter.company_id == context.company.id,
-                        Matter.id.in_(linked_matter_ids),
-                    )
-                )
-            )
-            for matter in matters:
+        if operational_linked_matters:
+            for matter in operational_linked_matters:
                 apply_next_hearing_update(
                     session,
                     matter=matter,
@@ -1236,6 +1280,20 @@ def refresh_bookmark(
 ) -> CaseTrackingRefreshResponse:
     bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
     tracked_case = bookmark.tracked_case
+    if bookmark.matter_id:
+        linked_matter = _matter_or_none(
+            session,
+            context=context,
+            matter_id=bookmark.matter_id,
+        )
+        if linked_matter is not None and (
+            str(linked_matter.status) in {"closed", "disposed"}
+            or not linked_matter.is_active
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot refresh case tracking for a disposed matter.",
+            )
     from caseops_api.services.saas_billing import assert_manual_refresh_limit
 
     assert_manual_refresh_limit(
@@ -1520,12 +1578,33 @@ def _system_contexts(session: Session) -> list[SessionContext]:
     return contexts
 
 
+def _eligible_tracked_case_predicate(*, company_id: str):
+    return (
+        select(TrackedCaseBookmark.id)
+        .outerjoin(Matter, Matter.id == TrackedCaseBookmark.matter_id)
+        .where(
+            TrackedCaseBookmark.company_id == company_id,
+            TrackedCaseBookmark.tracked_case_id == TrackedCase.id,
+            TrackedCaseBookmark.is_archived.is_(False),
+            or_(
+                TrackedCaseBookmark.matter_id.is_(None),
+                and_(
+                    Matter.company_id == company_id,
+                    Matter.is_active.is_(True),
+                    Matter.status.notin_(("closed", "disposed")),
+                ),
+            ),
+        )
+        .exists()
+    )
+
+
 def _eligible_tracked_case_count(session: Session, *, company_id: str) -> int:
     return int(
         session.scalar(
             select(func.count(TrackedCase.id)).where(
                 TrackedCase.company_id == company_id,
-                TrackedCase.bookmarks.any(TrackedCaseBookmark.is_archived.is_(False)),
+                _eligible_tracked_case_predicate(company_id=company_id),
             )
         )
         or 0
@@ -1677,7 +1756,7 @@ def poll_tracked_cases(
                 .options(selectinload(TrackedCase.bookmarks))
                 .where(
                     TrackedCase.company_id == context.company.id,
-                    TrackedCase.bookmarks.any(TrackedCaseBookmark.is_archived.is_(False)),
+                    _eligible_tracked_case_predicate(company_id=context.company.id),
                 )
                 .order_by(
                     TrackedCase.last_provider_checked_at.asc().nullsfirst(),

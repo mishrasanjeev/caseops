@@ -31,6 +31,7 @@ from caseops_api.schemas.drafting_data import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 MAX_SCAN_CHARS_PER_ATTACHMENT = 80_000
@@ -200,8 +201,19 @@ def extract_drafting_data(
     matter_id: str,
 ) -> DraftingDataExtractionResponse:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="extract drafting data",
+        lock_for_write=False,
+    )
     attachments = _load_text_attachments(session, matter.id)
     candidates = _extract_candidates(attachments)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="extract drafting data",
+    )
     created_count = 0
     updated_count = 0
     for candidate in candidates:
@@ -295,6 +307,11 @@ def review_drafting_data_field(
     payload: DraftingDataReviewRequest,
 ) -> DraftingDataFieldRecord:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="review drafting data",
+    )
     field = session.scalar(
         select(DraftingDataExtractionField).where(
             DraftingDataExtractionField.id == field_id,

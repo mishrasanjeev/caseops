@@ -99,7 +99,8 @@ def test_authenticated_user_can_update_a_matter(client: TestClient) -> None:
             "description": "Initial claim drafting and hearing strategy.",
         },
     )
-    matter_id = create_response.json()["id"]
+    matter = create_response.json()
+    matter_id = matter["id"]
     conflict_response = client.post(
         f"/api/matters/{matter_id}/conflict-checks",
         headers=auth_headers(token),
@@ -124,6 +125,7 @@ def test_authenticated_user_can_update_a_matter(client: TestClient) -> None:
             "court_name": "SIAC",
             "judge_name": "Arbitral Tribunal",
             "description": "Updated arbitration record after intake correction.",
+            "expected_updated_at": matter["updated_at"],
         },
     )
 
@@ -170,7 +172,10 @@ def test_matter_code_update_rejects_duplicate_code(client: TestClient) -> None:
     duplicate_response = client.patch(
         f"/api/matters/{second_response.json()['id']}",
         headers=auth_headers(token),
-        json={"matter_code": first_response.json()["matter_code"]},
+        json={
+            "matter_code": first_response.json()["matter_code"],
+            "expected_updated_at": second_response.json()["updated_at"],
+        },
     )
 
     assert duplicate_response.status_code == 409
@@ -213,7 +218,10 @@ def test_matter_workspace_includes_notes_hearings_activity_and_assignment(
     assign_response = client.patch(
         f"/api/matters/{matter_id}",
         headers=auth_headers(owner_token),
-        json={"assignee_membership_id": assignee_membership_id},
+        json={
+            "assignee_membership_id": assignee_membership_id,
+            "expected_updated_at": matter_response.json()["updated_at"],
+        },
     )
     assert assign_response.status_code == 200
     assert assign_response.json()["assignee_membership_id"] == assignee_membership_id

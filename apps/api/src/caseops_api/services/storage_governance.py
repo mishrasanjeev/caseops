@@ -7,7 +7,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import AuditResult, Company, Matter, MatterAttachment
+from caseops_api.db.models import (
+    AuditResult,
+    Company,
+    CompanyNotice,
+    Matter,
+    MatterAttachment,
+)
 from caseops_api.schemas.storage_governance import (
     FirmStorageUsageSummary,
     StorageArchiveCandidate,
@@ -26,10 +32,11 @@ WARNING_THRESHOLD_PERCENT = 90
 @dataclass(frozen=True)
 class StorageQuotaExceeded(Exception):
     company_id: str
-    matter_id: str
+    matter_id: str | None
     incoming_size_bytes: int
     used_bytes: int
     quota_bytes: int
+    replaced_size_bytes: int = 0
 
     @property
     def remaining_bytes(self) -> int:
@@ -37,12 +44,16 @@ class StorageQuotaExceeded(Exception):
 
     @property
     def projected_used_bytes(self) -> int:
-        return self.used_bytes + self.incoming_size_bytes
+        return (
+            max(self.used_bytes - self.replaced_size_bytes, 0)
+            + self.incoming_size_bytes
+        )
 
     def audit_metadata(self) -> dict[str, int | str]:
         return {
             "status": "blocked",
             "incoming_size_bytes": self.incoming_size_bytes,
+            "replaced_size_bytes": self.replaced_size_bytes,
             "used_bytes": self.used_bytes,
             "quota_bytes": self.quota_bytes,
             "remaining_bytes": self.remaining_bytes,
@@ -95,12 +106,17 @@ def _company_or_404(
 
 
 def _used_bytes(session: Session, *, company_id: str) -> int:
-    value = session.scalar(
+    matter_attachment_bytes = session.scalar(
         select(func.coalesce(func.sum(MatterAttachment.size_bytes), 0))
         .join(Matter, Matter.id == MatterAttachment.matter_id)
         .where(Matter.company_id == company_id)
     )
-    return int(value or 0)
+    standalone_notice_bytes = session.scalar(
+        select(func.coalesce(func.sum(CompanyNotice.size_bytes), 0)).where(
+            CompanyNotice.company_id == company_id
+        )
+    )
+    return int(matter_attachment_bytes or 0) + int(standalone_notice_bytes or 0)
 
 
 def _base_policy(session: Session, *, company: Company) -> StorageUploadPolicy:
@@ -214,8 +230,9 @@ def assert_storage_quota_allows_upload(
     session: Session,
     *,
     company_id: str,
-    matter_id: str,
+    matter_id: str | None,
     incoming_size_bytes: int,
+    replaced_size_bytes: int = 0,
 ) -> None:
     # Serialize firm quota checks per company so concurrent uploads cannot both
     # pass against the same pre-upload usage snapshot.
@@ -228,13 +245,17 @@ def assert_storage_quota_allows_upload(
     if quota_bytes is None:
         return
     used_bytes = _used_bytes(session, company_id=company.id)
-    if used_bytes + incoming_size_bytes > quota_bytes:
+    projected_used_bytes = (
+        max(used_bytes - max(replaced_size_bytes, 0), 0) + incoming_size_bytes
+    )
+    if projected_used_bytes > quota_bytes:
         raise StorageQuotaExceeded(
             company_id=company.id,
             matter_id=matter_id,
             incoming_size_bytes=incoming_size_bytes,
             used_bytes=used_bytes,
             quota_bytes=quota_bytes,
+            replaced_size_bytes=max(replaced_size_bytes, 0),
         )
 
 
@@ -242,15 +263,15 @@ def record_storage_quota_blocked_upload(
     session: Session,
     *,
     context: SessionContext,
-    matter_id: str,
+    matter_id: str | None,
     error: StorageQuotaExceeded,
 ) -> None:
     record_from_context(
         session,
         context,
         action="storage_quota.upload_blocked",
-        target_type="matter",
-        target_id=matter_id,
+        target_type="matter" if matter_id is not None else "company",
+        target_id=matter_id or context.company.id,
         matter_id=matter_id,
         result=AuditResult.DENIED,
         metadata=error.audit_metadata(),

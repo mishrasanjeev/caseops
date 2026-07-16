@@ -19,6 +19,7 @@ import json
 from datetime import timedelta
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.db.models import (
@@ -34,6 +35,7 @@ from caseops_api.db.models import (
     MatterClientAssignment as MatterClient,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import portal_matters as portal_matter_service
 from tests.test_auth_company import auth_headers
 
 
@@ -70,6 +72,43 @@ def _seed_matter(company_id: str, *, code: str) -> str:
         session.add(matter)
         session.commit()
         return matter.id
+
+
+def _dispose_matter(matter_id: str) -> None:
+    Session = get_session_factory()
+    with Session() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+
+def _dispose_after_portal_authorisation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispose after grant/matter load but before the write guard runs.
+
+    This models the lifecycle race that a simple pre-flight status check
+    misses.  The write session holds a stale identity-map Matter; the shared
+    operational guard must refresh it and reject the child write.
+    """
+    original_assert_grant = portal_matter_service._assert_grant
+    disposed = False
+
+    def assert_grant_then_dispose(*args, **kwargs):
+        nonlocal disposed
+        matter, grant = original_assert_grant(*args, **kwargs)
+        if not disposed:
+            disposed = True
+            _dispose_matter(matter.id)
+        return matter, grant
+
+    monkeypatch.setattr(
+        portal_matter_service,
+        "_assert_grant",
+        assert_grant_then_dispose,
+    )
 
 
 def _seed_client_and_link(
@@ -330,6 +369,81 @@ def test_portal_reply_empty_body_returns_400(client: TestClient) -> None:
     assert resp.status_code in {400, 422}
 
 
+def test_disposed_matter_rejects_portal_reply_without_side_effects(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="c2-reply-disposed",
+        email="c2-reply-disposed@firm.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C2-RD")
+    _, debug = _invite_client_portal_user(client, token, matter_id)
+    _verify_and_session(client, debug)
+    _dispose_matter(matter_id)
+
+    resp = client.post(
+        f"/api/portal/matters/{matter_id}/communications",
+        json={"body": "This must not reopen operational work."},
+        headers=_portal_csrf_headers(client),
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "disposed" in resp.json()["detail"].lower()
+    Session = get_session_factory()
+    with Session() as session:
+        assert (
+            session.query(Communication)
+            .filter(Communication.matter_id == matter_id)
+            .count()
+            == 0
+        )
+        assert (
+            session.query(AuditEvent)
+            .filter(AuditEvent.action == "portal.communication.posted")
+            .filter(AuditEvent.matter_id == matter_id)
+            .count()
+            == 0
+        )
+
+
+def test_portal_reply_rechecks_matter_after_disposal_race(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="c2-reply-race",
+        email="c2-reply-race@firm.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C2-RR")
+    _, debug = _invite_client_portal_user(client, token, matter_id)
+    _verify_and_session(client, debug)
+    _dispose_after_portal_authorisation(monkeypatch)
+
+    resp = client.post(
+        f"/api/portal/matters/{matter_id}/communications",
+        json={"body": "The grant read races with matter disposal."},
+        headers=_portal_csrf_headers(client),
+    )
+
+    assert resp.status_code == 409, resp.text
+    Session = get_session_factory()
+    with Session() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert (
+            session.query(Communication)
+            .filter(Communication.matter_id == matter_id)
+            .count()
+            == 0
+        )
+
+
 # ---------- KYC submit ----------
 
 
@@ -459,6 +573,81 @@ def test_portal_kyc_400_when_client_id_missing(client: TestClient) -> None:
         headers=_portal_csrf_headers(client),
     )
     assert resp.status_code == 422
+
+
+def test_disposed_matter_rejects_portal_kyc_without_side_effects(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="c2-kyc-disposed",
+        email="c2-kyc-disposed@firm.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C2-KD")
+    client_id = _seed_client_and_link(boot["company"]["id"], matter_id)
+    _, debug = _invite_client_portal_user(client, token, matter_id)
+    _verify_and_session(client, debug)
+    _dispose_matter(matter_id)
+
+    resp = client.post(
+        f"/api/portal/matters/{matter_id}/kyc",
+        json={"client_id": client_id, "documents": [{"name": "PAN"}]},
+        headers=_portal_csrf_headers(client),
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "disposed" in resp.json()["detail"].lower()
+    Session = get_session_factory()
+    with Session() as session:
+        target = session.get(Client, client_id)
+        assert target is not None
+        assert target.kyc_status == "not_started"
+        assert target.kyc_submitted_at is None
+        assert target.kyc_documents_json is None
+        assert (
+            session.query(AuditEvent)
+            .filter(AuditEvent.action == "portal.kyc.submitted")
+            .filter(AuditEvent.target_id == client_id)
+            .count()
+            == 0
+        )
+
+
+def test_portal_kyc_rechecks_matter_after_disposal_race(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="c2-kyc-race",
+        email="c2-kyc-race@firm.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C2-KR")
+    client_id = _seed_client_and_link(boot["company"]["id"], matter_id)
+    _, debug = _invite_client_portal_user(client, token, matter_id)
+    _verify_and_session(client, debug)
+    _dispose_after_portal_authorisation(monkeypatch)
+
+    resp = client.post(
+        f"/api/portal/matters/{matter_id}/kyc",
+        json={"client_id": client_id, "documents": [{"name": "PAN"}]},
+        headers=_portal_csrf_headers(client),
+    )
+
+    assert resp.status_code == 409, resp.text
+    Session = get_session_factory()
+    with Session() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        target = session.get(Client, client_id)
+        assert target is not None
+        assert target.kyc_status == "not_started"
+        assert target.kyc_submitted_at is None
+        assert target.kyc_documents_json is None
 
 
 # Codex H2: portal_visible filter — hidden comms must NOT leak.

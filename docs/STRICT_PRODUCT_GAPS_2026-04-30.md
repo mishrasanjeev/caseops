@@ -100,16 +100,19 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 ## P0 — New Gaps Tracked Here (Stop-Ship for "Best for Law Firms" claim)
 
 ### `PG-001` Conflict check workflow
-Status: **`Implemented`** (v1 MVP shipped 2026-04-30; intake gate closed 2026-05-16).
+Status: **`Implemented`** (v1 MVP shipped 2026-04-30; existing-matter
+activation gate closed 2026-05-16; direct-create policy updated locally
+2026-07-15 with deployed verification pending).
 Evidence:
 - DB: `MatterConflictCheck` model + migration `20260430_0001_matter_conflict_checks` (status enum: pending/cleared/conflicted/waived).
 - Service: `services/conflict_checks.py` with substring + Jaccard token-overlap scanner across `clients` + `matters`.
 - Routes: `POST /api/matters/{id}/conflict-checks`, `GET /api/matters/{id}/conflict-checks`, `PATCH /api/conflict-checks/{id}`.
 - Capabilities: `conflicts:run` (every fee-earner) + `conflicts:resolve` (staff only).
 - UI: `apps/web/components/matters/ConflictCheckCard.tsx` mounted on `/app/matters/[id]` cockpit. Run dialog + status badge + candidate list + clear / mark-conflicted / waive controls.
-- Intake gate: `services/matters.py::create_matter` rejects normal API attempts
-  to create a matter directly as `active`, and `services/matters.py::update_matter`
-  blocks every non-active status transition into `active` unless the latest
+- Existing-matter activation gate: new matters may be created directly as `active`
+  (the API default).
+  `services/matters.py::update_matter` blocks an existing `intake` or `on_hold`
+  matter's transition into `active` unless the latest
   tenant/matter-scoped conflict check is `cleared` or `waived`. Blocked and
   allowed attempts write redacted audit metadata; a clear/waived check is stale
   if activation changes the opposing-party scope it cleared. Matter access,
@@ -117,17 +120,19 @@ Evidence:
   are enforced before the gate.
 - Tests: backend coverage in `tests/test_conflict_checks.py` covers missing
   check denial, clear allow, explicit waived allow, pending/conflicted/invalid
-  latest-check denial, stale older-clear/newer-unresolved denial, direct active
-  create denial, changed opposing-party stale-scope denial, cross-tenant
-  non-satisfaction, tenant/access gates, and redacted audit metadata; legacy
-  conflict scan/resolve behavior remains covered. Prod-Playwright spec runs
-  scenario A (existing-client overlap) end-to-end.
+  latest-check denial, stale older-clear/newer-unresolved denial,
+  omitted/explicit Active-create success, terminal-create denial, changed
+  opposing-party stale-scope denial, cross-tenant non-satisfaction,
+  tenant/access gates, and redacted audit metadata; legacy conflict scan/resolve
+  behavior remains covered. The July 15 production Playwright spec is committed
+  but must not be counted as deployed proof until the candidate build identity
+  is established and the spec passes there.
 Follow-on caveats:
 - Contacts beyond `Client` (witnesses, opposing counsel, vendors) need a
   separate contact table before they can be scanned.
 - Bulk waiver / partner-approval email workflow is not part of the PG-001 gate.
-Estimated days remaining: 0 for the PG-001 intake gate; follow-ons tracked
-separately.
+Estimated days remaining: 0 for the PG-001 existing-matter activation gate;
+follow-ons tracked separately.
 
 ### `PG-002` Engagement letter / fee arrangement workflow
 Status: **`Missing`**.

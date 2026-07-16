@@ -153,10 +153,18 @@ def _assign_matter_team(
     matter_id: str,
     team_id: str,
 ) -> None:
+    matter = client.get(
+        f"/api/matters/{matter_id}",
+        headers=_auth(owner_token),
+    )
+    assert matter.status_code == 200, matter.text
     response = client.patch(
         f"/api/matters/{matter_id}",
         headers=_auth(owner_token),
-        json={"team_id": team_id},
+        json={
+            "team_id": team_id,
+            "expected_updated_at": matter.json()["updated_at"],
+        },
     )
     assert response.status_code == 200, response.text
 

@@ -115,3 +115,34 @@ test("passes adversarial values to a child as literal arguments", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), payloads);
 });
+
+test("dated tester regressions are discovered without manual config allowlists", () => {
+  const appConfig = fs.readFileSync(
+    path.join(repoRoot, "playwright.app.config.ts"),
+    "utf8",
+  );
+  const prodConfig = fs.readFileSync(
+    path.join(repoRoot, "playwright.prod-ram.config.ts"),
+    "utf8",
+  );
+  const e2eFiles = fs.readdirSync(path.join(repoRoot, "tests", "e2e"));
+  const datedLocalSpecs = e2eFiles.filter((name) =>
+    /^(?:hari|ram)-\d{4}-\d{2}-\d{2}-bugs\.spec\.ts$/.test(name),
+  );
+  const datedProdSpecs = e2eFiles.filter((name) =>
+    /^(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts$/.test(name),
+  );
+
+  assert.ok(datedLocalSpecs.length > 0, "expected dated local regression specs");
+  assert.ok(datedProdSpecs.length > 0, "expected dated production regression specs");
+  assert.match(
+    appConfig,
+    /\(\?:hari\|ram\)-\\d\{4\}-\\d\{2\}-\\d\{2\}-bugs/,
+    "local config must retain canonical dated-spec discovery",
+  );
+  assert.match(
+    prodConfig,
+    /\(\?:hari\|ram\)-\\d\{4\}-\\d\{2\}-\\d\{2\}-prod/,
+    "production config must retain canonical dated-spec discovery",
+  );
+});

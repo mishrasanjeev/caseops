@@ -83,6 +83,7 @@ from caseops_api.services.llm import (
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,11 @@ def create_draft(
     facts: dict | None = None,
 ) -> Draft:
     matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="create a draft",
+    )
     facts_json = None
     if facts:
         # Defensive cap: the facts dict is user-entered per-field text
@@ -935,6 +941,11 @@ def generate_draft_version(
 ) -> Draft:
     del template_key  # reserved for future template selection
     matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="generate a draft version",
+    )
     draft = _load_draft(session, matter, draft_id)
 
     if draft.status == DraftStatus.FINALIZED:
@@ -1215,6 +1226,11 @@ def edit_draft_version(
     body: str,
 ) -> Draft:
     matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="edit a draft version",
+    )
     draft = _load_draft(session, matter, draft_id)
 
     if draft.status == DraftStatus.FINALIZED:
@@ -1345,6 +1361,11 @@ def transition_draft(
     notes: str | None = None,
 ) -> Draft:
     matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="transition a draft",
+    )
     draft = _load_draft(session, matter, draft_id)
 
     if draft.status == DraftStatus.FINALIZED:

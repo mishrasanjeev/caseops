@@ -380,6 +380,7 @@ export default function MatterHearingsPage() {
   });
 
   if (!data) return null;
+  const isDisposedMatter = data.matter.status === "disposed";
   const completedHearings = data.hearings.filter((hearing) => hearing.status === "completed");
   const cancelledHearings = data.hearings.filter((hearing) => hearing.status === "cancelled");
   const upcomingHearings = data.hearings.filter(
@@ -404,7 +405,9 @@ export default function MatterHearingsPage() {
   const matterCourt = data.matter.court_name ?? null;
   const hasLiveAdapter =
     matterCourt !== null && SUPPORTED_COURTS.has(matterCourt);
-  const syncDisabledReason = !matterCourt
+  const syncDisabledReason = isDisposedMatter
+    ? "Disposed matters cannot run court sync. Reopen to Intake first."
+    : !matterCourt
     ? "Set the matter's court before running sync."
     : !hasLiveAdapter
       ? `Live sync isn't wired for ${matterCourt} yet — supported: Supreme Court of India, Delhi / Bombay / Karnataka / Madras / Telangana High Courts.`
@@ -489,6 +492,7 @@ export default function MatterHearingsPage() {
         </Card>
       ) : null}
 
+      {!isDisposedMatter ? (
       <Card className="lg:col-span-2" data-testid="matter-case-tracking-panel">
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
@@ -508,6 +512,7 @@ export default function MatterHearingsPage() {
           </Button>
         </CardHeader>
       </Card>
+      ) : null}
 
       <NextHearingProvenanceSection
         response={nextHearingHistoryQuery.data}
@@ -515,7 +520,7 @@ export default function MatterHearingsPage() {
         onDecide={(suggestionId, action) =>
           nextHearingSuggestionMutation.mutate({ suggestionId, action })
         }
-        isPending={nextHearingSuggestionMutation.isPending}
+        isPending={nextHearingSuggestionMutation.isPending || isDisposedMatter}
       />
 
       <ComplianceReviewSection
@@ -523,7 +528,7 @@ export default function MatterHearingsPage() {
         isLoading={complianceQuery.isPending}
         onAction={(itemId, action) => complianceMutation.mutate({ itemId, action })}
         isPending={complianceMutation.isPending}
-        canRetryAttachmentProcessing={canManageDocuments}
+        canRetryAttachmentProcessing={canManageDocuments && !isDisposedMatter}
         retryingAttachmentId={
           retryOrderAttachmentMutation.variables ?? null
         }
@@ -541,7 +546,7 @@ export default function MatterHearingsPage() {
               court sync above, or added here manually.
             </CardDescription>
           </div>
-          <ScheduleHearingDialog matterId={matterId} />
+          {!isDisposedMatter ? <ScheduleHearingDialog matterId={matterId} /> : null}
         </CardHeader>
         <CardContent>
           {upcomingHearings.length === 0 ? (

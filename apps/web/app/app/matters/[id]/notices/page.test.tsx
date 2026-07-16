@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   uploadMock,
   updateMock,
+  listNoticesMock,
+  downloadNoticeFileMock,
   useCapabilityMock,
   workspaceData,
   toastSuccess,
@@ -14,6 +16,8 @@ const {
 } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
   updateMock: vi.fn(),
+  listNoticesMock: vi.fn(),
+  downloadNoticeFileMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   workspaceData: {
     current: {
@@ -42,6 +46,11 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateMatterAttachmentMetadata: updateMock,
 }));
 
+vi.mock("@/lib/api/notices", () => ({
+  listNotices: listNoticesMock,
+  downloadNoticeFile: downloadNoticeFileMock,
+}));
+
 vi.mock("@/lib/capabilities", () => ({
   useCapability: (capability: string) => useCapabilityMock(capability),
 }));
@@ -67,6 +76,10 @@ describe("MatterNoticesPage", () => {
   beforeEach(() => {
     uploadMock.mockReset();
     updateMock.mockReset();
+    listNoticesMock.mockReset();
+    downloadNoticeFileMock.mockReset();
+    listNoticesMock.mockResolvedValue({ notices: [], total: 0 });
+    downloadNoticeFileMock.mockResolvedValue(undefined);
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -275,5 +288,112 @@ describe("MatterNoticesPage", () => {
         }),
       );
     });
+  });
+
+  it("shows a linked standalone notice without duplicating it as a matter attachment", async () => {
+    useCapabilityMock.mockImplementation(() => false);
+    const firstNotice = {
+      id: "global-1",
+      source_kind: "standalone",
+      read_only: false,
+      direction: "received",
+      subject: "Global regulator notice",
+      type: "Regulatory",
+      status: "Open",
+      authority: "Regulator",
+      received_from: "Portal",
+      department: "Compliance",
+      mode: "Portal",
+      owner_membership_id: null,
+      owner_name: null,
+      owner_email: null,
+      received_on: "2026-07-15",
+      sent_on: null,
+      reply_due_on: "2026-07-20",
+      reply_required: true,
+      reply_sent: false,
+      reply_sent_on: null,
+      summary: "Linked once from the global register.",
+      remarks: null,
+      response: null,
+      internal_spoc: null,
+      internal_remarks: null,
+      counsel_engaged: null,
+      currency: "INR",
+      amount_minor: null,
+      dispute_amount_minor: null,
+      recovered_amount_minor: null,
+      matter_links: [
+        { matter_id: "m1", matter_code: "N-1", matter_title: "Notice Matter" },
+      ],
+      filename: "regulator.txt",
+      has_file: true,
+      content_type: "text/plain",
+      size_bytes: 20,
+      created_at: "2026-07-15T10:00:00Z",
+      updated_at: "2026-07-15T10:00:00Z",
+    };
+    const firstPageNotices = Array.from({ length: 100 }, (_, index) =>
+      index === 0
+        ? firstNotice
+        : {
+            ...firstNotice,
+            id: `global-${index + 1}`,
+            subject: `Linked notice ${index + 1}`,
+            filename: null,
+            has_file: false,
+          },
+    );
+    listNoticesMock.mockImplementation(async ({ cursor }: { cursor: string | null }) => {
+      if (cursor === "matter-notices-page-2") {
+        return {
+          notices: [
+            {
+              ...firstNotice,
+              id: "global-101",
+              subject: "Later linked notice",
+              filename: null,
+              has_file: false,
+            },
+          ],
+          total: 101,
+          // A bad/repeated backend cursor must not create an infinite loop.
+          next_cursor: "matter-notices-page-2",
+        };
+      }
+      return {
+        notices: firstPageNotices,
+        total: 101,
+        next_cursor: "matter-notices-page-2",
+      };
+    });
+    render(withClient(<MatterNoticesPage />));
+
+    expect(await screen.findByTestId("linked-global-notices")).toHaveTextContent(
+      "Global regulator notice",
+    );
+    expect(screen.getByTestId("linked-global-notices")).toHaveTextContent(
+      "Later linked notice",
+    );
+    expect(screen.getAllByTestId(/^matter-global-notice-/)).toHaveLength(101);
+    expect(screen.queryByTestId("matter-notice-row")).not.toBeInTheDocument();
+    expect(listNoticesMock).toHaveBeenNthCalledWith(1, {
+      matter_id: "m1",
+      limit: 100,
+      cursor: null,
+    });
+    expect(listNoticesMock).toHaveBeenNthCalledWith(2, {
+      matter_id: "m1",
+      limit: 100,
+      cursor: "matter-notices-page-2",
+    });
+    expect(listNoticesMock).toHaveBeenCalledTimes(2);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Download linked regulator.txt" }),
+    );
+    expect(downloadNoticeFileMock).toHaveBeenCalledWith(
+      "global-1",
+      "regulator.txt",
+    );
   });
 });

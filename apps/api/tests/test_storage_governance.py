@@ -204,10 +204,18 @@ def test_admin_storage_breakdowns_respect_matter_visibility(
         json={"name": "Storage Governance", "slug": f"storage-{uuid4().hex[:8]}"},
     )
     assert team.status_code == 201, team.text
+    current_matter = client.get(
+        f"/api/matters/{team_matter}",
+        headers=_auth(owner_token),
+    )
+    assert current_matter.status_code == 200, current_matter.text
     assign = client.patch(
         f"/api/matters/{team_matter}",
         headers=_auth(owner_token),
-        json={"team_id": team.json()["id"]},
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": current_matter.json()["updated_at"],
+        },
     )
     assert assign.status_code == 200, assign.text
     scope = client.put(

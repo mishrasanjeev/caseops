@@ -25,6 +25,11 @@ from caseops_api.services.document_processing import (
     index_contract_attachment,
     index_matter_attachment,
 )
+from caseops_api.services.matter_operational_guard import (
+    MatterNotOperationalError,
+    assert_operational_matter,
+    matter_is_operational,
+)
 
 
 def _job_record(job: DocumentProcessingJob) -> DocumentProcessingJobRecord:
@@ -387,6 +392,8 @@ def _enqueue_attachment_reprocessing_candidates(
         ):
             continue
         if isinstance(attachment, MatterAttachment):
+            if not matter_is_operational(attachment.matter):
+                continue
             company_id = attachment.matter.company_id
         else:
             company_id = attachment.contract.company_id
@@ -414,6 +421,16 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     )
     if not attachment or not attachment.matter or attachment.matter.company_id != job.company_id:
         _mark_job_failed(session, job, error_message="Matter attachment could not be found.")
+        return
+
+    try:
+        assert_operational_matter(session, matter=attachment.matter)
+    except MatterNotOperationalError:
+        _mark_job_failed(
+            session,
+            job,
+            error_message="Matter disposed; document processing skipped.",
+        )
         return
 
     attachment.chunks.clear()

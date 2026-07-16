@@ -56,6 +56,7 @@ from caseops_api.services.llm import (
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -306,6 +307,11 @@ def generate_hearing_pack(
     provider: LLMProvider | None = None,
 ) -> HearingPack:
     matter = _load_matter(session, context, matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="generate a hearing pack",
+    )
     hearing: MatterHearing | None = None
     if hearing_id:
         hearing = _load_hearing(session, matter, hearing_id)
@@ -330,7 +336,7 @@ def generate_hearing_pack(
         select(MatterTask)
         .where(
             MatterTask.matter_id == matter.id,
-            MatterTask.status != "completed",
+            MatterTask.status.notin_(("completed", "cancelled")),
         )
         .order_by(MatterTask.due_on.asc().nullslast())
         .limit(10)

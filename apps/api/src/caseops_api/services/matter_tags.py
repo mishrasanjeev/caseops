@@ -4,7 +4,7 @@ import re
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.db.models import (
     Client,
@@ -27,6 +27,7 @@ from caseops_api.schemas.matter_tags import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -114,7 +115,6 @@ def _load_matter(
 ) -> Matter:
     matter = session.scalar(
         select(Matter)
-        .options(selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag))
         .where(Matter.id == matter_id)
         .where(Matter.company_id == context.company.id)
     )
@@ -122,6 +122,23 @@ def _load_matter(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
     return matter
+
+
+def _load_operational_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    operation: str,
+) -> Matter:
+    """Load, authorize, refresh, and lock the parent before tag writes."""
+
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    return require_operational_matter(
+        session,
+        matter=matter,
+        operation=operation,
+    )
 
 
 def list_tags(session: Session, *, context: SessionContext) -> MatterTagListResponse:
@@ -233,7 +250,12 @@ def assign_tag_to_matter(
     matter_id: str,
     payload: MatterTagAssignmentCreateRequest,
 ) -> MatterTagAssignmentRecord:
-    matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = _load_operational_matter(
+        session,
+        context=context,
+        matter_id=matter_id,
+        operation="assign a tag to this matter",
+    )
     tag = _load_tag(
         session,
         context=context,
@@ -283,7 +305,12 @@ def remove_tag_from_matter(
     matter_id: str,
     tag_id: str,
 ) -> None:
-    matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = _load_operational_matter(
+        session,
+        context=context,
+        matter_id=matter_id,
+        operation="remove a tag from this matter",
+    )
     tag = _load_tag(session, context=context, tag_id=tag_id, require_visible=True)
     assignment = session.scalar(
         select(MatterTagAssignment)
@@ -321,10 +348,19 @@ def bulk_assign_tag(
         require_visible=True,
     )
     matter_ids = list(dict.fromkeys(payload.matter_ids))
-    matters = [
-        _load_matter(session, context=context, matter_id=matter_id)
-        for matter_id in matter_ids
-    ]
+    # Lock every parent in a deterministic order before inspecting or creating
+    # any assignment rows.  This both prevents disposal races and avoids a
+    # reverse-order deadlock between overlapping bulk requests.
+    matters_by_id = {
+        matter_id: _load_operational_matter(
+            session,
+            context=context,
+            matter_id=matter_id,
+            operation="assign a tag to this matter",
+        )
+        for matter_id in sorted(matter_ids)
+    }
+    matters = [matters_by_id[matter_id] for matter_id in matter_ids]
     created: list[MatterTagAssignment] = []
     skipped = 0
     for matter in matters:

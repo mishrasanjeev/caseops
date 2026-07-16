@@ -4,11 +4,24 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import AuditEvent, Court, Matter
+from caseops_api.db.models import (
+    AuditEvent,
+    Company,
+    CompanyMembership,
+    Court,
+    Matter,
+    MatterTagAssignment,
+    User,
+)
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.matter_tags import MatterTagAssignmentCreateRequest
+from caseops_api.services.matter_tags import assign_tag_to_matter
+from caseops_api.services.session_context import SessionContext
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -119,7 +132,10 @@ def _create_matter(
         activate = client.patch(
             f"/api/matters/{matter['id']}",
             headers=_auth(token),
-            json={"status": "active"},
+            json={
+                "status": "active",
+                "expected_updated_at": matter["updated_at"],
+            },
         )
         assert activate.status_code == 200, activate.text
         return activate.json()
@@ -255,7 +271,11 @@ def test_lw_s1_claim_filters_tags_bulk_and_audit(client: TestClient) -> None:
     patched = client.patch(
         f"/api/matters/{high['id']}",
         headers=_auth(token),
-        json={"claim_amount_minor": 75_000_000, "claim_amount_notes": "Amended claim"},
+        json={
+            "claim_amount_minor": 75_000_000,
+            "claim_amount_notes": "Amended claim",
+            "expected_updated_at": high["updated_at"],
+        },
     )
     assert patched.status_code == 200, patched.text
     assert patched.json()["claim_amount_minor"] == 75_000_000
@@ -333,6 +353,104 @@ def test_lw_s1_tags_are_tenant_scoped(client: TestClient) -> None:
     )
     assert list_a.status_code == 200
     assert list_a.json()["matters"] == []
+
+
+def test_matter_tag_writes_fail_closed_after_disposal_and_refresh_stale_parent(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, "lw-tags-terminal", "owner")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    disposed_matter = _create_matter(client, token, "TAG-DISPOSED")
+    bulk_peer = _create_matter(client, token, "TAG-BULK-PEER")
+    tag = client.post(
+        "/api/matter-tags/",
+        headers=_auth(token),
+        json={"name": "Terminal Guard"},
+    ).json()
+    assigned = client.post(
+        f"/api/matters/{disposed_matter['id']}/tags",
+        headers=_auth(token),
+        json={"tag_id": tag["id"]},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    factory = get_session_factory()
+    with factory() as stale_session:
+        stale_matter = stale_session.get(Matter, disposed_matter["id"])
+        company = stale_session.get(Company, company_id)
+        membership = stale_session.scalar(
+            select(CompanyMembership).where(
+                CompanyMembership.company_id == company_id
+            )
+        )
+        assert stale_matter is not None and stale_matter.is_active is True
+        assert company is not None and membership is not None
+        user = stale_session.get(User, membership.user_id)
+        assert user is not None
+        context = SessionContext(
+            company=company,
+            membership=membership,
+            user=user,
+        )
+
+        with factory() as disposal_session:
+            current = disposal_session.get(Matter, disposed_matter["id"])
+            assert current is not None
+            current.status = "disposed"
+            current.is_active = False
+            disposal_session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            assign_tag_to_matter(
+                stale_session,
+                context=context,
+                matter_id=str(disposed_matter["id"]),
+                payload=MatterTagAssignmentCreateRequest(tag_id=str(tag["id"])),
+            )
+        assert exc_info.value.status_code == 409
+        assert "disposed" in str(exc_info.value.detail).lower()
+        assert stale_matter.status == "disposed"
+        assert stale_matter.is_active is False
+
+    duplicate = client.post(
+        f"/api/matters/{disposed_matter['id']}/tags",
+        headers=_auth(token),
+        json={"tag_id": tag["id"]},
+    )
+    assert duplicate.status_code == 409, duplicate.text
+
+    remove = client.delete(
+        f"/api/matters/{disposed_matter['id']}/tags/{tag['id']}",
+        headers=_auth(token),
+    )
+    assert remove.status_code == 409, remove.text
+
+    bulk = client.post(
+        "/api/matters/bulk-tags",
+        headers=_auth(token),
+        json={
+            "matter_ids": [bulk_peer["id"], disposed_matter["id"]],
+            "tag_id": tag["id"],
+        },
+    )
+    assert bulk.status_code == 409, bulk.text
+
+    with factory() as session:
+        peer_assignment = session.scalar(
+            select(MatterTagAssignment.id).where(
+                MatterTagAssignment.matter_id == bulk_peer["id"],
+                MatterTagAssignment.tag_id == tag["id"],
+            )
+        )
+        assert peer_assignment is None
+
+    historical = client.get(
+        f"/api/matters/{disposed_matter['id']}",
+        headers=_auth(token),
+    )
+    assert historical.status_code == 200, historical.text
+    assert [row["id"] for row in historical.json()["tags"]] == [tag["id"]]
 
 
 def test_lw_s1_tag_listing_respects_matter_access_boundaries(
@@ -489,7 +607,10 @@ def test_lw_s1_claim_currency_validation(client: TestClient) -> None:
     null_patch = client.patch(
         f"/api/matters/{matter['id']}",
         headers=_auth(token),
-        json={"claim_currency": None},
+        json={
+            "claim_currency": None,
+            "expected_updated_at": matter["updated_at"],
+        },
     )
     assert null_patch.status_code == 422, null_patch.text
 
@@ -511,7 +632,10 @@ def test_lw_s1_claim_currency_validation(client: TestClient) -> None:
     patch = client.patch(
         f"/api/matters/{matter['id']}",
         headers=_auth(token),
-        json={"claim_currency": "inr"},
+        json={
+            "claim_currency": "inr",
+            "expected_updated_at": matter["updated_at"],
+        },
     )
     assert patch.status_code == 200, patch.text
     assert patch.json()["claim_currency"] == "INR"

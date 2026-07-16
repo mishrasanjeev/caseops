@@ -245,4 +245,44 @@ describe("MatterTasksPage", () => {
       ),
     );
   });
+
+  it("keeps disposal-cancelled work read-only and hides operational create forms", async () => {
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...WORKSPACE,
+        matter: { ...WORKSPACE.matter, status: "disposed" },
+      },
+    });
+    listMatterTasksMock.mockResolvedValue({
+      matter_id: "m-1",
+      tasks: [
+        {
+          ...TASKS.tasks[0],
+          status: "cancelled",
+          title: "Cancelled on disposal",
+        },
+      ],
+    });
+    listMatterDeadlinesMock.mockResolvedValue({
+      matter_id: "m-1",
+      deadlines: [
+        {
+          ...DEADLINES.deadlines[0],
+          status: "cancelled",
+          title: "Cancelled deadline on disposal",
+        },
+      ],
+    });
+
+    render(withClient(<MatterTasksPage />));
+
+    expect(await screen.findByText("Cancelled on disposal")).toBeInTheDocument();
+    expect(screen.getByText("Cancelled deadline on disposal")).toBeInTheDocument();
+    expect(screen.getByTestId("disposed-task-write-guard")).toBeInTheDocument();
+    expect(screen.getByTestId("disposed-deadline-write-guard")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Prepare reply affidavit")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("File rejoinder")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Complete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
+  });
 });

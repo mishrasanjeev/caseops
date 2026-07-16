@@ -31,6 +31,7 @@ from caseops_api.schemas.affidavit_intelligence import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 PARSER_VERSION = "caseops-affidavit-deterministic-v1"
@@ -144,11 +145,22 @@ def analyze_affidavit_attachment(
     attachment_id: str,
 ) -> AffidavitIntelligenceResponse:
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="analyze an affidavit attachment",
+        lock_for_write=False,
+    )
     attachment = _load_attachment(session, matter_id=matter.id, attachment_id=attachment_id)
     chunks = _load_chunks(session, attachment.id)
     usable = _usable_source_chunks(chunks)
 
     if not usable:
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="analyze an affidavit attachment",
+        )
         run = _create_run(
             session,
             matter=matter,
@@ -181,6 +193,11 @@ def analyze_affidavit_attachment(
         else AffidavitIntelligenceRunStatus.NO_FINDINGS
     )
 
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="analyze an affidavit attachment",
+    )
     run = _create_run(
         session,
         matter=matter,

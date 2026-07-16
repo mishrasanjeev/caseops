@@ -13,11 +13,17 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
     AuditResult,
+    CalendarEventSync,
+    CalendarEventSyncStatus,
     CompanyMembership,
     Court,
     DocumentProcessingAction,
+    DocumentProcessingJob,
+    DocumentProcessingJobStatus,
     DocumentProcessingTargetType,
     ForumCatalogEntry,
+    HearingReminder,
+    HearingReminderStatus,
     Matter,
     MatterActivity,
     MatterAttachment,
@@ -26,6 +32,7 @@ from caseops_api.db.models import (
     MatterConflictCheckStatus,
     MatterCourtOrder,
     MatterCourtSyncJob,
+    MatterCourtSyncJobStatus,
     MatterCourtSyncRun,
     MatterDeadline,
     MatterDeadlineStatus,
@@ -34,6 +41,9 @@ from caseops_api.db.models import (
     MatterInvoice,
     MatterInvoiceLineItem,
     MatterInvoicePaymentAttempt,
+    MatterNextHearingSource,
+    MatterNextHearingSuggestion,
+    MatterNextHearingSuggestionStatus,
     MatterNote,
     MatterProceedingSignal,
     MatterStatus,
@@ -44,6 +54,8 @@ from caseops_api.db.models import (
     MatterTaskStatus,
     MatterTimeEntry,
     MembershipRole,
+    NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
     utcnow,
 )
 from caseops_api.schemas.billing import (
@@ -71,6 +83,7 @@ from caseops_api.schemas.matters import (
     MatterCreateRequest,
     MatterHearingCreateRequest,
     MatterHearingRecord,
+    MatterLifecycleStatusRequest,
     MatterListFilters,
     MatterListResponse,
     MatterNoteCreateRequest,
@@ -112,6 +125,7 @@ from caseops_api.services.matter_billing import (
     render_invoice_pdf,
     resolve_time_entry_rate,
 )
+from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.matter_tags import slugify_tag
 from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
 from caseops_api.services.session_context import SessionContext
@@ -177,6 +191,44 @@ def _status_value(value: object) -> str | None:
     return "disposed" if status_value == "closed" else status_value
 
 
+def _utc_datetime(value: datetime) -> datetime:
+    """Normalise SQLite-naive and Postgres-aware timestamps for OCC checks."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _assert_expected_updated_at(
+    matter: Matter,
+    *,
+    expected_updated_at: datetime | None,
+) -> None:
+    if expected_updated_at is None:
+        return
+    if _utc_datetime(matter.updated_at) == _utc_datetime(expected_updated_at):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "matter_stale_write",
+            "message": (
+                "This matter changed after it was loaded. Refresh it and retry "
+                "with the latest updated_at value."
+            ),
+            "current_updated_at": _utc_datetime(matter.updated_at).isoformat(),
+        },
+    )
+
+
+def _assert_matter_not_disposed(matter: Matter, *, operation: str) -> None:
+    if matter_is_operational(matter):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"Cannot {operation} because this matter is disposed or inactive.",
+    )
+
+
 def _conflict_gate_metadata(
     *,
     decision: ConflictGateDecision,
@@ -202,6 +254,11 @@ def _conflict_gate_block_detail(decision: ConflictGateDecision) -> str:
             "Matter cannot be activated until a conflict check is completed as "
             "clear or waived. Use the Conflict check card on the matter overview "
             "to run the scan, then save Active again."
+        )
+    if decision.reason == "stale_after_reopen":
+        return (
+            "Matter cannot be activated using a conflict check from before it "
+            "was reopened. Run a fresh conflict check, then save Active again."
         )
     if decision.latest_status == MatterConflictCheckStatus.CONFLICTED.value:
         return (
@@ -280,6 +337,11 @@ def _order_is_interim(order: MatterCourtOrder) -> bool:
 def _matter_record(matter: Matter) -> MatterRecord:
     if matter.status == "closed":
         matter.status = MatterStatus.DISPOSED.value
+    # Defensive read normalisation for legacy rows created before lifecycle
+    # state became server-owned. A disposed matter must never be presented as
+    # active, even if an old row retained is_active=true.
+    if matter.status == MatterStatus.DISPOSED.value:
+        matter.is_active = False
     record = MatterRecord.model_validate(matter)
     assignments = list(getattr(matter, "tag_assignments", []) or [])
     record.tags = [
@@ -1070,7 +1132,12 @@ def _attachment_record_map(
 
 
 def _task_sort_key(task: MatterTask) -> tuple[int, date, datetime]:
-    status_rank = 1 if task.status == MatterTaskStatus.COMPLETED else 0
+    status_rank = (
+        1
+        if task.status
+        in {MatterTaskStatus.COMPLETED.value, MatterTaskStatus.CANCELLED.value}
+        else 0
+    )
     due_on = task.due_on or date.max
     return (status_rank, due_on, task.created_at)
 
@@ -1098,55 +1165,98 @@ def _get_company_membership(
     return membership
 
 
-def _get_matter_model(session: Session, *, context: SessionContext, matter_id: str) -> Matter:
-    matter = session.scalar(
-        select(Matter)
-        .options(
-            joinedload(Matter.assignee_membership).joinedload(CompanyMembership.user),
-            selectinload(Matter.tasks)
-            .joinedload(MatterTask.created_by_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.tasks)
-            .joinedload(MatterTask.owner_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.notes)
-            .joinedload(MatterNote.author_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.hearings),
-            selectinload(Matter.activity_events)
-            .joinedload(MatterActivity.actor_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-            selectinload(Matter.cause_list_entries),
-            selectinload(Matter.court_orders),
-            selectinload(Matter.court_sync_runs)
-            .joinedload(MatterCourtSyncRun.triggered_by_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.court_sync_jobs)
-            .joinedload(MatterCourtSyncJob.requested_by_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.attachments)
-            .joinedload(MatterAttachment.uploaded_by_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.attachments).selectinload(MatterAttachment.chunks),
-            selectinload(Matter.time_entries)
-            .joinedload(MatterTimeEntry.author_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.time_entries).selectinload(MatterTimeEntry.invoice_line_item),
-            selectinload(Matter.invoices)
-            .joinedload(MatterInvoice.issued_by_membership)
-            .joinedload(CompanyMembership.user),
-            selectinload(Matter.invoices).selectinload(MatterInvoice.line_items),
-            selectinload(Matter.invoices)
-            .selectinload(MatterInvoice.payment_attempts)
-            .joinedload(MatterInvoicePaymentAttempt.initiated_by_membership)
-            .joinedload(CompanyMembership.user),
-        )
-        .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+def _matter_loader_options() -> tuple[object, ...]:
+    return (
+        joinedload(Matter.assignee_membership).joinedload(CompanyMembership.user),
+        selectinload(Matter.tasks)
+        .joinedload(MatterTask.created_by_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.tasks)
+        .joinedload(MatterTask.owner_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.notes)
+        .joinedload(MatterNote.author_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.hearings),
+        selectinload(Matter.activity_events)
+        .joinedload(MatterActivity.actor_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+        selectinload(Matter.cause_list_entries),
+        selectinload(Matter.court_orders),
+        selectinload(Matter.court_sync_runs)
+        .joinedload(MatterCourtSyncRun.triggered_by_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.court_sync_jobs)
+        .joinedload(MatterCourtSyncJob.requested_by_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.attachments)
+        .joinedload(MatterAttachment.uploaded_by_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.attachments).selectinload(MatterAttachment.chunks),
+        selectinload(Matter.time_entries)
+        .joinedload(MatterTimeEntry.author_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.time_entries).selectinload(MatterTimeEntry.invoice_line_item),
+        selectinload(Matter.invoices)
+        .joinedload(MatterInvoice.issued_by_membership)
+        .joinedload(CompanyMembership.user),
+        selectinload(Matter.invoices).selectinload(MatterInvoice.line_items),
+        selectinload(Matter.invoices)
+        .selectinload(MatterInvoice.payment_attempts)
+        .joinedload(MatterInvoicePaymentAttempt.initiated_by_membership)
+        .joinedload(CompanyMembership.user),
     )
+
+
+def _matter_lock_statement(*, company_id: str, matter_id: str):
+    """Compile to a bare ``FOR UPDATE OF matters`` on PostgreSQL.
+
+    Locking the eager-load statement would ask PostgreSQL to lock nullable
+    outer-join rows and can fail with ``FOR UPDATE cannot be applied to the
+    nullable side of an outer join``.
+    """
+
+    return (
+        select(Matter)
+        .where(Matter.id == matter_id, Matter.company_id == company_id)
+        .with_for_update(of=Matter)
+    )
+
+
+def _get_matter_model(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    lock_for_update: bool = False,
+) -> Matter:
+    if lock_for_update:
+        matter = session.scalar(
+            _matter_lock_statement(
+                company_id=context.company.id,
+                matter_id=matter_id,
+            ).execution_options(populate_existing=True)
+        )
+    else:
+        matter = session.scalar(
+            select(Matter)
+            .options(*_matter_loader_options())
+            .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+        )
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
+    if lock_for_update:
+        # The row lock is already held. Populate relationships in a separate,
+        # non-locking statement so nullable eager joins never participate in
+        # the PostgreSQL lock clause.
+        session.scalar(
+            select(Matter)
+            .options(*_matter_loader_options())
+            .where(Matter.id == matter.id)
+            .execution_options(populate_existing=True)
+        )
     return matter
 
 
@@ -1201,30 +1311,13 @@ def create_matter(
     context: SessionContext,
     payload: MatterCreateRequest,
 ) -> MatterRecord:
-    if payload.status == MatterStatus.ACTIVE.value:
-        record_from_context(
-            session,
-            context,
-            action="matter.status_transition.blocked",
-            target_type="matter",
-            result=AuditResult.DENIED,
-            metadata={
-                "from_status": None,
-                "to_status": MatterStatus.ACTIVE.value,
-                "conflict_gate": {
-                    "reason": "direct_active_create_blocked",
-                    "latest_check_id": None,
-                    "latest_status": None,
-                    "latest_ran_at": None,
-                },
-            },
-            commit=True,
-        )
+    if payload.status == MatterStatus.DISPOSED.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Matter cannot be created as active. Create it in intake and "
-                "complete conflict clearance before activation."
+                "A matter cannot be created in a disposed state. Create it in "
+                "an operational state, then use the lifecycle status endpoint "
+                "with archive capability, concurrency guards, and a reason."
             ),
         )
     from caseops_api.services.saas_billing import assert_matter_limit
@@ -1262,6 +1355,7 @@ def create_matter(
         case_number=payload.case_number.strip() if payload.case_number else None,
         cnr_number=payload.cnr_number.strip() if payload.cnr_number else None,
         status=payload.status,
+        is_active=payload.status != MatterStatus.DISPOSED.value,
         practice_area=payload.practice_area.strip(),
         forum_level=forum_selection["forum_level"] or payload.forum_level,
         court_id=forum_selection["court_id"],
@@ -1573,15 +1667,44 @@ def update_matter(
     matter_id: str,
     payload: MatterUpdateRequest,
 ) -> MatterRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
 
     updates = payload.model_dump(exclude_unset=True)
+    provided_update_fields = set(updates)
+    expected_updated_at = updates.pop("expected_updated_at", None)
+    _assert_expected_updated_at(matter, expected_updated_at=expected_updated_at)
+    if updates.get("status") is None:
+        updates.pop("status", None)
     status_before = _status_value(matter.status)
     requested_status = _status_value(updates.get("status"))
+    if not matter_is_operational(matter) and provided_update_fields:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Disposed or inactive matters are immutable. Reopen the matter "
+                "to intake through the lifecycle status endpoint before editing it."
+            ),
+        )
+    if not updates:
+        return _matter_record(matter)
+    if requested_status == MatterStatus.DISPOSED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Disposing a matter requires the lifecycle status endpoint, "
+                "an expected prior status, updated_at token, and reason."
+            ),
+        )
     opening_gate_decision: ConflictGateDecision | None = None
-    if requested_status == MatterStatus.ACTIVE.value and (
-        status_before != MatterStatus.ACTIVE.value
-    ):
+    if requested_status == MatterStatus.ACTIVE.value and status_before in {
+        MatterStatus.INTAKE.value,
+        MatterStatus.ON_HOLD.value,
+    }:
         opening_gate_decision = evaluate_matter_opening_gate(
             session,
             company_id=context.company.id,
@@ -1757,6 +1880,9 @@ def update_matter(
     elif next_hearing_manual_lock is not None:
         matter.next_hearing_manual_lock = bool(next_hearing_manual_lock)
 
+    # Lifecycle owns this derived flag. Metadata edits must not accidentally
+    # reactivate a legacy disposed row, and non-terminal states remain active.
+    matter.is_active = _status_value(matter.status) != MatterStatus.DISPOSED.value
     session.add(matter)
     _append_activity(
         session,
@@ -1818,6 +1944,449 @@ def update_matter(
     return _matter_record(matter)
 
 
+def _clear_disposed_matter_next_hearing(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    reason: str,
+) -> None:
+    if matter.next_hearing_on is not None:
+        clear_next_hearing(
+            session,
+            matter=matter,
+            source=MatterNextHearingSource.UNKNOWN,
+            actor_membership_id=context.membership.id,
+            context=context,
+            reason=reason,
+            manual_lock=False,
+        )
+    had_operational_source = any(
+        (
+            matter.next_hearing_source != MatterNextHearingSource.UNKNOWN.value,
+            matter.next_hearing_source_ref_type is not None,
+            matter.next_hearing_source_ref_id is not None,
+            matter.next_hearing_manual_lock,
+        )
+    )
+    matter.next_hearing_on = None
+    matter.next_hearing_source = MatterNextHearingSource.UNKNOWN.value
+    matter.next_hearing_source_ref_type = None
+    matter.next_hearing_source_ref_id = None
+    matter.next_hearing_manual_lock = False
+    if had_operational_source:
+        matter.next_hearing_updated_by_membership_id = context.membership.id
+        matter.next_hearing_updated_at = utcnow()
+
+
+def _neutralize_disposed_matter_operations(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+) -> dict[str, int]:
+    now = utcnow()
+    open_hearings = list(
+        session.scalars(
+            select(MatterHearing).where(
+                MatterHearing.matter_id == matter.id,
+                MatterHearing.status.in_(tuple(_OPEN_HEARING_STATUSES)),
+            )
+        )
+    )
+    for hearing in open_hearings:
+        hearing.status = MatterHearingStatus.CANCELLED.value
+        hearing.cancelled_by_matter_disposal = True
+
+    open_deadlines = list(
+        session.scalars(
+            select(MatterDeadline).where(
+                MatterDeadline.matter_id == matter.id,
+                MatterDeadline.status.notin_(
+                    (
+                        MatterDeadlineStatus.DONE.value,
+                        MatterDeadlineStatus.CANCELLED.value,
+                    )
+                ),
+            )
+        )
+    )
+    for deadline in open_deadlines:
+        deadline.status = MatterDeadlineStatus.CANCELLED.value
+        deadline.completed_at = now
+        deadline.cancelled_by_matter_disposal = True
+
+    open_tasks = list(
+        session.scalars(
+            select(MatterTask).where(
+                MatterTask.matter_id == matter.id,
+                MatterTask.status.notin_(
+                    (
+                        MatterTaskStatus.COMPLETED.value,
+                        MatterTaskStatus.CANCELLED.value,
+                    )
+                ),
+            )
+        )
+    )
+    for task in open_tasks:
+        task.status = MatterTaskStatus.CANCELLED.value
+        task.completed_at = now
+        task.cancelled_by_matter_disposal = True
+
+    document_processing_jobs = list(
+        session.scalars(
+            select(DocumentProcessingJob)
+            .join(
+                MatterAttachment,
+                MatterAttachment.id == DocumentProcessingJob.attachment_id,
+            )
+            .where(
+                MatterAttachment.matter_id == matter.id,
+                DocumentProcessingJob.target_type
+                == DocumentProcessingTargetType.MATTER_ATTACHMENT.value,
+                DocumentProcessingJob.status.in_(
+                    (
+                        DocumentProcessingJobStatus.QUEUED.value,
+                        DocumentProcessingJobStatus.PROCESSING.value,
+                    )
+                ),
+            )
+        )
+    )
+    for job in document_processing_jobs:
+        job.status = DocumentProcessingJobStatus.FAILED.value
+        job.error_message = "Cancelled because the matter was disposed."
+        job.completed_at = now
+
+    reminders = list(
+        session.scalars(
+            select(HearingReminder).where(
+                HearingReminder.company_id == context.company.id,
+                HearingReminder.matter_id == matter.id,
+                HearingReminder.status == HearingReminderStatus.QUEUED,
+            )
+        )
+    )
+    for reminder in reminders:
+        reminder.status = HearingReminderStatus.CANCELLED
+
+    court_sync_jobs = list(
+        session.scalars(
+            select(MatterCourtSyncJob).where(
+                MatterCourtSyncJob.company_id == context.company.id,
+                MatterCourtSyncJob.matter_id == matter.id,
+                MatterCourtSyncJob.status.in_(
+                    (
+                        MatterCourtSyncJobStatus.QUEUED,
+                        MatterCourtSyncJobStatus.PROCESSING,
+                    )
+                ),
+            )
+        )
+    )
+    for job in court_sync_jobs:
+        job.status = MatterCourtSyncJobStatus.FAILED
+        job.error_message = "Cancelled because the matter was disposed."
+        job.completed_at = now
+
+    delivery_intents = list(
+        session.scalars(
+            select(NotificationDeliveryIntent).where(
+                NotificationDeliveryIntent.company_id == context.company.id,
+                NotificationDeliveryIntent.matter_id == matter.id,
+                NotificationDeliveryIntent.status.in_(
+                    (
+                        NotificationDeliveryStatus.QUEUED,
+                        NotificationDeliveryStatus.RETRY_SCHEDULED,
+                    )
+                ),
+            )
+        )
+    )
+    for intent in delivery_intents:
+        intent.status = NotificationDeliveryStatus.BLOCKED
+        intent.next_attempt_at = None
+        intent.failed_at = now
+        intent.last_error_redacted = "Matter disposed before delivery."
+        intent.dead_letter_reason = "matter_disposed"
+
+    suggestions = list(
+        session.scalars(
+            select(MatterNextHearingSuggestion).where(
+                MatterNextHearingSuggestion.company_id == context.company.id,
+                MatterNextHearingSuggestion.matter_id == matter.id,
+                MatterNextHearingSuggestion.status
+                == MatterNextHearingSuggestionStatus.PENDING,
+            )
+        )
+    )
+    for suggestion in suggestions:
+        suggestion.status = MatterNextHearingSuggestionStatus.REJECTED
+        suggestion.decided_by_membership_id = context.membership.id
+        suggestion.decided_at = now
+
+    # Include children neutralized by an earlier disposal or the upgrade-time
+    # legacy-data repair, not only rows cancelled in this invocation. Otherwise
+    # a migrated child can stay cancelled in CaseOps while its old provider
+    # event remains synced and becomes misleading again after reopen.
+    session.flush()
+    disposal_hearing_ids = set(
+        session.scalars(
+            select(MatterHearing.id).where(
+                MatterHearing.matter_id == matter.id,
+                MatterHearing.cancelled_by_matter_disposal.is_(True),
+            )
+        )
+    )
+    disposal_deadline_ids = set(
+        session.scalars(
+            select(MatterDeadline.id).where(
+                MatterDeadline.matter_id == matter.id,
+                MatterDeadline.cancelled_by_matter_disposal.is_(True),
+            )
+        )
+    )
+    disposal_task_ids = set(
+        session.scalars(
+            select(MatterTask.id).where(
+                MatterTask.matter_id == matter.id,
+                MatterTask.cancelled_by_matter_disposal.is_(True),
+            )
+        )
+    )
+    calendar_source_pairs = {
+        *(("matter_hearing", hearing_id) for hearing_id in disposal_hearing_ids),
+        *(("matter_deadline", deadline_id) for deadline_id in disposal_deadline_ids),
+        *(("matter_task", task_id) for task_id in disposal_task_ids),
+    }
+    calendar_syncs: list[CalendarEventSync] = []
+    for source_type, source_id in calendar_source_pairs:
+        calendar_syncs.extend(
+            session.scalars(
+                select(CalendarEventSync)
+                .where(
+                    CalendarEventSync.company_id == context.company.id,
+                    CalendarEventSync.source_type == source_type,
+                    CalendarEventSync.source_id == source_id,
+                    CalendarEventSync.sync_status != CalendarEventSyncStatus.DELETED,
+                )
+                .with_for_update(of=CalendarEventSync)
+            )
+        )
+    for calendar_sync in calendar_syncs:
+        if calendar_sync.provider_event_id:
+            # Durable tombstone: external deletion is deliberately performed by
+            # the calendar worker, never inside this lifecycle transaction.
+            calendar_sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+            calendar_sync.next_attempt_at = now
+            calendar_sync.dead_letter_reason = "matter_disposed_delete"
+            calendar_sync.last_error = None
+        else:
+            calendar_sync.sync_status = CalendarEventSyncStatus.DELETED
+            calendar_sync.next_attempt_at = None
+            calendar_sync.dead_letter_reason = "matter_disposed"
+            calendar_sync.last_error = None
+
+    return {
+        "cancelled_open_hearings": len(open_hearings),
+        "cancelled_open_deadlines": len(open_deadlines),
+        "cancelled_open_tasks": len(open_tasks),
+        "cancelled_document_processing_jobs": len(document_processing_jobs),
+        "neutralized_calendar_syncs": len(calendar_syncs),
+        "cancelled_hearing_reminders": len(reminders),
+        "cancelled_court_sync_jobs": len(court_sync_jobs),
+        "blocked_notification_deliveries": len(delivery_intents),
+        "rejected_next_hearing_suggestions": len(suggestions),
+    }
+
+
+def transition_matter_lifecycle_status(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    payload: MatterLifecycleStatusRequest,
+) -> MatterRecord:
+    """Perform the only legal terminal lifecycle edges in one transaction."""
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    current_status = _status_value(matter.status)
+    expected_status = _status_value(payload.expected_from_status)
+    target_status = _status_value(payload.to_status)
+
+    if current_status != expected_status:
+        record_from_context(
+            session,
+            context,
+            action="matter.lifecycle.transition_denied",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            result=AuditResult.DENIED,
+            metadata={
+                "reason": "expected_status_mismatch",
+                "expected_from_status": expected_status,
+                "current_status": current_status,
+                "to_status": target_status,
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_status_conflict",
+                "message": "The matter is no longer in the expected status.",
+                "current_status": current_status,
+            },
+        )
+    try:
+        _assert_expected_updated_at(
+            matter,
+            expected_updated_at=payload.expected_updated_at,
+        )
+    except HTTPException:
+        record_from_context(
+            session,
+            context,
+            action="matter.lifecycle.transition_denied",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            result=AuditResult.DENIED,
+            metadata={
+                "reason": "stale_updated_at",
+                "current_status": current_status,
+                "to_status": target_status,
+            },
+        )
+        session.commit()
+        raise
+
+    disposing = (
+        current_status
+        in {
+            MatterStatus.INTAKE.value,
+            MatterStatus.ACTIVE.value,
+            MatterStatus.ON_HOLD.value,
+        }
+        and target_status == MatterStatus.DISPOSED.value
+    )
+    reopening = (
+        current_status == MatterStatus.DISPOSED.value
+        and target_status == MatterStatus.INTAKE.value
+    )
+    if not disposing and not reopening:
+        record_from_context(
+            session,
+            context,
+            action="matter.lifecycle.transition_denied",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            result=AuditResult.DENIED,
+            metadata={
+                "reason": "invalid_transition",
+                "current_status": current_status,
+                "to_status": target_status,
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The lifecycle endpoint only supports non-disposed to disposed "
+                "and disposed to intake transitions."
+            ),
+        )
+
+    side_effects: dict[str, int] = {}
+    if disposing:
+        _clear_disposed_matter_next_hearing(
+            session,
+            context=context,
+            matter=matter,
+            reason="matter_disposed",
+        )
+        side_effects = _neutralize_disposed_matter_operations(
+            session,
+            context=context,
+            matter=matter,
+        )
+        event_type = "matter_disposed"
+        event_title = "Matter disposed"
+        audit_action = "matter.lifecycle.disposed"
+        matter.is_active = False
+    else:
+        # Legacy disposed rows may still carry old operational hearing state;
+        # reopening must not resurrect it.
+        _clear_disposed_matter_next_hearing(
+            session,
+            context=context,
+            matter=matter,
+            reason="matter_reopened_stale_state_cleanup",
+        )
+        # Disposed rows created before lifecycle reconciliation may still have
+        # open operational children. Neutralize them while the parent row is
+        # locked and before Intake becomes visible, otherwise reopening would
+        # make legacy tasks/deadlines/hearings operational again.
+        side_effects = _neutralize_disposed_matter_operations(
+            session,
+            context=context,
+            matter=matter,
+        )
+        event_type = "matter_reopened"
+        event_title = "Matter reopened to intake"
+        audit_action = "matter.lifecycle.reopened"
+        matter.is_active = True
+
+    matter.status = target_status
+    matter.lifecycle_version += 1
+    session.add(matter)
+    session.flush()
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type=event_type,
+        title=event_title,
+        detail=payload.reason,
+    )
+    metadata: dict[str, object] = {
+        "from_status": current_status,
+        "to_status": target_status,
+        "reason": payload.reason,
+        "expected_updated_at": _utc_datetime(payload.expected_updated_at).isoformat(),
+    }
+    if side_effects:
+        metadata["side_effects"] = side_effects
+    record_from_context(
+        session,
+        context,
+        action=audit_action,
+        target_type="matter",
+        target_id=matter.id,
+        matter_id=matter.id,
+        metadata=metadata,
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter.status_transition.completed",
+        target_type="matter",
+        target_id=matter.id,
+        matter_id=matter.id,
+        metadata=metadata,
+    )
+    session.commit()
+    session.refresh(matter)
+    return _matter_record(matter)
+
+
 def get_matter_workspace(
     session: Session,
     *,
@@ -1869,7 +2438,13 @@ def create_matter_note(
     matter_id: str,
     payload: MatterNoteCreateRequest,
 ) -> MatterNoteRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="add an internal note")
     note = MatterNote(
         matter_id=matter.id,
         author_membership_id=context.membership.id,
@@ -1902,7 +2477,13 @@ def create_matter_task(
     matter_id: str,
     payload: MatterTaskCreateRequest,
 ) -> MatterTaskRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="create a task")
     owner_membership_id: str | None = None
     owner_name: str | None = None
     if payload.owner_membership_id:
@@ -1929,7 +2510,12 @@ def create_matter_task(
         due_on=payload.due_on,
         status=payload.status,
         priority=payload.priority,
-        completed_at=utcnow() if payload.status == MatterTaskStatus.COMPLETED else None,
+        completed_at=(
+            utcnow()
+            if payload.status
+            in {MatterTaskStatus.COMPLETED.value, MatterTaskStatus.CANCELLED.value}
+            else None
+        ),
     )
     session.add(task)
     session.flush()
@@ -1997,7 +2583,11 @@ def list_matter_tasks(
         )
     )
     if not include_completed:
-        stmt = stmt.where(MatterTask.status != MatterTaskStatus.COMPLETED)
+        stmt = stmt.where(
+            MatterTask.status.notin_(
+                (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
+            )
+        )
     tasks = list(session.scalars(stmt))
     if not tasks:
         return []
@@ -2037,7 +2627,13 @@ def update_matter_task(
     task_id: str,
     payload: MatterTaskUpdateRequest,
 ) -> MatterTaskRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="update a task")
     task = session.scalar(
         select(MatterTask)
         .options(
@@ -2045,11 +2641,25 @@ def update_matter_task(
             joinedload(MatterTask.owner_membership).joinedload(CompanyMembership.user),
         )
         .where(MatterTask.id == task_id, MatterTask.matter_id == matter.id)
+        .with_for_update(of=MatterTask)
+        .execution_options(populate_existing=True)
     )
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter task not found.")
 
     updates = payload.model_dump(exclude_unset=True)
+    if (
+        task.cancelled_by_matter_disposal
+        and "status" in updates
+        and updates["status"] != MatterTaskStatus.CANCELLED.value
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This task was cancelled by matter disposal and cannot be "
+                "resurrected after reopening. Create a new task instead."
+            ),
+        )
     owner_membership_id = updates.pop("owner_membership_id", None)
     owner_changed = "owner_membership_id" in payload.model_dump(exclude_unset=True)
     if owner_changed:
@@ -2075,9 +2685,15 @@ def update_matter_task(
     previous_owner = task.owner_membership_id
     for field_name, value in updates.items():
         setattr(task, field_name, value)
-    if task.status == MatterTaskStatus.COMPLETED:
+    if task.status in {
+        MatterTaskStatus.COMPLETED.value,
+        MatterTaskStatus.CANCELLED.value,
+    }:
         task.completed_at = task.completed_at or utcnow()
-    elif previous_status == MatterTaskStatus.COMPLETED:
+    elif previous_status in {
+        MatterTaskStatus.COMPLETED.value,
+        MatterTaskStatus.CANCELLED.value,
+    }:
         task.completed_at = None
 
     session.add(task)
@@ -2085,7 +2701,12 @@ def update_matter_task(
     if previous_status != task.status:
         if task.status == MatterTaskStatus.COMPLETED:
             action = "matter_task.completed"
-        elif previous_status == MatterTaskStatus.COMPLETED:
+        elif task.status == MatterTaskStatus.CANCELLED:
+            action = "matter_task.cancelled"
+        elif previous_status in {
+            MatterTaskStatus.COMPLETED.value,
+            MatterTaskStatus.CANCELLED.value,
+        }:
             action = "matter_task.reopened"
     changed_fields = sorted(
         field
@@ -2146,14 +2767,36 @@ def update_matter_hearing(
     outcome_note auto-creates a follow-up task so the PRD §9.6
     post-hearing loop survives a distracted user. Other status changes
     are recorded as activity but do not create tasks."""
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="update a hearing")
     hearing = session.scalar(
         select(MatterHearing).where(
             MatterHearing.id == hearing_id, MatterHearing.matter_id == matter.id
         )
+        .with_for_update(of=MatterHearing)
+        .execution_options(populate_existing=True)
     )
     if hearing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found.")
+
+    requested_hearing_updates = payload.model_dump(exclude_unset=True)
+    if (
+        hearing.cancelled_by_matter_disposal
+        and "status" in requested_hearing_updates
+        and requested_hearing_updates["status"] != MatterHearingStatus.CANCELLED.value
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This hearing was cancelled by matter disposal and cannot be "
+                "resurrected after reopening. Create a new hearing instead."
+            ),
+        )
 
     prior_status = hearing.status
     prior_hearing_on = hearing.hearing_on
@@ -2494,6 +3137,16 @@ def _sync_notice_reply_deadline(
                 MatterDeadline.kind == "reply_due",
             )
         )
+    if _status_value(matter.status) == MatterStatus.DISPOSED.value or not matter.is_active:
+        if existing is not None and existing.status not in {
+            MatterDeadlineStatus.DONE,
+            MatterDeadlineStatus.CANCELLED,
+        }:
+            existing.status = MatterDeadlineStatus.CANCELLED
+            existing.completed_at = datetime.now(UTC)
+            session.add(existing)
+        attachment.notice_reply_deadline_id = existing.id if existing is not None else None
+        return
     should_have_deadline = (
         attachment.document_type == "notice"
         and (attachment.notice_document_role or "notice") == "notice"
@@ -2654,7 +3307,13 @@ def create_matter_court_order(
     the in-app notification rules other workspace members rely on.
     """
 
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="add a court order")
 
     attachment_id = _validated_order_attachment_id(
         session,
@@ -2763,7 +3422,13 @@ def update_matter_court_order(
     order_id: str,
     payload: MatterCourtOrderUpdateRequest,
 ) -> MatterCourtOrderRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="update a court order")
     order = session.scalar(
         select(MatterCourtOrder).where(
             MatterCourtOrder.id == order_id,
@@ -2852,7 +3517,13 @@ def create_matter_hearing(
     matter_id: str,
     payload: MatterHearingCreateRequest,
 ) -> MatterHearingRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="create a hearing")
     hearing = MatterHearing(
         matter_id=matter.id,
         hearing_on=payload.hearing_on,
@@ -2921,6 +3592,7 @@ def _persist_court_sync_import(
     cause_list_entries,
     orders,
 ) -> MatterCourtSyncRun:
+    _assert_matter_not_disposed(matter, operation="import court-sync data")
     if not cause_list_entries and not orders:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -3108,7 +3780,13 @@ def create_matter_court_sync_import(
     matter_id: str,
     payload: MatterCourtSyncImportRequest,
 ) -> MatterCourtSyncRunRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="import court-sync data")
     sync_run = _persist_court_sync_import(
         session,
         matter=matter,
@@ -3175,7 +3853,17 @@ def create_matter_attachment(
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    # Hold the lifecycle row while deriving notice deadlines and enqueueing
+    # document work. This serializes attachment mutations with disposal: either
+    # the upload commits first and disposal neutralizes its work, or disposal
+    # wins and the derived deadline path observes the terminal state.
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="upload an attachment")
     audit_matter_id = matter.id
     linked_court_order_id = _validated_attachment_court_order_id(
         session,
@@ -3417,7 +4105,13 @@ def update_matter_attachment_metadata(
     attachment_id: str,
     payload: MatterAttachmentMetadataUpdateRequest,
 ) -> MatterAttachmentRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="update attachment metadata")
     attachment = session.scalar(
         select(MatterAttachment)
         .options(
@@ -3601,6 +4295,14 @@ def request_matter_attachment_processing(
     if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
         _raise_processing_permission_error()
 
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="queue attachment processing")
+
     attachment = _get_matter_attachment_model(
         session,
         context=context,
@@ -3660,16 +4362,18 @@ def get_matter_attachment_download(
     matter_id: str,
     attachment_id: str,
 ) -> tuple[MatterAttachment, str]:
+    # Resolve the matter through the canonical visibility gate first. Tenant
+    # scope alone is insufficient for restricted, team-scoped, or ethically
+    # walled matters; denied callers must receive the same opaque 404.
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
     attachment = session.scalar(
         select(MatterAttachment)
         .options(
             joinedload(MatterAttachment.uploaded_by_membership).joinedload(CompanyMembership.user)
         )
-        .join(Matter, Matter.id == MatterAttachment.matter_id)
         .where(
             MatterAttachment.id == attachment_id,
-            MatterAttachment.matter_id == matter_id,
-            Matter.company_id == context.company.id,
+            MatterAttachment.matter_id == matter.id,
         )
     )
     if not attachment:
@@ -3754,7 +4458,13 @@ def create_time_entry(
     matter_id: str,
     payload: TimeEntryCreateRequest,
 ) -> TimeEntryRecord:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="log time")
     rate_currency = payload.rate_currency.strip().upper()
     rate_amount_minor = payload.rate_amount_minor
     billing_rate_id: str | None = None
@@ -3823,7 +4533,13 @@ def create_matter_invoice(
     if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
         _raise_billing_permission_error()
 
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    _assert_matter_not_disposed(matter, operation="create an invoice")
     billing_profile = None
     if matter.billing_profile_id:
         billing_profile = session.scalar(

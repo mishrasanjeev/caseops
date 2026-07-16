@@ -1527,6 +1527,15 @@ def generate_recommendation(
             provider=provider,
         )
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    from caseops_api.services.matter_operational_guard import (
+        require_operational_matter,
+    )
+
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="generate a recommendation",
+    )
     _stage("load_matter")
     objective = _resolve_objective(
         session,
@@ -1641,6 +1650,20 @@ def generate_recommendation(
             noun="recommendation",
             exc=exc,
         ) from exc
+
+    # The optional bench-rerank audit above commits its own ModelRun, which
+    # necessarily releases the Matter row lock acquired at request entry.
+    # Provider work is also an unbounded external boundary.  Reload and lock
+    # the parent again *after* the provider returns and before any refusal run,
+    # recommendation, option, or audit row is staged.  Keeping this lock until
+    # the single terminal commit makes concurrent disposal and recommendation
+    # persistence mutually exclusive; ``populate_existing`` in the shared
+    # guard prevents the session identity map from hiding a winning disposal.
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="save a generated recommendation",
+    )
 
     unsafe_output_category = _classify_unsafe_response(parsed)
     if unsafe_output_category is not None:
@@ -1900,6 +1923,20 @@ def record_recommendation_decision(
         )
     recommendation = _load_recommendation(
         session, context=context, recommendation_id=recommendation_id
+    )
+    matter = _load_matter(
+        session,
+        context=context,
+        matter_id=recommendation.matter_id,
+    )
+    from caseops_api.services.matter_operational_guard import (
+        require_operational_matter,
+    )
+
+    require_operational_matter(
+        session,
+        matter=matter,
+        operation="record a recommendation decision",
     )
     if selected_option_index is not None and (
         selected_option_index < 0 or selected_option_index >= len(recommendation.options)

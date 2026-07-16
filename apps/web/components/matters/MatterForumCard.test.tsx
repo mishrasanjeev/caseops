@@ -172,6 +172,7 @@ describe("MatterForumCard", () => {
               forum_level: "arbitration",
               court_name: "SIAC",
               created_at: "2026-05-05T00:00:00Z",
+              updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
         />,
@@ -192,6 +193,7 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m-1",
+      expected_updated_at: "2026-07-15T10:00:00Z",
       forum_level: "high_court",
       court_id: "karnataka-hc",
       court_name: "Karnataka High Court",
@@ -224,6 +226,7 @@ describe("MatterForumCard", () => {
               forum_district: "Kamrup Metro",
               forum_city: null,
               created_at: "2026-06-24T00:00:00Z",
+              updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
         />,
@@ -260,6 +263,7 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m-assam",
+      expected_updated_at: "2026-07-15T10:00:00Z",
       forum_level: "lower_court",
       court_id: null,
       court_name: "Kamrup Metro Civil Court",
@@ -290,6 +294,7 @@ describe("MatterForumCard", () => {
               forum_district: "South-West",
               forum_city: "Dwarka",
               created_at: "2026-06-23T00:00:00Z",
+              updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
         />,
@@ -320,6 +325,7 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m-stale-district",
+      expected_updated_at: "2026-07-15T10:00:00Z",
       forum_level: "lower_court",
       court_id: null,
       court_name: "Dwarka Courts Complex",
@@ -352,6 +358,7 @@ describe("MatterForumCard", () => {
               forum_city: null,
               forum_consumer_level: "district",
               created_at: "2026-06-25T00:00:00Z",
+              updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
         />,
@@ -391,6 +398,7 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m-stale-consumer",
+      expected_updated_at: "2026-07-15T10:00:00Z",
       forum_level: "tribunal",
       court_id: null,
       court_name: "Central Delhi DCDRC",
@@ -418,6 +426,7 @@ describe("MatterForumCard", () => {
               court_name: "NCDRC",
               forum_consumer_level: "national",
               created_at: "2026-06-25T00:00:00Z",
+              updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
         />,
@@ -440,6 +449,7 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m-consumer",
+      expected_updated_at: "2026-07-15T10:00:00Z",
       forum_level: "tribunal",
       court_id: null,
       court_name: "Ajmer District Consumer Disputes Redressal Commission",
@@ -471,6 +481,7 @@ describe("MatterForumCard", () => {
               forum_state: "Delhi",
               forum_city: "New Delhi",
               created_at: "2026-05-05T00:00:00Z",
+              updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
         />,
@@ -484,5 +495,28 @@ describe("MatterForumCard", () => {
     );
     expect(screen.getByTestId("matter-forum-save")).toBeDisabled();
     expect(updateMatterMock).not.toHaveBeenCalled();
+  });
+
+  it("does not expose forum editing for a disposed matter", () => {
+    render(
+      withClient(
+        <MatterForumCard
+          matter={
+            {
+              id: "m-disposed",
+              matter_code: "DONE-1",
+              title: "Disposed matter",
+              status: "disposed",
+              practice_area: "Commercial",
+              forum_level: "high_court",
+              court_name: "Delhi High Court",
+              updated_at: "2026-07-15T10:00:00Z",
+            } as WorkspaceMatter
+          }
+        />,
+      ),
+    );
+
+    expect(screen.queryByTestId("matter-forum-edit")).not.toBeInTheDocument();
   });
 });

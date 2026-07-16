@@ -1,10 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
   CheckCircle2,
+  Download,
   Eye,
   FileText,
   Filter,
@@ -38,6 +39,11 @@ import {
   updateMatterAttachmentMetadata,
   uploadMatterAttachment,
 } from "@/lib/api/endpoints";
+import {
+  downloadNoticeFile,
+  listNotices,
+  type NoticeRecord,
+} from "@/lib/api/notices";
 import type { WorkspaceAttachment } from "@/lib/api/workspace-types";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate, todayLocalDateInput } from "@/lib/dates";
@@ -248,6 +254,44 @@ function dateInRange(value: string | null | undefined, from: string, to: string)
   return true;
 }
 
+function globalNoticeSearchableText(notice: NoticeRecord): string {
+  return [
+    notice.subject,
+    notice.type,
+    notice.authority,
+    notice.received_from,
+    notice.summary,
+    notice.response,
+    notice.remarks,
+    notice.department,
+    notice.owner_name,
+    notice.filename,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+async function loadAllLinkedGlobalNotices(
+  matterId: string,
+): Promise<NoticeRecord[]> {
+  const notices = new Map<string, NoticeRecord>();
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+
+  do {
+    const page = await listNotices({ matter_id: matterId, limit: 100, cursor });
+    for (const notice of page.notices) notices.set(notice.id, notice);
+
+    const next = page.next_cursor ?? null;
+    if (!next || seenCursors.has(next)) break;
+    seenCursors.add(next);
+    cursor = next;
+  } while (cursor);
+
+  return Array.from(notices.values());
+}
+
 export default function MatterNoticesPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
@@ -262,9 +306,22 @@ export default function MatterNoticesPage() {
   const [relatedUploadTarget, setRelatedUploadTarget] =
     useState<RelatedUploadTarget | null>(null);
   const [replySentDates, setReplySentDates] = useState<Record<string, string>>({});
+  const [downloadingGlobalId, setDownloadingGlobalId] = useState<string | null>(null);
   const canUpload = useCapability("documents:upload");
   const canManageDocuments = useCapability("documents:manage");
   const { data } = useMatterWorkspace(matterId);
+  const linkedGlobalNoticesQuery = useQuery({
+    queryKey: ["notices", "matter", matterId],
+    queryFn: () => loadAllLinkedGlobalNotices(matterId),
+  });
+
+  const linkedGlobalNotices = useMemo(
+    () =>
+      (linkedGlobalNoticesQuery.data ?? []).filter(
+        (notice) => notice.source_kind === "standalone" && !notice.read_only,
+      ),
+    [linkedGlobalNoticesQuery.data],
+  );
 
   const allNoticeDocuments = useMemo(
     () => (data?.attachments ?? []).filter((attachment) => attachment.document_type === "notice"),
@@ -306,6 +363,12 @@ export default function MatterNoticesPage() {
     (notice) => noticeDirection(notice) === "received",
   );
   const sentNotices = primaryNotices.filter((notice) => noticeDirection(notice) === "sent");
+  const receivedGlobalNotices = linkedGlobalNotices.filter(
+    (notice) => notice.direction === "received",
+  );
+  const sentGlobalNotices = linkedGlobalNotices.filter(
+    (notice) => notice.direction === "sent",
+  );
   const pendingReplies = receivedNotices.filter((notice) =>
     ["reply_pending", "reply_due_in_days"].includes(replyStatus(notice) ?? ""),
   );
@@ -318,6 +381,25 @@ export default function MatterNoticesPage() {
   const dueThisWeekReplies = receivedNotices.filter((notice) => {
     const days = notice.notice_reply_days_remaining;
     return replyStatus(notice) === "reply_due_in_days" && days !== null && days !== undefined && days <= 7;
+  });
+  const pendingGlobalReplies = receivedGlobalNotices.filter(
+    (notice) => notice.reply_required && !notice.reply_sent,
+  );
+  const overdueGlobalReplies = pendingGlobalReplies.filter(
+    (notice) =>
+      Boolean(
+        notice.reply_due_on && notice.reply_due_on.slice(0, 10) < todayIso(),
+      ),
+  );
+  const dueTodayGlobalReplies = pendingGlobalReplies.filter(
+    (notice) => notice.reply_due_on?.slice(0, 10) === todayIso(),
+  );
+  const sevenDaysFromNow = new Date();
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+  const weekEnd = sevenDaysFromNow.toISOString().slice(0, 10);
+  const dueThisWeekGlobalReplies = pendingGlobalReplies.filter((notice) => {
+    const due = notice.reply_due_on?.slice(0, 10);
+    return Boolean(due && due >= todayIso() && due <= weekEnd);
   });
 
   const visibleNotices = primaryNotices.filter((notice) => {
@@ -353,8 +435,53 @@ export default function MatterNoticesPage() {
     return true;
   });
 
+  const visibleGlobalNotices = linkedGlobalNotices.filter((notice) => {
+    if (notice.direction !== activeTab) return false;
+    if (
+      filters.query &&
+      !globalNoticeSearchableText(notice).includes(filters.query.toLowerCase())
+    ) {
+      return false;
+    }
+    if (filters.status && notice.status !== filters.status) return false;
+    if (
+      filters.replyStatus &&
+      (filters.replyStatus === "reply_sent"
+        ? !notice.reply_sent
+        : filters.replyStatus === "not_required"
+          ? notice.reply_required
+          : filters.replyStatus === "reply_overdue"
+            ? !(
+                notice.reply_required &&
+                !notice.reply_sent &&
+                notice.reply_due_on &&
+                notice.reply_due_on.slice(0, 10) < todayIso()
+              )
+            : !(notice.reply_required && !notice.reply_sent))
+    ) {
+      return false;
+    }
+    if (!dateInRange(notice.reply_due_on, filters.dueFrom, filters.dueTo)) return false;
+    if (
+      filters.authority &&
+      !(notice.authority ?? "").toLowerCase().includes(filters.authority.toLowerCase())
+    ) return false;
+    if (
+      filters.department &&
+      !(notice.department ?? "").toLowerCase().includes(filters.department.toLowerCase())
+    ) return false;
+    if (filters.matter && data?.matter) {
+      const matterText = `${data.matter.matter_code} ${data.matter.title}`.toLowerCase();
+      if (!matterText.includes(filters.matter.toLowerCase())) return false;
+    }
+    return true;
+  });
+
   const statusOptions = Array.from(
-    new Set(primaryNotices.map((notice) => notice.notice_status || "Open")),
+    new Set([
+      ...primaryNotices.map((notice) => notice.notice_status || "Open"),
+      ...linkedGlobalNotices.map((notice) => notice.status),
+    ]),
   ).sort();
 
   const invalidateWorkspace = async () => {
@@ -483,6 +610,22 @@ export default function MatterNoticesPage() {
     },
   });
 
+  const downloadGlobalNotice = async (notice: NoticeRecord) => {
+    setDownloadingGlobalId(notice.id);
+    try {
+      await downloadNoticeFile(
+        notice.id,
+        notice.filename ?? "notice-document",
+      );
+    } catch (error) {
+      toast.error(
+        apiErrorMessage(error, "Could not download the linked notice document."),
+      );
+    } finally {
+      setDownloadingGlobalId(null);
+    }
+  };
+
   if (!data) return null;
 
   const matterLabel = `${data.matter.matter_code} - ${data.matter.title}`;
@@ -497,7 +640,7 @@ export default function MatterNoticesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold text-[var(--color-ink)]">
-              {pendingReplies.length}
+              {pendingReplies.length + pendingGlobalReplies.length}
             </div>
           </CardContent>
         </Card>
@@ -508,8 +651,8 @@ export default function MatterNoticesPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2 text-3xl font-semibold text-amber-800">
-              {overdueReplies.length}
-              {overdueReplies.length > 0 ? <AlertTriangle className="h-5 w-5" aria-hidden /> : null}
+              {overdueReplies.length + overdueGlobalReplies.length}
+              {overdueReplies.length + overdueGlobalReplies.length > 0 ? <AlertTriangle className="h-5 w-5" aria-hidden /> : null}
             </div>
           </CardContent>
         </Card>
@@ -520,7 +663,7 @@ export default function MatterNoticesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold text-[var(--color-ink)]">
-              {dueTodayReplies.length}
+              {dueTodayReplies.length + dueTodayGlobalReplies.length}
             </div>
           </CardContent>
         </Card>
@@ -531,7 +674,7 @@ export default function MatterNoticesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold text-[var(--color-ink)]">
-              {dueThisWeekReplies.length}
+              {dueThisWeekReplies.length + dueThisWeekGlobalReplies.length}
             </div>
           </CardContent>
         </Card>
@@ -563,7 +706,7 @@ export default function MatterNoticesPage() {
               <Inbox className="h-4 w-4" aria-hidden />
               Notice Received
               <Badge tone={activeTab === "received" ? "neutral" : "brand"}>
-                {receivedNotices.length}
+                {receivedNotices.length + receivedGlobalNotices.length}
               </Badge>
             </Button>
             <Button
@@ -575,7 +718,7 @@ export default function MatterNoticesPage() {
               <Send className="h-4 w-4" aria-hidden />
               Notice Sent
               <Badge tone={activeTab === "sent" ? "neutral" : "brand"}>
-                {sentNotices.length}
+                {sentNotices.length + sentGlobalNotices.length}
               </Badge>
             </Button>
           </div>
@@ -1143,7 +1286,87 @@ export default function MatterNoticesPage() {
             }}
           />
 
-          {visibleNotices.length === 0 ? (
+          {visibleGlobalNotices.length > 0 ? (
+            <div className="mb-4 space-y-3" data-testid="linked-global-notices">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+                    Linked global notices
+                  </h2>
+                  <p className="text-xs text-[var(--color-mute)]">
+                    One source record shared with this matter; the file is not duplicated.
+                  </p>
+                </div>
+                <Button href="/app/notices" variant="outline" size="sm">
+                  Manage global register
+                </Button>
+              </div>
+              {visibleGlobalNotices.map((notice) => (
+                <article
+                  key={notice.id}
+                  className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4"
+                  data-testid={`matter-global-notice-${notice.id}`}
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+                          {notice.subject}
+                        </h3>
+                        <Badge tone="success">Global notice</Badge>
+                        <Badge tone={notice.direction === "received" ? "brand" : "neutral"}>
+                          {notice.direction === "received" ? "Received" : "Sent"}
+                        </Badge>
+                        <Badge>{notice.status}</Badge>
+                      </div>
+                      <div className="mt-2 grid gap-2 text-xs text-[var(--color-ink-2)] sm:grid-cols-2 lg:grid-cols-3">
+                        <span>
+                          {notice.direction === "received" ? "Received" : "Sent"}{" "}
+                          {formatDate(
+                            notice.direction === "received"
+                              ? notice.received_on
+                              : notice.sent_on,
+                          )}
+                        </span>
+                        {notice.type ? <span>Type: {notice.type}</span> : null}
+                        {notice.authority ? <span>Authority: {notice.authority}</span> : null}
+                        {notice.department ? <span>Department: {notice.department}</span> : null}
+                        {notice.owner_name ? <span>Owner: {notice.owner_name}</span> : null}
+                        {notice.reply_due_on ? (
+                          <span>Reply due: {formatDate(notice.reply_due_on)}</span>
+                        ) : null}
+                        {notice.filename ? <span>File: {notice.filename}</span> : null}
+                      </div>
+                      {notice.summary ? (
+                        <p className="mt-2 text-xs leading-5 text-[var(--color-ink-2)]">
+                          {notice.summary}
+                        </p>
+                      ) : null}
+                    </div>
+                    {notice.has_file ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={downloadingGlobalId === notice.id}
+                        onClick={() => downloadGlobalNotice(notice)}
+                        aria-label={`Download linked ${notice.filename ?? "notice document"}`}
+                      >
+                        {downloadingGlobalId === notice.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Download className="h-4 w-4" aria-hidden />
+                        )}
+                        Download
+                      </Button>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          {visibleNotices.length === 0 && visibleGlobalNotices.length === 0 ? (
             <EmptyState
               icon={activeTab === "received" ? Inbox : Send}
               title={activeTab === "received" ? "No received notices" : "No sent notices"}

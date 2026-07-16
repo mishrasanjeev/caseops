@@ -297,7 +297,6 @@ def test_notification_delivery_foundation_processes_in_app_idempotently(
             source_type="matter_attachment",
             source_id=source_id,
             matter=matter,
-            notification_rule_id=str(uuid4()),
             title="New order uploaded",
             body="A linked court order document was uploaded.",
         )
@@ -324,7 +323,6 @@ def test_notification_delivery_foundation_processes_in_app_idempotently(
             source_type="matter_attachment",
             source_id=source_id,
             matter=matter,
-            notification_rule_id=str(uuid4()),
             title="New order uploaded",
             body="A linked court order document was uploaded.",
         )
@@ -380,7 +378,6 @@ def test_notification_delivery_retry_and_dead_letter_are_bounded_redacted(
             source_type="matter_attachment",
             source_id=str(uuid4()),
             matter=matter,
-            notification_rule_id=str(uuid4()),
             title="New order uploaded",
             body="A linked court order document was uploaded.",
         )
@@ -421,6 +418,68 @@ def test_notification_delivery_retry_and_dead_letter_are_bounded_redacted(
         assert intent.next_attempt_at is None
         assert intent.dead_letter_reason == "retry_limit_exhausted"
         assert "lawyer@example.test" not in (intent.last_error_redacted or "")
+
+
+def test_disposed_matter_blocks_new_and_preloaded_notification_delivery(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    matter_payload = _create_matter(
+        client,
+        str(bootstrap["access_token"]),
+        "WTD53-DISPOSED",
+    )
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        context = _context(session)
+        matter = session.get(Matter, matter_payload["id"])
+        assert matter is not None
+        intent = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=context.membership,
+            channel="in_app",
+            event_type="new_order_uploaded",
+            source_type="matter_attachment",
+            source_id=str(uuid4()),
+            matter=matter,
+            title="Must not be delivered",
+            body="Disposal wins before the delivery worker commits.",
+        )
+        assert intent is not None
+        intent_id = intent.id
+        matter.status = "disposed"
+        matter.is_active = False
+        matter.lifecycle_version += 1
+        session.commit()
+
+    with session_factory() as session:
+        context = _context(session)
+        matter = session.get(Matter, matter_payload["id"])
+        assert matter is not None
+        assert enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=context.membership,
+            channel="in_app",
+            event_type="new_order_uploaded",
+            source_type="matter_attachment",
+            source_id=str(uuid4()),
+            matter=matter,
+            title="Must not be queued",
+        ) is None
+        result = process_notification_delivery_intent(
+            session,
+            intent_id=intent_id,
+            context=context,
+        )
+        session.commit()
+        assert result.blocked is True
+        assert session.scalar(select(func.count()).select_from(InAppNotification)) == 0
+        stored = session.get(NotificationDeliveryIntent, intent_id)
+        assert stored is not None
+        assert stored.status == NotificationDeliveryStatus.BLOCKED
+        assert stored.dead_letter_reason == "matter_disposed"
 
 
 @pytest.mark.asyncio

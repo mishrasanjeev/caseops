@@ -52,6 +52,11 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import (
+    MatterNotOperationalError,
+    assert_operational_matter,
+    require_operational_matter,
+)
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     redact_provider_error,
@@ -307,6 +312,13 @@ def _notify_review_required(
     item: MatterComplianceItem,
     actor_membership_id: str | None,
 ) -> None:
+    try:
+        matter = assert_operational_matter(
+            session,
+            matter=matter,
+        )
+    except MatterNotOperationalError:
+        return
     context = _notification_context(
         session,
         company_id=matter.company_id,
@@ -337,6 +349,13 @@ def _notify_extraction_failure(
     run: MatterComplianceExtractionRun,
     actor_membership_id: str | None,
 ) -> None:
+    try:
+        matter = assert_operational_matter(
+            session,
+            matter=matter,
+        )
+    except MatterNotOperationalError:
+        return
     context = _notification_context(
         session,
         company_id=matter.company_id,
@@ -442,6 +461,7 @@ def _create_item(
     source_paragraph: str | None = None,
     confidence_label: str = "low",
 ) -> MatterComplianceItem | None:
+    matter = assert_operational_matter(session, matter=matter)
     existing_filters = [
         MatterComplianceItem.matter_id == matter.id,
         MatterComplianceItem.dedupe_key == dedupe_key,
@@ -630,6 +650,10 @@ def _ai_items(
         run.error_message_redacted = redact_provider_error(exc)
         run.metadata_json = {**dict(run.metadata_json or {}), "ai_failed": True}
         return []
+    # The model request may take long enough for a concurrent lifecycle
+    # transition. Lock and recheck before recording model output, compliance
+    # items, delivery intents, tasks, or deadlines.
+    matter = assert_operational_matter(session, matter=matter)
     model_run = ModelRun(
         company_id=matter.company_id,
         matter_id=matter.id,
@@ -746,6 +770,7 @@ def run_compliance_extraction_for_order(
     context: SessionContext | None = None,
     provider: LLMProvider | None = None,
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
+    assert_operational_matter(session, matter=matter, lock_for_write=False)
     try:
         extract_imported_order_proceeding_intelligence(
             session,
@@ -753,6 +778,8 @@ def run_compliance_extraction_for_order(
             order=order,
             actor_membership_id=actor_membership_id,
         )
+    except MatterNotOperationalError:
+        raise
     except Exception as exc:  # noqa: BLE001
         safe_error = redact_provider_error(exc)
     else:
@@ -822,6 +849,16 @@ def run_compliance_extraction_for_order(
             status_value=MatterComplianceExtractionStatus.COMPLETED,
         )
         return run, created
+    except MatterNotOperationalError:
+        _finish_run(
+            session,
+            run=run,
+            matter=matter,
+            created_count=0,
+            status_value=MatterComplianceExtractionStatus.SKIPPED,
+            skip_reason="matter_disposed",
+        )
+        return run, []
     except Exception as exc:  # noqa: BLE001
         _finish_run(
             session,
@@ -850,6 +887,7 @@ def run_compliance_extraction_for_attachment(
     context: SessionContext | None = None,
     provider: LLMProvider | None = None,
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
+    assert_operational_matter(session, matter=matter, lock_for_write=False)
     source_text, skip_reason = _safe_source_text(attachment=attachment)
     linked_order = attachment.linked_court_order
     run = _create_run(
@@ -917,6 +955,16 @@ def run_compliance_extraction_for_attachment(
             status_value=MatterComplianceExtractionStatus.COMPLETED,
         )
         return run, created
+    except MatterNotOperationalError:
+        _finish_run(
+            session,
+            run=run,
+            matter=matter,
+            created_count=0,
+            status_value=MatterComplianceExtractionStatus.SKIPPED,
+            skip_reason="matter_disposed",
+        )
+        return run, []
     except Exception as exc:  # noqa: BLE001
         _finish_run(
             session,
@@ -949,6 +997,7 @@ def _activate_item(
     item: MatterComplianceItem,
     actor_membership_id: str | None,
 ) -> None:
+    matter = assert_operational_matter(session, matter=matter)
     if item.generated_task_id is None:
         task = MatterTask(
             matter_id=matter.id,
@@ -1023,6 +1072,11 @@ def update_compliance_item(
     item.reviewed_by_membership_id = context.membership.id
     item.reviewed_at = _now()
     if action == "confirm":
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="confirm compliance work",
+        )
         item.review_status = (
             MatterComplianceReviewStatus.EDITED
             if changed
@@ -1080,6 +1134,12 @@ def retry_order_compliance_extraction(
     order_id: str,
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
     matter = _load_accessible_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="retry compliance extraction",
+        lock_for_write=False,
+    )
     order = session.scalar(
         select(MatterCourtOrder).where(
             MatterCourtOrder.id == order_id,

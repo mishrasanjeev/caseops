@@ -241,10 +241,18 @@ def test_team_scoped_matter_is_hidden_from_non_team_member(
     assert lit_team.status_code in (200, 201), lit_team.text
     team_id = lit_team.json()["id"]
 
+    current_matter = client.get(
+        f"/api/matters/{hidden}",
+        headers=auth_headers(owner_token),
+    )
+    assert current_matter.status_code == 200, current_matter.text
     assign = client.patch(
         f"/api/matters/{hidden}",
         headers=auth_headers(owner_token),
-        json={"team_id": team_id},
+        json={
+            "team_id": team_id,
+            "expected_updated_at": current_matter.json()["updated_at"],
+        },
     )
     assert assign.status_code == 200, assign.text
 

@@ -139,6 +139,64 @@ def test_calendar_omits_tasks_with_no_due_date(client: TestClient) -> None:
     assert resp.json()["events"] == []
 
 
+def test_disposal_and_reopen_do_not_resurrect_calendar_sources(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "PB-CAL-DISPOSE", "Terminal matter")
+    event_day = date.today() + timedelta(days=3)
+    _schedule_hearing(client, headers, matter_id, event_day, "Terminal hearing")
+    _create_task(client, headers, matter_id, "Terminal task", event_day)
+    deadline = client.post(
+        f"/api/matters/{matter_id}/deadlines",
+        headers=headers,
+        json={"title": "Terminal deadline", "due_on": event_day.isoformat()},
+    )
+    assert deadline.status_code == 200, deadline.text
+    params = {
+        "from": date.today().isoformat(),
+        "to": (date.today() + timedelta(days=10)).isoformat(),
+    }
+    before = client.get("/api/calendar/events", headers=headers, params=params)
+    assert {row["kind"] for row in before.json()["events"]} == {
+        "hearing",
+        "task",
+        "deadline",
+    }
+
+    matter = client.get(f"/api/matters/{matter_id}", headers=headers).json()
+    disposed = client.patch(
+        f"/api/matters/{matter_id}/lifecycle/status",
+        headers=headers,
+        json={
+            "to_status": "disposed",
+            "expected_from_status": matter["status"],
+            "expected_updated_at": matter["updated_at"],
+            "reason": "Final judgment entered and all work concluded",
+        },
+    )
+    assert disposed.status_code == 200, disposed.text
+    assert client.get(
+        "/api/calendar/events", headers=headers, params=params
+    ).json()["events"] == []
+
+    reopened = client.patch(
+        f"/api/matters/{matter_id}/lifecycle/status",
+        headers=headers,
+        json={
+            "to_status": "intake",
+            "expected_from_status": "disposed",
+            "expected_updated_at": disposed.json()["updated_at"],
+            "reason": "New instructions require a controlled intake review",
+        },
+    )
+    assert reopened.status_code == 200, reopened.text
+    assert client.get(
+        "/api/calendar/events", headers=headers, params=params
+    ).json()["events"] == []
+
+
 def test_calendar_range_is_inclusive_on_both_ends(client: TestClient) -> None:
     """A hearing scheduled exactly on ``from`` or exactly on ``to``
     must be included. Off-by-one here is the kind of bug a single

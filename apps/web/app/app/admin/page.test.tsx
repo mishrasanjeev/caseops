@@ -203,6 +203,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
               description: null,
               next_hearing_on: null,
               created_at: "2026-05-05T00:00:00Z",
+              updated_at: "2026-05-05T00:00:00Z",
             },
           ],
           next_cursor: null,

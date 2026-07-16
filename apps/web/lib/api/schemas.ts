@@ -99,7 +99,9 @@ export const matter = z.object({
   // default) so legacy matters without the column don't break.
   oc_cross_visibility_enabled: z.boolean().optional().default(false),
   created_at: z.string(),
-  updated_at: z.string().optional(),
+  // Every mutation uses this server-issued optimistic-concurrency token.
+  // Treating it as optional allowed UI callers to silently issue unsafe PATCHes.
+  updated_at: z.string(),
 });
 
 export const mattersList = z.object({

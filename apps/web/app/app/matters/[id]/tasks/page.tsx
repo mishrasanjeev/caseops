@@ -97,6 +97,7 @@ export default function MatterTasksPage() {
   const [deadlineForm, setDeadlineForm] = useState<DeadlineForm>(EMPTY_DEADLINE);
 
   const assignees = workspace?.available_assignees ?? [];
+  const isDisposed = workspace?.matter.status === "disposed";
   const assigneeOptions = useMemo(
     () => assignees.filter((member) => member.is_active),
     [assignees],
@@ -140,7 +141,7 @@ export default function MatterTasksPage() {
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: (input: { id: string; status: MatterTaskRecord["status"] }) =>
+    mutationFn: (input: { id: string; status: "todo" | "completed" }) =>
       updateMatterTask(matterId, input.id, { status: input.status }),
     onSuccess: refresh,
     onError: (err) => toast.error(apiErrorMessage(err, "Could not update task.")),
@@ -195,6 +196,15 @@ export default function MatterTasksPage() {
           <CardDescription>Open work and source-backed action items.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          {isDisposed ? (
+            <p
+              className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
+              data-testid="disposed-task-write-guard"
+            >
+              This matter is disposed. Its tasks are retained as history and cannot be
+              created, changed, or reopened.
+            </p>
+          ) : (
           <form className="grid gap-3 md:grid-cols-[1fr_10rem_9rem_auto]" onSubmit={submitTask}>
             <Field label="Task">
               <Input
@@ -259,6 +269,7 @@ export default function MatterTasksPage() {
               </select>
             </Field>
           </form>
+          )}
 
           {tasksQuery.isPending ? (
             <p className="text-sm text-[var(--color-mute)]">Loading tasks...</p>
@@ -294,6 +305,15 @@ export default function MatterTasksPage() {
           <CardDescription>Manual and source-backed matter deadlines.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          {isDisposed ? (
+            <p
+              className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
+              data-testid="disposed-deadline-write-guard"
+            >
+              This matter is disposed. Its deadlines are retained as history and cannot
+              be created or changed.
+            </p>
+          ) : (
           <form
             className="grid gap-3 md:grid-cols-[1fr_10rem_9rem_auto]"
             onSubmit={submitDeadline}
@@ -362,6 +382,7 @@ export default function MatterTasksPage() {
               </select>
             </Field>
           </form>
+          )}
 
           {deadlinesQuery.isPending ? (
             <p className="text-sm text-[var(--color-mute)]">Loading deadlines...</p>
@@ -421,6 +442,7 @@ function TaskRow({
   busy: boolean;
 }) {
   const completed = task.status === "completed";
+  const cancelled = task.status === "cancelled";
   return (
     <li className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -438,6 +460,7 @@ function TaskRow({
             {task.source_label ? ` - ${task.source_label.replaceAll("_", " ")}` : ""}
           </p>
         </div>
+        {!cancelled ? (
         <Button size="sm" variant="outline" onClick={onToggle} disabled={busy}>
           {completed ? (
             <RotateCcw className="h-4 w-4" aria-hidden />
@@ -446,6 +469,7 @@ function TaskRow({
           )}
           {completed ? "Reopen" : "Complete"}
         </Button>
+        ) : null}
       </div>
     </li>
   );
@@ -461,6 +485,7 @@ function DeadlineRow({
   busy: boolean;
 }) {
   const done = deadline.status === "done";
+  const cancelled = deadline.status === "cancelled";
   return (
     <li className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -479,6 +504,7 @@ function DeadlineRow({
             {deadline.source_ref_type ? ` - ${deadline.source_ref_type}` : ""}
           </p>
         </div>
+        {!cancelled ? (
         <Button size="sm" variant="outline" onClick={onToggle} disabled={busy}>
           {done ? (
             <RotateCcw className="h-4 w-4" aria-hidden />
@@ -487,6 +513,7 @@ function DeadlineRow({
           )}
           {done ? "Reopen" : "Complete"}
         </Button>
+        ) : null}
       </div>
     </li>
   );

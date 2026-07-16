@@ -42,6 +42,7 @@ from caseops_api.schemas.outside_counsel import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -770,6 +771,11 @@ def create_outside_counsel_assignment(
     payload: OutsideCounselAssignmentCreateRequest,
 ) -> OutsideCounselAssignmentRecord:
     matter = _get_company_matter(session, context=context, matter_id=payload.matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="link outside counsel",
+    )
     counsel = _get_outside_counsel_model(
         session,
         company_id=context.company.id,
@@ -846,6 +852,11 @@ def create_outside_counsel_spend_record(
     payload: OutsideCounselSpendRecordCreateRequest,
 ) -> OutsideCounselSpendRecordResponse:
     matter = _get_company_matter(session, context=context, matter_id=payload.matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="record outside counsel spend",
+    )
     counsel = _get_outside_counsel_model(
         session,
         company_id=context.company.id,
@@ -954,6 +965,11 @@ def update_outside_counsel_spend_record(
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         return _serialize_spend_record(spend_record)
+    require_operational_matter(
+        session,
+        matter=spend_record.matter,
+        operation="update outside counsel spend",
+    )
 
     old_status = str(spend_record.status)
     old_pending = _pending_amount_minor(spend_record)

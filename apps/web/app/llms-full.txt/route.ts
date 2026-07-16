@@ -56,13 +56,12 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 ### 1c. Notices and reply deadlines
 
-- Route: /app/matters/{matter_id}/notices
-- Primary notices are separated into received and sent tabs and remain visible as matter documents
-- Received notices can track reply-required state, reply due date, ownership/department, reply plan, amounts, and related reply/supporting files
-- A received notice with reply required and a due date creates or updates a linked matter deadline
-- Uploading a reply document or recording "Mark reply sent" completes the linked deadline; supporting files do not
-- Dashboard counters show pending, overdue, due-today, and due-this-week received replies
-- The notice dashboard is matter-scoped; sent notices do not create reply deadlines
+- Central route: /app/notices; legacy matter workflow: /app/matters/{matter_id}/notices
+- Central records can be standalone or linked to zero, one, or multiple accessible matters and may have an optional owner and primary file
+- Received and sent tabs, summary counters, search, status, matter, owner, and reply-due filters cover the tenant-safe global register
+- Received notices can track reply-required state and reply due date; editable central records support status and owner updates
+- Legacy matter attachment notices are visible and downloadable in the central register but explicitly read-only there
+- Sent notices do not create reply deadlines
 
 ### 2. Tracked case refresh
 

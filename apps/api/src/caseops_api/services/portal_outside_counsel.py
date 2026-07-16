@@ -60,6 +60,7 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.file_security import verify_upload
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,
@@ -165,6 +166,11 @@ def upload_oc_work_product(
         session, portal_user=portal_user, matter_id=matter_id,
     )
     _require_grant_permission(_grant, "can_upload")
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="upload outside-counsel work product",
+    )
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     audit_matter_id = matter.id
 
@@ -302,6 +308,11 @@ def submit_oc_invoice(
         session, portal_user=portal_user, matter_id=matter_id,
     )
     _require_grant_permission(_grant, "can_invoice")
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="submit an outside-counsel invoice",
+    )
     if not invoice_number.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -415,6 +426,11 @@ def submit_oc_time_entry(
         session, portal_user=portal_user, matter_id=matter_id,
     )
     _require_grant_permission(_grant, "can_invoice")
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="submit an outside-counsel time entry",
+    )
     if duration_minutes <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

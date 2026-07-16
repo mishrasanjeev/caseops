@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from caseops_api.db.models import (
     AuditEvent,
@@ -24,6 +24,8 @@ from caseops_api.db.models import (
     DocumentProcessingJob,
     LegalUpdateAlert,
     LegalUpdateSourceRecord,
+    LegalUpdateWatchlist,
+    Matter,
     MatterStatuteReference,
     ModelRun,
     NotificationDeliveryIntent,
@@ -32,6 +34,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.scripts.seed_statutes import _seed
+from caseops_api.services import legal_updates as legal_updates_service
 from caseops_api.services.legal_update_sources import (
     PrsActsParliamentAdapter,
     sync_source,
@@ -123,6 +126,28 @@ def _seed_legal_update_authority() -> str:
         )
         session.commit()
         return document.id
+
+
+def _create_legal_update_matter(
+    client: TestClient,
+    token: str,
+    *,
+    code: str,
+) -> str:
+    response = client.post(
+        "/api/matters",
+        headers=auth_headers(token),
+        json={
+            "matter_code": code,
+            "title": f"Legal update matter {code}",
+            "practice_area": "Commercial",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "status": "intake",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return str(response.json()["id"])
 
 
 def test_ft_s2_1_list_statutes_returns_seeded_acts(client: TestClient) -> None:
@@ -419,6 +444,375 @@ def test_adp18_watchlist_rejects_unbounded_and_unknown_source_filters(
     )
     assert unknown_source.status_code == 400
     assert "source registry" in unknown_source.json()["detail"]
+
+
+def test_matter_scoped_legal_update_watchlist_rejects_disposed_mutations_but_keeps_history(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = _bootstrap_with_seed(client)
+    matter_id = _create_legal_update_matter(
+        client,
+        token,
+        code="LEGAL-UPDATES-DISPOSED",
+    )
+    create = client.post(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+        json={
+            "name": "Matter-scoped NI Act updates",
+            "statute_id": "ni-act-1881",
+            "statute_terms": ["Section 138"],
+            "matter_id": matter_id,
+            "update_types": ["amendment"],
+        },
+    )
+    assert create.status_code == 201, create.text
+    watchlist_id = str(create.json()["id"])
+
+    initial_run = client.post(
+        f"/api/statutes/legal-updates/watchlists/{watchlist_id}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert initial_run.status_code == 200, initial_run.text
+    assert initial_run.json()["created_count"] >= 1
+
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+        baseline_alert_count = int(
+            session.scalar(
+                select(func.count()).select_from(LegalUpdateAlert).where(
+                    LegalUpdateAlert.watchlist_id == watchlist_id
+                )
+            )
+            or 0
+        )
+        baseline_intent_count = int(
+            session.scalar(
+                select(func.count()).select_from(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.matter_id == matter_id
+                )
+            )
+            or 0
+        )
+        baseline_run_audit_count = int(
+            session.scalar(
+                select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.action == "legal_update.watchlist_run",
+                    AuditEvent.target_id == watchlist_id,
+                )
+            )
+            or 0
+        )
+
+    match_calls = 0
+    original_matches = legal_updates_service._matches_for_watchlist
+
+    def counted_matches(session, *, rule):
+        nonlocal match_calls
+        match_calls += 1
+        return original_matches(session, rule=rule)
+
+    monkeypatch.setattr(
+        legal_updates_service,
+        "_matches_for_watchlist",
+        counted_matches,
+    )
+
+    blocked_create = client.post(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+        json={
+            "name": "No second disposed watchlist",
+            "matter_id": matter_id,
+            "statute_terms": ["Section 138"],
+            "update_types": ["amendment"],
+        },
+    )
+    blocked_update = client.patch(
+        f"/api/statutes/legal-updates/watchlists/{watchlist_id}",
+        headers=auth_headers(token),
+        json={"name": "Must remain unchanged"},
+    )
+    blocked_run = client.post(
+        f"/api/statutes/legal-updates/watchlists/{watchlist_id}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert [
+        blocked_create.status_code,
+        blocked_update.status_code,
+        blocked_run.status_code,
+    ] == [409, 409, 409]
+    assert match_calls == 0
+
+    watchlist_history = client.get(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+    )
+    assert watchlist_history.status_code == 200, watchlist_history.text
+    historical_watchlist = next(
+        row
+        for row in watchlist_history.json()["watchlists"]
+        if row["id"] == watchlist_id
+    )
+    assert historical_watchlist["name"] == "Matter-scoped NI Act updates"
+
+    alert_history = client.get(
+        "/api/statutes/legal-updates",
+        headers=auth_headers(token),
+    )
+    assert alert_history.status_code == 200, alert_history.text
+    historical_alert = next(
+        row
+        for row in alert_history.json()["updates"]
+        if row["watchlist_id"] == watchlist_id
+    )
+    mark_read = client.patch(
+        f"/api/statutes/legal-updates/{historical_alert['id']}",
+        headers=auth_headers(token),
+        json={"action": "read"},
+    )
+    assert mark_read.status_code == 200, mark_read.text
+    assert mark_read.json()["is_read"] is True
+
+    def fixture_sync_source(session, **kwargs):
+        return sync_source(session, html=PRS_FIXTURE_HTML, **kwargs)
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.statutes.sync_source",
+        fixture_sync_source,
+    )
+    source_sync = client.post(
+        "/api/statutes/legal-updates/sources/prs_acts_parliament/sync?limit=1",
+        headers=auth_headers(token),
+    )
+    assert source_sync.status_code == 200, source_sync.text
+    assert source_sync.json()["status"] == "failed"
+    assert match_calls == 0
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(LegalUpdateWatchlist).where(
+                    LegalUpdateWatchlist.matter_id == matter_id
+                )
+            )
+            == 1
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(LegalUpdateAlert).where(
+                    LegalUpdateAlert.watchlist_id == watchlist_id
+                )
+            )
+            == baseline_alert_count
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.matter_id == matter_id
+                )
+            )
+            == baseline_intent_count
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.action == "legal_update.watchlist_run",
+                    AuditEvent.target_id == watchlist_id,
+                )
+            )
+            == baseline_run_audit_count
+        )
+
+
+def test_matter_scoped_legal_update_watchlist_treats_inactive_active_row_as_terminal(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = _bootstrap_with_seed(client)
+    matter_id = _create_legal_update_matter(
+        client,
+        token,
+        code="LEGAL-UPDATES-INACTIVE",
+    )
+    create = client.post(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+        json={
+            "name": "Inactive-row watchlist",
+            "matter_id": matter_id,
+            "statute_terms": ["Section 138"],
+            "update_types": ["amendment"],
+        },
+    )
+    assert create.status_code == 201, create.text
+    watchlist_id = str(create.json()["id"])
+
+    with get_session_factory()() as session:
+        # Reproduce a pre-constraint legacy inconsistency.  The current schema
+        # rejects this state at the database boundary, but the service guard
+        # must remain fail-closed while old/backfilled rows can still surface.
+        session.execute(text("PRAGMA ignore_check_constraints = ON"))
+        session.execute(
+            text("UPDATE matters SET is_active = 0 WHERE id = :matter_id"),
+            {"matter_id": matter_id},
+        )
+        session.execute(text("PRAGMA ignore_check_constraints = OFF"))
+        session.commit()
+
+    def matches_must_not_run(*_args, **_kwargs):
+        raise AssertionError("inactive Matter reached legal-update matching")
+
+    monkeypatch.setattr(
+        legal_updates_service,
+        "_matches_for_watchlist",
+        matches_must_not_run,
+    )
+    blocked_create = client.post(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+        json={
+            "name": "No inactive Matter watchlist",
+            "matter_id": matter_id,
+            "statute_terms": ["Section 138"],
+            "update_types": ["amendment"],
+        },
+    )
+    blocked_update = client.patch(
+        f"/api/statutes/legal-updates/watchlists/{watchlist_id}",
+        headers=auth_headers(token),
+        json={"is_archived": True},
+    )
+    blocked_preview = client.post(
+        f"/api/statutes/legal-updates/watchlists/{watchlist_id}/run",
+        headers=auth_headers(token),
+        json={"preview_only": True, "limit": 10},
+    )
+    assert [
+        blocked_create.status_code,
+        blocked_update.status_code,
+        blocked_preview.status_code,
+    ] == [409, 409, 409]
+
+    historical_list = client.get(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+    )
+    assert historical_list.status_code == 200, historical_list.text
+    historical = next(
+        row
+        for row in historical_list.json()["watchlists"]
+        if row["id"] == watchlist_id
+    )
+    assert historical["is_archived"] is False
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(LegalUpdateWatchlist).where(
+                    LegalUpdateWatchlist.matter_id == matter_id
+                )
+            )
+            == 1
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(LegalUpdateAlert).where(
+                    LegalUpdateAlert.watchlist_id == watchlist_id
+                )
+            )
+            == 0
+        )
+
+
+def test_matter_scoped_legal_update_run_rechecks_after_disposal_race(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = _bootstrap_with_seed(client)
+    matter_id = _create_legal_update_matter(
+        client,
+        token,
+        code="LEGAL-UPDATES-RACE",
+    )
+    create = client.post(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+        json={
+            "name": "Dispose during matching",
+            "statute_id": "ni-act-1881",
+            "statute_terms": ["Section 138"],
+            "matter_id": matter_id,
+            "update_types": ["amendment"],
+        },
+    )
+    assert create.status_code == 201, create.text
+    watchlist_id = str(create.json()["id"])
+    original_matches = legal_updates_service._matches_for_watchlist
+    disposal_interposed = False
+
+    def matches_then_dispose(session, *, rule):
+        nonlocal disposal_interposed
+        matches = original_matches(session, rule=rule)
+        if not disposal_interposed:
+            with get_session_factory()() as disposal_session:
+                matter = disposal_session.get(Matter, matter_id)
+                assert matter is not None
+                matter.status = "disposed"
+                matter.is_active = False
+                disposal_session.commit()
+            disposal_interposed = True
+        return matches
+
+    monkeypatch.setattr(
+        legal_updates_service,
+        "_matches_for_watchlist",
+        matches_then_dispose,
+    )
+    response = client.post(
+        f"/api/statutes/legal-updates/watchlists/{watchlist_id}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.text.lower()
+
+    history = client.get(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+    )
+    assert history.status_code == 200, history.text
+    assert any(row["id"] == watchlist_id for row in history.json()["watchlists"])
+
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert session.scalar(
+            select(LegalUpdateAlert).where(
+                LegalUpdateAlert.watchlist_id == watchlist_id
+            )
+        ) is None
+        assert session.scalar(
+            select(NotificationDeliveryIntent).where(
+                NotificationDeliveryIntent.matter_id == matter_id
+            )
+        ) is None
+        assert session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "legal_update.watchlist_run",
+                AuditEvent.target_id == watchlist_id,
+            )
+        ) is None
 
 
 def test_ai_enhancement_prs_parser_and_sync_are_idempotent(

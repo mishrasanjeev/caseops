@@ -13,6 +13,7 @@ from caseops_api.db.models import (
     CaseTrackingSupportMatrix,
     Company,
     CompanyMembership,
+    Matter,
     MatterActivity,
     NotificationDeliveryIntent,
     TrackedCase,
@@ -598,6 +599,101 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
         assert len(intents) == 1
         assert intents[0].channel == "in_app"
         assert intents[0].event_type == "case_tracking.new_order"
+
+
+def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Disposed tracked matter",
+            "matter_code": "TRACK-DISPOSED",
+            "practice_area": "litigation",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "status": "active",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter = matter_response.json()
+    bookmark = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010012342026",
+            "case_number": "WP(C) 1/2026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Example Petitioner v Example Respondent",
+            "matter_id": matter["id"],
+            "notification_enabled": True,
+        },
+    )
+    assert bookmark.status_code == 201, bookmark.text
+
+    disposed = client.patch(
+        f"/api/matters/{matter['id']}/lifecycle/status",
+        headers=auth_headers(token),
+        json={
+            "to_status": "disposed",
+            "expected_from_status": "active",
+            "expected_updated_at": matter["updated_at"],
+            "reason": "Final judgment entered and file formally closed",
+        },
+    )
+    assert disposed.status_code == 200, disposed.text
+
+    forbidden_bookmark = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010099992026",
+            "case_number": "WP(C) 999/2026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Disposed matter must not accept new tracking",
+            "matter_id": matter["id"],
+            "notification_enabled": True,
+        },
+    )
+    assert forbidden_bookmark.status_code == 409, forbidden_bookmark.text
+
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    refresh = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark.json()['id']}/refresh",
+        headers=auth_headers(token),
+    )
+    assert refresh.status_code == 409, refresh.text
+    assert provider.refresh_calls == []
+
+    with get_session_factory()() as session:
+        persisted_matter = session.get(Matter, matter["id"])
+        assert persisted_matter is not None
+        assert persisted_matter.next_hearing_on is None
+        assert session.scalar(select(TrackedCaseUpdate)) is None
+
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        with get_session_factory()() as session:
+            runs = poll_tracked_cases(session, provider=provider)
+            assert runs
+            assert runs[0].checked_count == 0
+            assert runs[0].provider_call_count == 0
+            assert provider.bulk_refresh_calls == []
+    finally:
+        get_settings.cache_clear()
 
 
 def test_case_tracking_source_download_uses_server_side_provider_auth(

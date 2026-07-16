@@ -27,9 +27,11 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     Matter,
     MatterDeadline,
+    MatterDeadlineStatus,
     MatterHearing,
     MatterHearingStatus,
     MatterTask,
+    MatterTaskStatus,
 )
 from caseops_api.schemas.calendar import (
     CalendarEventKind,
@@ -85,10 +87,14 @@ def _collect_hearings(
         .join(Matter, Matter.id == MatterHearing.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
             MatterHearing.hearing_on >= range_from,
             MatterHearing.hearing_on <= range_to,
-            MatterHearing.status != MatterHearingStatus.CANCELLED,
+            MatterHearing.status.in_(
+                (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+            ),
         )
     ).all()
     out: list[CalendarEventRecord] = []
@@ -127,7 +133,12 @@ def _collect_tasks(
         .join(Matter, Matter.id == MatterTask.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
+            MatterTask.status.notin_(
+                (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
+            ),
             MatterTask.due_on.is_not(None),
             MatterTask.due_on >= range_from,
             MatterTask.due_on <= range_to,
@@ -163,7 +174,12 @@ def _collect_deadlines(
         .join(Matter, Matter.id == MatterDeadline.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
+            MatterDeadline.status.notin_(
+                (MatterDeadlineStatus.DONE, MatterDeadlineStatus.CANCELLED)
+            ),
             MatterDeadline.due_on >= range_from,
             MatterDeadline.due_on <= range_to,
         )

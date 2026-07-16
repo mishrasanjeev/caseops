@@ -4,6 +4,7 @@ import json
 import uuid
 from datetime import UTC, date, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -14,6 +15,7 @@ from caseops_api.db.models import (
     Company,
     DocumentProcessingStatus,
     Draft,
+    DraftingDataExtractionField,
     Matter,
     MatterAttachment,
     MatterAttachmentChunk,
@@ -21,6 +23,7 @@ from caseops_api.db.models import (
     Team,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import drafting_data_extraction as drafting_data_service
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -121,6 +124,15 @@ def _seed_attachment(
         return attachment_id
     finally:
         session.close()
+
+
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
 
 
 def _bootstrap_company_with_slug(client: TestClient, slug: str) -> dict:
@@ -1155,6 +1167,73 @@ def test_drafting_data_extracts_reviewable_fields_from_existing_document_text(
     assert "test/drafting/" not in serialized
 
 
+def test_disposed_matter_blocks_drafting_data_extraction_without_new_fields(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DATA-DISPOSED")
+    _seed_attachment(matter_id, extracted_text="FIR No. 42/2026.")
+    _dispose_matter(matter_id)
+
+    response = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.json()["detail"].lower()
+    listed = client.get(
+        f"/api/matters/{matter_id}/drafting-data",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200, listed.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(DraftingDataExtractionField).where(
+                DraftingDataExtractionField.matter_id == matter_id
+            )
+        ) is None
+
+
+def test_drafting_data_extraction_rechecks_after_disposal_race(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DATA-EXTRACT-RACE")
+    _seed_attachment(matter_id, extracted_text="FIR No. 42/2026.")
+    original_extract_candidates = drafting_data_service._extract_candidates
+    disposal_interposed = False
+
+    def extract_candidates_then_dispose(attachments):
+        nonlocal disposal_interposed
+        candidates = original_extract_candidates(attachments)
+        if not disposal_interposed:
+            _dispose_matter(matter_id)
+            disposal_interposed = True
+        return candidates
+
+    monkeypatch.setattr(
+        drafting_data_service,
+        "_extract_candidates",
+        extract_candidates_then_dispose,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(DraftingDataExtractionField).where(
+                DraftingDataExtractionField.matter_id == matter_id
+            )
+        ) is None
+
+
 def test_drafting_data_review_actions_and_audit_are_redacted(
     client: TestClient,
 ) -> None:
@@ -1223,6 +1302,91 @@ def test_drafting_data_review_actions_and_audit_are_redacted(
     assert "Corrected PS" not in audit_blob
     assert "storage_key" not in audit_blob
     assert "test/drafting/" not in audit_blob
+
+
+def test_disposed_matter_blocks_drafting_data_review_without_field_mutation(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DATA-REVIEW-DISPOSED")
+    _seed_attachment(matter_id, extracted_text="FIR No. 77/2026.")
+    extracted = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+    assert extracted.status_code == 200, extracted.text
+    field = _field_by_key(extracted.json()["fields"], "fir_number")
+    _dispose_matter(matter_id)
+
+    response = client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{field['id']}",
+        headers=auth_headers(token),
+        json={"action": "confirm"},
+    )
+
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        stored = session.get(DraftingDataExtractionField, field["id"])
+        assert stored is not None
+        assert stored.status == field["status"]
+        assert stored.reviewed_at is None
+        assert session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.matter_id == matter_id,
+                AuditEvent.action == "drafting_data.reviewed",
+            )
+        ) is None
+
+
+def test_drafting_data_review_refreshes_stale_matter_before_field_mutation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DATA-REVIEW-RACE")
+    _seed_attachment(matter_id, extracted_text="FIR No. 88/2026.")
+    extracted = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+    assert extracted.status_code == 200, extracted.text
+    field = _field_by_key(extracted.json()["fields"], "fir_number")
+    original_load_matter = drafting_data_service._load_matter
+    disposal_interposed = False
+
+    def load_matter_then_dispose(*args, **kwargs):
+        nonlocal disposal_interposed
+        matter = original_load_matter(*args, **kwargs)
+        if not disposal_interposed:
+            _dispose_matter(matter_id)
+            disposal_interposed = True
+        return matter
+
+    monkeypatch.setattr(
+        drafting_data_service,
+        "_load_matter",
+        load_matter_then_dispose,
+    )
+
+    response = client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{field['id']}",
+        headers=auth_headers(token),
+        json={"action": "confirm"},
+    )
+
+    assert disposal_interposed is True
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        stored = session.get(DraftingDataExtractionField, field["id"])
+        assert stored is not None
+        assert stored.status == field["status"]
+        assert stored.reviewed_at is None
+        assert session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.matter_id == matter_id,
+                AuditEvent.action == "drafting_data.reviewed",
+            )
+        ) is None
 
 
 def test_reviewed_drafting_data_feeds_prompt_without_overriding_stepper_facts(

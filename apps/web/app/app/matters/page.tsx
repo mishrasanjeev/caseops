@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
+import { MatterLifecycleDialog } from "@/components/matters/MatterLifecycleDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
@@ -68,7 +69,6 @@ const MATTER_STATUSES = [
   { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
   { value: "on_hold", label: "On hold" },
-  { value: "disposed", label: "Dispose" },
 ] as const;
 
 type MatterStatusValue = (typeof MATTER_STATUSES)[number]["value"];
@@ -76,6 +76,7 @@ type MatterStatusValue = (typeof MATTER_STATUSES)[number]["value"];
 const MATTER_STATUS_LABELS: Record<string, string> = Object.fromEntries(
   MATTER_STATUSES.map((status) => [status.value, status.label]),
 );
+MATTER_STATUS_LABELS.disposed = "Disposed";
 
 function formatDate(value: string | null | undefined): string {
   // Legal calendar dates (next_hearing_on etc.) are SQL Date values
@@ -139,6 +140,7 @@ export default function MattersPage() {
   const [bulkTagId, setBulkTagId] = useState<string>("none");
   const canCreateMatter = useCapability("matters:create");
   const canEditMatters = useCapability("matters:edit");
+  const canArchiveMatters = useCapability("matters:archive");
   const listParams = useMemo(
     () => ({
       q: appliedFilters.q.trim() || undefined,
@@ -172,8 +174,16 @@ export default function MattersPage() {
     queryFn: listMatterTags,
   });
   const statusMutation = useMutation({
-    mutationFn: (input: { matterId: string; status: MatterStatusValue }) =>
-      updateMatter({ matterId: input.matterId, status: input.status }),
+    mutationFn: (input: { matter: Matter; status: MatterStatusValue }) => {
+      if (!input.matter.updated_at) {
+        throw new Error("Refresh this matter before changing its status.");
+      }
+      return updateMatter({
+        matterId: input.matter.id,
+        status: input.status,
+        expected_updated_at: input.matter.updated_at,
+      });
+    },
     onSuccess: async (matter) => {
       await queryClient.invalidateQueries({ queryKey: ["matters"] });
       toast.success(
@@ -263,12 +273,12 @@ export default function MattersPage() {
         header: "Status",
         cell: (ctx) => {
           const matter = ctx.row.original;
-          if (!canEditMatters) {
+          if (!canEditMatters && !canArchiveMatters) {
             return <StatusBadge status={ctx.getValue<string>()} />;
           }
           const rowPending =
             statusMutation.isPending &&
-            statusMutation.variables?.matterId === matter.id;
+            statusMutation.variables?.matter.id === matter.id;
           return (
             <div
               className="flex items-center gap-2"
@@ -276,27 +286,37 @@ export default function MattersPage() {
               onKeyDown={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >
-              <select
-                aria-label={`Status for ${matter.matter_code}`}
-                className="h-9 min-w-32 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm text-[var(--color-ink)]"
-                value={matter.status}
-                disabled={rowPending}
-                onChange={(event) => {
-                  const nextStatus = event.target.value as MatterStatusValue;
-                  if (nextStatus !== matter.status) {
-                    statusMutation.mutate({
-                      matterId: matter.id,
-                      status: nextStatus,
-                    });
-                  }
-                }}
-              >
-                {MATTER_STATUSES.map((statusOption) => (
-                  <option key={statusOption.value} value={statusOption.value}>
-                    {statusOption.label}
-                  </option>
-                ))}
-              </select>
+              {canEditMatters && matter.status !== "disposed" ? (
+                <select
+                  aria-label={`Status for ${matter.matter_code}`}
+                  className="h-9 min-w-32 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm text-[var(--color-ink)]"
+                  value={matter.status}
+                  disabled={rowPending || !matter.updated_at}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value as MatterStatusValue;
+                    if (nextStatus !== matter.status) {
+                      statusMutation.mutate({ matter, status: nextStatus });
+                    }
+                  }}
+                >
+                  {MATTER_STATUSES.map((statusOption) => (
+                    <option key={statusOption.value} value={statusOption.value}>
+                      {statusOption.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <StatusBadge status={matter.status} />
+              )}
+              {canArchiveMatters ? (
+                <MatterLifecycleDialog
+                  matter={matter}
+                  compact
+                  onChanged={async () => {
+                    await queryClient.invalidateQueries({ queryKey: ["matters"] });
+                  }}
+                />
+              ) : null}
               {rowPending ? (
                 <Loader2 className="h-4 w-4 animate-spin text-[var(--color-mute)]" />
               ) : null}
@@ -305,7 +325,7 @@ export default function MattersPage() {
         },
       },
     ],
-    [canEditMatters, statusMutation],
+    [canArchiveMatters, canEditMatters, queryClient, statusMutation],
   );
 
   const matters = useMemo(

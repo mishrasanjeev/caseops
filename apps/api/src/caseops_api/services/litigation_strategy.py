@@ -97,6 +97,7 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.template_recommender import (
     TemplateRecommendation,
@@ -1139,6 +1140,11 @@ def generate_litigation_strategy(
       8. Audit row.
     """
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="generate litigation strategy",
+    )
 
     # Per-statement timeout to keep retrieval from blowing the
     # request budget on a busy day. Same pattern as

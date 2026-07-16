@@ -346,10 +346,15 @@ def test_matter_audit_respects_team_scoping(client: TestClient) -> None:
         json={"name": "IP", "slug": "ip"},
     ).json()
     matter_id = _create_matter(client, owner_token, code="LW-AUD-TEAM")
+    matter = client.get(f"/api/matters/{matter_id}", headers=owner_headers)
+    assert matter.status_code == 200, matter.text
     assign_team = client.patch(
         f"/api/matters/{matter_id}",
         headers=owner_headers,
-        json={"team_id": litigation_team["id"]},
+        json={
+            "team_id": litigation_team["id"],
+            "expected_updated_at": matter.json()["updated_at"],
+        },
     )
     assert assign_team.status_code == 200, assign_team.text
     _seed_audit_event(

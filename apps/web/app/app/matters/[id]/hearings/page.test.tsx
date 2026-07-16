@@ -1146,4 +1146,38 @@ describe("MatterHearingsPage", () => {
       action: "accept",
     });
   });
+
+  it("removes operational hearing and tracking actions for a disposed matter", async () => {
+    useCapabilityMock.mockReturnValue(true);
+    workspaceData.current = {
+      matter: {
+        id: "m1",
+        matter_code: "X",
+        title: "Disposed matter",
+        status: "disposed",
+        court_name: "Delhi High Court",
+        updated_at: "2026-07-15T10:00:00Z",
+      },
+      hearings: [],
+      attachments: [],
+      invoices: [],
+      time_entries: [],
+      activity: [],
+      tasks: [],
+      notes: [],
+      court_orders: [],
+      cause_list_entries: [],
+    } as unknown;
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(screen.queryByTestId("schedule-hearing-open")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("matter-case-tracking-panel")).not.toBeInTheDocument();
+    const syncButton = await screen.findByTestId("matter-court-sync-run");
+    expect(syncButton).toBeDisabled();
+    expect(syncButton).toHaveAttribute(
+      "title",
+      "Disposed matters cannot run court sync. Reopen to Intake first.",
+    );
+  });
 });

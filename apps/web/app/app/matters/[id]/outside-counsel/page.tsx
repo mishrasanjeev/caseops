@@ -180,7 +180,8 @@ export default function PerMatterOutsideCounselPage() {
 
       <CrossVisibilityCard
         matterId={matterId}
-        canManage={canManage}
+        canManage={canManage && matterData?.matter.status !== "disposed"}
+        expectedUpdatedAt={matterData?.matter.updated_at ?? null}
         currentValue={
           matterData?.matter.oc_cross_visibility_enabled ?? false
         }
@@ -697,14 +698,21 @@ function CrossVisibilityCard({
   matterId,
   canManage,
   currentValue,
+  expectedUpdatedAt,
 }: {
   matterId: string;
   canManage: boolean;
   currentValue: boolean;
+  expectedUpdatedAt: string | null;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: (next: boolean) => setMatterOcCrossVisibility(matterId, next),
+    mutationFn: (next: boolean) => {
+      if (!expectedUpdatedAt) {
+        throw new Error("Refresh this matter before changing visibility.");
+      }
+      return setMatterOcCrossVisibility(matterId, next, expectedUpdatedAt);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["matters", matterId, "workspace"],
@@ -745,7 +753,7 @@ function CrossVisibilityCard({
             <input
               type="checkbox"
               checked={currentValue}
-              disabled={!canManage || mutation.isPending}
+              disabled={!canManage || !expectedUpdatedAt || mutation.isPending}
               onChange={(e) => mutation.mutate(e.target.checked)}
               data-testid="matter-oc-cross-visibility-toggle"
               className="h-4 w-4"

@@ -13,6 +13,7 @@ from caseops_api.db.models import (
     Company,
     DocumentProcessingStatus,
     Matter,
+    MatterActivity,
     MatterAttachment,
     MatterAttachmentChunk,
     MatterFileQAEntry,
@@ -167,6 +168,26 @@ def _set_ai_token_policy(company_id: str, *, firm_quota_tokens: int | None) -> N
             session.add(policy)
         policy.monthly_token_budget = firm_quota_tokens
         session.commit()
+
+
+def _dispose_matter(matter_id: str) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+
+def _matter_activity_ids(matter_id: str) -> list[str]:
+    with get_session_factory()() as session:
+        return list(
+            session.scalars(
+                select(MatterActivity.id)
+                .where(MatterActivity.matter_id == matter_id)
+                .order_by(MatterActivity.id)
+            ).all()
+        )
 
 
 def test_matter_file_qa_answers_from_uploaded_chunks_and_persists_model_run(
@@ -759,6 +780,35 @@ class _CountingMatterFileQAProvider:
                     "status": "answered",
                     "answer": "The uploaded file records non-payment.",
                     "local_language_analysis": "Hindi aid: non-payment appears.",
+                    "confidence": "medium",
+                    "source_ids": ["src_1"],
+                    "limitations": [],
+                }
+            ),
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=18,
+            completion_tokens=16,
+            latency_ms=1,
+        )
+
+
+class _DisposingMatterFileQAProvider:
+    name = "test-disposing-matter-file-qa"
+    model = "test-disposing-matter-file-qa-model"
+
+    def __init__(self, matter_id: str) -> None:
+        self.matter_id = matter_id
+        self.calls = 0
+
+    def generate(self, messages, *, temperature=0.0, max_tokens=1800):  # noqa: ANN001
+        self.calls += 1
+        _dispose_matter(self.matter_id)
+        return LLMCompletion(
+            text=json.dumps(
+                {
+                    "status": "answered",
+                    "answer": "The uploaded file records non-payment.",
                     "confidence": "medium",
                     "source_ids": ["src_1"],
                     "limitations": [],
@@ -1833,3 +1883,218 @@ def test_matter_file_qa_does_not_answer_from_public_authorities_or_model_memory(
     rendered = json.dumps(body).lower()
     assert "imprisonment" not in rendered
     assert "public authorit" in rendered or "model memory" in rendered
+
+
+def test_disposed_matter_file_qa_rejects_before_provider_without_side_effects(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    provider = _CountingMatterFileQAProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: provider,
+    )
+    boot = _bootstrap(client, f"mfq-disposed-fast-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "MFQ-DISPOSED-FAST")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint alleges non-payment under Invoice A-12."],
+    )
+    _dispose_matter(matter_id)
+    activity_ids_before = _matter_activity_ids(matter_id)
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={"question": "What payment default is alleged?", "limit": 3},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.text.lower()
+    assert provider.calls == 0
+    with get_session_factory()() as session:
+        assert not session.scalars(
+            select(MatterFileQAEntry).where(MatterFileQAEntry.matter_id == matter_id)
+        ).all()
+        assert not session.scalars(
+            select(ModelRun).where(
+                ModelRun.matter_id == matter_id,
+                ModelRun.purpose == "matter_file_qa",
+            )
+        ).all()
+        assert not session.scalars(
+            select(MatterNote).where(MatterNote.matter_id == matter_id)
+        ).all()
+        activity_ids_after = list(
+            session.scalars(
+                select(MatterActivity.id)
+                .where(MatterActivity.matter_id == matter_id)
+                .order_by(MatterActivity.id)
+            ).all()
+        )
+        assert activity_ids_after == activity_ids_before
+        assert not session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.matter_id == matter_id,
+                AuditEvent.action.in_(
+                    ["matter_file_qa.asked", "matter_file_qa.exported"]
+                ),
+            )
+        ).all()
+
+
+def test_matter_file_qa_rechecks_disposal_after_provider_before_writes(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = _bootstrap(client, f"mfq-disposed-race-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "MFQ-DISPOSED-RACE")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint alleges non-payment under Invoice A-12."],
+    )
+    activity_ids_before = _matter_activity_ids(matter_id)
+    provider = _DisposingMatterFileQAProvider(matter_id)
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: provider,
+    )
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={"question": "What payment default is alleged?", "limit": 3},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "disposed" in response.text.lower()
+    assert provider.calls == 1
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert not session.scalars(
+            select(MatterFileQAEntry).where(MatterFileQAEntry.matter_id == matter_id)
+        ).all()
+        assert not session.scalars(
+            select(ModelRun).where(
+                ModelRun.matter_id == matter_id,
+                ModelRun.purpose == "matter_file_qa",
+            )
+        ).all()
+        assert not session.scalars(
+            select(MatterNote).where(MatterNote.matter_id == matter_id)
+        ).all()
+        activity_ids_after = list(
+            session.scalars(
+                select(MatterActivity.id)
+                .where(MatterActivity.matter_id == matter_id)
+                .order_by(MatterActivity.id)
+            ).all()
+        )
+        assert activity_ids_after == activity_ids_before
+        assert not session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.matter_id == matter_id,
+                AuditEvent.action.in_(
+                    ["matter_file_qa.asked", "matter_file_qa.exported"]
+                ),
+            )
+        ).all()
+
+
+def test_matter_file_qa_export_rechecks_disposal_and_history_stays_readable(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = _bootstrap(client, f"mfq-export-race-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "MFQ-EXPORT-RACE")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint alleges non-payment under Invoice A-12."],
+    )
+    answer = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={"question": "What payment default is alleged?", "limit": 3},
+    )
+    assert answer.status_code == 200, answer.text
+    entry_id = answer.json()["history_entry_id"]
+    assert entry_id
+    activity_ids_before = _matter_activity_ids(matter_id)
+
+    from caseops_api.services import matter_file_qa as matter_file_qa_service
+
+    original_get_matter = matter_file_qa_service._get_matter_model
+    disposed_before_lock = False
+
+    def dispose_before_locked_refresh(  # noqa: ANN001
+        session,
+        *,
+        context,
+        matter_id,
+        lock_for_update=False,
+    ):
+        nonlocal disposed_before_lock
+        if lock_for_update and not disposed_before_lock:
+            _dispose_matter(matter_id)
+            disposed_before_lock = True
+        return original_get_matter(
+            session,
+            context=context,
+            matter_id=matter_id,
+            lock_for_update=lock_for_update,
+        )
+
+    monkeypatch.setattr(
+        matter_file_qa_service,
+        "_get_matter_model",
+        dispose_before_locked_refresh,
+    )
+    export = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa/{entry_id}/export-note",
+        headers=_auth(token),
+    )
+
+    assert export.status_code == 409, export.text
+    assert "disposed" in export.text.lower()
+    assert disposed_before_lock is True
+    history = client.get(
+        f"/api/ai/matters/{matter_id}/file-qa/history",
+        headers=_auth(token),
+    )
+    assert history.status_code == 200, history.text
+    assert [row["id"] for row in history.json()["entries"]] == [entry_id]
+
+    with get_session_factory()() as session:
+        entry = session.get(MatterFileQAEntry, entry_id)
+        assert entry is not None
+        assert entry.exported_note_id is None
+        assert entry.exported_at is None
+        assert not session.scalars(
+            select(MatterNote).where(MatterNote.matter_id == matter_id)
+        ).all()
+        activity_ids_after = list(
+            session.scalars(
+                select(MatterActivity.id)
+                .where(MatterActivity.matter_id == matter_id)
+                .order_by(MatterActivity.id)
+            ).all()
+        )
+        assert activity_ids_after == activity_ids_before
+        assert not session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.matter_id == matter_id,
+                AuditEvent.action == "matter_file_qa.exported",
+            )
+        ).all()

@@ -10,7 +10,7 @@ Returns five streams keyed by urgency:
 1. ``hearings_next_7d`` — `MatterHearing` rows with `hearing_on`
    between today and today + horizon_days, status SCHEDULED.
 2. ``tasks_due_or_overdue`` — `MatterTask` rows with `due_on` ≤ today
-   + horizon_days, status NOT in (completed). Owner-scoped: returns
+   + horizon_days, status NOT in (completed, cancelled). Owner-scoped: returns
    tasks owned by the current user OR unassigned.
 3. ``drafts_in_review`` — `Draft` rows with status IN_REVIEW across
    the tenant. Reviewer queue.
@@ -248,6 +248,8 @@ def _hearings(
         .join(Matter, Matter.id == MatterHearing.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
             MatterHearing.status == MatterHearingStatus.SCHEDULED,
             MatterHearing.hearing_on >= today,
@@ -285,8 +287,12 @@ def _tasks(
         .join(Matter, Matter.id == MatterTask.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
-            MatterTask.status != MatterTaskStatus.COMPLETED,
+            MatterTask.status.notin_(
+                (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
+            ),
             or_(
                 # Owner-scoped: tasks I own OR unassigned tasks
                 # (so a fresh tenant doesn't show 0 tasks).
@@ -333,6 +339,8 @@ def _drafts_in_review(
         .join(Matter, Matter.id == Draft.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
             Draft.status == DraftStatus.IN_REVIEW,
         )
@@ -366,6 +374,8 @@ def _overdue_invoices(
         .join(Matter, Matter.id == MatterInvoice.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
             MatterInvoice.due_on.is_not(None),
             MatterInvoice.due_on < today,
@@ -407,7 +417,10 @@ def _deadlines(
         .join(Matter, Matter.id == MatterDeadline.matter_id)
         .where(
             Matter.company_id == context.company.id,
+            Matter.is_active.is_(True),
+            Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
+            MatterDeadline.status.notin_(("done", "cancelled")),
             MatterDeadline.due_on >= today - timedelta(days=14),
             MatterDeadline.due_on <= horizon_end,
         )

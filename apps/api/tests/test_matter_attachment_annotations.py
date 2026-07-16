@@ -6,7 +6,7 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import Matter, MatterAttachment
+from caseops_api.db.models import Matter, MatterAttachment, MatterAttachmentAnnotation
 from caseops_api.db.session import get_session_factory
 
 
@@ -151,6 +151,61 @@ def test_archive_annotation_removes_from_list(client: TestClient) -> None:
         headers=headers,
     )
     assert listed.json() == {"annotations": []}
+
+
+def test_disposed_matter_allows_annotation_reads_but_rejects_writes(
+    client: TestClient,
+) -> None:
+    _, headers = _bootstrap(client)
+    matter_id = _create_matter(client, headers, "Q10-DISPOSED")
+    attachment_id = _seed_attachment(matter_id)
+    created = client.post(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/annotations",
+        json={"kind": "note", "page": 1, "body": "Historical annotation"},
+        headers=headers,
+    )
+    assert created.status_code == 200, created.text
+    annotation_id = created.json()["id"]
+
+    factory = get_session_factory()
+    with factory() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+    create_after_disposal = client.post(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/annotations",
+        json={"kind": "flag", "page": 2, "body": "Must not be created"},
+        headers=headers,
+    )
+    archive_after_disposal = client.delete(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/annotations/"
+        f"{annotation_id}",
+        headers=headers,
+    )
+    assert create_after_disposal.status_code == 409, create_after_disposal.text
+    assert archive_after_disposal.status_code == 409, archive_after_disposal.text
+    assert "disposed" in create_after_disposal.text.lower()
+    assert "disposed" in archive_after_disposal.text.lower()
+
+    listed = client.get(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/annotations",
+        headers=headers,
+    )
+    assert listed.status_code == 200, listed.text
+    assert [row["id"] for row in listed.json()["annotations"]] == [annotation_id]
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(MatterAttachmentAnnotation).where(
+                    MatterAttachmentAnnotation.matter_id == matter_id
+                )
+            )
+        )
+        assert len(rows) == 1
+        assert rows[0].is_archived is False
 
 
 def test_cross_tenant_attachment_is_404(client: TestClient) -> None:

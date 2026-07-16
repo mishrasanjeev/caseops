@@ -13,6 +13,7 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     InAppNotification,
+    Matter,
     MatterCourtOrder,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
@@ -971,6 +972,85 @@ def test_notification_rule_patch_distinguishes_null_scope_from_omitted(
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["scope_type"] == "company"
     assert cleared.json()["scope_id"] is None
+
+
+def test_matter_notification_rule_writes_reject_disposed_scope_and_keep_history(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, "LW-S10-RULE-DISPOSED")
+    matter_rule = client.post(
+        "/api/notification-rules",
+        headers=_auth(token),
+        json={
+            "scope_type": "matter",
+            "scope_id": matter["id"],
+            "event_type": "new_order_uploaded",
+            "channels": ["in_app"],
+            "enabled": True,
+        },
+    )
+    assert matter_rule.status_code == 200, matter_rule.text
+    company_rule = client.post(
+        "/api/notification-rules",
+        headers=_auth(token),
+        json={
+            "scope_type": "company",
+            "event_type": "new_order_uploaded",
+            "channels": ["in_app"],
+            "enabled": True,
+        },
+    )
+    assert company_rule.status_code == 200, company_rule.text
+
+    with get_session_factory()() as session:
+        current = session.get(Matter, matter["id"])
+        assert current is not None
+        current.status = "disposed"
+        current.is_active = False
+        session.commit()
+
+    create_after_disposal = client.post(
+        "/api/notification-rules",
+        headers=_auth(token),
+        json={
+            "scope_type": "matter",
+            "scope_id": matter["id"],
+            "event_type": "new_order_uploaded",
+            "channels": ["in_app"],
+            "enabled": False,
+        },
+    )
+    assert create_after_disposal.status_code == 409, create_after_disposal.text
+
+    update_existing = client.patch(
+        f"/api/notification-rules/{matter_rule.json()['id']}",
+        headers=_auth(token),
+        json={"enabled": False},
+    )
+    assert update_existing.status_code == 409, update_existing.text
+
+    detach_existing = client.patch(
+        f"/api/notification-rules/{matter_rule.json()['id']}",
+        headers=_auth(token),
+        json={"scope_type": "company", "scope_id": None},
+    )
+    assert detach_existing.status_code == 409, detach_existing.text
+
+    attach_company_rule = client.patch(
+        f"/api/notification-rules/{company_rule.json()['id']}",
+        headers=_auth(token),
+        json={"scope_type": "matter", "scope_id": matter["id"]},
+    )
+    assert attach_company_rule.status_code == 409, attach_company_rule.text
+
+    listed = client.get("/api/notification-rules", headers=_auth(token))
+    assert listed.status_code == 200, listed.text
+    records = {row["id"]: row for row in listed.json()["rules"]}
+    assert records[matter_rule.json()["id"]]["scope_type"] == "matter"
+    assert records[matter_rule.json()["id"]]["enabled"] is True
+    assert records[company_rule.json()["id"]]["scope_type"] == "company"
 
 
 def test_new_order_upload_creates_in_app_notification_when_rule_enabled(

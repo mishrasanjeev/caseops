@@ -74,6 +74,7 @@ from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
@@ -1107,6 +1108,11 @@ def review_message_import(
             context=context,
             matter_id=payload.matter_id or row.matter_id,
         )
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="link mailbox work",
+        )
         communication = _ensure_metadata_communication(
             session,
             context=context,
@@ -1169,6 +1175,11 @@ def review_message_import(
             row.matter_id = matter.id
         else:
             matter = _matter_for_review(session, context=context, matter_id=row.matter_id)
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="request mailbox content import",
+        )
         row.status = MailboxImportStatus.CONTENT_IMPORT_REQUESTED
         session.add(row)
         record_from_context(
@@ -1374,6 +1385,12 @@ def review_attachment_candidate(
             candidate=_attachment_record(candidate),
             imported_attachment_id=candidate.imported_attachment_id,
         )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="import a Gmail attachment",
+        lock_for_write=False,
+    )
     connection = candidate.message_import.connection
     provider_attachment_id = _decrypt_secret_safe(candidate.encrypted_provider_attachment_ref)
     if not provider_attachment_id:
@@ -1385,6 +1402,36 @@ def review_attachment_candidate(
             message_id=candidate.message_import.provider_message_id,
             attachment_id=provider_attachment_id,
         )
+    except Exception as exc:
+        candidate.last_error_redacted = _safe_error(exc)
+        session.add(candidate)
+        record_from_context(
+            session,
+            context,
+            action="mailbox.gmail_attachment.import_failed",
+            target_type="mailbox_attachment_candidate",
+            target_id=candidate.id,
+            matter_id=matter.id,
+            result="failed",
+            metadata={
+                "provider": MailboxProvider.GMAIL,
+                "error": candidate.last_error_redacted,
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Gmail attachment import failed.",
+        ) from exc
+
+    # A provider fetch can outlive a concurrent lifecycle transition. Reload
+    # and lock before any attachment bytes, jobs, or audit rows are persisted.
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="import a Gmail attachment",
+    )
+    try:
         from caseops_api.services.communications import _persist_inbound_attachment
 
         attachment, _job_id, _storage_key = _persist_inbound_attachment(

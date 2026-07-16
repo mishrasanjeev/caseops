@@ -7,6 +7,7 @@ const {
   bulkAssignMatterTagMock,
   listMatterTagsMock,
   listMattersMock,
+  transitionMatterStatusMock,
   updateMatterMock,
   useCapabilityMock,
   useRouterMock,
@@ -14,6 +15,7 @@ const {
   bulkAssignMatterTagMock: vi.fn(),
   listMatterTagsMock: vi.fn(),
   listMattersMock: vi.fn(),
+  transitionMatterStatusMock: vi.fn(),
   updateMatterMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   useRouterMock: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   bulkAssignMatterTag: bulkAssignMatterTagMock,
   listMatterTags: listMatterTagsMock,
   listMatters: listMattersMock,
+  transitionMatterStatus: transitionMatterStatusMock,
   updateMatter: updateMatterMock,
 }));
 
@@ -53,6 +56,7 @@ describe("MattersPage", () => {
     listMatterTagsMock.mockReset();
     listMattersMock.mockReset();
     updateMatterMock.mockReset();
+    transitionMatterStatusMock.mockReset();
     useCapabilityMock.mockReset();
     listMatterTagsMock.mockResolvedValue({
       tags: [{ id: "tag-1", company_id: "c-1", name: "Urgent", slug: "urgent" }],
@@ -109,7 +113,11 @@ describe("MattersPage", () => {
     expect(screen.getByText(/2,50,000/)).toBeInTheDocument();
   });
 
-  it("labels the disposed status action as Dispose", async () => {
+  it("separates disposal from ordinary status editing", async () => {
+    useCapabilityMock.mockImplementation(
+      (capability: string) =>
+        capability === "matters:edit" || capability === "matters:archive",
+    );
     listMattersMock.mockResolvedValue({
       matters: [
         {
@@ -130,9 +138,8 @@ describe("MattersPage", () => {
     render(withClient(<MattersPage />));
 
     const statusSelect = await screen.findByLabelText("Status for ACME-1");
-    expect(within(statusSelect).getByRole("option", { name: "Dispose" })).toHaveValue(
-      "disposed",
-    );
+    expect(within(statusSelect).queryByRole("option", { name: "Dispose" })).toBeNull();
+    expect(screen.getByTestId("matter-dispose-trigger")).toBeInTheDocument();
   });
 
   it("surfaces the QueryErrorState when listMatters throws", async () => {
@@ -237,12 +244,13 @@ describe("MattersPage", () => {
     render(withClient(<MattersPage />));
 
     const statusSelect = await screen.findByLabelText("Status for ACME-1");
-    fireEvent.change(statusSelect, { target: { value: "disposed" } });
+    fireEvent.change(statusSelect, { target: { value: "on_hold" } });
 
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m1",
-      status: "disposed",
+      status: "on_hold",
+      expected_updated_at: "2026-04-15T00:00:00Z",
     });
     expect(push).not.toHaveBeenCalled();
   });

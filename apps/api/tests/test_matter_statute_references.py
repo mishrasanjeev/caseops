@@ -184,6 +184,62 @@ def test_delete_matter_statute_reference_removes_row_returns_204(
     assert delete_again.status_code == 404
 
 
+def test_statute_reference_writes_reject_disposed_matter_but_history_remains(
+    client: TestClient,
+) -> None:
+    from caseops_api.db.session import get_session_factory
+
+    token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
+    factory = get_session_factory()
+    with factory() as session:
+        section_ids = list(
+            session.scalars(
+                select(StatuteSection.id)
+                .where(StatuteSection.statute_id == "ipc-1860")
+                .order_by(StatuteSection.section_number)
+                .limit(2)
+            )
+        )
+    assert len(section_ids) == 2
+
+    created = client.post(
+        f"/api/matters/{matter_id}/statute-references",
+        json={"section_id": section_ids[0], "relevance": "cited"},
+        headers=auth_headers(token),
+    )
+    assert created.status_code == 201, created.text
+
+    with factory() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+    add_after_disposal = client.post(
+        f"/api/matters/{matter_id}/statute-references",
+        json={"section_id": section_ids[1], "relevance": "context"},
+        headers=auth_headers(token),
+    )
+    assert add_after_disposal.status_code == 409, add_after_disposal.text
+    assert "disposed" in add_after_disposal.json()["detail"].lower()
+
+    delete_after_disposal = client.delete(
+        f"/api/matters/{matter_id}/statute-references/{created.json()['id']}",
+        headers=auth_headers(token),
+    )
+    assert delete_after_disposal.status_code == 409, delete_after_disposal.text
+
+    historical = client.get(
+        f"/api/matters/{matter_id}/statute-references",
+        headers=auth_headers(token),
+    )
+    assert historical.status_code == 200, historical.text
+    assert [row["id"] for row in historical.json()["references"]] == [
+        created.json()["id"]
+    ]
+
+
 def test_ft_s4_4_drafting_prompt_includes_statutory_text_block(
     client: TestClient,
 ) -> None:

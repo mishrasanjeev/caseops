@@ -1,24 +1,37 @@
 # Notice Module Implementation And End-User Usage Guide
 
-Date: 2026-07-07
-Status: Implemented and deployed
-Primary app location: `/app/matters/{matter_id}/notices`
+Date: 2026-07-07; updated 2026-07-15
+Status: Matter workspace deployed; global register implemented locally and pending deployed verification
+Primary app locations: `/app/notices` and `/app/matters/{matter_id}/notices`
 Related production verification: `.github/workflows/prod-verify.yml`
 
 ## 1. Purpose
 
-The Notice module gives each matter a first-class workflow for notices received
-from external parties and notices sent by the firm or company. It captures the
-notice document and the operational metadata needed to track response ownership,
-reply deadlines, reply status, amounts, departments, counsel, and supporting
-documents.
+The Notice module has two complementary surfaces. The company-wide Notice
+Management register captures received or sent notices independently of a case,
+supports optional ownership and zero, one, or multiple matter links, and does
+not require a file. The matter workspace retains the deeper document workflow
+for replies, supporting documents, deadline synchronization, and processing.
 
-The module is matter-scoped. Users work inside a specific matter and see only
-the notices attached to that matter.
+The global register also presents existing matter notice attachments as
+read-only legacy rows, subject to the caller's matter-access rules. It therefore
+adds a standalone workflow without duplicating or breaking the established
+matter document records.
 
 ## 2. Where To Find It
 
-Open any matter and select the `Notices` tab in the matter cockpit.
+For the company-wide register, select `Notices` in the main navigation. Use it
+to receive, send, search, filter, assign, and track notices before a matter is
+known, or when one notice spans multiple matters.
+
+Global URL:
+
+```text
+/app/notices
+```
+
+For the matter document workflow, open a matter and select the `Notices` tab in
+the matter cockpit.
 
 Typical path:
 
@@ -33,8 +46,11 @@ Direct URL pattern:
 /app/matters/{matter_id}/notices
 ```
 
-The Notices page also links back to the matter `Documents` page. Notice files
-are still normal matter documents, so they are visible from both places.
+The matter Notices page shows both matter attachment notices and reverse
+references to standalone global notices linked to that matter. A standalone
+file remains stored once on the company notice; linking it never creates a
+second attachment or file copy. Matter attachment files remain available in
+the matter `Documents` page.
 
 ## 3. Permissions
 
@@ -42,14 +58,37 @@ The module uses the existing document permissions.
 
 | Capability | What it allows in the Notice module |
 |---|---|
-| `documents:upload` | Upload received notices, sent notices, reply documents, and supporting documents. |
-| `documents:manage` | Open the management surface for the document metadata through the Documents page. |
-| Matter access | View notices only for matters the user can access. |
+| `documents:upload` | Create standalone notices, attach an initial optional file, and upload matter notice/reply/supporting documents. |
+| `documents:manage` | Update all standalone metadata, owner, and links; replace an existing standalone file; and manage matter document metadata. |
+| Matter access | View linked notices only through matters the user can access; hidden matter links are never exposed. |
 
-If a user can view a matter but does not have `documents:upload`, the Notices
-page remains visible but upload controls are hidden.
+Users without write capabilities receive a read-only global register. A notice
+with matter links is returned only when the caller can access every linked
+matter. A mixed visible/restricted link set hides the whole standalone record,
+including its file download, rather than applying the least-restrictive link.
+Mutation likewise requires access to every current and requested link.
 
 ## 4. Key Concepts
+
+### 4.0 Standalone Company Notice
+
+A standalone company notice is stored independently from matter attachments.
+It supports received/sent direction, status, owner, dates, amounts, authority,
+summary, optional file, and up to multiple matter links. Matter links may be
+empty and can be added later. File creation is a recoverable two-step flow: if
+the optional upload fails, the notice remains available with an `Attach
+document` action instead of being silently lost.
+
+Existing matter notice attachments appear in the global register as
+`legacy_attachment` records. They are intentionally read-only there and remain
+managed from the matter workspace.
+
+Standalone edits include an `expected_updated_at` version. If another browser
+or integration changed the notice after the form was opened, the API rejects
+the stale save instead of silently overwriting the newer record. Reload the
+notice and re-apply the intended change. Initial attachment and replacement
+uploads carry the same version token, so a stale file action cannot overwrite a
+newer file or metadata version.
 
 ### 4.1 Primary Notice
 
@@ -110,9 +149,62 @@ Today`, and `Reply Sent`.
 
 ## 5. End-User Guide
 
-### 5.1 Notice Dashboard
+### 5.0 Create Or Manage A Company-Wide Notice
 
-At the top of the Notices page, users see four counters:
+Use the main-navigation `Notices` page when the notice is not yet tied to a
+matter or spans several matters.
+
+1. Select `New notice`.
+2. Choose `Received` or `Sent` and complete the structured metadata. The form
+   supports type, mode, authority/source, department, owner, dates, reply
+   state, summary, response, remarks, internal SPOC/remarks, counsel, currency,
+   and the applicable amount fields.
+3. Search the complete accessible matter directory and select zero, one, or
+   several matters. The picker follows pagination; it is not limited to the
+   first 100 matters.
+4. Optionally select a primary file and save.
+
+To correct metadata or matter relationships later, select `Manage details &
+links` on the global row, add or remove matter checkboxes, and select `Save
+changes`. A linked global notice then appears in each selected matter's
+`Notices` workspace as a `Global notice` reference. Manage the source record in
+the global register.
+
+Owner assignment follows the Notice permission model. `documents:manage`
+loads the active tenant member choices from the Notice-scoped owner endpoint;
+it does not probe the employee-administration API or require
+`company:manage_users`. An upload-only user can leave a new notice unassigned or
+self-assign, but cannot assign another member. For users without
+`documents:manage`, the owner filter explicitly identifies that its choices are
+limited to the current user and owners present in loaded results; selecting
+`All owners` still applies no owner restriction on the server.
+
+The register is cursor paginated. Select `Load more notices` to append the next
+server-filtered page; the API never returns an unbounded tenant-wide result in
+one response. Status is a free-form exact-value filter with suggestions, so
+workspace-specific statuses are not restricted to a hard-coded dropdown.
+
+### 5.1 Notice Dashboards
+
+The global register uses only server-authoritative counters:
+
+| Counter | Meaning |
+|---|---|
+| Received | Total received notices visible to the user. |
+| Sent | Total sent notices visible to the user. |
+| Matching results | Exact server total for the active direction and filters. |
+| Rows loaded | Rows appended from the current cursor chain. |
+
+Changing direction, query, status, matter, owner, or due-date filters starts a
+new cursor chain at page one. Filtering is performed in SQL, not against only
+the rows already loaded in the browser.
+
+The reverse-reference section on a matter walks every opaque notice cursor for
+that `matter_id`, deduplicates records by ID, and stops safely if an API ever
+repeats a cursor. It therefore does not omit linked standalone notices after
+the first 100 records.
+
+At the top of the matter Notices page, users see four workflow counters:
 
 | Counter | Meaning |
 |---|---|
@@ -269,8 +361,14 @@ action.
 
 ### 5.8 Manage Metadata
 
-Users with `documents:manage` see a `Manage` action that links to the Documents
-page. Use the Documents page for broader document metadata management.
+For a standalone global record, users with `documents:manage` see `Manage
+details & links`. This edits the complete structured record, including the
+matter-link set. Status and owner also have fast inline controls, and every
+PATCH carries the displayed record version.
+
+For a legacy matter attachment, `Manage` continues to link to the matter
+Documents page. Global legacy rows are read-only because the matter attachment
+remains their source of truth.
 
 The Notices page is optimized for notice workflow capture and monitoring. The
 Documents page remains the general document-management surface.
@@ -324,15 +422,25 @@ the full list.
 
 ### 8.1 Design Decision
 
-The Notice module uses `matter_attachments` as the source of truth. A notice is
-not stored in a separate notice table. This keeps Notices, Documents, workspace
-APIs, storage governance, document processing, downloads, and audit activity on
-one shared document model.
+The module intentionally has two source models:
+
+- `company_notices` is the source of truth for standalone/global records. A
+  link table provides zero-to-many matter relationships, and the optional
+  primary file is stored once on the company notice.
+- `matter_attachments` remains the source of truth for the established
+  matter-specific primary/reply/supporting-document workflow.
+
+The unified global API presents both models but marks matter attachments as
+read-only legacy rows. The matter workspace queries linked standalone notices
+by `matter_id` and renders a reverse reference alongside its native attachment
+workflow; it does not copy the global record or blob.
 
 ### 8.2 Main Code Locations
 
 | Area | File |
 |---|---|
+| Global notice UI | `apps/web/app/app/notices/page.tsx` |
+| Global web API wrapper | `apps/web/lib/api/notices.ts` |
 | Notice UI | `apps/web/app/app/matters/[id]/notices/page.tsx` |
 | Matter cockpit navigation | `apps/web/components/app/MatterCockpitNav.tsx` |
 | Web API endpoint wrapper | `apps/web/lib/api/endpoints.ts` |
@@ -342,6 +450,8 @@ one shared document model.
 | API service logic | `apps/api/src/caseops_api/services/matters.py` |
 | DB model | `apps/api/src/caseops_api/db/models.py` |
 | API schemas | `apps/api/src/caseops_api/schemas/matters.py` |
+| Global API/service/schema | `apps/api/src/caseops_api/api/routes/notices.py`, `apps/api/src/caseops_api/services/notices.py`, `apps/api/src/caseops_api/schemas/notices.py` |
+| Global notice migration | `apps/api/alembic/versions/20260715_0001_company_notices.py` |
 | Initial notice metadata migration | `apps/api/alembic/versions/20260703_0001_notice_metadata_and_bulk_download.py` |
 | Expanded notice workflow migration | `apps/api/alembic/versions/20260706_0001_notice_workflows.py` |
 | Local E2E | `tests/e2e/notice-module.spec.ts` |
@@ -351,7 +461,9 @@ one shared document model.
 
 ### 8.3 Data Model
 
-Notice fields live on `matter_attachments`.
+Matter-workflow notice fields live on `matter_attachments`. Standalone fields
+live on `company_notices`, with matter IDs represented by
+`company_notice_matter_links`.
 
 Core fields:
 
@@ -502,7 +614,27 @@ Supporting documents do not mark the reply sent.
 
 ### 8.7 Frontend Behavior
 
-The React page:
+The global React page:
+
+- loads the unified register and clearly marks legacy rows read-only
+- uses one complete form for create and edit so the supported metadata does not
+  diverge between workflows
+- walks all matter-list cursors and provides local search in the link picker
+- consumes the notice register through opaque cursor pages and exposes a
+  `Load more notices` control
+- accepts any exact free-form status in the server filter while retaining
+  loaded/common values as suggestions
+- supports link add/remove after creation
+- includes `expected_updated_at` on quick and full-form PATCH requests
+- keeps JSON creation and optional file upload as retryable separate steps
+- downloads through the shared authenticated binary transport, including the
+  same single refresh and one-retry behavior as JSON API requests
+- uses the Notice-scoped owner directory for `documents:manage`, without
+  requiring employee-admin permission; upload-only creation is limited to
+  unassigned or self-assigned ownership, and its partial owner-filter domain is
+  disclosed in the UI
+
+The matter React page:
 
 - loads matter workspace data through `useMatterWorkspace`
 - filters attachments to `document_type === "notice"`
@@ -514,6 +646,8 @@ The React page:
 - marks replies sent through `updateMatterAttachmentMetadata`
 - hides upload controls without `documents:upload`
 - hides the Manage link without `documents:manage`
+- walks all global notice cursors for the current `matter_id`, guards repeated
+  cursors, and shows source-record references without duplicating storage
 
 The page resets the upload draft after successful primary upload and invalidates
 the matter workspace query so the new notice state is reloaded.
@@ -556,6 +690,11 @@ Automated coverage includes:
 | Local E2E | `tests/e2e/notice-module.spec.ts` | Full browser workflow for received notice, reply document, sent notice, filters, Documents visibility. |
 | Production E2E | `tests/e2e/notice-module-prod.spec.ts` | Same critical workflow on live production using QA Bot workspace. |
 | Production verification workflow | `.github/workflows/prod-verify.yml` | Runs existing production suite and notice module production suite. |
+| Global register API | `apps/api/tests/test_notices.py` | Unlinked and multi-matter records, filters, assignment, legacy compatibility, file security/quota, roles, tenant and restricted-matter isolation. |
+| Global register components | `apps/web/app/app/notices/page.test.tsx`, `apps/web/lib/api/notices.test.ts`, and `apps/web/lib/api/client.test.ts` | Complete metadata create/edit, CAS, paginated matter loading, link correction, permissions, arbitrary exact-status filters, honest owner scope, retryable upload/download authentication, legacy rows, and API contract. |
+| Matter reverse-reference component | `apps/web/app/app/matters/[id]/notices/page.test.tsx` | Linked standalone rendering across more than 100 records, repeated-cursor protection, and file action without creating a matter attachment row. |
+| July 15 local E2E | `tests/e2e/ram-2026-07-15-bugs.spec.ts` | Main-nav standalone creation, assignment, multi-matter sent notice, actual file byte download, post-create link removal, matter reverse reference, search, and filters. |
+| July 15 deployed E2E | `tests/e2e/ram-2026-07-15-prod.spec.ts` | No-mock deployed verification after release. |
 
 Latest verified production run:
 
@@ -565,12 +704,15 @@ https://github.com/mishrasanjeev/caseops/actions/runs/28834193540
 
 ### 8.11 Known Boundaries
 
-- The module is matter-scoped. It does not currently provide a global notice
-  dashboard across all matters.
+- The global register complements rather than replaces the matter-specific
+  reply/supporting-document workflow. Legacy matter rows remain read-only in
+  the global surface.
+- A standalone notice has one optional primary file. Use the matter workspace
+  when reply documents, annexures, or document processing are required.
 - Reply reminders are stored and displayed as offsets, but notification delivery
   depends on the broader deadline/reminder infrastructure.
-- The Notices page is optimized for capture and monitoring; advanced metadata
-  management remains on the Documents page.
+- Standalone metadata and matter links are managed in the global Notice form;
+  legacy attachment metadata remains managed in the matter Documents page.
 - Sent notices do not currently create reply deadlines.
 - Status values are free text; teams should agree on internal conventions.
 
@@ -578,6 +720,10 @@ https://github.com/mishrasanjeev/caseops/actions/runs/28834193540
 
 | Need | Use |
 |---|---|
+| Log a notice before a matter exists | Main navigation `Notices` -> `New notice`; leave matter links empty |
+| Link one notice to several matters | Main navigation `Notices` -> select each visible matter during creation |
+| Correct matter links later | Global notice row -> `Manage details & links` |
+| Search, assign, or track notices company-wide | Main navigation `Notices` |
 | Log a notice received from an authority or party | `Notice Received` tab |
 | Track a reply deadline | `Reply required` plus `Reply due date` |
 | Upload the actual reply | `Reply document` on the received notice row |
@@ -587,4 +733,3 @@ https://github.com/mishrasanjeev/caseops/actions/runs/28834193540
 | Open the file | `View` |
 | Manage broader document metadata | `Documents` or `Manage` |
 | Find overdue responses | Dashboard `Overdue replies` or reply status filter |
-

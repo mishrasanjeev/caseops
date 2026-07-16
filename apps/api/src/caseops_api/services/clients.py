@@ -36,6 +36,7 @@ from caseops_api.schemas.clients import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
 _ALLOWED_TYPES = {t.value for t in ClientType}
@@ -459,6 +460,11 @@ def assign_client_to_matter(
             MatterClientAssignment.client_id == client.id,
         )
     )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="assign a client to a matter",
+    )
     if existing is not None:
         # Idempotent: update role / is_primary if the caller re-posts.
         existing.role = payload.role
@@ -518,6 +524,11 @@ def remove_client_from_matter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No such client assignment on this matter.",
         )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="remove a client from a matter",
+    )
     session.delete(assignment)
     record_from_context(
         session,
@@ -893,6 +904,11 @@ def update_matter_client_verification(
     )
     assignment, client = _load_matter_client_assignment(
         session, matter=matter, client_id=client_id,
+    )
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="update matter client verification",
     )
     documents = payload.documents
     if documents is not None:
