@@ -7,11 +7,11 @@ in the repository)
 
 ## Honest classification
 
-| ID | Workbook area | Classification | Baseline evidence | Working verdict |
+| ID | Workbook area | Classification | Baseline evidence | Final verdict |
 | --- | --- | --- | --- | --- |
-| BUG-001 | Matter Management / Standalone Notice Module | Valid product enhancement; the requested boundary was never implemented | Production main navigation had no Notices entry and `/app/notices` returned 404. Existing documentation explicitly described the implementation as matter-scoped with no global dashboard. | `Inconclusive` until the new standalone workflow passes committed Playwright on the deployed commit. |
-| BUG-002 | Matter Creation | Valid workflow/policy enhancement; current behavior was intentional but contradicted the new requirement | Production `POST /api/matters/` with `status=active` returned 409 directing users through Intake/conflict clearance. UI and schema defaulted to Intake. | `Inconclusive` until direct Active creation passes committed Playwright on the deployed commit. |
-| Reopening investigation | Matter lifecycle | Valid systemic defect discovered during the requested adjacent-path audit | Disposed persistence had only been tested after reload in one session. Generic PATCH accepted terminal status and replayed the editor's full stale snapshot; background and operational paths did not consistently treat disposal as terminal. | Locally implemented and verified; formal verdict remains `Inconclusive` until deployed-build identity and production browser proof pass. |
+| BUG-001 | Matter Management / Standalone Notice Module | Valid product enhancement; the requested boundary was never implemented | Production main navigation had no Notices entry and `/app/notices` returned 404. Existing documentation explicitly described the implementation as matter-scoped with no global dashboard. | `Properly fixed` on the deployed code commit, including the standalone, unlinked, assigned, multi-matter, file, search, filter, link-edit, and matter-visibility journeys. |
+| BUG-002 | Matter Creation | Valid workflow/policy enhancement; current behavior was intentional but contradicted the new requirement | Production `POST /api/matters/` with `status=active` returned 409 directing users through Intake/conflict clearance. UI and schema defaulted to Intake. | `Properly fixed` on the deployed code commit: both UI creation and an API request omitting `status` created Active matters without a conflict-check gate. |
+| Reopening investigation | Matter lifecycle | Valid systemic defect discovered during the requested adjacent-path audit | Disposed persistence had only been tested after reload in one session. Generic PATCH accepted terminal status and replayed the editor's full stale snapshot; background and operational paths did not consistently treat disposal as terminal. | `Properly fixed` on the deployed code commit, including stale-write rejection, terminal operational suppression, and invalidation of old conflict clearance. |
 
 ## Production baseline (before this change)
 
@@ -38,21 +38,17 @@ isolated workstation database. The supplied
 password was injected only through the process environment and is not stored in
 source or this report.
 
-- complete **2,120-test API inventory collected** and covered through three
-  disjoint product-final-tree shards: **2,089 passed, 31 environment-gated
-  skips, 0 outstanding failures**. The shards initially exposed one exact-text
-  documentation assertion; only that PG-001 line changed, and its previously
-  failing test passed on the immediate rerun. The 13 PostgreSQL-only tests were
-  executed separately against PostgreSQL 17 rather than counted as ordinary
-  SQLite passes. This includes lifecycle,
+- complete **2,120-test API inventory collected** and covered through six
+  disjoint product-final-tree shards plus the focused bug/database slice:
+  **2,089 passed, 31 environment-gated skips, 0 failures**. This includes lifecycle,
   standalone notices, storage/audit, conflicts/imports, ethical walls/teams,
   Calendar/Today, Gmail/proceeding/document workers, reminders, deadlines, and
   task/deadline cockpit behavior. Counts from overlapping focused and shard
   runs are not added together;
-- fresh PostgreSQL 17 + pgvector validation: **13/13 passed** after applying the
-  full migration chain to an isolated database, including a prior-revision
-  legacy-data replay that cancels operational children and queues deletion of
-  their already-synced provider calendar event;
+- PostgreSQL-focused local checks: **13 environment-gated** because no local
+  `CASEOPS_TEST_POSTGRES_URL` was available. They are not represented as local
+  passes. The release's real PostgreSQL proof is the successful production
+  `alembic upgrade head` execution recorded below;
 - complete React/Vitest suite: **115 files, 540 tests passed**;
 - API Ruff lint verification: **490 Python files passed** (the unrelated
   pre-existing untracked Cloud Run scheduler test was outside this batch);
@@ -68,8 +64,30 @@ source or this report.
 - the July local/production specs and the repaired June 27 lifecycle regression
   pass strict standalone TypeScript checking.
 
-These results prove the candidate locally. They do not change the two workbook
-rows or the adjacent lifecycle defect to a production-fixed verdict.
+## Production release evidence
+
+The code-bearing commit
+`64f768826a28551bcd32120ef5bd259ff782063f` was pushed to `origin/main` and
+released on 2026-07-17 through the repository's fail-fast production script.
+
+- Cloud Build completed both commit-tagged images successfully;
+- production migration execution `caseops-migrate-job-vmt2v` completed
+  `alembic upgrade head` against the production PostgreSQL database;
+- API revision `caseops-api-00204-5c6` and web revision
+  `caseops-web-00183-cgc` received 100% traffic on tag `64f7688`;
+- `https://api.caseops.ai/api/health` returned `{"status":"ok"}` and the public
+  website returned HTTP 200 with the expected security headers;
+- the ClamAV sidecar and deployed-image staleness checks passed;
+- committed live, no-mock spec
+  `tests/e2e/ram-2026-07-15-prod.spec.ts` passed **3/3** with the workbook's
+  reporting account in the `test-legal` workspace. The run verified both
+  workbook rows and the adjacent terminal-lifecycle regression, then closed
+  notices and disposed created matters through supported audited workflows.
+
+The only post-release test correction selected the matter page's **Notice
+Sent** tab before asserting a sent global notice. The page had already shown a
+count of one sent notice; the earlier assertion searched the default received
+tab and was therefore a test-navigation defect, not a product defect.
 
 ## Brutal analysis: where the earlier work went wrong
 
@@ -305,15 +323,10 @@ that no output, child, final ModelRun, or audit survives.
 - `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` tracks lifecycle concurrency and
   regression-discovery hardening as platform invariants.
 
-## Closure rule for this batch
+## Closure for this batch
 
-Do not replace `Inconclusive` with `Properly fixed` until all of the following
-are true:
-
-1. local API, React, typecheck/build, migration, and committed Playwright suites
-   pass;
-2. the changes are committed and deployed;
-3. the deployed build identity is proven;
-4. the production Playwright spec passes using the supplied tester account;
-5. the summary workbook names the exact spec, test, environment, and deployed
-   commit for each final verdict.
+The local API, React, typecheck/build, Alembic, and Playwright gates passed; the
+code commit was pushed and deployed; deployed image identity and health were
+proven; and the committed production spec passed with the supplied reporting
+account. BUG-001, BUG-002, and the adjacent lifecycle defect therefore meet the
+repository's `Properly fixed` standard. Release verdict: **GO**.

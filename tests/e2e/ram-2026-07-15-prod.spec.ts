@@ -646,6 +646,7 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
     await page.goto(
       `${PROD_BASE_URL}/app/matters/${lifecycleMatter.id}/notices`,
     );
+    await page.getByTestId("notice-sent-tab").click();
     await expect(
       page.getByTestId(`matter-global-notice-${sentNotice.id}`),
     ).toContainText(sentSubject);
