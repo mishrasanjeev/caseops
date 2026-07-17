@@ -15,7 +15,7 @@ const flows = [
     persona: "General Counsel",
     headline: "Control the portfolio, not the paperwork.",
     bullets: [
-      "Structured intake routes business requests into matters, with a conflict-clearance gate before Active status.",
+      "Structured intake can hold pre-engagement work behind conflict clearance, while direct New Matter creation starts Active by default.",
       "Contract repository with clause extraction and obligation tracking.",
       "Matter intelligence review, outside-counsel spend, aging, realization, and audited provider operations in one dashboard.",
     ],

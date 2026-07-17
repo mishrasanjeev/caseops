@@ -52,7 +52,7 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Conflict checks compare the proposed opposing and related parties against workspace clients, matters, and contacts
 - Candidate similarity is a review aid, not automatic clearance
 - A partner or admin records cleared, conflicted, or an explicit waiver with a note
-- Matter Active status requires the latest conflict check to be cleared or waived
+- Direct New Matter creation starts Active by default; a matter deliberately kept in Intake or On hold requires a cleared or waived latest conflict check before moving to Active
 
 ### 1c. Notices and reply deadlines
 

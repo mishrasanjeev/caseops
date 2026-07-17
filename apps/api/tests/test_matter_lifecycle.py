@@ -11,6 +11,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 
 from caseops_api.db.models import (
+    DEFAULT_MATTER_STATUS,
     AuditEvent,
     AuditResult,
     CalendarEventSync,
@@ -31,6 +32,7 @@ from caseops_api.db.models import (
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.matters import MatterCreateRequest
 from caseops_api.services.matters import (
     _assert_matter_not_disposed,
     _matter_lock_statement,
@@ -146,6 +148,43 @@ def test_create_defaults_to_active_and_explicit_active_needs_no_conflict_check(
 
     assert (implicit["status"], implicit["is_active"]) == ("active", True)
     assert (explicit["status"], explicit["is_active"]) == ("active", True)
+
+
+def test_creation_policy_defaults_are_active_below_the_http_boundary(
+    client: TestClient,
+) -> None:
+    """Guard every omitted-status producer, not only the Pydantic route."""
+
+    bootstrap = bootstrap_company(client)
+    payload = MatterCreateRequest(
+        title="Schema default matter",
+        matter_code="LIFE-SCHEMA-DEFAULT",
+        practice_area="litigation",
+        forum_level="high_court",
+        court_name="Delhi High Court",
+    )
+    assert payload.status == DEFAULT_MATTER_STATUS.value
+
+    status_column = Matter.__table__.c.status
+    assert status_column.default is not None
+    assert status_column.default.arg == DEFAULT_MATTER_STATUS
+    assert status_column.server_default is not None
+    assert str(status_column.server_default.arg).strip("'") == DEFAULT_MATTER_STATUS.value
+
+    # Direct/background ORM construction used to fall back to Intake even
+    # after the UI and request schema had moved to Active.
+    with get_session_factory()() as session:
+        row = Matter(
+            company_id=str(bootstrap["company"]["id"]),
+            title="ORM default matter",
+            matter_code="LIFE-ORM-DEFAULT",
+            practice_area="litigation",
+            forum_level="high_court",
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        assert (row.status, row.is_active) == (DEFAULT_MATTER_STATUS.value, True)
 
 
 def test_create_rejects_terminal_status_without_lifecycle_controls(

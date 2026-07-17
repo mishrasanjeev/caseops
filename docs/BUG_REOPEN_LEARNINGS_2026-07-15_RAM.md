@@ -330,3 +330,41 @@ code commit was pushed and deployed; deployed image identity and health were
 proven; and the committed production spec passed with the supplied reporting
 account. BUG-001, BUG-002, and the adjacent lifecycle defect therefore meet the
 repository's `Properly fixed` standard. Release verdict: **GO**.
+
+## 2026-07-17 reopen audit addendum: BUG-002 default drift
+
+The July 17 workbook repeated BUG-002. Its reported date is July 15, before the
+corrected production release, so the original user journey is not a new
+post-release recurrence. The repeat nevertheless exposed that this document's
+earlier claim that adjacent creation paths were fully protected was too broad.
+
+The prior correction changed the React form and `MatterCreateRequest`, and its
+browser/API regression exercised those two boundaries. It did **not** change
+the `Matter.status` ORM default, which remained `intake`; the database column
+had no server default. Any future background producer, maintenance script, or
+direct database insert that omitted status could therefore recreate the old
+behavior without touching either green test. Marketing and guide copy also
+continued to state the pre-change policy. That is a systemic default drift, not
+an acceptable implementation detail.
+
+Permanent correction and learning:
+
+1. A product default must have one named domain constant and be aligned at the
+   schema, service/import, ORM, database-migration, UI, documentation, and
+   browser-test layers.
+2. Intentional exceptions must be explicit. Intake promotion passes `intake`
+   deliberately and has a regression proving the linked matter remains Intake;
+   missing status is never used to express business intent.
+3. A browser test may not use a button's eventual enabled state as an implicit
+   network-readiness check. The production test now waits for the selected
+   structured-forum value, so a slow or failed catalog produces an actionable
+   failure instead of a timing-dependent false green/red.
+4. Release evidence must name the account and release timestamp. A workbook
+   row reported before deployment is baseline evidence; only a reproduction on
+   the deployed build can establish a reopen.
+5. “Cases reopening” and “bugs reopening” are separate questions. Matter rows
+   cannot reopen through generic PATCH or background work; only the dedicated
+   Disposed-to-Intake lifecycle endpoint, with archive capability, source-state
+   and timestamp compare-and-swap, and a reason, may reopen one. BUG-002
+   resurfaced because verification stopped at two boundaries, not because a
+   disposed Matter was automatically reactivated.

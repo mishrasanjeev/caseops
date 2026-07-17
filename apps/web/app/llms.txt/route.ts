@@ -20,7 +20,7 @@ const body = `# CaseOps - Indian legal operating system
 ## What the product does
 
 - **Matter management**: intake, matter workspaces, timeline, tasks and deadlines, documents, notices, drafts, hearings, intelligence, communications, billing, Dispose status, next-hearing provenance, server-enforced matter access, and audit
-- **Conflict clearance**: pre-engagement scans compare clients, matters, and contacts; candidate matches require partner/admin review, and Active status requires the latest check to be cleared or waived
+- **Conflict clearance**: direct New Matter creation starts Active by default; pre-engagement files deliberately kept in Intake or On hold require a cleared or waived latest check before moving to Active
 - **Notices**: centralized /app/notices register for standalone or zero/multi-matter-linked received/sent notices, with optional owner/file, status and reply tracking, workspace filters, and clearly read-only legacy matter attachments
 - **Status vocabulary**: every public claim is one of live, review-first, provider-gated, founder-only, disabled until UAT, or planned
 - **Case tracking**: explicitly tracked/bookmarked cases refresh in the configured 4 PM-6 PM IST window; disabled or misconfigured providers make no external calls and record blocked/skipped state

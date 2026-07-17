@@ -9,7 +9,7 @@ export const marketingFaqs = [
   },
   {
     q: "How do intake conflict checks work?",
-    a: "A permitted user runs a pre-engagement scan against workspace clients, matters, and contacts. Candidate overlaps stay pending until a partner or admin clears, marks conflicted, or explicitly waives them. A matter cannot move to Active unless its latest check is cleared or waived.",
+    a: "A permitted user runs a pre-engagement scan against workspace clients, matters, and contacts. Candidate overlaps stay pending until a partner or admin clears, marks conflicted, or explicitly waives them. New Matter starts Active by default; a file deliberately kept in Intake or On hold needs a cleared or waived latest check before it can move to Active.",
   },
   {
     q: "How are received and sent notices tracked?",

@@ -106,6 +106,14 @@ class MatterStatus(StrEnum):
     DISPOSED = "disposed"
 
 
+# Product-wide creation policy. Intake promotion deliberately passes
+# ``MatterStatus.INTAKE`` explicitly; every producer that omits a status must
+# create an operational matter. Keep both the ORM and database defaults tied to
+# this value so background scripts and direct SQL cannot silently resurrect the
+# retired Intake-by-default behavior.
+DEFAULT_MATTER_STATUS = MatterStatus.ACTIVE
+
+
 class MatterForumLevel(StrEnum):
     LOWER_COURT = "lower_court"
     HIGH_COURT = "high_court"
@@ -1237,7 +1245,12 @@ class Matter(Base):
     matter_code: Mapped[str] = mapped_column(String(80), nullable=False)
     client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     opposing_party: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default=MatterStatus.INTAKE)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DEFAULT_MATTER_STATUS,
+        server_default=DEFAULT_MATTER_STATUS,
+    )
     practice_area: Mapped[str] = mapped_column(String(120), nullable=False)
     forum_level: Mapped[str] = mapped_column(String(40), nullable=False)
     court_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

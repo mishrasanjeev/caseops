@@ -390,15 +390,17 @@ export default function GuidePage() {
                       <>
                         A partner or admin reviews candidate overlaps and records{" "}
                         <em>Cleared</em>, <em>Conflicted</em>, or an explicit{" "}
-                        <em>Waiver</em> with a note. Active status requires the latest check
+                        <em>Waiver</em> with a note. For a pre-engagement file deliberately
+                        kept in Intake or On hold, moving to Active requires the latest check
                         to be cleared or waived.
                       </>,
                     ]}
                   />
                   <Callout tone="warn" title="Do not treat similarity as clearance">
                     Candidate matching is a review aid. A pending or conflicted result is not
-                    permission to proceed, and the activation gate intentionally blocks an
-                    unreviewed file.
+                    permission to proceed. The activation gate intentionally blocks an
+                    unreviewed Intake or On-hold file; direct New Matter creation starts Active
+                    by default.
                   </Callout>
                 </Section>
 
@@ -427,9 +429,10 @@ export default function GuidePage() {
                         uncatalogued fallback instead of saving stale forum metadata.
                       </>,
                       <>
-                        Keep a pre-engagement file in <strong>Intake</strong> while its
-                        conflict check is pending. Moving to Active requires a cleared or
-                        waived latest check.
+                        New Matter starts <strong>Active</strong> by default. If your team
+                        chooses to keep a pre-engagement file in <strong>Intake</strong> while
+                        its conflict check is pending, moving it to Active requires a cleared
+                        or waived latest check.
                       </>,
                       <>
                         Add a concise description, create the matter, then attach the first

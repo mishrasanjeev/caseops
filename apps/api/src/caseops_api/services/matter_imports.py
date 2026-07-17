@@ -16,7 +16,11 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import AuditResult, Matter, MatterStatus
+from caseops_api.db.models import (
+    DEFAULT_MATTER_STATUS,
+    AuditResult,
+    Matter,
+)
 from caseops_api.schemas.matter_imports import (
     BulkMatterImportDocumentReference,
     BulkMatterImportDryRunResponse,
@@ -603,7 +607,7 @@ def dry_run_bulk_matter_import(
         client_name = row.get("client_name", "").strip() or None
         practice_area = row.get("practice_area", "").strip() or None
         matter_type = row.get("matter_type", "").strip() or None
-        matter_status = row.get("status", "").strip() or MatterStatus.ACTIVE.value
+        matter_status = row.get("status", "").strip() or DEFAULT_MATTER_STATUS.value
         forum_level = row.get("forum_level", "").strip() or None
         court_name = row.get("court_name", "").strip() or None
         owner_email = row.get("owner_email", "").strip() or None

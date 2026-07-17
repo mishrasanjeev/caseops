@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from caseops_api.db.models import DEFAULT_MATTER_STATUS
 from caseops_api.schemas.billing import InvoiceRecord, TimeEntryRecord
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 from caseops_api.schemas.matter_tags import MatterTagRecord
@@ -153,7 +154,7 @@ class MatterCreateRequest(BaseModel):
     # New matters are operational by default. Conflict clearance remains a
     # gate when an existing intake/on-hold matter is later activated; it is
     # not a prerequisite for creating an already-active matter.
-    status: MatterStatusInputLiteral = "active"
+    status: MatterStatusInputLiteral = DEFAULT_MATTER_STATUS.value
     practice_area: str = Field(min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral
     court_id: str | None = Field(default=None, max_length=36)

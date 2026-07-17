@@ -426,6 +426,14 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
 
     const dialog = page.getByRole("dialog", { name: /New matter/i });
     await expect(dialog).toBeVisible();
+    // Creation is intentionally blocked until the structured forum catalog
+    // resolves. Waiting for the selected state makes this a real readiness
+    // assertion instead of a catalog-speed race that can pass or fail based on
+    // production latency.
+    await expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue(
+      "Delhi",
+      { timeout: 30_000 },
+    );
     const statusSelect = dialog.getByRole("combobox", { name: "Status" });
     await expect(statusSelect).toHaveText(/^Active$/);
     await statusSelect.click();
