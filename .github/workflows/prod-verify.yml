@@ -81,6 +81,12 @@ jobs:
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          # Canonical dated regressions run against the same dedicated QA
+          # tenant in CI. Local operators can still provide separate tester
+          # credentials through these environment variables when needed.
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
 
       - name: Run prod-Playwright suite (notice module)
