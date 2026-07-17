@@ -369,6 +369,62 @@ export type MatterListParams = {
   max_claim_amount_minor?: number;
 };
 
+export type MatterImportRowStatus = "valid" | "invalid" | "created" | "failed";
+export type MatterImportJobStatus =
+  | "validated"
+  | "importing"
+  | "completed"
+  | "completed_with_errors"
+  | "cancelled"
+  | "failed"
+  | "expired";
+
+export type MatterImportRow = {
+  id: string;
+  row_number: number;
+  status: MatterImportRowStatus;
+  normalized: Record<string, unknown>;
+  errors: string[];
+  created_matter_id: string | null;
+};
+
+export type MatterImportJob = {
+  id: string;
+  company_id: string;
+  filename: string;
+  content_type: string | null;
+  manifest_format: "csv" | "xlsx" | "json";
+  file_size_bytes: number;
+  source_sha256: string;
+  status: MatterImportJobStatus;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  created_count: number;
+  failed_count: number;
+  validation_error_count: number;
+  error_message: string | null;
+  uploaded_by_membership_id: string | null;
+  uploaded_by_name: string | null;
+  uploaded_by_email: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  imported_at: string | null;
+  cancelled_at: string | null;
+  rows: MatterImportRow[];
+};
+
+export type MatterImportCommitResult = {
+  job: MatterImportJob;
+  created_matter_ids: string[];
+};
+
+export type MatterImportHistory = {
+  imports: MatterImportJob[];
+  total: number;
+};
+
 function appendMatterListParam(
   qs: URLSearchParams,
   key: keyof MatterListParams,
@@ -4241,6 +4297,65 @@ export async function assignMatterTeam(input: {
     },
   });
   return matter.parse(data);
+}
+
+export async function downloadMatterImportTemplate(
+  format: "csv" | "xlsx",
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/matters/imports/template?format=${format}`,
+    { method: "GET", credentials: "include" },
+  );
+  if (!response.ok) throw new Error(`Matter template download failed (${response.status}).`);
+  return response.blob();
+}
+
+export async function previewMatterImport(file: File): Promise<MatterImportJob> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest<MatterImportJob>("/api/matters/imports/preview", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function getMatterImport(jobId: string): Promise<MatterImportJob> {
+  return apiRequest<MatterImportJob>(`/api/matters/imports/${jobId}`);
+}
+
+export async function listMatterImports(input?: {
+  q?: string;
+  status?: MatterImportJobStatus | "all";
+  limit?: number;
+}): Promise<MatterImportHistory> {
+  const qs = new URLSearchParams();
+  if (input?.q?.trim()) qs.set("q", input.q.trim());
+  if (input?.status && input.status !== "all") qs.set("status", input.status);
+  if (input?.limit) qs.set("limit", String(input.limit));
+  return apiRequest<MatterImportHistory>(
+    `/api/matters/imports/history${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+}
+
+export async function commitMatterImport(jobId: string): Promise<MatterImportCommitResult> {
+  return apiRequest<MatterImportCommitResult>(`/api/matters/imports/${jobId}/commit`, {
+    method: "POST",
+  });
+}
+
+export async function cancelMatterImport(jobId: string): Promise<MatterImportJob> {
+  return apiRequest<MatterImportJob>(`/api/matters/imports/${jobId}/cancel`, {
+    method: "POST",
+  });
+}
+
+export async function downloadMatterImportErrors(jobId: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
+    method: "GET",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error(`Matter error report download failed (${response.status}).`);
+  return response.blob();
 }
 
 // --- Sprint 8b BG-025: GC intake queue ---

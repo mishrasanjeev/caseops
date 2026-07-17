@@ -442,6 +442,48 @@ export default function GuidePage() {
                     ]}
                   />
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Bulk upload matters
+                  </h3>
+                  <p>
+                    Owners, Admins, and users with a delegated Matter Manager capability
+                    can select <strong>Bulk upload matters</strong> from the Matter
+                    portfolio. Download the XLSX template for controlled status, forum,
+                    practice-area, date, people, and team guidance; CSV is also available
+                    for migration tooling.
+                  </p>
+                  <ol className="mt-3 list-decimal space-y-2 pl-6 text-[15px]">
+                    <li>
+                      Enter one matter per row. Matter Title, Matter Code, Client Name,
+                      Matter Status, Practice Area, and Forum are required.
+                    </li>
+                    <li>
+                      Upload a CSV/XLSX file of at most 500 non-empty rows and 2 MB, then
+                      select <strong>Validate data before import</strong>. Validation does
+                      not create matters.
+                    </li>
+                    <li>
+                      Review every row error. CaseOps checks duplicates, dates, email and
+                      phone formats, practice/status/forum values, active users and teams,
+                      tenant boundaries, team-scoping consistency, and unsafe formulas.
+                    </li>
+                    <li>
+                      Confirm the job to create every row that remains valid. Invalid rows
+                      are retained for correction, so a mixed file may complete with both
+                      successful and failed counts.
+                    </li>
+                    <li>
+                      Download the error CSV and use Import History to search by file or
+                      uploader and review upload date, status, totals, imported, and failed
+                      counts.
+                    </li>
+                  </ol>
+                  <Callout title="Safe and recoverable imports">
+                    Validation expires after 24 hours and is repeated at confirmation.
+                    Repeating confirmation for a completed job creates no duplicates. The
+                    upload, validation failures, completion, row outcomes, cancellation,
+                    and error-report download remain tenant-scoped and audited.
+                  </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     The matter cockpit
                   </h3>
                   <p>

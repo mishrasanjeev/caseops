@@ -80,6 +80,23 @@ class EmployeeImportRowStatus(StrEnum):
     FAILED = "failed"
 
 
+class MatterImportJobStatus(StrEnum):
+    VALIDATED = "validated"
+    IMPORTING = "importing"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+    EXPIRED = "expired"
+
+
+class MatterImportRowStatus(StrEnum):
+    VALID = "valid"
+    INVALID = "invalid"
+    CREATED = "created"
+    FAILED = "failed"
+
+
 class MatterIntakeStatus(StrEnum):
     # GC intake queue (BG-025). Status machine:
     #   new -> triaging -> in_progress -> (completed | rejected)
@@ -728,6 +745,10 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    matter_import_jobs: Mapped[list[MatterBulkImportJob]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
     custom_roles: Mapped[list[CustomRole]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
@@ -799,6 +820,10 @@ class CompanyMembership(Base):
     assigned_matters: Mapped[list[Matter]] = relationship(
         back_populates="assignee_membership",
         foreign_keys="Matter.assignee_membership_id",
+    )
+    responsible_matters: Mapped[list[Matter]] = relationship(
+        back_populates="responsible_lawyer_membership",
+        foreign_keys="Matter.responsible_lawyer_membership_id",
     )
     created_tasks: Mapped[list[MatterTask]] = relationship(
         back_populates="created_by_membership",
@@ -1214,6 +1239,122 @@ class EmployeeBulkImportRow(Base):
     )
 
 
+class MatterBulkImportJob(Base):
+    """Persistent, tenant-scoped validation and commit record for matter imports."""
+
+    __tablename__ = "matter_bulk_import_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    manifest_format: Mapped[str] = mapped_column(String(12), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MatterImportJobStatus.VALIDATED,
+        index=True,
+    )
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    validation_error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: utcnow() + timedelta(hours=24),
+        nullable=False,
+        index=True,
+    )
+    imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    company: Mapped[Company] = relationship(back_populates="matter_import_jobs")
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    rows: Mapped[list[MatterBulkImportRow]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="MatterBulkImportRow.row_number",
+    )
+
+
+class MatterBulkImportRow(Base):
+    """One sanitized and normalized row in a matter import job."""
+
+    __tablename__ = "matter_bulk_import_rows"
+    __table_args__ = (
+        UniqueConstraint("job_id", "row_number", name="uq_matter_import_job_row"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_bulk_import_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    normalized_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    errors_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterImportRowStatus.INVALID,
+        index=True,
+    )
+    created_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    job: Mapped[MatterBulkImportJob] = relationship(back_populates="rows")
+    created_matter: Mapped[Matter | None] = relationship(foreign_keys=[created_matter_id])
+
+
 class Matter(Base):
     __tablename__ = "matters"
     __table_args__ = (
@@ -1241,10 +1382,20 @@ class Matter(Base):
         nullable=True,
         index=True,
     )
+    responsible_lawyer_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     matter_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    matter_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    client_contact_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    client_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     opposing_party: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opposing_counsel: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
@@ -1256,6 +1407,8 @@ class Matter(Base):
     court_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     case_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    filing_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     cnr_number: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_hearing_on: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -1378,6 +1531,9 @@ class Matter(Base):
     assignee_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="assigned_matters",
         foreign_keys=[assignee_membership_id],
+    )
+    responsible_lawyer_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[responsible_lawyer_membership_id],
     )
     next_hearing_updated_by_membership: Mapped[CompanyMembership | None] = relationship(
         foreign_keys=[next_hearing_updated_by_membership_id],

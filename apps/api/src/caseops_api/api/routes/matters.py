@@ -86,7 +86,12 @@ from caseops_api.schemas.matter_access import (
     MatterAccessPanelResponse,
     MatterRestrictedAccessRequest,
 )
-from caseops_api.schemas.matter_imports import BulkMatterImportDryRunResponse
+from caseops_api.schemas.matter_imports import (
+    BulkMatterImportDryRunResponse,
+    MatterImportCommitResponse,
+    MatterImportHistoryResponse,
+    MatterImportJobResponse,
+)
 from caseops_api.schemas.matter_tags import (
     MatterBulkTagAssignRequest,
     MatterBulkTagAssignResponse,
@@ -225,10 +230,17 @@ from caseops_api.services.matter_imports import (
     MATTER_IMPORT_DOCUMENT_ARCHIVE_MAX_BYTES,
     MATTER_IMPORT_DOCUMENT_MANIFEST_MAX_BYTES,
     MATTER_IMPORT_MAPPING_MAX_BYTES,
+    cancel_matter_import,
+    commit_matter_import,
     dry_run_bulk_matter_import,
+    get_matter_import,
+    list_matter_imports,
+    matter_import_error_report,
+    matter_import_template,
     parse_matter_import_document_archive,
     parse_matter_import_document_manifest,
     parse_matter_import_mapping,
+    preview_matter_import,
 )
 from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
@@ -311,7 +323,10 @@ DocumentUploader = Annotated[SessionContext, Depends(require_capability("documen
 DocumentManager = Annotated[SessionContext, Depends(require_capability("documents:manage"))]
 MatterAccessManager = Annotated[SessionContext, Depends(require_capability("matter_access:manage"))]
 MatterAuditExporter = Annotated[SessionContext, Depends(require_capability("audit:export"))]
-MatterBulkImporter = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
+MatterBulkImporter = Annotated[
+    SessionContext,
+    Depends(require_capability("matters:bulk_import")),
+]
 
 
 @router.get("/", response_model=MatterListResponse, summary="List matters for the current company")
@@ -350,6 +365,64 @@ async def create_current_company_matter(
     session: DbSession,
 ) -> MatterRecord:
     return create_matter(session, context=context, payload=payload)
+
+
+@router.get(
+    "/imports/template",
+    summary="Download the CSV/XLSX bulk matter import template",
+)
+async def download_current_company_matter_import_template(
+    context: MatterBulkImporter,
+    format: Literal["csv", "xlsx"] = Query(default="xlsx"),
+) -> Response:
+    del context
+    body, content_type, filename = matter_import_template(format)
+    return Response(
+        content=body,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/imports/history",
+    response_model=MatterImportHistoryResponse,
+    summary="Search tenant-scoped matter import history",
+)
+async def current_company_matter_import_history(
+    context: MatterBulkImporter,
+    session: DbSession,
+    q: str | None = Query(default=None, max_length=200),
+    status_filter: str | None = Query(default=None, alias="status", max_length=32),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> MatterImportHistoryResponse:
+    return list_matter_imports(
+        session,
+        context=context,
+        query=q,
+        status_filter=status_filter,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/imports/preview",
+    response_model=MatterImportJobResponse,
+    summary="Validate and persist a CSV/XLSX bulk matter import preview",
+)
+async def preview_current_company_matter_import(
+    context: MatterBulkImporter,
+    session: DbSession,
+    file: Annotated[UploadFile, File(...)],
+) -> MatterImportJobResponse:
+    content = await file.read(MATTER_IMPORT_MAPPING_MAX_BYTES + 1)
+    return preview_matter_import(
+        session,
+        context=context,
+        filename=file.filename or "matters",
+        content_type=file.content_type,
+        content=content,
+    )
 
 
 @router.post(
@@ -426,6 +499,66 @@ async def dry_run_current_company_matter_import(
         context=context,
         parsed_import=parsed_import,
         available_document_filenames=document_filenames,
+    )
+
+
+@router.get(
+    "/imports/{job_id}",
+    response_model=MatterImportJobResponse,
+    summary="Read one tenant-scoped matter import job",
+)
+async def current_company_matter_import(
+    job_id: str,
+    context: MatterBulkImporter,
+    session: DbSession,
+) -> MatterImportJobResponse:
+    return get_matter_import(session, context=context, job_id=job_id)
+
+
+@router.post(
+    "/imports/{job_id}/commit",
+    response_model=MatterImportCommitResponse,
+    summary="Confirm a validated matter import and create every valid row",
+)
+async def commit_current_company_matter_import(
+    job_id: str,
+    context: MatterBulkImporter,
+    session: DbSession,
+) -> MatterImportCommitResponse:
+    return commit_matter_import(session, context=context, job_id=job_id)
+
+
+@router.post(
+    "/imports/{job_id}/cancel",
+    response_model=MatterImportJobResponse,
+    summary="Cancel a validated matter import",
+)
+async def cancel_current_company_matter_import(
+    job_id: str,
+    context: MatterBulkImporter,
+    session: DbSession,
+) -> MatterImportJobResponse:
+    return cancel_matter_import(session, context=context, job_id=job_id)
+
+
+@router.get(
+    "/imports/{job_id}/errors",
+    summary="Download row-level matter import errors as a safe CSV",
+)
+async def download_current_company_matter_import_errors(
+    job_id: str,
+    context: MatterBulkImporter,
+    session: DbSession,
+) -> Response:
+    body, filename = matter_import_error_report(
+        session,
+        context=context,
+        job_id=job_id,
+    )
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

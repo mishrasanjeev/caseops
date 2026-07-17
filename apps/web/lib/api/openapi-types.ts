@@ -5716,6 +5716,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/imports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one tenant-scoped matter import job */
+        get: operations["current_company_matter_import_api_matters_imports__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/imports/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a validated matter import */
+        post: operations["cancel_current_company_matter_import_api_matters_imports__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/imports/{job_id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm a validated matter import and create every valid row */
+        post: operations["commit_current_company_matter_import_api_matters_imports__job_id__commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/imports/{job_id}/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download row-level matter import errors as a safe CSV */
+        get: operations["download_current_company_matter_import_errors_api_matters_imports__job_id__errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/imports/drive/provider-config": {
         parameters: {
             query?: never;
@@ -5750,6 +5818,57 @@ export interface paths {
          * @description Parses a CSV, JSON, or XLSX matter mapping file and returns a tenant-scoped validation plan. Optional document manifests or ZIP archives are inspected for filenames only. The endpoint writes no matter rows, attachment rows, storage objects, OCR jobs, corpus jobs, or embeddings; it records only a redacted audit summary.
          */
         post: operations["dry_run_current_company_matter_import_api_matters_imports_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/imports/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search tenant-scoped matter import history */
+        get: operations["current_company_matter_import_history_api_matters_imports_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/imports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate and persist a CSV/XLSX bulk matter import preview */
+        post: operations["preview_current_company_matter_import_api_matters_imports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/imports/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the CSV/XLSX bulk matter import template */
+        get: operations["download_current_company_matter_import_template_api_matters_imports_template_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9312,6 +9431,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_preview_current_company_matter_import_api_matters_imports_preview_post */
+        Body_preview_current_company_matter_import_api_matters_imports_preview_post: {
+            /** File */
+            file: string;
+        };
         /** BootstrapCompanyRequest */
         BootstrapCompanyRequest: {
             /** Company Name */
@@ -9420,16 +9544,30 @@ export interface components {
         };
         /** BulkMatterImportRowPlan */
         BulkMatterImportRowPlan: {
+            /** Case Number */
+            case_number?: string | null;
+            /** Client Code */
+            client_code?: string | null;
+            /** Client Contact Number */
+            client_contact_number?: string | null;
+            /** Client Email */
+            client_email?: string | null;
             /** Client Name */
             client_name?: string | null;
             /** Court Name */
             court_name?: string | null;
+            /** Description */
+            description?: string | null;
             /** Document References */
             document_references?: components["schemas"]["BulkMatterImportDocumentReference"][];
             /** Duplicate Candidates */
             duplicate_candidates?: components["schemas"]["BulkMatterImportDuplicateCandidate"][];
             /** Errors */
             errors?: string[];
+            /** Filing Date */
+            filing_date?: string | null;
+            /** Filing Number */
+            filing_number?: string | null;
             /** Forum Level */
             forum_level?: string | null;
             /** Matter Code */
@@ -9438,10 +9576,20 @@ export interface components {
             matter_status?: string | null;
             /** Matter Type */
             matter_type?: string | null;
+            /** Opposing Counsel */
+            opposing_counsel?: string | null;
+            /** Opposing Party Name */
+            opposing_party_name?: string | null;
             /** Owner Email */
             owner_email?: string | null;
+            /** Owner Membership Id */
+            owner_membership_id?: string | null;
             /** Practice Area */
             practice_area?: string | null;
+            /** Responsible Lawyer Email */
+            responsible_lawyer_email?: string | null;
+            /** Responsible Lawyer Membership Id */
+            responsible_lawyer_membership_id?: string | null;
             /** Row Number */
             row_number: number;
             /**
@@ -9449,6 +9597,8 @@ export interface components {
              * @enum {string}
              */
             status: "valid" | "invalid";
+            /** Team Id */
+            team_id?: string | null;
             /** Team Slug */
             team_slug?: string | null;
             /** Title */
@@ -17849,6 +17999,8 @@ export interface components {
          *     }
          */
         MatterCreateRequest: {
+            /** Assignee Membership Id */
+            assignee_membership_id?: string | null;
             /** Case Number */
             case_number?: string | null;
             /** Claim Amount Minor */
@@ -17860,6 +18012,12 @@ export interface components {
              * @default INR
              */
             claim_currency: string;
+            /** Client Code */
+            client_code?: string | null;
+            /** Client Contact Number */
+            client_contact_number?: string | null;
+            /** Client Email */
+            client_email?: string | null;
             /** Client Name */
             client_name?: string | null;
             /** Cnr Number */
@@ -17870,6 +18028,10 @@ export interface components {
             court_name?: string | null;
             /** Description */
             description?: string | null;
+            /** Filing Date */
+            filing_date?: string | null;
+            /** Filing Number */
+            filing_number?: string | null;
             /** Forum Catalog Entry Id */
             forum_catalog_entry_id?: string | null;
             /** Forum City */
@@ -17889,6 +18051,8 @@ export interface components {
             judge_name?: string | null;
             /** Matter Code */
             matter_code: string;
+            /** Matter Type */
+            matter_type?: string | null;
             /**
              * Next Hearing Manual Lock
              * @default false
@@ -17896,16 +18060,22 @@ export interface components {
             next_hearing_manual_lock: boolean;
             /** Next Hearing On */
             next_hearing_on?: string | null;
+            /** Opposing Counsel */
+            opposing_counsel?: string | null;
             /** Opposing Party */
             opposing_party?: string | null;
             /** Practice Area */
             practice_area: string;
+            /** Responsible Lawyer Membership Id */
+            responsible_lawyer_membership_id?: string | null;
             /**
              * Status
              * @default active
              * @enum {string}
              */
             status: "intake" | "active" | "on_hold" | "disposed" | "closed";
+            /** Team Id */
+            team_id?: string | null;
             /** Title */
             title: string;
         };
@@ -18383,6 +18553,105 @@ export interface components {
             /** Status */
             status?: ("scheduled" | "completed" | "adjourned" | "cancelled") | null;
         };
+        /** MatterImportCommitResponse */
+        MatterImportCommitResponse: {
+            /** Created Matter Ids */
+            created_matter_ids?: string[];
+            job: components["schemas"]["MatterImportJobResponse"];
+        };
+        /** MatterImportHistoryResponse */
+        MatterImportHistoryResponse: {
+            /** Imports */
+            imports?: components["schemas"]["MatterImportJobResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** MatterImportJobResponse */
+        MatterImportJobResponse: {
+            /** Cancelled At */
+            cancelled_at?: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Content Type */
+            content_type?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created Count */
+            created_count: number;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Failed Count */
+            failed_count: number;
+            /** File Size Bytes */
+            file_size_bytes: number;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /** Imported At */
+            imported_at?: string | null;
+            /** Invalid Rows */
+            invalid_rows: number;
+            /**
+             * Manifest Format
+             * @enum {string}
+             */
+            manifest_format: "csv" | "json" | "xlsx";
+            /** Rows */
+            rows?: components["schemas"]["MatterImportRowRecord"][];
+            /** Source Sha256 */
+            source_sha256: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "validated" | "importing" | "completed" | "completed_with_errors" | "cancelled" | "failed" | "expired";
+            /** Total Rows */
+            total_rows: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Uploaded By Email */
+            uploaded_by_email?: string | null;
+            /** Uploaded By Membership Id */
+            uploaded_by_membership_id?: string | null;
+            /** Uploaded By Name */
+            uploaded_by_name?: string | null;
+            /** Valid Rows */
+            valid_rows: number;
+            /** Validation Error Count */
+            validation_error_count: number;
+        };
+        /** MatterImportRowRecord */
+        MatterImportRowRecord: {
+            /** Created Matter Id */
+            created_matter_id?: string | null;
+            /** Errors */
+            errors?: string[];
+            /** Id */
+            id: string;
+            /** Normalized */
+            normalized?: {
+                [key: string]: unknown;
+            };
+            /** Row Number */
+            row_number: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "invalid" | "created" | "failed";
+        };
         /**
          * MatterLifecycleStatusRequest
          * @description Explicit terminal lifecycle transition with compare-and-swap guards.
@@ -18558,6 +18827,12 @@ export interface components {
              * @default INR
              */
             claim_currency: string;
+            /** Client Code */
+            client_code?: string | null;
+            /** Client Contact Number */
+            client_contact_number?: string | null;
+            /** Client Email */
+            client_email?: string | null;
             /** Client Name */
             client_name: string | null;
             /** Cnr Number */
@@ -18575,6 +18850,10 @@ export interface components {
             created_at: string;
             /** Description */
             description: string | null;
+            /** Filing Date */
+            filing_date?: string | null;
+            /** Filing Number */
+            filing_number?: string | null;
             /** Forum Catalog Entry Id */
             forum_catalog_entry_id?: string | null;
             /** Forum City */
@@ -18613,6 +18892,8 @@ export interface components {
             lifecycle_version: number;
             /** Matter Code */
             matter_code: string;
+            /** Matter Type */
+            matter_type?: string | null;
             /**
              * Next Hearing Manual Lock
              * @default false
@@ -18638,10 +18919,14 @@ export interface components {
              * @default false
              */
             oc_cross_visibility_enabled: boolean;
+            /** Opposing Counsel */
+            opposing_counsel?: string | null;
             /** Opposing Party */
             opposing_party: string | null;
             /** Practice Area */
             practice_area: string;
+            /** Responsible Lawyer Membership Id */
+            responsible_lawyer_membership_id?: string | null;
             /**
              * Status
              * @enum {string}
@@ -19122,6 +19407,12 @@ export interface components {
             claim_amount_notes?: string | null;
             /** Claim Currency */
             claim_currency?: string | null;
+            /** Client Code */
+            client_code?: string | null;
+            /** Client Contact Number */
+            client_contact_number?: string | null;
+            /** Client Email */
+            client_email?: string | null;
             /** Client Name */
             client_name?: string | null;
             /** Cnr Number */
@@ -19134,6 +19425,10 @@ export interface components {
             description?: string | null;
             /** Expected Updated At */
             expected_updated_at?: string | null;
+            /** Filing Date */
+            filing_date?: string | null;
+            /** Filing Number */
+            filing_number?: string | null;
             /** Forum Catalog Entry Id */
             forum_catalog_entry_id?: string | null;
             /** Forum City */
@@ -19150,16 +19445,22 @@ export interface components {
             judge_name?: string | null;
             /** Matter Code */
             matter_code?: string | null;
+            /** Matter Type */
+            matter_type?: string | null;
             /** Next Hearing Manual Lock */
             next_hearing_manual_lock?: boolean | null;
             /** Next Hearing On */
             next_hearing_on?: string | null;
             /** Oc Cross Visibility Enabled */
             oc_cross_visibility_enabled?: boolean | null;
+            /** Opposing Counsel */
+            opposing_counsel?: string | null;
             /** Opposing Party */
             opposing_party?: string | null;
             /** Practice Area */
             practice_area?: string | null;
+            /** Responsible Lawyer Membership Id */
+            responsible_lawyer_membership_id?: string | null;
             /** Status */
             status?: ("intake" | "active" | "on_hold" | "disposed" | "closed") | null;
             /** Team Id */
@@ -35823,6 +36124,130 @@ export interface operations {
             };
         };
     };
+    current_company_matter_import_api_matters_imports__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterImportJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_current_company_matter_import_api_matters_imports__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterImportJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_current_company_matter_import_api_matters_imports__job_id__commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterImportCommitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_current_company_matter_import_errors_api_matters_imports__job_id__errors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_google_drive_provider_config_status_api_matters_imports_drive_provider_config_get: {
         parameters: {
             query?: never;
@@ -35863,6 +36288,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkMatterImportDryRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_import_history_api_matters_imports_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                q?: string | null;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterImportHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_current_company_matter_import_api_matters_imports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_current_company_matter_import_api_matters_imports_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterImportJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_current_company_matter_import_template_api_matters_imports_template_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "xlsx";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

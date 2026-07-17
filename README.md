@@ -29,6 +29,7 @@ until the agent trust plane is activated.
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
 | GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
 | Matter notices and pre-engagement conflict clearance: received/sent notice tracking, reply documents and linked deadlines, conflict candidate review, and Active-status gate | Implemented (2026-07-08) | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-07_CONFLICT_CHECKS.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-07_CONFLICT_CHECKS.md), `/guide` |
+| Bulk matter creation: CSV/XLSX templates, validation preview, partial-success commit, error report, history, audit, notifications, and delegated Matter Manager capability | Implemented (2026-07-17) | [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), [`docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md`](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md), `/app/matters/imports`, `/guide` |
 | Production readiness, Pine Labs UAT evidence, secret-rotation proof, margin/profit gates, MFA login challenge, enterprise readiness scaffolding | Founder-only / disabled until UAT / planned as labelled | `/app/platform-admin/paid-production`, `/api/platform-admin/production-readiness`, `/api/admin/enterprise-readiness` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
@@ -45,6 +46,7 @@ until the agent trust plane is activated.
 - Deployed user guide: `/guide` on the web app.
 - Detailed GBA Law Office guide: [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md).
 - Notice workflow guide: [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md).
+- Bulk matter creation PRD and operating guide: [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md) and [ADP-11 in the end-user guide](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md#adp-11--bulk-matter-import).
 - Source PRD: [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md).
 - Machine-readable public summaries: `/llms.txt` and `/llms-full.txt`.
 

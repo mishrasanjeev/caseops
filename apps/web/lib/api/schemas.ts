@@ -50,9 +50,14 @@ export const authContext = z.object({
 export const matter = z.object({
   id: z.string(),
   matter_code: z.string(),
+  matter_type: z.string().nullable().optional(),
   title: z.string(),
   client_name: z.string().nullable().optional(),
+  client_code: z.string().nullable().optional(),
+  client_contact_number: z.string().nullable().optional(),
+  client_email: z.string().nullable().optional(),
   opposing_party: z.string().nullable().optional(),
+  opposing_counsel: z.string().nullable().optional(),
   status: z.string(),
   practice_area: z.string().nullable().optional(),
   forum_level: z.string().nullable().optional(),
@@ -65,6 +70,8 @@ export const matter = z.object({
   forum_consumer_level: z.string().nullable().optional(),
   judge_name: z.string().nullable().optional(),
   case_number: z.string().nullable().optional(),
+  filing_number: z.string().nullable().optional(),
+  filing_date: z.string().nullable().optional(),
   cnr_number: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   next_hearing_on: z.string().nullable().optional(),
@@ -94,6 +101,8 @@ export const matter = z.object({
   has_stay: z.boolean().optional().default(false),
   has_interim_order: z.boolean().optional().default(false),
   assignee_membership_id: z.string().nullable().optional(),
+  responsible_lawyer_membership_id: z.string().nullable().optional(),
+  team_id: z.string().nullable().optional(),
   // Phase C-3c (MOD-TS-016, 2026-04-25). Per-matter outside-counsel
   // cross-visibility flag. Defaults False on read (backend's DB
   // default) so legacy matters without the column don't break.
