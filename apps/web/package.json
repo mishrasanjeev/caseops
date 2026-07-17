@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "gen:api-types": "npx --yes openapi-typescript --alphabetize http://localhost:8000/openapi.json --output lib/api/openapi-types.ts"
+    "gen:api-types": "npx --yes openapi-typescript@7.13.0 --alphabetize http://localhost:8000/openapi.json --output lib/api/openapi-types.ts"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.2.8",

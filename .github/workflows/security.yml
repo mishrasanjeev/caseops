@@ -138,12 +138,12 @@ jobs:
       - name: Sync API deps
         working-directory: apps/api
         run: uv sync --frozen --no-install-project
-      - name: Install openapi-typescript
-        run: npm install --no-save openapi-typescript@^7
       - name: Dump current OpenAPI from FastAPI app
         run: uv --directory apps/api run --no-sync python ../../scripts/dump_openapi.py /tmp/openapi.json
       - name: Regenerate web/lib/api/openapi-types.ts
-        run: npx openapi-typescript /tmp/openapi.json --output apps/web/lib/api/openapi-types.ts
+        run: >-
+          npx --yes openapi-typescript@7.13.0 --alphabetize
+          /tmp/openapi.json --output apps/web/lib/api/openapi-types.ts
       - name: Fail if regenerated types differ from committed types
         run: |
           if ! git diff --quiet -- apps/web/lib/api/openapi-types.ts; then
