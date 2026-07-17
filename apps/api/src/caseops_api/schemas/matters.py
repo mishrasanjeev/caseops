@@ -4,7 +4,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from caseops_api.db.models import DEFAULT_MATTER_STATUS
 from caseops_api.schemas.billing import InvoiceRecord, TimeEntryRecord
@@ -147,9 +147,16 @@ class MatterCreateRequest(BaseModel):
         max_length=80,
         json_schema_extra={"pattern": MATTER_CODE_PATTERN.pattern},
     )
+    matter_type: str | None = Field(default=None, max_length=120)
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
+    client_code: str | None = Field(default=None, max_length=80)
+    client_contact_number: str | None = Field(default=None, max_length=40)
+    client_email: EmailStr | None = None
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
+    opposing_counsel: str | None = Field(default=None, max_length=255)
     case_number: str | None = Field(default=None, max_length=120)
+    filing_number: str | None = Field(default=None, max_length=120)
+    filing_date: date | None = None
     cnr_number: str | None = Field(default=None, max_length=32)
     # New matters are operational by default. Conflict clearance remains a
     # gate when an existing intake/on-hold matter is later activated; it is
@@ -171,6 +178,9 @@ class MatterCreateRequest(BaseModel):
     claim_amount_minor: int | None = Field(default=None, ge=0)
     claim_currency: str = Field(default="INR", min_length=3, max_length=3)
     claim_amount_notes: str | None = Field(default=None, max_length=2000)
+    assignee_membership_id: str | None = Field(default=None, max_length=36)
+    responsible_lawyer_membership_id: str | None = Field(default=None, max_length=36)
+    team_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("claim_currency", mode="before")
     @classmethod
@@ -187,7 +197,16 @@ class MatterCreateRequest(BaseModel):
     def normalize_status(cls, value: object) -> object:
         return normalize_matter_status(value)
 
-    @field_validator("case_number", "cnr_number", mode="before")
+    @field_validator(
+        "case_number",
+        "cnr_number",
+        "filing_number",
+        "matter_type",
+        "client_code",
+        "client_contact_number",
+        "opposing_counsel",
+        mode="before",
+    )
     @classmethod
     def normalize_identity_fields(cls, value: object) -> object:
         if isinstance(value, str):
@@ -230,9 +249,17 @@ class MatterUpdateRequest(BaseModel):
         json_schema_extra={"pattern": MATTER_CODE_PATTERN.pattern},
     )
     assignee_membership_id: str | None = None
+    responsible_lawyer_membership_id: str | None = None
+    matter_type: str | None = Field(default=None, max_length=120)
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
+    client_code: str | None = Field(default=None, max_length=80)
+    client_contact_number: str | None = Field(default=None, max_length=40)
+    client_email: EmailStr | None = None
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
+    opposing_counsel: str | None = Field(default=None, max_length=255)
     case_number: str | None = Field(default=None, max_length=120)
+    filing_number: str | None = Field(default=None, max_length=120)
+    filing_date: date | None = None
     cnr_number: str | None = Field(default=None, max_length=32)
     status: MatterStatusInputLiteral | None = None
     practice_area: str | None = Field(default=None, min_length=2, max_length=120)
@@ -284,7 +311,16 @@ class MatterUpdateRequest(BaseModel):
     def normalize_status(cls, value: object) -> object:
         return normalize_matter_status(value)
 
-    @field_validator("case_number", "cnr_number", mode="before")
+    @field_validator(
+        "case_number",
+        "cnr_number",
+        "filing_number",
+        "matter_type",
+        "client_code",
+        "client_contact_number",
+        "opposing_counsel",
+        mode="before",
+    )
     @classmethod
     def normalize_identity_fields(cls, value: object) -> object:
         if isinstance(value, str):
@@ -376,10 +412,16 @@ class MatterRecord(BaseModel):
     id: str
     company_id: str
     assignee_membership_id: str | None
+    responsible_lawyer_membership_id: str | None = None
     title: str
     matter_code: str
+    matter_type: str | None = None
     client_name: str | None
+    client_code: str | None = None
+    client_contact_number: str | None = None
+    client_email: str | None = None
     opposing_party: str | None
+    opposing_counsel: str | None = None
     status: MatterStatusLiteral
     practice_area: str
     forum_level: MatterForumLevelLiteral
@@ -392,6 +434,8 @@ class MatterRecord(BaseModel):
     forum_consumer_level: str | None = None
     judge_name: str | None
     case_number: str | None = None
+    filing_number: str | None = None
+    filing_date: date | None = None
     cnr_number: str | None = None
     description: str | None
     next_hearing_on: date | None

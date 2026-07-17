@@ -3,12 +3,21 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from datetime import UTC, datetime, timedelta
 from xml.sax.saxutils import escape
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from caseops_api.db.models import AuditEvent, DocumentProcessingJob, Matter, MatterAttachment
+from caseops_api.db.models import (
+    AuditEvent,
+    DocumentProcessingJob,
+    Matter,
+    MatterAttachment,
+    MatterBulkImportJob,
+    MatterBulkImportRow,
+    NotificationDeliveryIntent,
+)
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -501,3 +510,495 @@ def test_bulk_matter_import_rejects_xlsx_xml_entities(client: TestClient) -> Non
 
     assert response.status_code == 400, response.text
     assert response.json()["detail"] == "XLSX matter import file could not be read."
+
+
+def test_bulk_matter_creation_template_preview_commit_history_and_notifications(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+
+    xlsx_template = client.get(
+        "/api/matters/imports/template?format=xlsx",
+        headers=auth_headers(token),
+    )
+    assert xlsx_template.status_code == 200, xlsx_template.text
+    assert xlsx_template.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    with zipfile.ZipFile(io.BytesIO(xlsx_template.content)) as workbook:
+        assert {f"xl/worksheets/sheet{index}.xml" for index in range(1, 4)}.issubset(
+            workbook.namelist()
+        )
+        assert b"Matter Title" in workbook.read("xl/worksheets/sheet1.xml")
+
+    csv_body = (
+        b"Matter Title,Matter Code,Matter Type,Practice Area,Matter Status,"
+        b"Matter Description,Client Name,Client Code,Client Contact Number,"
+        b"Client Email,Opposing Party Name,Opposing Counsel,Forum,Court,"
+        b"Case Number,Filing Number,Filing Date,Matter Owner,Responsible Lawyer\n"
+        b"Acme recovery proceedings,BULK-2026-001,Litigation,Commercial,active,"
+        b"Recovery of unpaid invoices,Acme Industries,CLI-001,+919876543210,"
+        b"legal@acme.com,Northstar Supplies,Rao Chambers,high_court,"
+        b"Delhi High Court,CS-COMM-123-2026,FILING-123,2026-07-17,"
+        b"owner@asterlegal.in,owner@asterlegal.in\n"
+    )
+    preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={"file": ("matters.csv", csv_body, "text/csv")},
+    )
+    assert preview.status_code == 200, preview.text
+    job = preview.json()
+    assert job["status"] == "validated"
+    assert job["valid_rows"] == 1
+    assert job["invalid_rows"] == 0
+    assert job["source_sha256"]
+    normalized = job["rows"][0]["normalized"]
+    assert normalized["client_code"] == "CLI-001"
+    assert normalized["filing_date"] == "2026-07-17"
+    assert normalized["owner_membership_id"] == boot["membership"]["id"]
+
+    committed = client.post(
+        f"/api/matters/imports/{job['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert committed.status_code == 200, committed.text
+    result = committed.json()
+    assert result["job"]["status"] == "completed"
+    assert result["job"]["created_count"] == 1
+    assert result["job"]["failed_count"] == 0
+    assert len(result["created_matter_ids"]) == 1
+
+    matter = client.get(
+        f"/api/matters/{result['created_matter_ids'][0]}",
+        headers=auth_headers(token),
+    )
+    assert matter.status_code == 200, matter.text
+    record = matter.json()
+    assert record["matter_type"] == "Litigation"
+    assert record["client_code"] == "CLI-001"
+    assert record["client_contact_number"] == "+919876543210"
+    assert record["client_email"] == "legal@acme.com"
+    assert record["opposing_counsel"] == "Rao Chambers"
+    assert record["case_number"] == "CS-COMM-123-2026"
+    assert record["filing_number"] == "FILING-123"
+    assert record["filing_date"] == "2026-07-17"
+    assert record["assignee_membership_id"] == boot["membership"]["id"]
+    assert record["responsible_lawyer_membership_id"] == boot["membership"]["id"]
+
+    repeated = client.post(
+        f"/api/matters/imports/{job['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["created_matter_ids"] == result["created_matter_ids"]
+
+    history = client.get(
+        "/api/matters/imports/history?q=matters.csv",
+        headers=auth_headers(token),
+    )
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == 1
+    assert history.json()["imports"][0]["uploaded_by_email"] == "owner@asterlegal.in"
+    assert history.json()["imports"][0]["rows"] == []
+
+    factory = get_session_factory()
+    with factory() as session:
+        events = set(
+            session.scalars(
+                select(NotificationDeliveryIntent.event_type).where(
+                    NotificationDeliveryIntent.source_id == job["id"]
+                )
+            )
+        )
+    assert "matter_import.upload_succeeded" in events
+    assert "matter_import.completed" in events
+
+
+def test_bulk_matter_creation_partial_success_and_error_report(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    csv_body = (
+        b"Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum,Client Email\n"
+        b"Valid bulk row,BULK-PARTIAL-1,Civil,active,Asha Rao,high_court,asha@example.com\n"
+        b"Invalid bulk row,BULK-PARTIAL-2,Unknown Specialty,closed,,high_court,not-an-email\n"
+    )
+    preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={"file": ("partial.csv", csv_body, "text/csv")},
+    )
+    assert preview.status_code == 200, preview.text
+    job = preview.json()
+    assert (job["valid_rows"], job["invalid_rows"]) == (1, 1)
+    errors = job["rows"][1]["errors"]
+    assert "Client name is required." in errors
+    assert any("Practice area is invalid" in error for error in errors)
+    assert any("disposed state" in error for error in errors)
+    assert any("email" in error.lower() for error in errors)
+
+    committed = client.post(
+        f"/api/matters/imports/{job['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert committed.status_code == 200, committed.text
+    result = committed.json()["job"]
+    assert result["status"] == "completed_with_errors"
+    assert (result["created_count"], result["failed_count"]) == (1, 1)
+
+    report = client.get(
+        f"/api/matters/imports/{job['id']}/errors",
+        headers=auth_headers(token),
+    )
+    assert report.status_code == 200, report.text
+    report_text = report.content.decode("utf-8-sig")
+    assert "Row Number,Matter Code,Matter Title,Status,Errors" in report_text
+    assert "BULK-PARTIAL-2" in report_text
+    assert "Client name is required." in report_text
+
+
+def test_bulk_matter_creation_detects_case_duplicates_and_commit_time_staleness(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    existing = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Existing case",
+            "matter_code": "EXISTING-CASE",
+            "client_name": "Existing Client",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+            "status": "active",
+            "case_number": "CASE-777",
+        },
+    )
+    assert existing.status_code == 200, existing.text
+
+    duplicate_create = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Duplicate direct create",
+            "matter_code": "DIRECT-DUPLICATE-CASE",
+            "client_name": "Other Client",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+            "status": "active",
+            "case_number": "case-777",
+        },
+    )
+    assert duplicate_create.status_code == 409, duplicate_create.text
+
+    update_target = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Duplicate update target",
+            "matter_code": "UPDATE-DUPLICATE-CASE",
+            "client_name": "Other Client",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert update_target.status_code == 200, update_target.text
+    update_duplicate = client.patch(
+        f"/api/matters/{update_target.json()['id']}",
+        headers=auth_headers(token),
+        json={
+            "case_number": "CASE-777",
+            "expected_updated_at": update_target.json()["updated_at"],
+        },
+    )
+    assert update_duplicate.status_code == 409, update_duplicate.text
+
+    duplicate_preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "duplicate.csv",
+                b"Matter Title,Matter Code,Practice Area,Matter Status,Client Name,"
+                b"Forum,Case Number\n"
+                b"Different title,NEW-CODE,Civil,active,Another Client,high_court,case-777\n",
+                "text/csv",
+            )
+        },
+    )
+    assert duplicate_preview.status_code == 200, duplicate_preview.text
+    assert any(
+        "Duplicate case number" in error
+        for error in duplicate_preview.json()["rows"][0]["errors"]
+    )
+
+    fresh_preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "stale.csv",
+                b"Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum\n"
+                b"Stale preview,STALE-CODE,Civil,active,Stale Client,high_court\n",
+                "text/csv",
+            )
+        },
+    )
+    assert fresh_preview.status_code == 200, fresh_preview.text
+    stale_job = fresh_preview.json()
+    _create_matter(client, token, "STALE-CODE", "Created after preview")
+    stale_commit = client.post(
+        f"/api/matters/imports/{stale_job['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert stale_commit.status_code == 400, stale_commit.text
+    with get_session_factory()() as session:
+        persisted = session.get(MatterBulkImportJob, stale_job["id"])
+        assert persisted is not None
+        assert persisted.status == "completed_with_errors"
+
+
+def test_bulk_matter_creation_permissions_custom_matter_manager_and_tenant_isolation(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    viewer_mid, viewer_token = _invite_user(
+        client,
+        owner_token,
+        email="matter-manager@asterlegal.in",
+        role="viewer",
+    )
+    denied = client.get(
+        "/api/matters/imports/template?format=csv",
+        headers=auth_headers(viewer_token),
+    )
+    assert denied.status_code == 403
+
+    role = client.post(
+        "/api/companies/current/roles",
+        headers=auth_headers(owner_token),
+        json={
+            "name": "Matter Manager",
+            "description": "May validate and commit matter imports only.",
+            "base_role": "viewer",
+            "permissions": ["matters:bulk_import"],
+        },
+    )
+    assert role.status_code == 200, role.text
+    assigned = client.post(
+        f"/api/companies/current/employees/{viewer_mid}/role",
+        headers=auth_headers(owner_token),
+        json={"custom_role_id": role.json()["id"]},
+    )
+    assert assigned.status_code == 200, assigned.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "company_slug": "aster-legal",
+            "email": "matter-manager@asterlegal.in",
+            "password": "ImportPass123!",
+        },
+    )
+    assert login.status_code == 200, login.text
+    manager_token = str(login.json()["access_token"])
+    allowed = client.get(
+        "/api/matters/imports/template?format=csv",
+        headers=auth_headers(manager_token),
+    )
+    assert allowed.status_code == 200, allowed.text
+
+    preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(manager_token),
+        files={
+            "file": (
+                "manager.csv",
+                b"Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum\n"
+                b"Managed import,MANAGER-1,Civil,active,Manager Client,high_court\n",
+                "text/csv",
+            )
+        },
+    )
+    assert preview.status_code == 200, preview.text
+
+    tenant_b = _bootstrap_company(
+        client,
+        slug="bulk-import-tenant-b",
+        email="owner@bulk-b.example",
+    )
+    tenant_b_token = str(tenant_b["access_token"])
+    cross_tenant = client.get(
+        f"/api/matters/imports/{preview.json()['id']}",
+        headers=auth_headers(tenant_b_token),
+    )
+    assert cross_tenant.status_code == 404
+
+
+def test_bulk_matter_creation_strict_xlsx_validation_and_formula_sanitization(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    xlsx = _xlsx_bytes(
+        [
+            "Matter Title",
+            "Matter Code",
+            "Practice Area",
+            "Matter Status",
+            "Client Name",
+            "Forum",
+            "Client Contact Number",
+        ],
+        [
+            [
+                "Valid workbook row",
+                "XLSX-CREATE-1",
+                "Civil",
+                "active",
+                "Acme",
+                "high_court",
+                "+919876543210",
+            ],
+            ["Missing status", "XLSX-CREATE-2", "Civil", "", "Acme", "high_court", "9876543210"],
+            ["Unsafe phone", "XLSX-CREATE-3", "Civil", "active", "Acme", "high_court", "=2+2"],
+        ],
+    )
+    preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "strict.xlsx",
+                xlsx,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    job = preview.json()
+    assert (job["valid_rows"], job["invalid_rows"]) == (1, 2)
+    assert "Matter status is required." in job["rows"][1]["errors"]
+    assert "Unsafe formula-like cell values are not allowed." in job["rows"][2]["errors"]
+
+    with get_session_factory()() as session:
+        unsafe_row = session.scalar(
+            select(MatterBulkImportRow).where(
+                MatterBulkImportRow.job_id == job["id"],
+                MatterBulkImportRow.row_number == 4,
+            )
+        )
+        assert unsafe_row is not None
+        assert unsafe_row.raw_json["Client Contact Number"] == "[unsafe formula removed]"
+
+
+def test_bulk_matter_creation_expiry_and_cancel_are_terminal(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+
+    def preview(code: str) -> dict[str, object]:
+        response = client.post(
+            "/api/matters/imports/preview",
+            headers=auth_headers(token),
+            files={
+                "file": (
+                    f"{code}.csv",
+                    (
+                        "Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum\n"
+                        f"Terminal test,{code},Civil,active,Terminal Client,high_court\n"
+                    ).encode(),
+                    "text/csv",
+                )
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    expired = preview("EXPIRED-IMPORT-1")
+    with get_session_factory()() as session:
+        job = session.get(MatterBulkImportJob, str(expired["id"]))
+        assert job is not None
+        job.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        session.commit()
+    expired_commit = client.post(
+        f"/api/matters/imports/{expired['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert expired_commit.status_code == 400
+    expired_detail = client.get(
+        f"/api/matters/imports/{expired['id']}",
+        headers=auth_headers(token),
+    ).json()
+    assert expired_detail["status"] == "expired"
+
+    cancelled = preview("CANCELLED-IMPORT-1")
+    cancel = client.post(
+        f"/api/matters/imports/{cancelled['id']}/cancel",
+        headers=auth_headers(token),
+    )
+    assert cancel.status_code == 200, cancel.text
+    assert cancel.json()["status"] == "cancelled"
+    cancelled_commit = client.post(
+        f"/api/matters/imports/{cancelled['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert cancelled_commit.status_code == 400
+
+
+def test_bulk_matter_creation_recovers_stale_import_without_recreating_completed_rows(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "recover.csv",
+                b"Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum\n"
+                b"Already committed,RECOVER-1,Civil,active,Recovery Client,high_court\n"
+                b"Resume this row,RECOVER-2,Civil,active,Recovery Client,high_court\n",
+                "text/csv",
+            )
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    job_id = preview.json()["id"]
+    existing_id = _create_matter(client, token, "RECOVER-1", "Already committed")
+
+    with get_session_factory()() as session:
+        job = session.get(MatterBulkImportJob, job_id)
+        first_row = session.scalar(
+            select(MatterBulkImportRow).where(
+                MatterBulkImportRow.job_id == job_id,
+                MatterBulkImportRow.row_number == 2,
+            )
+        )
+        assert job is not None and first_row is not None
+        job.status = "importing"
+        job.updated_at = datetime.now(UTC) - timedelta(minutes=11)
+        first_row.status = "created"
+        first_row.created_matter_id = existing_id
+        session.commit()
+
+    resumed = client.post(
+        f"/api/matters/imports/{job_id}/commit",
+        headers=auth_headers(token),
+    )
+    assert resumed.status_code == 200, resumed.text
+    result = resumed.json()
+    assert result["job"]["status"] == "completed"
+    assert result["job"]["created_count"] == 2
+    assert set(result["created_matter_ids"]) == {
+        existing_id,
+        next(
+            row["created_matter_id"]
+            for row in result["job"]["rows"]
+            if row["row_number"] == 3
+        ),
+    }
+    with get_session_factory()() as session:
+        recover_one_count = session.scalar(
+            select(func.count()).select_from(Matter).where(Matter.matter_code == "RECOVER-1")
+        )
+        assert recover_one_count == 1

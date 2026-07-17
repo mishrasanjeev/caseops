@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, time
 from typing import BinaryIO
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
@@ -56,6 +56,8 @@ from caseops_api.db.models import (
     MembershipRole,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
+    Team,
+    TeamMembership,
     utcnow,
 )
 from caseops_api.schemas.billing import (
@@ -1305,11 +1307,32 @@ def _get_matter_attachment_model(
     return attachment
 
 
+def _acquire_case_number_lock(
+    session: Session,
+    *,
+    company_id: str,
+    case_number: str,
+) -> None:
+    """Serialize tenant/case-number writes where PostgreSQL is available."""
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    lock_key = int.from_bytes(
+        hashlib.sha256(f"{company_id}:{case_number.casefold()}".encode()).digest()[:8],
+        byteorder="big",
+        signed=True,
+    )
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": lock_key},
+    )
+
+
 def create_matter(
     session: Session,
     *,
     context: SessionContext,
     payload: MatterCreateRequest,
+    commit: bool = True,
 ) -> MatterRecord:
     if payload.status == MatterStatus.DISPOSED.value:
         raise HTTPException(
@@ -1334,6 +1357,78 @@ def create_matter(
             status_code=status.HTTP_409_CONFLICT,
             detail="A matter with this code already exists for the current company.",
         )
+    normalized_case_number = payload.case_number.strip() if payload.case_number else None
+    if normalized_case_number:
+        # The application-level duplicate check alone is race-prone. Serialize
+        # same-tenant/same-case-number writes on PostgreSQL so concurrent API
+        # creates and bulk-import rows cannot both pass the check. SQLite test
+        # databases intentionally use the ordinary validation path.
+        _acquire_case_number_lock(
+            session,
+            company_id=context.company.id,
+            case_number=normalized_case_number,
+        )
+        existing_case_number = session.scalar(
+            select(Matter.id).where(
+                Matter.company_id == context.company.id,
+                func.lower(Matter.case_number) == normalized_case_number.lower(),
+            )
+        )
+        if existing_case_number:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A matter with this case number already exists for the current company.",
+            )
+    assignee = (
+        _get_company_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=payload.assignee_membership_id,
+        )
+        if payload.assignee_membership_id
+        else None
+    )
+    responsible_lawyer = (
+        _get_company_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=payload.responsible_lawyer_membership_id,
+        )
+        if payload.responsible_lawyer_membership_id
+        else None
+    )
+    team = None
+    if payload.team_id:
+        team = session.scalar(
+            select(Team).where(
+                Team.id == payload.team_id,
+                Team.company_id == context.company.id,
+                Team.is_active.is_(True),
+            )
+        )
+        if team is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Team does not belong to this company or is inactive.",
+            )
+        if context.company.team_scoping_enabled:
+            for label, membership in (
+                ("Matter owner", assignee),
+                ("Responsible lawyer", responsible_lawyer),
+            ):
+                if membership is None:
+                    continue
+                belongs = session.scalar(
+                    select(TeamMembership.id).where(
+                        TeamMembership.team_id == team.id,
+                        TeamMembership.membership_id == membership.id,
+                    )
+                )
+                if belongs is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"{label} must belong to the assigned team.",
+                    )
     forum_selection = _resolve_forum_selection(
         session,
         forum_level=payload.forum_level,
@@ -1348,11 +1443,27 @@ def create_matter(
 
     matter = Matter(
         company_id=context.company.id,
+        assignee_membership_id=assignee.id if assignee else None,
+        responsible_lawyer_membership_id=(
+            responsible_lawyer.id if responsible_lawyer else None
+        ),
+        team_id=team.id if team else None,
         title=payload.title.strip(),
         matter_code=payload.matter_code.strip(),
+        matter_type=payload.matter_type.strip() if payload.matter_type else None,
         client_name=payload.client_name.strip() if payload.client_name else None,
+        client_code=payload.client_code.strip() if payload.client_code else None,
+        client_contact_number=(
+            payload.client_contact_number.strip() if payload.client_contact_number else None
+        ),
+        client_email=str(payload.client_email).strip().lower() if payload.client_email else None,
         opposing_party=payload.opposing_party.strip() if payload.opposing_party else None,
-        case_number=payload.case_number.strip() if payload.case_number else None,
+        opposing_counsel=(
+            payload.opposing_counsel.strip() if payload.opposing_counsel else None
+        ),
+        case_number=normalized_case_number,
+        filing_number=payload.filing_number.strip() if payload.filing_number else None,
+        filing_date=payload.filing_date,
         cnr_number=payload.cnr_number.strip() if payload.cnr_number else None,
         status=payload.status,
         is_active=payload.status != MatterStatus.DISPOSED.value,
@@ -1417,7 +1528,13 @@ def create_matter(
         matter_id=matter.id,
         metadata={
             "matter_code": matter.matter_code,
+            "matter_type": matter.matter_type,
             "status": matter.status,
+            "case_number": matter.case_number,
+            "filing_number": matter.filing_number,
+            "assignee_membership_id": matter.assignee_membership_id,
+            "responsible_lawyer_membership_id": matter.responsible_lawyer_membership_id,
+            "team_id": matter.team_id,
             "forum_level": matter.forum_level,
             "court_id": matter.court_id,
             "court_name": matter.court_name,
@@ -1431,8 +1548,14 @@ def create_matter(
             "case_tracking_auto_link": case_tracking_auto_link.metadata(),
         },
     )
-    session.commit()
-    session.refresh(matter)
+    if commit:
+        session.commit()
+        session.refresh(matter)
+    else:
+        # Bulk import owns the transaction so the matter, audit/activity rows,
+        # and import-row outcome are committed atomically. A worker crash can
+        # therefore never leave a created matter behind a still-valid row.
+        session.flush()
     return _matter_record(matter)
 
 
@@ -1752,6 +1875,21 @@ def update_matter(
             )
             matter.assignee_membership_id = assignee.id
 
+    responsible_membership_id = updates.pop("responsible_lawyer_membership_id", None)
+    responsible_changed = (
+        "responsible_lawyer_membership_id" in payload.model_dump(exclude_unset=True)
+    )
+    if responsible_changed:
+        if responsible_membership_id is None:
+            matter.responsible_lawyer_membership_id = None
+        else:
+            responsible = _get_company_membership(
+                session,
+                company_id=context.company.id,
+                membership_id=responsible_membership_id,
+            )
+            matter.responsible_lawyer_membership_id = responsible.id
+
     # Sprint 8c: validate team membership lives in this company before
     # letting the setattr loop below accept it (otherwise a rogue
     # `team_id` from tenant A could land on tenant B's matter via a
@@ -1775,6 +1913,25 @@ def update_matter(
                 )
             matter.team_id = team_id
 
+    if context.company.team_scoping_enabled and matter.team_id:
+        for label, membership_id in (
+            ("Matter owner", matter.assignee_membership_id),
+            ("Responsible lawyer", matter.responsible_lawyer_membership_id),
+        ):
+            if membership_id is None:
+                continue
+            belongs = session.scalar(
+                select(TeamMembership.id).where(
+                    TeamMembership.team_id == matter.team_id,
+                    TeamMembership.membership_id == membership_id,
+                )
+            )
+            if belongs is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{label} must belong to the assigned team.",
+                )
+
     if "matter_code" in updates:
         requested_code = updates.pop("matter_code")
         if requested_code is not None and requested_code != matter.matter_code:
@@ -1791,6 +1948,32 @@ def update_matter(
                     detail="A matter with this code already exists for the current company.",
                 )
             matter.matter_code = requested_code
+
+    if "case_number" in updates:
+        requested_case_number = updates.pop("case_number")
+        if isinstance(requested_case_number, str):
+            requested_case_number = requested_case_number.strip() or None
+        if requested_case_number and requested_case_number != matter.case_number:
+            _acquire_case_number_lock(
+                session,
+                company_id=context.company.id,
+                case_number=requested_case_number,
+            )
+            existing_case_number = session.scalar(
+                select(Matter.id).where(
+                    Matter.company_id == context.company.id,
+                    func.lower(Matter.case_number) == requested_case_number.lower(),
+                    Matter.id != matter.id,
+                )
+            )
+            if existing_case_number:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "A matter with this case number already exists for the current company."
+                    ),
+                )
+        matter.case_number = requested_case_number
 
     if FORUM_SELECTION_FIELDS & updates.keys():
         forum_selection = _resolve_forum_selection(
@@ -1817,13 +2000,18 @@ def update_matter(
             value = value.strip().upper()
         if field_name == "claim_amount_notes" and isinstance(value, str):
             value = value.strip() or None
-        if field_name in {"case_number", "cnr_number"} and isinstance(value, str):
+        if field_name in {"cnr_number", "filing_number"} and isinstance(value, str):
             value = value.strip() or None
         if field_name in {"title", "practice_area"} and isinstance(value, str):
             value = value.strip()
         if field_name in {
             "client_name",
+            "client_code",
+            "client_contact_number",
+            "client_email",
+            "matter_type",
             "opposing_party",
+            "opposing_counsel",
             "court_name",
             "judge_name",
             "description",

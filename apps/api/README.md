@@ -20,6 +20,30 @@ uv run uvicorn caseops_api.main:app --reload --app-dir src
 
 CaseOps local API runtime is Postgres-first. Use `CASEOPS_DATABASE_URL` to point at a Postgres 17 + `pgvector` instance, not SQLite, for normal local development and seeded data work.
 
+## Bulk Matter Creation
+
+The production matter import workflow is tenant-scoped and capability-gated by
+`matters:bulk_import` (Owner/Admin by default; delegable to a custom Matter
+Manager role).
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/matters/imports/template?format=xlsx|csv` | Download the controlled template |
+| `POST` | `/api/matters/imports/preview` | Validate and persist a CSV/XLSX preview |
+| `GET` | `/api/matters/imports/history` | Search tenant import history |
+| `GET` | `/api/matters/imports/{job_id}` | Read job summary and row results |
+| `POST` | `/api/matters/imports/{job_id}/commit` | Revalidate and create every valid row |
+| `POST` | `/api/matters/imports/{job_id}/cancel` | Cancel an uncommitted preview |
+| `GET` | `/api/matters/imports/{job_id}/errors` | Download formula-safe error CSV |
+
+Limits are 2 MB and 500 non-empty data rows. Preview jobs expire after 24
+hours; completed commit is idempotent. Matter creation and its import-row outcome
+commit atomically. An `importing` job with no heartbeat for ten minutes can be
+resumed safely, and PostgreSQL serializes concurrent same-tenant case-number
+creation. See
+`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md` for the full field, validation,
+security, state-machine, and partial-success specification.
+
 ## Document Worker
 
 ```powershell

@@ -32,6 +32,7 @@ export type Role =
 export type Capability =
   // matter + workspace
   | "matters:create"
+  | "matters:bulk_import"
   | "matters:edit"
   | "matters:archive"
   | "matters:write"
@@ -200,6 +201,7 @@ const GOVERNANCE: Capability[] = [
   "company:manage_profile",
   "company:manage_users",
   "workspace:admin",
+  "matters:bulk_import",
   "matter_access:manage",
   "teams:manage",
   // Email templates editor sits next to Teams admin.

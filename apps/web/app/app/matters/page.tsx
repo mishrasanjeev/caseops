@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Briefcase, Filter, Loader2, RotateCcw, Tags } from "lucide-react";
+import { Briefcase, Filter, Loader2, RotateCcw, Tags, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -139,6 +139,7 @@ export default function MattersPage() {
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [bulkTagId, setBulkTagId] = useState<string>("none");
   const canCreateMatter = useCapability("matters:create");
+  const canBulkImportMatters = useCapability("matters:bulk_import");
   const canEditMatters = useCapability("matters:edit");
   const canArchiveMatters = useCapability("matters:archive");
   const listParams = useMemo(
@@ -515,7 +516,22 @@ export default function MattersPage() {
         eyebrow="Matters"
         title="Matter portfolio"
         description="Every matter in your workspace. Click a row to open the cockpit."
-        actions={canCreateMatter ? <NewMatterDialog /> : null}
+        actions={
+          canCreateMatter || canBulkImportMatters ? (
+            <div className="flex flex-wrap gap-2">
+              {canBulkImportMatters ? (
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/app/matters/imports")}
+                  data-testid="matter-import-trigger"
+                >
+                  <UploadCloud className="h-4 w-4" /> Bulk upload matters
+                </Button>
+              ) : null}
+              {canCreateMatter ? <NewMatterDialog /> : null}
+            </div>
+          ) : null
+        }
       />
 
       {!isPending && !isError ? filterPanel : null}

@@ -113,6 +113,21 @@ describe("MattersPage", () => {
     expect(screen.getByText(/2,50,000/)).toBeInTheDocument();
   });
 
+  it("shows bulk upload only to users with the dedicated matter-import capability", async () => {
+    const push = vi.fn();
+    useRouterMock.mockReturnValue({ push, replace: vi.fn(), refresh: vi.fn() });
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:bulk_import",
+    );
+    listMattersMock.mockResolvedValue({ matters: [], next_cursor: null });
+
+    render(withClient(<MattersPage />));
+
+    const trigger = await screen.findByTestId("matter-import-trigger");
+    fireEvent.click(trigger);
+    expect(push).toHaveBeenCalledWith("/app/matters/imports");
+  });
+
   it("separates disposal from ordinary status editing", async () => {
     useCapabilityMock.mockImplementation(
       (capability: string) =>

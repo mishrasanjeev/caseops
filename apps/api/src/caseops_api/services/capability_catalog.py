@@ -19,6 +19,11 @@ _ALL_AUTHENTICATED = frozenset(
 CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # --- matter and workspace core ---
     "matters:create": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
+    # Bulk import can create hundreds of tenant records and expose import
+    # history. Owner/Admin receive it by default; a tenant may delegate this
+    # single capability to a custom "Matter Manager" role without granting
+    # workspace administration.
+    "matters:bulk_import": _OWNER_ADMIN,
     "matters:edit": _ALL_FEE_EARNERS,  # paralegals can edit matter metadata
     "matters:archive": _STAFF,
     "matters:write": _ALL_FEE_EARNERS,

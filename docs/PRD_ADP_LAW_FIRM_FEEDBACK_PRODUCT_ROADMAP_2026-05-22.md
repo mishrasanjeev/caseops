@@ -551,7 +551,7 @@ CaseOps interpretation:
 | Law amendment alerts | Statute model foundation exists | Amendment/regulatory monitoring missing | Source-backed legal-change watchlist and in-app alerts | Phase 2/4 |
 | Deep judge analytics | Judge catalog/analytics foundations exist | Deeper descriptive analytics missing | Source-backed court/bench/judge context explorer | Phase 1/3 |
 | Best court/bench/judge | Not safe to implement literally | Outcome prediction and judge-shopping risk | Do not ship; replace with descriptive fit/context explanation | Governed alternative |
-| Bulk matter upload | Upload foundations exist | ZIP/folder/Excel import workflow missing | Dry-run import plan and validation queue | Phase 2 |
+| Bulk matter upload | Production CSV/XLSX create workflow implemented 2026-07-17 | Document ZIP commit remains separate | Persistent preview, partial commit, history, errors, notifications, audit | Delivered |
 | Google Drive integration | Not complete | OAuth import/sync missing | Bounded manual Drive import first; durable sync later | Phase 2/4 |
 | Draft data extraction | Drafting templates exist | Pre-fill extraction from uploaded docs incomplete | Source-linked extracted fact review queue | Phase 3 |
 | Court-specific formats | Templates exist | Forum-specific layout/required-fields depth missing | Court-format profiles per draft type | Phase 3 |
@@ -1725,33 +1725,36 @@ Tests:
 - Rework/reject state.
 - Sensitive audit redaction.
 
-### ADP-11: Bulk Matter Upload Dry-Run
+### ADP-11: Bulk Matter Creation
 
 Type: Backend + Web
 Priority: P2
 Dependencies: Matter/document creation, attachment pipeline
-Status: Foundation implemented 2026-05-24; bulk matter import now supports a
-dry-run-only planner for CSV, JSON, and XLSX matter mappings plus optional
-folder/ZIP filename indexes. The planner validates required matter fields,
-detects visible tenant-scoped duplicates, checks document filename references,
-and records redacted audit summary counts only. Commit execution, persistent
-import jobs, attachment storage, OCR, corpus processing, embeddings, and Google
-Drive import remain deferred.
+Status: Production matter-creation workflow implemented 2026-07-17. Authorized
+Owner/Admin/delegated Matter Manager users can download controlled CSV/XLSX
+templates, persist a row-level preview, confirm partial-success creation after
+commit-time revalidation, download a safe error CSV, search tenant history, and
+receive durable in-app notification intents. Every job and row outcome is
+audited and repeat commit is idempotent. The older CSV/JSON/XLSX document-name
+dry-run remains for backward compatibility. Attachment ZIP commit, OCR, corpus
+processing, embeddings, and Google Drive import are separate workflows.
 
 Scope:
 
-- ZIP/folder/Excel mapping.
-- Dry-run import plan.
-- Validation queue.
-- Duplicate detection.
-- Commit only after approval.
+- CSV/XLSX template and full 20-field mapping.
+- Persistent validation queue and 24-hour preview.
+- Duplicate, format, tenant-reference, team-scope, and formula validation.
+- Explicit partial-success commit with commit-time revalidation.
+- Searchable import history, safe error report, notifications, and audit.
+- Backward-compatible ZIP/folder/document-name dry-run planning.
 
 Tests:
 
-- Valid import plan.
-- Invalid row errors.
-- Duplicate detection.
-- No corpus jobs.
+- Template, valid plan, full-field round trip, and partial success.
+- Invalid row/error-report coverage.
+- Duplicate, stale-preview, idempotency, permission, tenant-isolation, XLSX,
+  XML-entity, and formula safety coverage.
+- No attachment, storage, OCR, corpus, or embedding jobs from matter creation.
 
 ### ADP-12: Google Drive Bounded Manual Import
 

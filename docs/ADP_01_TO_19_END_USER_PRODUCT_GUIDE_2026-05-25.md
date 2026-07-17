@@ -232,25 +232,77 @@ What to expect:
   document payloads or storage keys.
 - There is no biometric verification or automated identity scoring.
 
-## ADP-11: Bulk Matter Upload Dry Run
+## ADP-11: Bulk Matter Creation
 
-Purpose: Validate a bulk matter import before creating any matters.
+Purpose: Validate a controlled CSV/XLSX file, create every valid matter after
+confirmation, and retain a searchable audit/error history.
+
+Who can use it:
+
+- Workspace Owner.
+- Admin.
+- A custom Matter Manager role granted `matters:bulk_import` by an Owner.
+- Viewer/read-only users cannot see or call the import workflow.
 
 How to use:
 
-1. Prepare a supported mapping file or manifest.
-2. Run the bulk matter import dry run.
-3. Review valid rows, invalid rows, duplicate candidates, missing fields, and
-   unsupported document references.
-4. Correct the source file and rerun the dry run until the plan is clean.
+1. Open **Matters** and select **Bulk upload matters**.
+2. Download the XLSX template (recommended) or CSV template. The XLSX workbook
+   includes Matter Import, Reference Values, and Instructions sheets.
+3. Enter one matter per row. Do not rename or remove required columns.
+4. Upload the completed `.xlsx` or UTF-8 `.csv` file.
+5. Select **Validate data before import**. No matter is created at this step.
+6. Review Total Records, Valid, Validation Errors, Imported, and Failed counts.
+   Invalid rows appear first and show every detected problem.
+7. Correct the source and upload it again, or confirm the current job to create
+   all rows that are still valid. Invalid rows are skipped rather than blocking
+   valid matters.
+8. Download the error CSV for any invalid or commit-failed rows.
+9. Use Import History to search by file name, uploader name, or uploader email,
+   and filter by job status.
+
+Required fields:
+
+- Matter Title.
+- Matter Code.
+- Client Name.
+- Matter Status (`active`, `intake`, or `on_hold`).
+- Practice Area.
+- Forum.
+
+Supported optional fields include Matter Type/Description, client code/contact
+number/email, opposing party/counsel, Court, Case Number, Filing Number/Date,
+Matter Owner, Assigned Team, and Responsible Lawyer. People are entered by
+their active CaseOps work email; teams may use an active team name or slug.
+
+What validation checks:
+
+- Missing required fields and invalid matter code/status/forum.
+- Invalid practice area, filing date, email, or phone.
+- Duplicate Matter Code, Case Number, or Matter Title + Client Name in the file
+  and visible tenant records.
+- Unknown, inactive, or cross-company people/teams.
+- Team-membership consistency when team scoping is enabled.
+- Unsafe spreadsheet formulas or formula-like values.
 
 What to expect:
 
-- Dry run does not create matter rows.
-- Dry run does not create attachment rows.
-- Dry run does not store uploaded file payloads.
-- ZIP or folder handling, where shown, is metadata-only and does not run OCR,
-  document processing, corpus ingest, or embeddings.
+- Maximum 500 non-empty rows and 2 MB per import.
+- Validation jobs expire after 24 hours; expired jobs must be uploaded again.
+- The system revalidates at confirmation so a duplicate created after preview
+  cannot silently pass.
+- A mixed file can finish with partial success. For example, 95 valid rows are
+  created while 5 invalid rows remain in the error report.
+- Repeating confirmation for a completed job is idempotent and creates no
+  duplicate matters.
+- Upload, validation failure, and completion produce in-app notification
+  intents. Validation, each created row, completion, cancellation, and error
+  report download are audited.
+- The original upload binary is not retained. CaseOps stores its SHA-256,
+  metadata, sanitized row data, normalized values, errors, and outcomes.
+- The former `/imports/dry-run` API remains for backward-compatible ADP-11
+  planning and document-name checks. It still creates no matters or documents;
+  the dedicated Bulk upload matters page is the production creation workflow.
 
 ## ADP-12: Google Drive Bounded Manual Import
 

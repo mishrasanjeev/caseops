@@ -35,6 +35,7 @@ export default defineConfig({
     /teams-admin\.spec\.ts/,
     /contracts-detail\.spec\.ts/,
     /matter-hearings\.spec\.ts/,
+    /bulk-matter-creation\.spec\.ts/,
     /research\.spec\.ts/,
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,
