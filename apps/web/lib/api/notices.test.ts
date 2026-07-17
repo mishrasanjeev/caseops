@@ -132,7 +132,13 @@ describe("notices API client", () => {
     expect(apiBlobRequestMock).toHaveBeenCalledWith(
       "/api/notices/notice%2Funsafe/download",
     );
-    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    const downloadedBlob = createObjectUrl.mock.calls[0]?.[0] as Blob | undefined;
+    expect(downloadedBlob).toBeDefined();
+    expect(downloadedBlob).toMatchObject({
+      size: 12,
+      type: "text/plain;charset=utf-8",
+    });
+    expect(await downloadedBlob?.text()).toBe("notice bytes");
     expect(click).toHaveBeenCalledTimes(1);
 
     createObjectUrl.mockRestore();
