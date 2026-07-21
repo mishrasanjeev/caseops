@@ -279,7 +279,7 @@ async function loadAllLinkedGlobalNotices(
   const seenCursors = new Set<string>();
   let cursor: string | null = null;
 
-  do {
+  while (true) {
     const page = await listNotices({ matter_id: matterId, limit: 100, cursor });
     for (const notice of page.notices) notices.set(notice.id, notice);
 
@@ -287,7 +287,7 @@ async function loadAllLinkedGlobalNotices(
     if (!next || seenCursors.has(next)) break;
     seenCursors.add(next);
     cursor = next;
-  } while (cursor);
+  }
 
   return Array.from(notices.values());
 }

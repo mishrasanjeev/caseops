@@ -231,7 +231,7 @@ async function loadAllMatters(): Promise<MatterOption[]> {
   const matters = new Map<string, MatterOption>();
   const seenCursors = new Set<string>();
   let cursor: string | null = null;
-  do {
+  while (true) {
     const page = await listMatters({ limit: 100, cursor });
     for (const matter of page.matters) {
       matters.set(matter.id, {
@@ -244,7 +244,7 @@ async function loadAllMatters(): Promise<MatterOption[]> {
     if (!next || seenCursors.has(next)) break;
     seenCursors.add(next);
     cursor = next;
-  } while (cursor);
+  }
   return Array.from(matters.values()).sort((left, right) =>
     `${left.matter_code} ${left.title}`.localeCompare(`${right.matter_code} ${right.title}`),
   );

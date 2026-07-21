@@ -646,12 +646,11 @@ def _parse_import_date(value: str | None) -> tuple[date | None, str | None]:
     if not cleaned:
         return None, None
     if re.fullmatch(r"\d+(?:\.0+)?", cleaned):
-        try:
-            serial = int(float(cleaned))
+        serial_text = cleaned.partition(".")[0]
+        if len(serial_text) <= 7:
+            serial = int(serial_text)
             if 1 <= serial <= 2_958_465:
                 return date(1899, 12, 30) + timedelta(days=serial), None
-        except (OverflowError, ValueError):
-            pass
     for date_format in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
         try:
             return datetime.strptime(cleaned, date_format).date(), None
@@ -1219,7 +1218,7 @@ def _matter_template_xlsx_bytes() -> bytes:
         ["Dates", "Use YYYY-MM-DD. DD/MM/YYYY and native Excel dates are also accepted."],
         [
             "People",
-            "Matter Owner and Responsible Lawyer must be active work-email "
+            "Matter Owner and Responsible Lawyer must be active work-email " +
             "addresses in this company.",
         ],
         ["Teams", "Assigned Team must be an active team name or slug in this company."],
@@ -1823,9 +1822,10 @@ def commit_matter_import(
                     heartbeat.updated_at = row.updated_at
                 session.commit()
         except Exception:
+            safe_job_id = job_id.replace("\r", r"\r").replace("\n", r"\n")
             logger.exception(
                 "Unexpected matter import row failure (job_id=%s, row_number=%s)",
-                job_id,
+                safe_job_id,
                 row_number,
             )
             session.rollback()
