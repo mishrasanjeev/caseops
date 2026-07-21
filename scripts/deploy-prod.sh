@@ -11,9 +11,10 @@
 # This script enforces the order:
 #   1. build api + web images in parallel
 #   2. update + execute caseops-migrate-job (alembic upgrade head)
-#   3. deploy caseops-api with the new image
-#   4. deploy caseops-web with the new image
-#   5. quick post-deploy smoke
+#   3. refresh scheduled/background jobs with an immutable API image
+#   4. deploy caseops-api with the new image
+#   5. deploy caseops-web with the new image
+#   6. quick post-deploy smoke
 #
 # Usage:
 #   scripts/deploy-prod.sh                 # tag with current git HEAD short SHA
@@ -101,7 +102,7 @@ echo "API image: ${API_IMAGE}"
 echo "Web image: ${WEB_IMAGE}"
 
 # Step 1 — build both images in parallel.
-echo "--- 1/5 build images (parallel) ---"
+echo "--- 1/6 build images (parallel) ---"
 if [[ ! -f "${API_GCLOUDIGNORE_PATH}" ]]; then
   echo "Missing ${API_GCLOUDIGNORE_PATH}; refusing API build because local secrets/caches may be uploaded."
   exit 1
@@ -125,18 +126,57 @@ wait "${API_BUILD_PID}" || { echo "API build FAILED"; exit 1; }
 wait "${WEB_BUILD_PID}" || { echo "Web build FAILED"; exit 1; }
 echo "  api + web images built."
 
+# Resolve the API tag while it is known to exist and pin every long-lived job
+# to the digest. Artifact Registry cleanup may delete tags; digest references
+# keep scheduled jobs runnable and prevent a repeat of the July 2026 report outage.
+API_DIGEST=$(gcloud artifacts docker images describe "${API_IMAGE}" \
+  --project "${PROJECT}" --format='value(image_summary.digest)')
+if [[ ! "${API_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  echo "ERROR: could not resolve immutable digest for ${API_IMAGE}."
+  exit 1
+fi
+API_IMMUTABLE_IMAGE="${REGISTRY}/caseops-api@${API_DIGEST}"
+echo "  immutable api image=${API_IMMUTABLE_IMAGE}"
+
 # Step 2 — refresh and execute the migrate-job. Idempotent when alembic
 # is already at head; mandatory when there's a pending migration.
-echo "--- 2/5 migrate-job (alembic upgrade head) ---"
+echo "--- 2/6 migrate-job (alembic upgrade head) ---"
 gcloud run jobs update caseops-migrate-job \
-  --image "${API_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet
+  --image "${API_IMMUTABLE_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet
 gcloud run jobs execute caseops-migrate-job \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
 
+# Step 3 - refresh recurring jobs. They all execute commands packaged in the API
+# image, so every production deploy must advance them with the service release.
+echo "--- 3/6 refresh recurring jobs ---"
+SCHEDULED_API_JOBS=(
+  caseops-document-worker
+  caseops-legal-update-sync
+  caseops-case-tracking-poll
+  caseops-activity-report
+  caseops-reminders-job
+)
+for JOB_NAME in "${SCHEDULED_API_JOBS[@]}"; do
+  gcloud run jobs update "${JOB_NAME}" \
+    --image "${API_IMMUTABLE_IMAGE}" \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --quiet
+  LIVE_JOB_IMAGE=$(gcloud run jobs describe "${JOB_NAME}" \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format='value(spec.template.spec.template.spec.containers[0].image)')
+  if [[ "${LIVE_JOB_IMAGE}" != "${API_IMMUTABLE_IMAGE}" ]]; then
+    echo "ERROR: ${JOB_NAME} image=${LIVE_JOB_IMAGE}; expected ${API_IMMUTABLE_IMAGE}."
+    exit 1
+  fi
+  echo "  ${JOB_NAME} pinned to ${API_DIGEST}."
+done
+
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.
-echo "--- 3/5 deploy caseops-api ---"
+echo "--- 4/6 deploy caseops-api ---"
 gcloud run deploy caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
@@ -151,7 +191,7 @@ gcloud run deploy caseops-api \
 echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
 
 # Step 4 — deploy web.
-echo "--- 4/5 deploy caseops-web ---"
+echo "--- 5/6 deploy caseops-web ---"
 gcloud run deploy caseops-web \
   --image "${WEB_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet \
   --min-instances "${WEB_MIN_INSTANCES}"
@@ -160,7 +200,7 @@ echo "  caseops-web at 100% traffic on ${TAG} (min-instances ${WEB_MIN_INSTANCES
 # Step 5 — staleness sweep. Fails the script if the public domain
 # doesn't return the new image tag, so you don't think you deployed
 # when you actually didn't.
-echo "--- 5/5 staleness sweep ---"
+echo "--- 6/6 staleness sweep ---"
 LIVE_API_TAG=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' | grep -oE "[a-f0-9]+$")
 LIVE_WEB_TAG=$(gcloud run services describe caseops-web --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' | grep -oE "[a-f0-9]+$")
 if [[ "${LIVE_API_TAG}" != "${TAG}" || "${LIVE_WEB_TAG}" != "${TAG}" ]]; then

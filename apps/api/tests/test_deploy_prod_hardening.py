@@ -203,7 +203,13 @@ exit 91
         """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
-if [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[0].image"* ]]; then
+if [[ "$*" == *"artifacts docker images describe"* ]]; then
+  printf '%s\n' 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+elif [[ "$*" == *"run jobs describe"* ]]; then
+  printf '%s%s\n' \
+    'asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:' \
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[0].image"* ]]; then
   printf 'registry.invalid/caseops-api:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-web"* ]]; then
   printf 'registry.invalid/caseops-web:%s\n' "${FAKE_TAG}"

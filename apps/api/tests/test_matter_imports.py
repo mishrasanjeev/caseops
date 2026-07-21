@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.matter_imports import _parse_import_date
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -193,6 +194,13 @@ def _zip_bytes(names: list[str]) -> bytes:
         for name in names:
             archive.writestr(name, b"dry-run placeholder")
     return buffer.getvalue()
+
+
+def test_import_date_rejects_out_of_range_excel_serial_without_overflow() -> None:
+    value, error = _parse_import_date("9" * 10_000)
+
+    assert value is None
+    assert error is not None
 
 
 def test_bulk_matter_import_csv_dry_run_returns_plan_without_writes(
