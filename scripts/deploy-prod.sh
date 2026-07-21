@@ -151,7 +151,6 @@ echo "  migrate-job completed."
 # image, so every production deploy must advance them with the service release.
 echo "--- 3/6 refresh recurring jobs ---"
 SCHEDULED_API_JOBS=(
-  caseops-document-worker
   caseops-legal-update-sync
   caseops-case-tracking-poll
   caseops-activity-report
