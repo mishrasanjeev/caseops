@@ -11,7 +11,7 @@ stored in source or this document)
 
 | ID | Classification | Why | Formal verdict |
 | --- | --- | --- | --- |
-| BUG-001 | Valid workflow/product-policy enhancement | The product deliberately enforced a conflict gate for existing Intake/On-hold matters. The workbook now explicitly makes conflict checking optional and nonblocking for that transition. | `Inconclusive` until the committed production Playwright workflow passes against the deployed build identity. |
+| BUG-001 | Valid workflow/product-policy enhancement | The product deliberately enforced a conflict gate for existing Intake/On-hold matters. The workbook now explicitly makes conflict checking optional and nonblocking for that transition. | `Properly fixed` on deployed commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a`. |
 
 This is not evidence that the old code randomly regressed. It is a broader
 acceptance contract than the one deployed on July 15.
@@ -167,15 +167,31 @@ Evidence captured on 2026-07-22:
   case recorded a cleared review, activated On hold, disposed, reopened to
   Intake, rendered the old clearance as `Historical (stale)`, then activated
   and persisted after read-back and reload;
-- the extended committed production Chromium spec authenticated as the
-  supplied tester and created a unique Intake matter, but the first activation
-  received the deployed legacy HTTP 409 requiring Clear/Waived. The second
-  serial controlled-reopen case therefore did not run; `afterAll` emitted no
-  cleanup failure; and
+- before deployment, the extended committed production Chromium spec
+  authenticated as the supplied tester and reproduced the prior build's HTTP
+  409 requiring Clear/Waived. The second serial controlled-reopen case did not
+  run; `afterAll` emitted no cleanup failure. This is retained as the
+  pre-deploy production reproduction, not final fix evidence;
 - the browser harness was made deterministic for a fresh no-install-project
   venv and build-time API/CSP origin, removing two workstation-only false-proof
-  paths discovered during this replay.
+  paths discovered during this replay;
+- exact commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a` was deployed with
+  `scripts/deploy-prod.sh`. Migration execution `caseops-migrate-job-ggqwz`
+  succeeded, all four recurring jobs were pinned to API digest
+  `sha256:23d2e9313cf8a99f538e3dbd5f9a9cfc0533e0559de0fc16f4b02df4a18e3b94`,
+  API revision `caseops-api-00210-fnv` and web revision
+  `caseops-web-00189-k9f` received 100% traffic, public health reported status
+  `ok`, and the ClamAV sidecar remained present;
+- the same committed production spec passed 2/2 with the supplied `legal`
+  tester account in 71.6s. It proved no-check Intake activation and the full
+  On hold -> Active -> Disposed -> controlled reopen -> historical-clearance
+  -> Active workflow, including persistence, reload, and fail-loud cleanup;
+  and
+- GitHub production-verification run `29929098217` checked out the exact
+  deployed SHA, passed both July 22 cases again on the independent QA tenant,
+  completed the RAM batch with 46 passed and four expected conditional skips,
+  and passed the notice module 2/2.
 
-The local candidate is verified. The formal production verdict remains
-**`Inconclusive`** until this candidate is deployed and the same committed
-production Playwright workflow passes against that deployed build identity.
+The formal production verdict is **`Properly fixed`**. The deployed-build
+identity and both tester-tenant and independent-QA production evidence are
+recorded in `docs/runbooks/release-signoff-2026-07-22-34f19ad.md`.

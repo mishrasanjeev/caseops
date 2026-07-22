@@ -100,9 +100,8 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 ## P0 — New Gaps Tracked Here (Stop-Ship for "Best for Law Firms" claim)
 
 ### `PG-001` Conflict check workflow
-Status: **`Implemented and locally verified` for the 2026-07-22 policy; formal
-production verdict `Inconclusive`** until the candidate is deployed and the
-committed production Playwright workflow passes against that build identity.
+Status: **`Implemented, deployed, and Properly fixed` for the 2026-07-22
+policy** on commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a`.
 The scan/review workflow remains implemented, and the superseded mandatory
 activation gate has been removed from status paths, tests, and current docs.
 Evidence:
@@ -126,12 +125,14 @@ Evidence:
   run passed 5/5 in 20.5s with the shared exact local tester identity. The July
   22 spec passed 2/2: no-check Intake activation in 1.3s and controlled
   Dispose -> Reopen -> Historical-cleared -> Active in 2.1s, including
-  lifecycle-version/CAS assertions and final reload persistence. The extended
-  production spec authenticated and created a unique Intake matter, but the
-  first activation received the prior build's legacy HTTP 409; the second
-  serial controlled-reopen case did not run, while `afterAll` emitted no
-  cleanup failure. The formal verdict cannot change from `Inconclusive` until
-  the same committed production spec passes on the deployed candidate build.
+  lifecycle-version/CAS assertions and final reload persistence.
+- Production evidence: exact commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a`
+  was deployed to API revision `caseops-api-00210-fnv` and web revision
+  `caseops-web-00189-k9f`, with 100% traffic and registry/runtime digest
+  equality. The committed July 22 spec passed 2/2 with the supplied `legal`
+  tester, then passed both cases again in GitHub run `29929098217` on the
+  independent QA tenant. That run completed the broader RAM batch with 46
+  passed and four expected conditional skips, plus notice module 2/2.
 Follow-on caveats:
 - Contacts beyond `Client` (witnesses, opposing counsel, vendors) need a
   separate contact table before they can be scanned.

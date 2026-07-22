@@ -867,11 +867,11 @@ Sprints A-F (security, frontend spine, AI core, drafting v1) all **shipped**  - 
 
 1. Staging proof: configure staging Workload Identity / secrets, run the staging deploy path, and capture runtime proof.
 2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106` without touching calendar sync.
-3. `PG-001` conflict review: local retirement of the obsolete intake/status
-   gate and its regression coverage are verified. Deploy the exact candidate
-   build and run the committed July 22 production Playwright workflow; keep
-   scanning and resolution optional/auditable, and do not reintroduce the gate
-   from an older test, guide, lifecycle note, or fixture.
+3. `PG-001` conflict review: closed on exact deployed commit `34f19ad` with the
+   committed July 22 production workflow passing on both the supplied `legal`
+   tester and independent QA tenant. Retain the permanent regression guard: do
+   not reintroduce the gate from an older test, guide, lifecycle note, or
+   fixture.
 4. `WTD-7.2` tasks/deadlines: matter-cockpit foundation implemented; admin task templates remain.
 5. Durable notifications / Temporal: `WTD-5.1c` and `WTD-5.3` are landed for
    the notification foundation; next work remains provider-specific approval

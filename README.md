@@ -28,14 +28,14 @@ until the agent trust plane is activated.
 | Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
 | GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
-| Matter notices and optional pre-engagement conflict review: received/sent notice tracking, reply documents and linked deadlines, auditable candidate review, and nonblocking status changes | Local candidate verified 2026-07-22; production still serves the prior gate pending deployment | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md), `/guide` |
+| Matter notices and optional pre-engagement conflict review: received/sent notice tracking, reply documents and linked deadlines, auditable candidate review, and nonblocking status changes | Production deployed and verified 2026-07-22 (`34f19ad`); July 22 verdict `Properly fixed` | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md), `/guide` |
 | Bulk matter creation: CSV/XLSX templates, validation preview, partial-success commit, error report, history, audit, notifications, and delegated Matter Manager capability | Implemented (2026-07-17) | [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), [`docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md`](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md), `/app/matters/imports`, `/guide` |
 | Production readiness, Pine Labs UAT evidence, secret-rotation proof, margin/profit gates, MFA login challenge, enterprise readiness scaffolding | Founder-only / disabled until UAT / planned as labelled | `/app/platform-admin/paid-production`, `/api/platform-admin/production-readiness`, `/api/admin/enterprise-readiness` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
 | Work plan | Current | [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) |
-| Strict bug ledger | Original April 22 gate closed (10/10); later dated batches retain their own verdicts, including July 22 `Inconclusive` | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
+| Strict bug ledger | Original April 22 gate closed (10/10); later dated batches retain their own verdicts, including July 22 `Properly fixed` on deployed `34f19ad` | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
 | Drafting studio (31 specialised templates including the SC escalation pack — SLP, supreme-court appeal, review, curative, transfer, contempt, interim relief, condonation of delay, exemption, synopsis / list of dates, filing index — plus court-aware PDF + filing bundle + revision diff + bench-aware drafting + filing checklist + mobile + solo mode + governance + live-LLM eval) | Implemented (PG-005, 12 sprints, 2026-05-01; SC pack 2026-05-03) | [`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md) |
 | Litigation Strategy & Escalation Planner (matter-level strategy: current posture, primary + alternative routes, forum sequence up to Supreme Court, recommended draft pack with one-click generation, limitation flags, missing facts, risks, authorities, lawyer-review workflow) | Implemented (MOD-LSE, 2026-05-03) | [`docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md`](./docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md) |
 
@@ -75,8 +75,11 @@ Public product claims use these labels: `live`, `review-first`, `provider-gated`
   matter or moving Intake/On hold to Active.
 - Kept pre-reopen and pre-party-change results as historical evidence. A fresh
   check is needed before claiming current clearance, not before changing status.
-- Formal production verdict remains `Inconclusive` until the committed
-  production Playwright workflow passes against the deployed build identity.
+- Deployed exact commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a` and
+  proved API/web revision digests plus 100% traffic. The committed July 22
+  production spec passed 2/2 with the supplied tester account, and GitHub run
+  `29929098217` passed the broader RAM and notice suites. Formal verdict:
+  `Properly fixed`.
 
 ## Documentation changelog - 2026-07-11
 

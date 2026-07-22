@@ -975,7 +975,7 @@ Detailed root-cause record:
 
 | ID | Severity | Classification | Formal verdict | Scope |
 | --- | --- | --- | --- | --- |
-| BUG-001 | Medium | Valid workflow/policy enhancement, not a regression against the July 15 creation-only contract | `Inconclusive` pending deployed-commit Playwright | Conflict review remains optional and auditable. Missing, pending, conflicted, cleared, waived, invalid, stale-scope, and pre-reopen results must not block creation or an Intake/On-hold to Active transition. |
+| BUG-001 | Medium | Valid workflow/policy enhancement, not a regression against the July 15 creation-only contract | `Properly fixed` on deployed `34f19ad` | Conflict review remains optional and auditable. Missing, pending, conflicted, cleared, waived, invalid, stale-scope, and pre-reopen results must not block creation or an Intake/On-hold to Active transition. |
 
 Why the bug appeared to reopen:
 
@@ -1011,12 +1011,18 @@ Local candidate evidence captured on 2026-07-22:
   no-check Intake case in 1.3s and the controlled
   Dispose -> Reopen -> Historical-cleared -> Active case in 2.1s, including
   lifecycle-version/CAS assertions and final reload persistence; and
-- the extended production spec authenticated as the supplied tester and
-  created a unique Intake matter, but its first activation received the prior
-  build's legacy HTTP 409. The second serial controlled-reopen case did not
-  run, while `afterAll` emitted no cleanup failure.
+- before deployment, the extended production spec authenticated as the
+  supplied tester and reproduced the prior build's legacy HTTP 409. The second
+  serial controlled-reopen case did not run, while `afterAll` emitted no
+  cleanup failure;
+- exact commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a` was deployed to API
+  revision `caseops-api-00210-fnv` and web revision
+  `caseops-web-00189-k9f`, with registry/runtime digest equality and 100%
+  traffic proved independently; and
+- the committed July 22 production spec passed 2/2 with the supplied `legal`
+  tester account. GitHub run `29929098217` then passed both cases on the
+  independent QA tenant, the RAM batch (46 passed, four expected conditional
+  skips), and the notice module (2 passed).
 
-The local candidate is verified. The formal production verdict remains
-`Inconclusive` until the exact candidate build is deployed and the same
-committed production Playwright workflow passes against that deployed build
-identity.
+The formal production verdict is `Properly fixed`. See
+`docs/runbooks/release-signoff-2026-07-22-34f19ad.md`.

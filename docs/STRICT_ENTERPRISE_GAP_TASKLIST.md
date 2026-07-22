@@ -907,9 +907,8 @@ tracked under `WTD-5.1` / `WTD-5.3`.
 
 ### EH-LC-04 - Conflict review/status decoupling (2026-07-22)
 
-- **Status:** Local candidate verified 2026-07-22; production still returned the
-  superseded 409 contract, so the formal verdict remains `Inconclusive` pending
-  deployment and same-spec Playwright proof.
+- **Status:** `Properly fixed` on exact deployed commit
+  `34f19ad2bc0a5b48398144998cf546cc9e7a815a` on 2026-07-22.
 - **Policy:** conflict review is optional and auditable. Missing, pending,
   conflicted, cleared, waived, invalid, stale-scope, and pre-reopen results must
   not block creation or an Intake/On-hold to Active transition. A stale result
@@ -926,13 +925,15 @@ tracked under `WTD-5.1` / `WTD-5.3`.
   -> Active in 2.1s with lifecycle-version/CAS and reload persistence proof.
 - **Current-claim audit:** current product records describe scanner scope as
   clients plus matters only; broader contacts remain an explicit follow-on gap.
-- **Production evidence:** the extended spec authenticated and created a unique
-  Intake matter, but the first activation received the prior build's legacy
-  HTTP 409. The second serial controlled-reopen case did not run; `afterAll`
-  emitted no cleanup failure.
-- **Remaining closure evidence:** deploy the exact candidate build, record its
-  identity, and pass the same committed production workflow without mocks or
-  skips before changing the formal `Inconclusive` verdict.
+- **Production evidence:** the earlier authenticated run retained the prior
+  build's legacy HTTP 409 as the pre-deploy reproduction. Exact commit
+  `34f19ad2bc0a5b48398144998cf546cc9e7a815a` was then deployed to API revision
+  `caseops-api-00210-fnv` and web revision `caseops-web-00189-k9f`, with 100%
+  traffic and exact registry/runtime digests. The committed July 22 spec passed
+  2/2 with the supplied `legal` tester and again on the independent QA tenant
+  in GitHub run `29929098217`; the broader RAM and notice suites also passed.
+- **Closure evidence:** satisfied. Persistent release proof is in
+  `docs/runbooks/release-signoff-2026-07-22-34f19ad.md`.
 
 ### EH-DB-02 - Database-test fixture integrity
 
