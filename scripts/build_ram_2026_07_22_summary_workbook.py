@@ -20,6 +20,15 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 DEFAULT_OUTPUT = Path(r"C:\tmp\CaseOps_BugFix_Summary_Ram22Jul2026.xlsx")
 SOURCE_WORKBOOK = Path(r"C:\Users\mishr\Downloads\CaseOps_Bugs_Ram22Jul2026.xlsx")
 
+BASELINE_COMMIT = "33bf177b45eeb556ea5a02a82f2d8644cd7e5c25"
+DEPLOYED_COMMIT = "34f19ad2bc0a5b48398144998cf546cc9e7a815a"
+API_REVISION = "caseops-api-00210-fnv"
+API_DIGEST = "sha256:23d2e9313cf8a99f538e3dbd5f9a9cfc0533e0559de0fc16f4b02df4a18e3b94"
+WEB_REVISION = "caseops-web-00189-k9f"
+WEB_DIGEST = "sha256:7ffd1277b78d352539e0a4eeef83e320b3a396227b0c7ad3128f123ba4f15745"
+MIGRATION_EXECUTION = "caseops-migrate-job-ggqwz"
+INDEPENDENT_QA_RUN = "29929098217"
+
 NAVY = "17324D"
 TEAL = "087E8B"
 PALE_TEAL = "DDF4F2"
@@ -82,7 +91,6 @@ def _finish_sheet(ws, *, widths: list[int], landscape: bool = True) -> None:
             cell.alignment = WRAP
     ws.sheet_view.showGridLines = False
     ws.freeze_panes = "A4"
-    ws.auto_filter.ref = ws.dimensions
     ws.page_setup.orientation = "landscape" if landscape else "portrait"
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
@@ -97,18 +105,21 @@ def build_executive_summary(wb: Workbook) -> None:
     _title(
         ws,
         "CaseOps — Ram 22 July 2026 issue assessment and fix summary",
-        "Formal verdicts follow the strict rule: no ‘Properly fixed’ claim before the candidate commit is deployed and the production Playwright regression passes.",
+        "Formal verdict rule satisfied: the exact candidate commit was deployed and the committed production Playwright regression passed; BUG-001 is now Properly fixed.",
         2,
     )
 
     metadata = [
         ("Source workbook", str(SOURCE_WORKBOOK)),
         ("Assessment date", "2026-07-22"),
-        ("Candidate baseline", "33bf177b45eeb556ea5a02a82f2d8644cd7e5c25"),
+        ("Baseline → deployed runtime commit", f"{BASELINE_COMMIT} → {DEPLOYED_COMMIT}"),
         ("Reported issues", "=COUNTA('Issue Assessment'!A5:A1000)"),
         ("Valid product-policy enhancements", '=COUNTIF(\'Issue Assessment\'!F5:F1000,"Valid enhancement")'),
         ("Valid regressions", '=COUNTIF(\'Issue Assessment\'!F5:F1000,"Valid regression")'),
-        ("Formal verdict", "Inconclusive — local candidate verified; production returned the prior mandatory-gate 409 because this candidate is not deployed"),
+        (
+            "Formal verdict",
+            f"Properly fixed — exact candidate commit {DEPLOYED_COMMIT} is deployed; the committed production Playwright specification passed 2/2 with terminal cleanup.",
+        ),
         ("Tester identity", "legal / hari.gupta@gmail.com (password supplied at runtime; not stored)"),
     ]
     ws.append([])
@@ -139,8 +150,8 @@ def build_executive_summary(wb: Workbook) -> None:
             "The candidate removes the server gate and dead evaluator, removes UI blocking guidance, keeps conflict review usable as an advisory workflow, preserves terminal lifecycle/CAS/tenant protections, updates the authoritative contract, and adds a state × conflict-result regression matrix.",
         ),
         (
-            "What remains",
-            "Deploy this exact candidate and run tests/e2e/ram-2026-07-22-prod.spec.ts with the tester credential. Until that succeeds, the formal verdict remains Inconclusive rather than Fixed.",
+            "Production closure",
+            f"GO with caveat — exact runtime commit {DEPLOYED_COMMIT} serves 100% traffic on API revision {API_REVISION} and web revision {WEB_REVISION}; public health passed; supplied-tester Playwright passed 2/2 with cleanup; independent QA also passed both July 22 cases. Separate caveats: unlocked web dependency installation and two high npm-audit findings.",
         ),
     ]
     for decision in decisions:
@@ -197,8 +208,8 @@ def build_issue_assessment(wb: Workbook) -> None:
             "Previous July 15 work intentionally changed only direct creation. Existing-matter promotion retained a documented server gate and matching UI/tests/copy. The test suite therefore enforced a split contract instead of one cross-product invariant.",
             "Removed the activation gate/evaluator and gate-only UI. Retained advisory scans/resolution, tenant scoping, lifecycle provenance, row locking, optimistic concurrency, terminal-state protection, controlled reopen, and operational-child neutralisation.",
             "Direct create; Intake→Active; On Hold→Active; missing/pending/conflicted/cleared/waived/stale conflict results; changed opposing party; post-reopen activation; import-created Intake; cross-tenant review access; generic disposed writes; controlled reopen; UI edit/reload; public/current product copy.",
-            "Inconclusive",
-            "Candidate not deployed. Production Playwright must pass against the deployed candidate commit before ‘Properly fixed’ is permitted.",
+            "Properly fixed",
+            f"None for BUG-001 — exact build identity ({DEPLOYED_COMMIT}), 100% production traffic, public health, committed production Playwright 2/2 with cleanup, and independent QA evidence are complete. The release's two pre-existing build/security caveats are tracked separately.",
         ]
     )
     _table(ws, "IssueAssessment", 4, 5, len(headers))
@@ -231,14 +242,14 @@ def build_policy_matrix(wb: Workbook) -> None:
     _header_row(ws, 4, len(headers))
     rows = [
         ("Create", "n/a", "None", "Create directly as Active", "Allowed", "Create validation, tenant scope, audit", "Backend + July 15/22 E2E"),
-        ("Edit", "Intake", "None", "PATCH status to Active", "Allowed", "CAS token and status consistency", "Backend + local July 22 E2E passed; production E2E committed, pending deploy"),
+        ("Edit", "Intake", "None", "PATCH status to Active", "Allowed", "CAS token and status consistency", "Backend + local + deployed production July 22 E2E passed (supplied tester and independent QA)"),
         ("Edit", "Intake", "Pending", "PATCH status to Active", "Allowed", "Review remains visible/auditable", "Backend matrix"),
         ("Edit", "Intake", "Conflicted", "PATCH status to Active", "Allowed", "Resolution capability still enforced", "Backend matrix"),
         ("Edit", "Intake", "Cleared / waived", "PATCH status to Active", "Allowed", "Review history preserved", "Backend matrix"),
-        ("Edit", "On Hold", "None / any result", "PATCH status to Active", "Allowed", "CAS token and status consistency", "Backend + local July 22 E2E passed; production case committed, not run after earlier 409"),
+        ("Edit", "On Hold", "None / any result", "PATCH status to Active", "Allowed", "CAS token and status consistency", "Backend state matrix covers On Hold → Active; local and deployed production July 22 E2E validate the shared nonblocking outcome through Intake/reopen paths"),
         ("Edit", "Intake", "Old party scope", "Change party and activate", "Allowed", "Old review remains historical", "Backend matrix"),
         ("Import", "Intake", "None", "PATCH imported matter to Active", "Allowed", "Import validation and tenant scope", "Backend regression"),
-        ("Controlled reopen", "Disposed → Intake", "Pre-disposal result", "Activate without a new review", "Allowed", "Lifecycle version marks old review historical", "Backend lifecycle + local July 22 E2E passed; production case committed, not run after earlier 409"),
+        ("Controlled reopen", "Disposed → Intake", "Pre-disposal result", "Activate without a new review", "Allowed", "Lifecycle version marks old review historical", "Backend lifecycle + local + deployed production July 22 E2E passed (dispose/reopen, historical clearance, reactivation, reload, cleanup)"),
         ("Generic edit", "Disposed", "Any", "PATCH status or operational fields", "Blocked", "Dedicated lifecycle endpoint, capability, reason", "Existing terminal lifecycle suite"),
         ("Conflict review", "Any operational status", "Any", "Run / list / resolve", "Allowed by capability", "Tenant isolation and audit", "Conflict-check API + UI regressions"),
         ("Cross tenant", "Any", "Another tenant's review", "Read / resolve", "404 / blocked", "Tenant isolation", "Backend regression"),
@@ -256,7 +267,7 @@ def build_verification_evidence(wb: Workbook) -> None:
     _title(
         ws,
         "Verification evidence",
-        "A failed or blocked run remains visible. Local evidence cannot substitute for deployment proof, and unrelated setup failures are not counted as pass/fail evidence for BUG-001.",
+        "A failed or blocked run remains visible. Local evidence cannot substitute for deployment proof, and unrelated setup failures are not counted as pass/fail evidence for BUG-001. The exact deployed evidence below now satisfies closure.",
         8,
     )
     headers = [
@@ -334,14 +345,44 @@ def build_verification_evidence(wb: Workbook) -> None:
             "Local candidate verified",
         ),
         (
-            "Production browser E2E",
+            "Pre-deploy production browser E2E",
             "Production / Chromium",
             "tests/e2e/ram-2026-07-22-prod.spec.ts",
             "Committed Intake/no-check and controlled-reopen tester workflows with terminal cleanup",
             "FAIL — prior deployed policy reproduced",
-            "The extended spec authenticated and created a unique Intake matter. Its first activation returned HTTP 409 with the legacy Clear/Waived requirement; the second serial controlled-reopen case did not run. afterAll emitted no cleanup failure. Re-run the same committed spec after deployment.",
+            "Historical pre-deploy attempt: the extended spec authenticated and created a unique Intake matter. Its first activation returned HTTP 409 with the legacy Clear/Waived requirement; the second serial controlled-reopen case did not run. afterAll emitted no cleanup failure.",
             "1 failed at expected 200/actual 409; second serial case did not run",
-            "Formal verdict remains Inconclusive",
+            "Superseded by exact deployed-candidate PASS rows below",
+        ),
+        (
+            "Production deployment identity",
+            "Production / Cloud Run",
+            f"scripts/deploy-prod.sh {DEPLOYED_COMMIT}; immutable revision/digest and health read-back",
+            "Exact candidate identity; migration; scheduled jobs; 100% traffic; public health",
+            "PASS",
+            f"Runtime commit {DEPLOYED_COMMIT}; API {API_REVISION} at {API_DIGEST}; web {WEB_REVISION} at {WEB_DIGEST}; {MIGRATION_EXECUTION} passed 1/1; migrate plus four recurring jobs were pinned to the API digest; API health returned ok, web returned HTTP 200, and ClamAV was present.",
+            "2 revisions at 100%; migration 1/1; 5 jobs pinned; health pass",
+            "Exact candidate deployed and healthy",
+        ),
+        (
+            "Supplied-tester production browser E2E",
+            "Production / Chromium",
+            "tests/e2e/ram-2026-07-22-prod.spec.ts",
+            "Committed Intake/no-check and controlled-reopen/historical-clearance workflows with terminal cleanup",
+            "PASS — exact deployed candidate",
+            f"Using the supplied legal tester identity at runtime, both committed cases passed against deployed commit {DEPLOYED_COMMIT}; adjacent conflict review remained operational and afterAll cleanup passed. Password supplied at runtime; not stored in this workbook.",
+            "2/2 in 71.6s (6.5s, 57.0s); cleanup passed",
+            "Closes BUG-001 as Properly fixed",
+        ),
+        (
+            "Independent QA production regression",
+            "GitHub Actions / independent production QA tenant",
+            f"GitHub run {INDEPENDENT_QA_RUN}",
+            "Independent replay of both July 22 cases plus broader RAM and notice regressions",
+            "PASS",
+            f"Workflow checked out exact commit {DEPLOYED_COMMIT}. Both July 22 cases passed on an independent QA tenant; the RAM batch and notice module also passed. Four RAM skips were expected data-conditional legacy probes, not July 22 acceptance tests.",
+            "July 22: 2/2 (8.9s, 14.4s); RAM: 46 passed + 4 expected conditional skips; notice: 2/2",
+            "Independent corroboration of production closure",
         ),
     ]
     for row in rows:
@@ -356,7 +397,9 @@ def build_verification_evidence(wb: Workbook) -> None:
         FormulaRule(formula=["OR(ISNUMBER(SEARCH(\"FAIL\",E5)),ISNUMBER(SEARCH(\"BLOCK\",E5)))"], fill=PatternFill("solid", fgColor=PALE_RED)),
     )
     for row in range(5, ws.max_row + 1):
-        ws.row_dimensions[row].height = 72
+        ws.row_dimensions[row].height = 96
+    for row in range(ws.max_row - 2, ws.max_row + 1):
+        ws.row_dimensions[row].height = 120
     _finish_sheet(ws, widths=[24, 24, 65, 50, 31, 68, 24, 34])
 
 
@@ -406,14 +449,14 @@ def build_permanent_learnings(wb: Workbook) -> None:
             "Prior closeout records drifted: one learning document held production evidence while authoritative task ledgers still said pending.",
             "Contradictory verdict sources make reopened reports hard to classify and encourage rework against stale assumptions.",
             "One formal verdict per issue; reconcile every authoritative ledger during closeout and retain explicit supersession notes for history.",
-            "July 15 records annotated as superseded; July 22 remains Inconclusive pending deployment.",
+            f"July 15 records remain explicitly superseded; July 22 commit {DEPLOYED_COMMIT} was deployed, production-verified, and reconciled as Properly fixed.",
         ),
         (
             "L6",
             "We could have mistaken a friendlier 409 message or a review CTA for a fix.",
             "The user would still be unable to save Active, so the reported outcome would remain broken.",
             "A workflow bug is fixed only when the user completes the intended action on the deployed surface.",
-            "Playwright asserts HTTP 2xx, dialog closes, reload persists Active, and cleanup completes.",
+            f"The committed production regression is tied to exact deployed SHA {DEPLOYED_COMMIT}; it asserts HTTP 2xx, dialog closure, reload persistence, and cleanup, and passed 2/2.",
         ),
     ]
     for row in rows:
@@ -431,6 +474,7 @@ def build(output: Path) -> None:
     build_policy_matrix(wb)
     build_verification_evidence(wb)
     build_permanent_learnings(wb)
+    wb.calculation.calcMode = "auto"
     wb.calculation.fullCalcOnLoad = True
     wb.calculation.forceFullCalc = True
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -450,8 +494,46 @@ def build(output: Path) -> None:
         raise RuntimeError(f"Unexpected sheet topology: {check.sheetnames!r}")
     if check["Issue Assessment"]["A5"].value != "BUG-001":
         raise RuntimeError("BUG-001 assessment row is missing")
-    if check["Executive Summary"]["B10"].value is None:
-        raise RuntimeError("Formal verdict is missing")
+    formal_verdict = str(check["Executive Summary"]["B10"].value or "")
+    if "Properly fixed" not in formal_verdict or DEPLOYED_COMMIT not in formal_verdict:
+        raise RuntimeError("Formal verdict is not tied to the exact deployed commit")
+    if check["Issue Assessment"]["M5"].value != "Properly fixed":
+        raise RuntimeError("BUG-001 issue verdict is not Properly fixed")
+
+    verification = check["Verification Evidence"]
+    production_passes = [
+        row
+        for row in verification.iter_rows(min_row=5, values_only=True)
+        if row[4] and "PASS" in str(row[4]) and "production" in str(row[0]).lower()
+    ]
+    if len(production_passes) < 2:
+        raise RuntimeError("Post-deploy production PASS evidence is incomplete")
+
+    table_sheets = expected
+    for sheet_name in table_sheets:
+        sheet = check[sheet_name]
+        if sheet.auto_filter.ref is not None:
+            raise RuntimeError(f"Conflicting worksheet AutoFilter remains on {sheet_name}")
+        if len(sheet.tables) != 1:
+            raise RuntimeError(f"Expected exactly one Excel Table on {sheet_name}")
+
+    formula_errors: list[str] = []
+    unsafe_password_mentions: list[str] = []
+    for sheet in check.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.data_type == "e":
+                    formula_errors.append(f"{sheet.title}!{cell.coordinate}={cell.value}")
+                if isinstance(cell.value, str) and "password" in cell.value.lower():
+                    lowered = cell.value.lower()
+                    if "not stored" not in lowered and "runtime-only" not in lowered:
+                        unsafe_password_mentions.append(f"{sheet.title}!{cell.coordinate}")
+    if formula_errors:
+        raise RuntimeError(f"Formula errors found: {formula_errors}")
+    if unsafe_password_mentions:
+        raise RuntimeError(f"Unsafe password-bearing cells found: {unsafe_password_mentions}")
+    if not check.calculation.fullCalcOnLoad or not check.calculation.forceFullCalc:
+        raise RuntimeError("Workbook is not configured for full recalculation on open")
     check.close()
     print(f"wrote and verified {output}")
 
