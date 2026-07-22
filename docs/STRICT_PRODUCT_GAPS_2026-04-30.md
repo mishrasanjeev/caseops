@@ -100,39 +100,46 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 ## P0 — New Gaps Tracked Here (Stop-Ship for "Best for Law Firms" claim)
 
 ### `PG-001` Conflict check workflow
-Status: **`Implemented`** (v1 MVP shipped 2026-04-30; existing-matter
-activation gate closed 2026-05-16; direct-create policy updated locally
-2026-07-15 with deployed verification pending).
+Status: **`Implemented and locally verified` for the 2026-07-22 policy; formal
+production verdict `Inconclusive`** until the candidate is deployed and the
+committed production Playwright workflow passes against that build identity.
+The scan/review workflow remains implemented, and the superseded mandatory
+activation gate has been removed from status paths, tests, and current docs.
 Evidence:
 - DB: `MatterConflictCheck` model + migration `20260430_0001_matter_conflict_checks` (status enum: pending/cleared/conflicted/waived).
 - Service: `services/conflict_checks.py` with substring + Jaccard token-overlap scanner across `clients` + `matters`.
 - Routes: `POST /api/matters/{id}/conflict-checks`, `GET /api/matters/{id}/conflict-checks`, `PATCH /api/conflict-checks/{id}`.
 - Capabilities: `conflicts:run` (every fee-earner) + `conflicts:resolve` (staff only).
 - UI: `apps/web/components/matters/ConflictCheckCard.tsx` mounted on `/app/matters/[id]` cockpit. Run dialog + status badge + candidate list + clear / mark-conflicted / waive controls.
-- Existing-matter activation gate: new matters may be created directly as `active`
-  (the API default).
-  `services/matters.py::update_matter` blocks an existing `intake` or `on_hold`
-  matter's transition into `active` unless the latest
-  tenant/matter-scoped conflict check is `cleared` or `waived`. Blocked and
-  allowed attempts write redacted audit metadata; a clear/waived check is stale
-  if activation changes the opposing-party scope it cleared. Matter access,
-  restricted matters, team scoping, ethical walls, and cross-tenant 404 behavior
-  are enforced before the gate.
-- Tests: backend coverage in `tests/test_conflict_checks.py` covers missing
-  check denial, clear allow, explicit waived allow, pending/conflicted/invalid
-  latest-check denial, stale older-clear/newer-unresolved denial,
-  omitted/explicit Active-create success, terminal-create denial, changed
-  opposing-party stale-scope denial, cross-tenant non-satisfaction,
-  tenant/access gates, and redacted audit metadata; legacy conflict scan/resolve
-  behavior remains covered. The July 15 production Playwright spec is committed
-  but must not be counted as deployed proof until the candidate build identity
-  is established and the spec passes there.
+- Status policy effective 2026-07-22: conflict checks are optional, auditable
+  review evidence. New matters may be created directly as `active`, and an
+  existing `intake` or `on_hold` matter may move to `active` when the latest
+  check is missing, pending, conflicted, cleared, waived, invalid, or stale.
+  A party-scope change or reopen keeps the earlier result as historical rather
+  than current clearance, but must never turn it into a status blocker. Matter
+  access, restricted matters, team scoping, ethical walls, terminal lifecycle,
+  and cross-tenant 404 behavior remain enforced independently.
+- Local regression evidence: canonical backend verification passed Ruff plus
+  all 59 tests in the affected conflict, lifecycle, intake, and import files;
+  19 focused React tests across three files, TypeScript, and the 64-route
+  production web build passed. The combined July 15 and July 22 local Chromium
+  run passed 5/5 in 20.5s with the shared exact local tester identity. The July
+  22 spec passed 2/2: no-check Intake activation in 1.3s and controlled
+  Dispose -> Reopen -> Historical-cleared -> Active in 2.1s, including
+  lifecycle-version/CAS assertions and final reload persistence. The extended
+  production spec authenticated and created a unique Intake matter, but the
+  first activation received the prior build's legacy HTTP 409; the second
+  serial controlled-reopen case did not run, while `afterAll` emitted no
+  cleanup failure. The formal verdict cannot change from `Inconclusive` until
+  the same committed production spec passes on the deployed candidate build.
 Follow-on caveats:
 - Contacts beyond `Client` (witnesses, opposing counsel, vendors) need a
   separate contact table before they can be scanned.
-- Bulk waiver / partner-approval email workflow is not part of the PG-001 gate.
-Estimated days remaining: 0 for the PG-001 existing-matter activation gate;
-follow-ons tracked separately.
+- Bulk waiver / partner-approval email workflow is not part of the core PG-001
+  optional review workflow.
+Estimated work remaining: deploy the candidate, record its exact build identity,
+and pass the committed production Playwright workflow; data-model follow-ons
+remain tracked separately.
 
 ### `PG-002` Engagement letter / fee arrangement workflow
 Status: **`Missing`**.

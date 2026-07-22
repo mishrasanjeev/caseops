@@ -68,7 +68,7 @@ async function createMatter(
   const response = await api.post(`${apiBaseUrl}/api/matters/`, {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      title: `Conflict gate ${code}`,
+      title: `Conflict review ${code}`,
       matter_code: code,
       client_name: "Neutral Local Client",
       opposing_party: opposingParty,
@@ -76,7 +76,7 @@ async function createMatter(
       forum_level: "high_court",
       court_name: "Delhi High Court",
       status: "intake",
-      description: "Regression matter for July 7 conflict-check bugs.",
+      description: "Regression matter for the optional conflict-review workflow.",
     },
   });
   await expectOk(response, "create matter");
@@ -86,7 +86,7 @@ async function createMatter(
 test.describe("Hari 2026-07-07 conflict-check bug regressions", () => {
   test.setTimeout(180_000);
 
-  test("client-backed conflict scan runs, guides blocked activation, then clears and activates", async ({
+  test("client-backed conflict scan stays usable but does not block activation", async ({
     page,
   }) => {
     const api = await request.newContext();
@@ -124,32 +124,7 @@ test.describe("Hari 2026-07-07 conflict-check bug regressions", () => {
 
     await page.getByTestId("matter-edit-open").click();
     await page.getByTestId("matter-edit-status").selectOption("active");
-    await expect(page.getByTestId("matter-edit-active-conflict-hint")).toContainText(
-      "Conflict check card",
-    );
-
-    const blockedActivation = page.waitForResponse(
-      (response) =>
-        response.url().endsWith(`/api/matters/${matterId}`) &&
-        response.request().method() === "PATCH",
-    );
-    await page.getByTestId("matter-edit-save").click();
-    expect((await blockedActivation).status()).toBe(409);
-    await expect(page.getByTestId("matter-edit-conflict-gate")).toContainText(
-      "requires review or waiver",
-    );
-
-    await page.getByTestId("matter-edit-review-conflict").click();
-    await expect(conflictCard).toBeFocused();
-
-    const clearResponse = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/conflict-checks/") &&
-        response.request().method() === "PATCH",
-    );
-    await conflictCard.getByTestId("conflict-resolve-clear").click();
-    expect((await clearResponse).status()).toBe(200);
-    await expect(conflictCard.getByTestId("conflict-status-cleared")).toBeVisible();
+    await expect(page.getByTestId("matter-edit-active-conflict-hint")).toHaveCount(0);
 
     const activation = page.waitForResponse(
       (response) =>
@@ -163,5 +138,15 @@ test.describe("Hari 2026-07-07 conflict-check bug regressions", () => {
       "active",
     );
     await expect(page.getByTestId("matter-edit-form")).toBeHidden();
+    await expect(page.getByTestId("matter-edit-conflict-gate")).toHaveCount(0);
+
+    const clearResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/conflict-checks/") &&
+        response.request().method() === "PATCH",
+    );
+    await conflictCard.getByTestId("conflict-resolve-clear").click();
+    expect((await clearResponse).status()).toBe(200);
+    await expect(conflictCard.getByTestId("conflict-status-cleared")).toBeVisible();
   });
 });

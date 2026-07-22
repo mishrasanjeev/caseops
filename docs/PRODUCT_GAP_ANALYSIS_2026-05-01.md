@@ -174,7 +174,9 @@ Current strength:
 Current gaps:
 
 - Engagement letter and fee arrangement workflow remains missing in the strict ledger.
-- Conflict workflow still needs intake gating, richer contact checks, waiver handling, partner approval, and emailable documentation.
+- Conflict workflow still needs richer contact checks, waiver handling, partner
+  approval, and emailable documentation while review remains optional and
+  nonblocking for matter creation and status changes.
 - Research lacks incumbent-grade citator, treatment, source coverage, and authority confidence.
 - Drafting quality is not proven; current eval says zero.
 - Billing, realization, write-offs, WIP, collections, and partner dashboards are not clearly complete.
@@ -430,13 +432,20 @@ Required improvements:
 
 ### 5. Conflict Checks
 
+> **Historical recommendation superseded 2026-07-22.** Conflict scanning,
+> review, resolution, audit, and reporting remain product requirements. The
+> May 1 proposals to block intake or make a check mandatory are no longer the
+> accepted policy: conflict review is optional and nonblocking for creation and
+> status transitions.
+
 Current state:
 
 - Partial implementation exists.
 
 Remaining gaps:
 
-- Intake must be blocked or gated based on conflict status.
+- Superseded historical proposal: intake would be blocked or gated based on
+  conflict status.
 - Checks must include clients, counterparties, related parties, witnesses, directors, group entities, vendors, and prior matters.
 - Conflict results need severity, explanation, source, reviewer, and disposition.
 - Waivers need templating, approval, audit, and storage.
@@ -444,7 +453,8 @@ Remaining gaps:
 
 Required improvements:
 
-- Make conflict check mandatory for matter opening.
+- Superseded historical proposal: make conflict check mandatory for matter
+  opening.
 - Add entity normalization and fuzzy matching.
 - Add related-party graph.
 - Add waiver workflow.
@@ -771,7 +781,8 @@ Recommended sequencing:
 1. Make the drafting eval failure a release blocker.
 2. Fix the two failing eval scenarios and add at least eight more representative legal drafting scenarios.
 3. Add a visible "today" cockpit for litigation users.
-4. Complete conflict check v2: intake gating, related parties, waiver, approval, export.
+4. Complete conflict check v2: optional review, related parties, waiver,
+   approval, and export without blocking matter creation or status changes.
 5. Start good-law MVP: treatment unknown/positive/negative with citation validation warnings.
 6. Strip or qualify marketing/admin copy for features that are not truly shipped.
 7. Create a source coverage matrix for research/court data.
@@ -819,7 +830,9 @@ These should block any external claim that the product is best-in-class:
 - Drafting eval below target.
 - No good-law/treatment signal.
 - No engagement and fee arrangement workflow.
-- No mandatory conflict gate.
+- Conflict review quality remains important, but the former mandatory-gate
+  blocker was superseded on 2026-07-22; optional/nonblocking is the accepted
+  policy.
 - No enterprise identity for enterprise buyers.
 - No spend controls for GC buyers.
 - No durable workflow engine for legal deadlines.
@@ -834,7 +847,8 @@ Law firms:
 - Hours saved per draft that passes review.
 - Percentage of matters with next action and deadline.
 - Missed deadline count.
-- Conflict check completion before matter opening.
+- Conflict-review coverage and documented resolution rate, measured
+  independently of matter opening.
 - WIP to invoice cycle time.
 - Client update response time.
 

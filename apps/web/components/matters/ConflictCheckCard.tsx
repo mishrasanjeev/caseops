@@ -1,7 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ShieldAlert, ShieldQuestion, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  History,
+  ShieldAlert,
+  ShieldQuestion,
+  Loader2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -34,18 +40,20 @@ import {
 import { useCapability } from "@/lib/capabilities";
 
 /**
- * ConflictCheckCard — pre-engagement conflict gate (PG-001) on the
- * matter cockpit. Displays the latest conflict check (if any), shows
- * candidate matches, and lets a fee-earner run a fresh scan or a
- * partner resolve a pending one (cleared / conflicted / waived).
- *
- * Intake gating is enforced by the API: matter status promotion is
- * blocked unless the latest check is cleared or waived.
+ * ConflictCheckCard — optional pre-engagement conflict review (PG-001) on
+ * the matter cockpit. Displays the latest conflict check (if any), shows
+ * candidate matches, and lets a fee-earner run a fresh scan or a partner
+ * resolve a pending one (cleared / conflicted / waived). Conflict review is
+ * advisory and never blocks an ordinary matter status change.
  */
 export function ConflictCheckCard({
   matterId,
+  matterLifecycleVersion,
+  opposingParty,
 }: {
   matterId: string;
+  matterLifecycleVersion: number;
+  opposingParty: string | null | undefined;
 }): React.JSX.Element | null {
   const canRun = useCapability("conflicts:run");
   const canResolve = useCapability("conflicts:resolve");
@@ -58,6 +66,14 @@ export function ConflictCheckCard({
   if (!canRun) return null;
 
   const latest: ConflictCheckRecord | undefined = data?.checks?.[0];
+  const historicalReasons = latest
+    ? conflictCheckHistoricalReasons(
+        latest,
+        matterLifecycleVersion,
+        opposingParty,
+      )
+    : [];
+  const isHistorical = historicalReasons.length > 0;
   const refreshAll = async () => {
     await queryClient.invalidateQueries({
       queryKey: ["matters", matterId, "conflict-checks"],
@@ -72,17 +88,20 @@ export function ConflictCheckCard({
         <div>
           <CardTitle>Conflict check</CardTitle>
           <CardDescription>
-            Pre-engagement scan against this workspace's clients, matters,
-            and contacts. Run before opening the file.
+            Pre-engagement scan against this workspace's clients and matters.
+            Use it when firm policy or the matter's risk profile calls for a
+            review.
           </CardDescription>
         </div>
-        <RunCheckDialog matterId={matterId} onSuccess={refreshAll} />
+        <RunCheckDialog
+          matterId={matterId}
+          defaultOpposingParty={opposingParty}
+          onSuccess={refreshAll}
+        />
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div
-            className="flex items-center gap-2 text-sm text-[var(--color-mute)]"
-          >
+          <div className="flex items-center gap-2 text-sm text-[var(--color-mute)]">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading…
           </div>
         ) : !latest ? (
@@ -91,27 +110,56 @@ export function ConflictCheckCard({
           </p>
         ) : (
           <div className="flex flex-col gap-3">
-            <StatusBadge status={tone} />
+            {isHistorical ? (
+              <HistoricalStatusBadge status={latest.status} />
+            ) : (
+              <StatusBadge status={tone} />
+            )}
             <p className="text-xs text-[var(--color-mute)]">
               Last scan: {new Date(latest.ran_at).toLocaleString()}
             </p>
+            {isHistorical ? (
+              <div
+                className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-800"
+                data-testid="conflict-historical-notice"
+                role="note"
+              >
+                <p>
+                  <strong className="font-semibold">
+                    Historical evidence only.
+                  </strong>{" "}
+                  The original outcome was {conflictOutcomeLabel(latest.status)}
+                  .
+                </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {historicalReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+                <p className="mt-1">
+                  This stale result does not block status changes. Run a fresh
+                  check before treating the current matter as cleared.
+                </p>
+              </div>
+            ) : null}
             {latest.candidates.length === 0 ? (
               <p className="text-sm text-[var(--color-ink-2)]">
-                No overlapping clients, matters, or contacts found.
+                No overlapping clients or matters found.
               </p>
             ) : (
               <CandidatesList candidates={latest.candidates} />
             )}
-            {latest.status === "pending" && canResolve ? (
+            {latest.status === "pending" && canResolve && !isHistorical ? (
               <ResolveBar checkId={latest.id} onResolved={refreshAll} />
             ) : null}
-            {latest.status === "pending" && !canResolve ? (
+            {latest.status === "pending" && !canResolve && !isHistorical ? (
               <p
                 className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
                 data-testid="conflict-review-restricted"
               >
-                A partner or admin must clear, mark conflicted, or waive this
-                result before the matter can move to Active.
+                A partner or admin can clear, mark conflicted, or waive this
+                result. The review remains visible but does not block matter
+                status changes.
               </p>
             ) : null}
             {latest.resolution_note ? (
@@ -132,10 +180,72 @@ export function ConflictCheckCard({
   );
 }
 
+type ConflictCheckStatus = ConflictCheckRecord["status"];
+
+const CONFLICT_OUTCOME_LABELS: Record<ConflictCheckStatus, string> = {
+  pending: "Pending review",
+  cleared: "Cleared",
+  conflicted: "Conflicted",
+  waived: "Waived",
+};
+
+function conflictOutcomeLabel(status: ConflictCheckStatus): string {
+  return CONFLICT_OUTCOME_LABELS[status];
+}
+
+function normalizePartyName(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function conflictCheckHistoricalReasons(
+  check: ConflictCheckRecord,
+  matterLifecycleVersion: number,
+  opposingParty: string | null | undefined,
+): string[] {
+  const reasons: string[] = [];
+  if (check.matter_lifecycle_version !== matterLifecycleVersion) {
+    reasons.push(
+      `This scan belongs to lifecycle version ${check.matter_lifecycle_version}; ` +
+        `the matter is now version ${matterLifecycleVersion} after a disposal or reopen.`,
+    );
+  }
+  if (
+    normalizePartyName(check.opposing_party_name) !==
+    normalizePartyName(opposingParty)
+  ) {
+    reasons.push(
+      "The scanned opposing party no longer matches the matter's current opposing party.",
+    );
+  }
+  return reasons;
+}
+
+function HistoricalStatusBadge({
+  status,
+}: {
+  status: ConflictCheckStatus;
+}): React.JSX.Element {
+  return (
+    <span
+      className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-800"
+      data-original-status={status}
+      data-testid="conflict-status-historical"
+    >
+      <History className="h-3.5 w-3.5" aria-hidden /> Historical (stale):{" "}
+      {conflictOutcomeLabel(status)}
+    </span>
+  );
+}
+
 function StatusBadge({
   status,
 }: {
-  status: "pending" | "cleared" | "conflicted" | "waived" | "untested";
+  status: ConflictCheckStatus | "untested";
 }): React.JSX.Element {
   const map = {
     pending: {
@@ -204,13 +314,15 @@ function CandidatesList({
 
 function RunCheckDialog({
   matterId,
+  defaultOpposingParty,
   onSuccess,
 }: {
   matterId: string;
+  defaultOpposingParty: string | null | undefined;
   onSuccess: () => Promise<void>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const [opposing, setOpposing] = useState("");
+  const [opposing, setOpposing] = useState(defaultOpposingParty ?? "");
   const [related, setRelated] = useState("");
 
   const mutation = useMutation({
@@ -225,7 +337,7 @@ function RunCheckDialog({
       }),
     onSuccess: async () => {
       setOpen(false);
-      setOpposing("");
+      setOpposing(defaultOpposingParty ?? "");
       setRelated("");
       await onSuccess();
       toast.success("Conflict scan completed.");
@@ -236,7 +348,13 @@ function RunCheckDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setOpposing(defaultOpposingParty ?? "");
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -251,8 +369,8 @@ function RunCheckDialog({
         <DialogHeader>
           <DialogTitle>Run conflict check</DialogTitle>
           <DialogDescription>
-            Scan existing clients, matters, and contacts for overlap with
-            the parties below. Run this before opening the engagement.
+            Scan existing clients and matters for overlap with the parties
+            below. This optional review does not block matter activation.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -331,9 +449,10 @@ function ResolveBar({
   const [showWaiver, setShowWaiver] = useState(false);
 
   const resolve = useMutation({
-    mutationFn: (
-      input: { status: "cleared" | "conflicted" | "waived"; resolution_note?: string },
-    ) => resolveConflictCheck({ checkId, ...input }),
+    mutationFn: (input: {
+      status: "cleared" | "conflicted" | "waived";
+      resolution_note?: string;
+    }) => resolveConflictCheck({ checkId, ...input }),
     onSuccess: async () => {
       setWaiverNote("");
       setShowWaiver(false);
@@ -373,7 +492,10 @@ function ResolveBar({
             size="sm"
             disabled={resolve.isPending || !waiverNote.trim()}
             onClick={() =>
-              resolve.mutate({ status: "waived", resolution_note: waiverNote.trim() })
+              resolve.mutate({
+                status: "waived",
+                resolution_note: waiverNote.trim(),
+              })
             }
           >
             Save waiver
@@ -403,7 +525,8 @@ function ResolveBar({
         onClick={() =>
           resolve.mutate({
             status: "conflicted",
-            resolution_note: "Confirmed conflict; matter cannot proceed.",
+            resolution_note:
+              "Confirmed conflict; escalate for risk review and record the firm's decision.",
           })
         }
         data-testid="conflict-resolve-conflict"

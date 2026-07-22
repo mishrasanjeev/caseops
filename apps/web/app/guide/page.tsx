@@ -9,7 +9,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "User guide",
   description:
-    "The current CaseOps user guide: daily priorities, intake and conflict clearance, matters, notices and reply deadlines, communications, tracked case refresh, compliance review, drafting, hearings, contracts, outside counsel, billing, and safe source-backed intelligence.",
+    "The current CaseOps user guide: daily priorities, intake and optional conflict review, matters, notices and reply deadlines, communications, tracked case refresh, compliance review, drafting, hearings, contracts, outside counsel, billing, and safe source-backed intelligence.",
   alternates: { canonical: "/guide" },
   openGraph: {
     type: "article",
@@ -25,7 +25,7 @@ const sections: { id: string; title: string }[] = [
   { id: "status-labels", title: "Product status labels" },
   { id: "daily-operations", title: "Today, calendar and portfolio" },
   { id: "workspace", title: "Workspace and roles" },
-  { id: "intake-conflicts", title: "Intake, clients and conflict clearance" },
+  { id: "intake-conflicts", title: "Intake, clients and optional conflict review" },
   { id: "matters", title: "Opening and running a matter" },
   { id: "documents", title: "Documents and indexing" },
   { id: "notices", title: "Notices and reply deadlines" },
@@ -245,8 +245,8 @@ export default function GuidePage() {
                       </>,
                       <>
                         <strong>Open your first matter.</strong> Continue through daily
-                        operations, roles, and conflict clearance before opening an active
-                        file.
+                        operations, roles, and optional conflict review before opening or
+                        working an active file.
                       </>,
                     ]}
                   />
@@ -359,7 +359,7 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="intake-conflicts" title="5 · Intake, clients and conflict clearance">
+                <Section id="intake-conflicts" title="5 · Intake, clients and optional conflict review">
                   <p>
                     Use <a className="underline" href="/app/intake">Intake</a> for inbound
                     business requests before they become matters. Users with the relevant
@@ -384,23 +384,22 @@ export default function GuidePage() {
                       </>,
                       <>
                         On the matter Overview, run <strong>Conflict check</strong> against
-                        workspace clients, matters, and contacts, including the opposing and
-                        related parties entered for the scan.
+                        workspace clients and matters, including the opposing and related
+                        parties entered for the scan.
                       </>,
                       <>
                         A partner or admin reviews candidate overlaps and records{" "}
                         <em>Cleared</em>, <em>Conflicted</em>, or an explicit{" "}
-                        <em>Waiver</em> with a note. For a pre-engagement file deliberately
-                        kept in Intake or On hold, moving to Active requires the latest check
-                        to be cleared or waived.
+                        <em>Waiver</em> with a note. The result is auditable review evidence,
+                        not a precondition for creating or activating the matter.
                       </>,
                     ]}
                   />
-                  <Callout tone="warn" title="Do not treat similarity as clearance">
+                  <Callout tone="warn" title="Review evidence is not a status gate">
                     Candidate matching is a review aid. A pending or conflicted result is not
-                    permission to proceed. The activation gate intentionally blocks an
-                    unreviewed Intake or On-hold file; direct New Matter creation starts Active
-                    by default.
+                    the same as clearance, but it does not block creation or a move to Active.
+                    After a material party change or matter reopen, the earlier result remains
+                    historical; run a fresh check before calling the matter currently cleared.
                   </Callout>
                 </Section>
 
@@ -431,8 +430,8 @@ export default function GuidePage() {
                       <>
                         New Matter starts <strong>Active</strong> by default. If your team
                         chooses to keep a pre-engagement file in <strong>Intake</strong> while
-                        its conflict check is pending, moving it to Active requires a cleared
-                        or waived latest check.
+                        its conflict check is pending, it can still move to Active. Conflict
+                        review remains optional and available before or after that change.
                       </>,
                       <>
                         Add a concise description, create the matter, then attach the first

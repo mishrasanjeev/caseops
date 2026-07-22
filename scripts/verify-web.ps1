@@ -41,8 +41,16 @@ if ($Quick) {
 Write-Host "[verify-web] npm run build (mandatory; prevents stale-bundle false negatives)"
 # Next.js resolves NEXT_PUBLIC_* values at build time.  A developer's
 # .env.local may intentionally point at localhost, but the canonical marketing
-# assertions verify production canonical/OG URLs.  Pin those public origins
-# for the release build instead of setting them only on `next start`.
+# assertions verify production canonical/OG URLs.  The API origin must also be
+# pinned here: setting it only on `next start` leaves the browser bundle baked
+# with the default `http://localhost:8000`, while the e2e CSP permits the
+# canonical `http://127.0.0.1:<port>` origin.
+$E2EApiPort = if ([string]::IsNullOrWhiteSpace($env:CASEOPS_E2E_API_PORT)) {
+    "8000"
+} else {
+    $env:CASEOPS_E2E_API_PORT
+}
+$env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:$E2EApiPort"
 $env:NEXT_PUBLIC_SITE_URL = "https://caseops.ai"
 $env:NEXT_PUBLIC_APP_URL = "https://caseops.ai/app"
 & npm run build

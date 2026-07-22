@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "CaseOps",
   tagline: "The matter-native legal operating system.",
   description:
-    "CaseOps unifies legal intake and conflict clearance, matter management, notice and reply-deadline tracking, research, drafting, hearings, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing in one citation-grounded workspace for Indian legal teams.",
+    "CaseOps unifies legal intake and optional conflict review, matter management, notice and reply-deadline tracking, research, drafting, hearings, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing in one citation-grounded workspace for Indian legal teams.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://caseops.ai",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://caseops.ai/app",
   keywords: [

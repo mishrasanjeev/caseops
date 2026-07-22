@@ -62,7 +62,7 @@ export function MatterLifecycleDialog({
       await onChanged(updatedMatter);
       toast.success(
         isReopen
-          ? "Matter reopened in Intake. Run a fresh conflict check before activation."
+          ? "Matter reopened in Intake. Conflict review remains optional before activation."
           : "Matter disposed and removed from active operations.",
       );
       setReason("");
@@ -116,7 +116,7 @@ export function MatterLifecycleDialog({
           <DialogTitle>{actionLabel}</DialogTitle>
           <DialogDescription>
             {isReopen
-              ? "Reopening returns this matter to Intake. Previous conflict clearance is not reused; a fresh check is required before Active status."
+              ? "Reopening returns this matter to Intake. Run a fresh conflict check if your firm's process calls for one; it does not block Active status."
               : "Disposal is a controlled lifecycle action. The matter is removed from active work views and later background updates cannot reopen it."}
           </DialogDescription>
         </DialogHeader>

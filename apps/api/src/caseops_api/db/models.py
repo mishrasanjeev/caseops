@@ -163,10 +163,11 @@ class MatterTaskPriority(StrEnum):
 
 
 class MatterConflictCheckStatus(StrEnum):
-    # PG-001 (2026-04-30) — pre-engagement conflict gate.
+    # PG-001 conflict-review states. These describe the advisory review record
+    # and do not control Matter lifecycle transitions.
     #   pending     — check ran, ≥1 candidate flagged, awaiting partner review
     #   cleared     — no overlap OR partner reviewed and cleared
-    #   conflicted  — partner reviewed and confirms conflict; matter cannot proceed
+    #   conflicted  — partner reviewed and confirms a conflict for follow-up
     #   waived      — partner reviewed and explicitly waived (must record reason)
     PENDING = "pending"
     CLEARED = "cleared"
@@ -1881,14 +1882,14 @@ class MatterTask(Base):
 
 
 class MatterConflictCheck(Base):
-    """Pre-engagement conflict-of-interest check for a matter (PG-001).
+    """Optional conflict-of-interest review for a matter (PG-001).
 
-    Run when a matter is created or before opening a new client engagement.
-    Service scans existing clients, matters, and contacts for overlap by
-    name/CIN/PAN/email and persists candidate matches as a JSON column.
+    May be run when a matter is created or during a client engagement.
+    Service scans existing client names and matter client/opposing-party
+    names for overlap and persists candidate matches as a JSON column.
     Partner reviews and records `cleared`, `conflicted`, or `waived`. The
-    intake gate (matter status promotion) and matter cockpit reference
-    the latest check.
+    matter cockpit presents the latest result as an advisory workflow;
+    conflict-check state does not control the Matter lifecycle.
     """
 
     __tablename__ = "matter_conflict_checks"

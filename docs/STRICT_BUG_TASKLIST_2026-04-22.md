@@ -909,9 +909,9 @@ Detailed root-cause record:
 
 | ID | Severity | Classification | Formal verdict | Scope |
 | --- | --- | --- | --- | --- |
-| BUG-001 | Medium | Valid product enhancement | `Inconclusive` pending deployed-commit Playwright | Standalone tenant-wide Notice Management from main navigation; create received/sent notices independently with zero or multiple matter links, search/filter/assign/track, and retain secure file handling plus legacy matter-notice visibility. |
-| BUG-002 | Medium | Valid workflow/policy enhancement | `Inconclusive` pending deployed-commit Playwright | New matters default to Active and direct Active creation is allowed without mandatory conflict clearance; conflict checks remain available and explicit Intake/On-hold activation remains gated. |
-| Lifecycle adjacent defect | High | Valid systemic defect | Locally verified; formal verdict `Inconclusive` pending deployed-commit Playwright | Explicit terminal state machine, optimistic concurrency, dirty metadata PATCH, reason/capability/audit, reopen to Intake with fresh conflict requirement, and post-disposal operational/background guards. |
+| BUG-001 | Medium | Valid product enhancement | `Properly fixed` for the deployed July 15 scope; reconciled 2026-07-22 | Standalone tenant-wide Notice Management from main navigation; create received/sent notices independently with zero or multiple matter links, search/filter/assign/track, and retain secure file handling plus legacy matter-notice visibility. |
+| BUG-002 | Medium | Valid workflow/policy enhancement | `Properly fixed` for the deployed July 15 creation-only scope; superseded by the July 22 policy | New matters default to Active and direct Active creation is allowed without mandatory conflict clearance. The historical July 15 contract retained the explicit Intake/On-hold activation gate; that clause is no longer current. |
+| Lifecycle adjacent defect | High | Valid systemic defect | `Properly fixed` for the deployed July 15 lifecycle scope; conflict-gate clause superseded July 22 | Explicit terminal state machine, optimistic concurrency, dirty metadata PATCH, reason/capability/audit, reopen to Intake with prior clearance retained as historical evidence, and post-disposal operational/background guards. |
 
 Pre-change production reproduction on the `legal` tester tenant:
 
@@ -932,10 +932,12 @@ Required closure evidence for this batch:
 - registered `tests/e2e/ram-2026-07-15-prod.spec.ts` deployed proof;
 - exact deployed commit/build identity paired with each final verdict.
 
-Do not rewrite any verdict above as `Properly fixed` from local evidence alone.
+The rows above were reconciled on 2026-07-22 with the deployment and production
+Playwright evidence recorded in `docs/BUG_REOPEN_LEARNINGS_2026-07-15_RAM.md`.
+That historical evidence does not close the newer July 22 policy.
 
-Local candidate evidence from the 2026-07-15 workstation replay, with final
-regression shards completed on 2026-07-16:
+Historical local-candidate evidence captured before the later July 15
+deployment, with final regression shards completed on 2026-07-16:
 
 - complete 2,120-test API inventory collected and covered through three
   disjoint product-final-tree shards: 2,089 passed, 31 environment-gated skips,
@@ -958,5 +960,63 @@ regression shards completed on 2026-07-16:
   instead of using the lifecycle endpoint. Permanent controls now require valid
   parent fixtures, repository-wide mutation-call-site audits, and denial of
   terminal entry through create/import/generic PATCH;
-- production post-fix execution remains intentionally pending deployment and
-  deployed-build identity proof.
+- at that checkpoint, production execution was still pending. The later
+  deployed-build identity and production Playwright closure are recorded in
+  `docs/BUG_REOPEN_LEARNINGS_2026-07-15_RAM.md`; they close only that dated
+  scope.
+
+---
+
+## Ram 2026-07-22 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps_Bugs_Ram22Jul2026.xlsx`.
+Detailed root-cause record:
+`docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`.
+
+| ID | Severity | Classification | Formal verdict | Scope |
+| --- | --- | --- | --- | --- |
+| BUG-001 | Medium | Valid workflow/policy enhancement, not a regression against the July 15 creation-only contract | `Inconclusive` pending deployed-commit Playwright | Conflict review remains optional and auditable. Missing, pending, conflicted, cleared, waived, invalid, stale-scope, and pre-reopen results must not block creation or an Intake/On-hold to Active transition. |
+
+Why the bug appeared to reopen:
+
+- July 15 exempted direct matter creation but explicitly kept the later status
+  gate. July 22 expands the contract to all activation paths.
+- Exact 409 tests, UI recovery copy, lifecycle documentation, public copy, and
+  helper fixtures fossilized the older invariant, so changing only one service
+  branch would be another shallow fix.
+- Cases themselves do not reopen accidentally: the dedicated, capability- and
+  CAS-gated lifecycle endpoint is still the only Disposed-to-Intake path.
+
+Required closure evidence:
+
+- API matrix for Intake and On hold with no check plus pending, conflicted,
+  stale-party-scope, and pre-reopen results; every transition must persist and
+  emit no conflict-gate denial;
+- conflict scan, candidate review, clear/conflict/waive, tenant/access,
+  performance, and audit behavior still works independently;
+- React proof removes blocking guidance while keeping the optional card usable;
+- registered local and production July 22 Playwright specs exercise final
+  read-back with the tester account/local equivalent; and
+- exact deployed commit/build identity is paired with the passing production
+  run before changing `Inconclusive` to `Properly fixed`.
+
+Local candidate evidence captured on 2026-07-22:
+
+- canonical backend verification passed Ruff plus all 59 tests in the affected
+  conflict, lifecycle, intake, and import files;
+- three focused React files passed 19 tests, TypeScript passed, and the
+  64-route production Next.js build passed;
+- the combined July 15 and July 22 local Chromium run passed 5/5 in 20.5s with
+  the shared exact local tester identity. The July 22 spec passed 2/2: the
+  no-check Intake case in 1.3s and the controlled
+  Dispose -> Reopen -> Historical-cleared -> Active case in 2.1s, including
+  lifecycle-version/CAS assertions and final reload persistence; and
+- the extended production spec authenticated as the supplied tester and
+  created a unique Intake matter, but its first activation received the prior
+  build's legacy HTTP 409. The second serial controlled-reopen case did not
+  run, while `afterAll` emitted no cleanup failure.
+
+The local candidate is verified. The formal production verdict remains
+`Inconclusive` until the exact candidate build is deployed and the same
+committed production Playwright workflow passes against that deployed build
+identity.

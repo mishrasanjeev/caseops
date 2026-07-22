@@ -29,7 +29,6 @@ from caseops_api.db.models import (
     MatterAttachment,
     MatterBillingProfile,
     MatterCauseListEntry,
-    MatterConflictCheckStatus,
     MatterCourtOrder,
     MatterCourtSyncJob,
     MatterCourtSyncJobStatus,
@@ -102,10 +101,6 @@ from caseops_api.schemas.matters import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.case_tracking import auto_link_matter_case_tracking
-from caseops_api.services.conflict_checks import (
-    ConflictGateDecision,
-    evaluate_matter_opening_gate,
-)
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
     load_latest_processing_jobs,
@@ -228,50 +223,6 @@ def _assert_matter_not_disposed(matter: Matter, *, operation: str) -> None:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail=f"Cannot {operation} because this matter is disposed or inactive.",
-    )
-
-
-def _conflict_gate_metadata(
-    *,
-    decision: ConflictGateDecision,
-    from_status: str,
-    to_status: str,
-) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "from_status": from_status,
-        "to_status": to_status,
-        "conflict_gate": {
-            "reason": decision.reason,
-            "latest_check_id": decision.latest_check_id,
-            "latest_status": decision.latest_status,
-            "latest_ran_at": decision.latest_ran_at.isoformat() if decision.latest_ran_at else None,
-        },
-    }
-    return metadata
-
-
-def _conflict_gate_block_detail(decision: ConflictGateDecision) -> str:
-    if decision.reason == "missing_check":
-        return (
-            "Matter cannot be activated until a conflict check is completed as "
-            "clear or waived. Use the Conflict check card on the matter overview "
-            "to run the scan, then save Active again."
-        )
-    if decision.reason == "stale_after_reopen":
-        return (
-            "Matter cannot be activated using a conflict check from before it "
-            "was reopened. Run a fresh conflict check, then save Active again."
-        )
-    if decision.latest_status == MatterConflictCheckStatus.CONFLICTED.value:
-        return (
-            "Matter cannot be activated because the latest conflict check "
-            "indicates a possible conflict requiring review. Use the Conflict "
-            "check card to resolve or record a waiver before saving Active."
-        )
-    return (
-        "Matter cannot be activated because the latest conflict check requires "
-        "review or waiver. Use the Conflict check card to clear or waive it, "
-        "then save Active again."
     )
 
 
@@ -1823,39 +1774,6 @@ def update_matter(
                 "an expected prior status, updated_at token, and reason."
             ),
         )
-    opening_gate_decision: ConflictGateDecision | None = None
-    if requested_status == MatterStatus.ACTIVE.value and status_before in {
-        MatterStatus.INTAKE.value,
-        MatterStatus.ON_HOLD.value,
-    }:
-        opening_gate_decision = evaluate_matter_opening_gate(
-            session,
-            company_id=context.company.id,
-            matter_id=matter.id,
-            expected_opposing_party_name=updates.get("opposing_party")
-            if "opposing_party" in updates
-            else matter.opposing_party,
-        )
-        if not opening_gate_decision.allowed:
-            record_from_context(
-                session,
-                context,
-                action="matter.status_transition.blocked",
-                target_type="matter",
-                target_id=matter.id,
-                matter_id=matter.id,
-                result=AuditResult.DENIED,
-                metadata=_conflict_gate_metadata(
-                    decision=opening_gate_decision,
-                    from_status=status_before,
-                    to_status=MatterStatus.ACTIVE.value,
-                ),
-                commit=True,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_conflict_gate_block_detail(opening_gate_decision),
-            )
     claim_before = {
         "claim_amount_minor": matter.claim_amount_minor,
         "claim_currency": matter.claim_currency,
@@ -2091,12 +2009,6 @@ def update_matter(
             "from_status": status_before,
             "to_status": status_after,
         }
-        if opening_gate_decision is not None:
-            status_metadata = _conflict_gate_metadata(
-                decision=opening_gate_decision,
-                from_status=status_before or "",
-                to_status=status_after or "",
-            )
         record_from_context(
             session,
             context,

@@ -887,7 +887,8 @@ tracked under `WTD-5.1` / `WTD-5.3`.
 - **Required invariant:** generic PATCH cannot dispose/reopen or edit a disposed
   matter; lifecycle changes use capability + reason + source status + timestamp;
   stale writes return 409; reopen lands in Intake; old conflict clearance is
-  invalid; post-disposal tasks/deadlines/hearings/jobs cannot make the matter
+  retained only as historical/stale evidence and does not block a later Active
+  transition; post-disposal tasks/deadlines/hearings/jobs cannot make the matter
   operational again. Legacy terminal rows and already-synced provider calendar
   artifacts are neutralized/tombstoned on migration and again before reopen.
   Every operational portal, integration, AI/provider,
@@ -903,6 +904,35 @@ tracked under `WTD-5.1` / `WTD-5.3`.
   one instant; it does not prove terminality across concurrent writers or jobs.
   A lock acquired before a commit or provider call also proves nothing about
   the final persistence boundary because a commit releases that lock.
+
+### EH-LC-04 - Conflict review/status decoupling (2026-07-22)
+
+- **Status:** Local candidate verified 2026-07-22; production still returned the
+  superseded 409 contract, so the formal verdict remains `Inconclusive` pending
+  deployment and same-spec Playwright proof.
+- **Policy:** conflict review is optional and auditable. Missing, pending,
+  conflicted, cleared, waived, invalid, stale-scope, and pre-reopen results must
+  not block creation or an Intake/On-hold to Active transition. A stale result
+  must not be presented as current clearance.
+- **Adjacent invariants retained:** conflict scanning/resolution, tenant and
+  matter access, terminal lifecycle, optimistic concurrency, audit provenance,
+  and party-scope/lifecycle versioning remain enforced independently.
+- **Local evidence:** canonical backend verification passed Ruff plus 59
+  affected conflict/lifecycle/intake/import tests; three focused React files
+  passed 19 tests, TypeScript passed, and the 64-route production build passed.
+  The combined July 15 and July 22 local Chromium run passed 5/5 in 20.5s with
+  the shared exact local tester identity. July 22 passed 2/2: no-check Intake
+  activation in 1.3s and controlled Dispose -> Reopen -> Historical-cleared
+  -> Active in 2.1s with lifecycle-version/CAS and reload persistence proof.
+- **Current-claim audit:** current product records describe scanner scope as
+  clients plus matters only; broader contacts remain an explicit follow-on gap.
+- **Production evidence:** the extended spec authenticated and created a unique
+  Intake matter, but the first activation received the prior build's legacy
+  HTTP 409. The second serial controlled-reopen case did not run; `afterAll`
+  emitted no cleanup failure.
+- **Remaining closure evidence:** deploy the exact candidate build, record its
+  identity, and pass the same committed production workflow without mocks or
+  skips before changing the formal `Inconclusive` verdict.
 
 ### EH-DB-02 - Database-test fixture integrity
 

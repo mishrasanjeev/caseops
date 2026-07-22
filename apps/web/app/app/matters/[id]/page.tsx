@@ -7,7 +7,6 @@ import {
   MessageSquareText,
   Pencil,
   Save,
-  ShieldAlert,
   X,
 } from "lucide-react";
 import { useParams } from "next/navigation";
@@ -182,12 +181,6 @@ function hasMatterChanges(input: MatterUpdateInput): boolean {
   );
 }
 
-function isConflictGateActivationError(err: unknown, message: string): boolean {
-  if (!isApiErrorShape(err) || err.status !== 409) return false;
-  const haystack = `${err.detail} ${err.problemType ?? ""} ${message}`.toLowerCase();
-  return haystack.includes("conflict check") || haystack.includes("conflict clearance");
-}
-
 function MatterDetail({
   label,
   value,
@@ -214,8 +207,6 @@ export default function MatterOverviewPage() {
   const [isEditingMatter, setIsEditingMatter] = useState(false);
   const [matterDraft, setMatterDraft] = useState<MatterEditDraft | null>(null);
   const [matterEditBase, setMatterEditBase] = useState<Matter | null>(null);
-  const [matterEditConflictGateError, setMatterEditConflictGateError] =
-    useState<string | null>(null);
   const [matterEditConcurrencyError, setMatterEditConcurrencyError] =
     useState<string | null>(null);
   const matterMutation = useMutation({
@@ -229,14 +220,11 @@ export default function MatterOverviewPage() {
       setIsEditingMatter(false);
       setMatterDraft(null);
       setMatterEditBase(null);
-      setMatterEditConflictGateError(null);
       setMatterEditConcurrencyError(null);
     },
     onError: async (err) => {
       const message = apiErrorMessage(err, "Could not update the matter.");
-      const isConflictGate = isConflictGateActivationError(err, message);
-      setMatterEditConflictGateError(isConflictGate ? message : null);
-      const isStaleWrite = isApiErrorShape(err) && err.status === 409 && !isConflictGate;
+      const isStaleWrite = isApiErrorShape(err) && err.status === 409;
       setMatterEditConcurrencyError(isStaleWrite ? message : null);
       if (isStaleWrite) {
         await queryClient.invalidateQueries({
@@ -268,27 +256,12 @@ export default function MatterOverviewPage() {
     setMatterEditBase({ ...matter });
     setMatterDraft(draftFromMatter(matter));
     setIsEditingMatter(true);
-    setMatterEditConflictGateError(null);
     setMatterEditConcurrencyError(null);
   }
 
   function updateMatterDraft(patch: Partial<MatterEditDraft>) {
     setMatterDraft((current) => (current ? { ...current, ...patch } : current));
-    if (patch.status && patch.status !== "active") {
-      setMatterEditConflictGateError(null);
-    }
   }
-
-  function reviewConflictCheck() {
-    const card = document.querySelector<HTMLElement>(
-      '[data-testid="matter-conflict-card"]',
-    );
-    card?.scrollIntoView({ behavior: "smooth", block: "center" });
-    card?.focus({ preventScroll: true });
-  }
-
-  const isActivatingMatter =
-    matterDraft?.status === "active" && matterEditBase?.status !== "active";
 
   return (
     <div className="grid gap-5 lg:grid-cols-3">
@@ -333,7 +306,6 @@ export default function MatterOverviewPage() {
                     setIsEditingMatter(false);
                     setMatterDraft(null);
                     setMatterEditBase(null);
-                    setMatterEditConflictGateError(null);
                     setMatterEditConcurrencyError(null);
                   } else {
                     beginMatterEdit(data.matter as Matter);
@@ -385,44 +357,6 @@ export default function MatterOverviewPage() {
                     reopen the editor to use the latest record.
                   </p>
                 </div>
-              ) : null}
-              {matterEditConflictGateError ? (
-                <div
-                  className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 md:col-span-2"
-                  role="alert"
-                  data-testid="matter-edit-conflict-gate"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">
-                        Activation is waiting on conflict clearance.
-                      </p>
-                      <p className="mt-1 text-xs leading-5">
-                        {matterEditConflictGateError}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={reviewConflictCheck}
-                      data-testid="matter-edit-review-conflict"
-                    >
-                      <ShieldAlert className="h-4 w-4" aria-hidden />
-                      Review conflict check
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              {isActivatingMatter && !matterEditConflictGateError ? (
-                <p
-                  className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-mute)] md:col-span-2"
-                  data-testid="matter-edit-active-conflict-hint"
-                >
-                  Active status requires the latest conflict check to be clear
-                  or waived. Use the Conflict check card on this page before
-                  saving Active.
-                </p>
               ) : null}
               <div className="md:col-span-2">
                 <Label htmlFor="matter-edit-title">Title</Label>
@@ -589,7 +523,6 @@ export default function MatterOverviewPage() {
                   onClick={() => {
                     setIsEditingMatter(false);
                     setMatterDraft(null);
-                    setMatterEditConflictGateError(null);
                     setMatterEditConcurrencyError(null);
                   }}
                   data-testid="matter-edit-cancel"
@@ -647,7 +580,11 @@ export default function MatterOverviewPage() {
         </CardContent>
       </Card>
 
-      <ConflictCheckCard matterId={data.matter.id} />
+      <ConflictCheckCard
+        matterId={data.matter.id}
+        matterLifecycleVersion={data.matter.lifecycle_version}
+        opposingParty={data.matter.opposing_party}
+      />
 
       <MatterForumCard matter={data.matter} />
 

@@ -158,9 +158,9 @@ class MatterCreateRequest(BaseModel):
     filing_number: str | None = Field(default=None, max_length=120)
     filing_date: date | None = None
     cnr_number: str | None = Field(default=None, max_length=32)
-    # New matters are operational by default. Conflict clearance remains a
-    # gate when an existing intake/on-hold matter is later activated; it is
-    # not a prerequisite for creating an already-active matter.
+    # New matters are operational by default. Conflict checks remain available
+    # as an advisory workflow and are not a prerequisite for creation or later
+    # status changes.
     status: MatterStatusInputLiteral = DEFAULT_MATTER_STATUS.value
     practice_area: str = Field(min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral

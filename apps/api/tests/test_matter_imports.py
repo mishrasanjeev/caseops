@@ -545,7 +545,7 @@ def test_bulk_matter_creation_template_preview_commit_history_and_notifications(
         b"Matter Description,Client Name,Client Code,Client Contact Number,"
         b"Client Email,Opposing Party Name,Opposing Counsel,Forum,Court,"
         b"Case Number,Filing Number,Filing Date,Matter Owner,Responsible Lawyer\n"
-        b"Acme recovery proceedings,BULK-2026-001,Litigation,Commercial,active,"
+        b"Acme recovery proceedings,BULK-2026-001,Litigation,Commercial,intake,"
         b"Recovery of unpaid invoices,Acme Industries,CLI-001,+919876543210,"
         b"legal@acme.com,Northstar Supplies,Rao Chambers,high_court,"
         b"Delhi High Court,CS-COMM-123-2026,FILING-123,2026-07-17,"
@@ -594,6 +594,18 @@ def test_bulk_matter_creation_template_preview_commit_history_and_notifications(
     assert record["filing_date"] == "2026-07-17"
     assert record["assignee_membership_id"] == boot["membership"]["id"]
     assert record["responsible_lawyer_membership_id"] == boot["membership"]["id"]
+    assert record["status"] == "intake"
+
+    activated = client.patch(
+        f"/api/matters/{record['id']}",
+        headers=auth_headers(token),
+        json={
+            "status": "active",
+            "expected_updated_at": record["updated_at"],
+        },
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == "active"
 
     repeated = client.post(
         f"/api/matters/imports/{job['id']}/commit",

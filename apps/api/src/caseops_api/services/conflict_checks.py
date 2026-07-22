@@ -1,10 +1,10 @@
 """Pre-engagement conflict-of-interest scanner (PG-001).
 
 Surface every potential overlap between a matter's opposing/related
-parties and existing clients, matters, and contacts in the same tenant.
+parties and existing clients and matters in the same tenant.
 A partner reviews the candidates and records `cleared`, `conflicted`, or
-`waived`. The intake gate blocks matter status promotion until the latest
-check is `cleared` or `waived`.
+`waived`. Conflict checks are an advisory review workflow and do not block
+matter status changes.
 
 The matcher is deliberately simple for v1: case-insensitive normalised
 substring match + Jaccard token overlap on length-≥2 tokens. False
@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -25,7 +24,6 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
-    AuditEvent,
     Client,
     Matter,
     MatterConflictCheck,
@@ -43,10 +41,6 @@ from caseops_api.services.matter_operational_guard import require_operational_ma
 from caseops_api.services.session_context import SessionContext
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
-_GATE_ALLOWED_STATUSES = {
-    MatterConflictCheckStatus.CLEARED.value,
-    MatterConflictCheckStatus.WAIVED.value,
-}
 _PREFILTER_STOPWORDS = {
     "and",
     "client",
@@ -70,21 +64,6 @@ _PREFILTER_STOPWORDS = {
     "target",
     "the",
 }
-
-
-def _utc_timestamp(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
-
-
-@dataclass(frozen=True)
-class ConflictGateDecision:
-    allowed: bool
-    reason: str
-    latest_check_id: str | None = None
-    latest_status: str | None = None
-    latest_ran_at: datetime | None = None
 
 
 def _normalise(text: str) -> str:
@@ -391,112 +370,6 @@ def list_conflict_checks(
     return [_record(r) for r in rows]
 
 
-def evaluate_matter_opening_gate(
-    session: Session,
-    *,
-    company_id: str,
-    matter_id: str,
-    expected_opposing_party_name: str | None = None,
-) -> ConflictGateDecision:
-    """Return whether the latest conflict check permits intake -> active.
-
-    PG-001 gates matter opening on the latest tenant/matter-scoped check.
-    Older clear checks are intentionally stale once a newer pending or
-    conflicted check exists.
-    """
-    latest = session.scalar(
-        select(MatterConflictCheck)
-        .where(
-            MatterConflictCheck.company_id == company_id,
-            MatterConflictCheck.matter_id == matter_id,
-        )
-        .order_by(
-            MatterConflictCheck.ran_at.desc(),
-            MatterConflictCheck.created_at.desc(),
-            MatterConflictCheck.id.desc(),
-        )
-        .limit(1)
-    )
-    if latest is None:
-        return ConflictGateDecision(allowed=False, reason="missing_check")
-
-    current_lifecycle_version = session.scalar(
-        select(Matter.lifecycle_version).where(
-            Matter.company_id == company_id,
-            Matter.id == matter_id,
-        )
-    )
-    if (
-        current_lifecycle_version is None
-        or latest.matter_lifecycle_version != current_lifecycle_version
-    ):
-        return ConflictGateDecision(
-            allowed=False,
-            reason="stale_after_reopen",
-            latest_check_id=latest.id,
-            latest_status=latest.status,
-            latest_ran_at=latest.ran_at,
-        )
-
-    latest_reopen_at = session.scalar(
-        select(AuditEvent.created_at)
-        .where(
-            AuditEvent.company_id == company_id,
-            AuditEvent.matter_id == matter_id,
-            AuditEvent.action == "matter.lifecycle.reopened",
-        )
-        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
-        .limit(1)
-    )
-    if latest_reopen_at is not None and _utc_timestamp(latest.ran_at) <= _utc_timestamp(
-        latest_reopen_at
-    ):
-        return ConflictGateDecision(
-            allowed=False,
-            reason="stale_after_reopen",
-            latest_check_id=latest.id,
-            latest_status=latest.status,
-            latest_ran_at=latest.ran_at,
-        )
-
-    if latest.status in _GATE_ALLOWED_STATUSES:
-        if (
-            expected_opposing_party_name
-            and _normalise(latest.opposing_party_name)
-            != _normalise(expected_opposing_party_name)
-        ):
-            return ConflictGateDecision(
-                allowed=False,
-                reason="stale_party_scope",
-                latest_check_id=latest.id,
-                latest_status=latest.status,
-                latest_ran_at=latest.ran_at,
-            )
-        reason = (
-            "clear"
-            if latest.status == MatterConflictCheckStatus.CLEARED.value
-            else "waived"
-        )
-        return ConflictGateDecision(
-            allowed=True,
-            reason=reason,
-            latest_check_id=latest.id,
-            latest_status=latest.status,
-            latest_ran_at=latest.ran_at,
-        )
-
-    reason = "requires_review"
-    if latest.status == MatterConflictCheckStatus.CONFLICTED.value:
-        reason = "possible_conflict"
-    return ConflictGateDecision(
-        allowed=False,
-        reason=reason,
-        latest_check_id=latest.id,
-        latest_status=latest.status,
-        latest_ran_at=latest.ran_at,
-    )
-
-
 def resolve_conflict_check(
     session: Session,
     *,
@@ -562,8 +435,6 @@ def resolve_conflict_check(
 
 
 __all__ = [
-    "ConflictGateDecision",
-    "evaluate_matter_opening_gate",
     "list_conflict_checks",
     "resolve_conflict_check",
     "run_conflict_check",

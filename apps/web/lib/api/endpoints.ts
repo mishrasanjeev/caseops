@@ -1789,6 +1789,7 @@ export type ConflictCheckRecord = {
   resolved_by_membership_id: string | null;
   resolved_at: string | null;
   ran_by_membership_id: string | null;
+  matter_lifecycle_version: number;
   ran_at: string;
   created_at: string;
 };

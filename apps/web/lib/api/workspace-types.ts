@@ -4,6 +4,7 @@ export type WorkspaceMatter = {
   title: string;
   status: string;
   updated_at: string;
+  lifecycle_version: number;
   practice_area?: string | null;
   forum_level?: string | null;
   court_id?: string | null;

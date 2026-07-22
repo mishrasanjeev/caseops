@@ -48,7 +48,11 @@ fi
 echo "[verify-web] npm run build (mandatory; prevents stale-bundle false negatives)"
 # Next.js resolves NEXT_PUBLIC_* values at build time.  Keep a developer's
 # localhost .env.local from leaking into canonical/OG assertions in the release
-# build.
+# build.  Pin the e2e API origin at build time too; setting it only on
+# `next start` cannot change an already-bundled NEXT_PUBLIC_* value and causes
+# the CSP to reject login requests to the default localhost origin.
+E2E_API_PORT="${CASEOPS_E2E_API_PORT:-8000}"
+NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:${E2E_API_PORT}" \
 NEXT_PUBLIC_SITE_URL="https://caseops.ai" \
 NEXT_PUBLIC_APP_URL="https://caseops.ai/app" \
   npm run build

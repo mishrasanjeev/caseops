@@ -87,14 +87,25 @@ def test_intake_create_list_update_promote(client: TestClient) -> None:
     assert promoted["linked_matter_code"] == "INT-STRIPE-001"
 
     # Intake promotion is the deliberate exception to the global Active
-    # creation default: this workflow represents pre-engagement review and
-    # must remain behind the conflict-clearance transition gate.
+    # creation default so the team can conduct an optional pre-engagement
+    # review. Conflict review remains advisory for the later activation.
     linked = client.get(
         f"/api/matters/{promoted['linked_matter_id']}",
         headers=headers,
     )
     assert linked.status_code == 200, linked.text
     assert (linked.json()["status"], linked.json()["is_active"]) == ("intake", True)
+
+    activated = client.patch(
+        f"/api/matters/{promoted['linked_matter_id']}",
+        headers=headers,
+        json={
+            "status": "active",
+            "expected_updated_at": linked.json()["updated_at"],
+        },
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == "active"
 
 
 def test_intake_rejects_cross_tenant_access(client: TestClient) -> None:

@@ -59,6 +59,7 @@ export const matter = z.object({
   opposing_party: z.string().nullable().optional(),
   opposing_counsel: z.string().nullable().optional(),
   status: z.string(),
+  lifecycle_version: z.number().int().min(0),
   practice_area: z.string().nullable().optional(),
   forum_level: z.string().nullable().optional(),
   court_id: z.string().nullable().optional(),

@@ -1,5 +1,13 @@
 # Bug Reopen Learnings - Conflict Checks 2026-07-07
 
+> **Historical contract, superseded 2026-07-22.** This record correctly
+> explains the July 7 scanner crash, large-tenant performance failure, and the
+> policy accepted at that time. Its statements that conflict clearance must
+> block Intake/On-hold activation are no longer current. Conflict review is now
+> optional and nonblocking; see
+> `docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`. The scanner, tenancy,
+> resolution, audit, and performance learnings below remain binding.
+
 Source workbooks:
 
 - `C:\Users\mishr\Downloads\CaseOps_Aishwarya_07Jul2026.xlsx`
@@ -29,7 +37,9 @@ Source workbooks:
 
 - Conflict-check regressions must create at least one real `Client` row, not only matters with free-text client names.
 - Conflict-check regressions must include a volume guard that proves unrelated tenant rows are not hydrated/scored for every scan.
-- Mandatory gates must have two tests: one for the enforcement and one for the user recovery path from the page where the block appears.
+- When a current product policy truly mandates a gate, it needs two tests: one
+  for enforcement and one for the user recovery path. The conflict-status gate
+  described in this historical record was superseded on 2026-07-22.
 - Any browser CORS/network-looking failure on a mutating endpoint must be reproduced with a direct authenticated API request before classifying the bug.
 - UI comments that describe implemented gates as future work must be corrected during the fix. Stale comments are product-risk debt.
 - Workbook bugs touching status transitions must be covered by API tests, React tests, and a Playwright browser test registered in `playwright.app.config.ts`.
@@ -39,18 +49,25 @@ Source workbooks:
 - `apps/api/src/caseops_api/services/conflict_checks.py` now scans `Client.name`, the actual model column, and stores string candidate IDs.
 - `apps/api/src/caseops_api/services/conflict_checks.py` now prefilters client and matter scans in SQL before applying the existing Python similarity scorer, so large tenants do not hydrate and score every row for one conflict check.
 - `apps/api/alembic/versions/20260708_0001_conflict_check_trigram_indexes.py` adds `pg_trgm` GIN indexes for `clients.name`, `matters.client_name`, and `matters.opposing_party`, so the production `%term%` prefilter does not devolve into a sequential scan.
-- `apps/api/src/caseops_api/services/matters.py` now returns actionable activation-block messages that point users to the Conflict check card.
-- `apps/web/app/app/matters/[id]/page.tsx` now keeps conflict-gate activation failures visible inline, shows an Active-status pre-save hint, and provides a Review conflict check button that focuses the card.
-- `apps/web/components/matters/ConflictCheckCard.tsx` now documents the real gating behavior, is focusable from the edit form, and tells non-resolver users that a partner/admin must clear, mark conflicted, or waive a pending result.
+- Historical July 7 fix: `apps/api/src/caseops_api/services/matters.py` returned
+  actionable activation-block messages. That blocker is intentionally removed
+  under the July 22 policy.
+- Historical July 7 fix: `apps/web/app/app/matters/[id]/page.tsx` added
+  conflict-gate recovery guidance. Blocking guidance is obsolete under the
+  July 22 policy; the optional Conflict Check card remains discoverable.
+- Historical July 7 fix: `ConflictCheckCard.tsx` documented the then-current
+  gate. The July 22 card must describe review as optional/nonblocking while
+  retaining role-aware resolution controls.
 
 ## Regression Anchors Added
 
 - `apps/api/tests/test_conflict_checks.py::test_run_conflict_check_flags_existing_client_record_as_pending` covers the real `Client.name` scan path that failed in production.
 - `apps/api/tests/test_conflict_checks.py::test_run_conflict_check_prefilters_large_client_tables` covers the large-tenant guard by seeding many unrelated client rows and asserting the scorer is not called for them.
 - `apps/api/tests/test_postgres_validation.py::test_conflict_check_trigram_indexes_exist_after_head` proves `alembic upgrade head` creates the production substring-search indexes on real Postgres.
-- Existing API gate tests now assert that 409 activation messages include "Conflict check card".
-- `apps/web/app/app/matters/[id]/page.test.tsx` covers the inline conflict-gate guidance and Review conflict check button.
-- `tests/e2e/hari-2026-07-07-bugs.spec.ts` drives the full local browser path: real client creation, matter creation, UI conflict scan, blocked Active save with guidance, clear check, and successful Active save.
+- Historical API tests asserted the 409 activation message. They must be
+  inverted/replaced for the July 22 nonblocking policy.
+- Historical page and Playwright tests covered blocking recovery. Their scanner
+  and resolution coverage remains useful, but the 409 expectation is obsolete.
 - `playwright.app.config.ts` includes the new Playwright regression in the app suite.
 
 ## Local Verification - 2026-07-07
@@ -66,4 +83,8 @@ Source workbooks:
 
 ## Current Verdict
 
-Both July 7 conflict-check rows are valid and fixed locally. Production verification must be repeated after the latest indexed migration is deployed because the original Ram failure reproduced only on the shipped production API and the first two server fixes exposed the database scan cost.
+Both July 7 conflict-check rows were valid under their dated acceptance scope.
+Their scanner/performance fixes remain relevant. The mandatory activation rule
+and its blocking UI/test assertions are superseded by the July 22 nonblocking
+policy; closure of that newer policy remains `Inconclusive` until deployed-build
+Playwright proof exists.
