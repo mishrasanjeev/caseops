@@ -1,6 +1,6 @@
 # CaseOps ADP-01 to ADP-19 End User Product Guide
 
-Last updated: 2026-05-25
+Last updated: 2026-07-23
 
 This guide explains the product capabilities delivered through ADP-19 and how
 law firm and legal operations users can use them in CaseOps. It is written for
@@ -234,8 +234,14 @@ What to expect:
 
 ## ADP-11: Bulk Matter Creation
 
-Purpose: Validate a controlled CSV/XLSX file, create every valid matter after
-confirmation, and retain a searchable audit/error history.
+Purpose: Validate the canonical 21-column CSV/XLSX template or a documented
+compatible client register, create every valid matter after confirmation, and
+retain a searchable audit/error history.
+
+Release status (23 July 2026): the compatibility revision described below is
+prepared, but its automated, end-to-end, and production deployment evidence is
+still pending. The existing bulk-creation workflow remains the production
+baseline until the dated validation guide records completion.
 
 Who can use it:
 
@@ -249,8 +255,13 @@ How to use:
 1. Open **Matters** and select **Bulk upload matters**.
 2. Download the XLSX template (recommended) or CSV template. The XLSX workbook
    includes Matter Import, Reference Values, and Instructions sheets.
-3. Enter one matter per row. Do not rename or remove required columns.
-4. Upload the completed `.xlsx` or UTF-8 `.csv` file.
+3. Enter one matter per row. The canonical template has 21 columns. **Court**
+   is the court/forum name; **Court Forum Number** is a separate optional court,
+   bench, room, or forum reference.
+4. Upload the completed `.xlsx` or `.csv` file. CSV may be UTF-8, BOM-marked
+   UTF-16, or Windows-1252 and may use comma, semicolon, tab, or pipe
+   delimiters. Enclose a field in standard CSV double quotes when it contains
+   the selected delimiter.
 5. Select **Validate data before import**. No matter is created at this step.
 6. Review Total Records, Valid, Validation Errors, Imported, and Failed counts.
    Invalid rows appear first and show every detected problem.
@@ -265,29 +276,78 @@ Required fields:
 
 - Matter Title.
 - Matter Code.
-- Client Name.
-- Matter Status (`active`, `intake`, or `on_hold`).
 - Practice Area.
 - Forum.
 
-Supported optional fields include Matter Type/Description, client code/contact
-number/email, opposing party/counsel, Court, Case Number, Filing Number/Date,
-Matter Owner, Assigned Team, and Responsible Lawyer. People are entered by
-their active CaseOps work email; teams may use an active team name or slug.
+Client Name is optional. Matter Status is optional and defaults to Active.
+Other optional fields are Matter Type/Description, client code/contact
+number/email, opposing party/counsel, Court, Court Forum Number, Case Number,
+Filing Number/Date, Matter Owner, Assigned Team, and Responsible Lawyer. People
+are entered by their active CaseOps work email; teams may use an active team
+name or slug.
+
+Compatible values and layouts:
+
+- Status and Forum values are case-insensitive and tolerate spaces, hyphens,
+  and underscores. For example, `On Hold`, `on-hold`, and `on_hold` mean the
+  same status; `HIGH COURT` and `high_court` mean the same forum.
+- A required Practice Area does not have to exist in the catalog. CaseOps
+  canonicalizes a known value and preserves another valid 2-120 character
+  business label.
+- Normal legal/business punctuation is supported in applicable text/reference
+  fields. A phone main number must contain 7-20 digits and may have a trailing
+  `ext`, `ext.`, or `x` followed by 1-10 digits. Without a leading `+`, it may
+  use spaces, parentheses, periods, commas, `#`, hyphens, slashes, and `&`.
+  With exactly one leading international `+`, the formula-safe grammar permits
+  only digits, spaces, parentheses, and hyphens before the optional extension.
+- Common headings such as `Matter Name`, `Matter ID`, `Area of Practice`,
+  `Current Status`, `Existing Client Name`, `Court / Forum`,
+  `Client Phone No.`, `Date of Filing`, and `Court / Forum No.` are recognized
+  regardless of case or presentation punctuation.
+- CSV/XLSX may contain report-title rows above the header. XLSX may put the
+  import table on a later worksheet. CaseOps searches the first 25 non-empty
+  rows of each candidate sheet and chooses the best recognized table.
+- Filing Date accepts ISO/year-first dates, common Indian day-first numeric or
+  English month-name dates, ISO timestamps, and fractional Excel serial dates.
+  XLSX follows the workbook's 1900/1904 date system and discards any
+  time-of-day fraction because the field stores a date.
 
 What validation checks:
 
 - Missing required fields and invalid matter code/status/forum.
-- Invalid practice area, filing date, email, or phone.
+- Invalid/out-of-range text, filing date, or phone; Client Email must be a
+  valid address of at most 254 characters.
 - Duplicate Matter Code, Case Number, or Matter Title + Client Name in the file
   and visible tenant records.
 - Unknown, inactive, or cross-company people/teams.
 - Team-membership consistency when team scoping is enabled.
 - Unsafe spreadsheet formulas or formula-like values.
 
+Two rules remain intentionally strict:
+
+- Matter Code is trimmed and uppercased, must be 2-80 characters, must start
+  and end with a letter or digit, and may contain only letters, digits, and
+  internal hyphens. Spaces, underscores, slashes, and other punctuation are
+  rejected, matching normal Matter creation.
+- Actual XLSX formula nodes in the selected import header/data cells and
+  formula-like selected-table text beginning with `=`, `+`, `-`, or `@` are
+  rejected and sanitized. Ignored report rows and nonselected worksheets are
+  not imported or evaluated. A phone may begin with `+` only in Client Contact
+  Number and only under the narrower grammar above. The downloaded error CSV
+  is formula-safe.
+
 What to expect:
 
 - Maximum 500 non-empty rows and 2 MB per import.
+- XLSX coordinates must stay within Excel's A-XFD columns and rows
+  1-1,048,576. Malformed/out-of-range coordinates and duplicate/out-of-order
+  worksheet row references are rejected. Encrypted workbooks, more than 1,000
+  ZIP entries, an uncompressed entry over 16 MiB, total uncompressed content
+  over 32 MiB, or a 250:1 compression ratio on an entry of at least 1 MiB are
+  rejected. XLSX ZIP entries must use stored or Deflate compression; other
+  compression methods are rejected. Workbook metadata is capped at 512 KiB per required metadata file;
+  shared strings are streamed and capped at 100,000 entries, 32,767 characters
+  per entry, and 8,388,608 characters of aggregate text.
 - Validation jobs expire after 24 hours; expired jobs must be uploaded again.
 - The system revalidates at confirmation so a duplicate created after preview
   cannot silently pass.
@@ -303,6 +363,8 @@ What to expect:
 - The former `/imports/dry-run` API remains for backward-compatible ADP-11
   planning and document-name checks. It still creates no matters or documents;
   the dedicated Bulk upload matters page is the production creation workflow.
+- Release implementation/validation details are maintained in
+  `docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md`.
 
 ## ADP-12: Google Drive Bounded Manual Import
 

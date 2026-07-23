@@ -1406,6 +1406,7 @@ class Matter(Base):
     practice_area: Mapped[str] = mapped_column(String(120), nullable=False)
     forum_level: Mapped[str] = mapped_column(String(40), nullable=False)
     court_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    court_forum_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     case_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     filing_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)

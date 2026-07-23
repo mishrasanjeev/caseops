@@ -2,21 +2,43 @@
 
 **Document ID:** PRD-BMC-2026-07-17
 
-**Status:** Implemented and verified
+**Status:** Compatibility candidate implemented and locally verified; full CI and production deployment pending
 
 **Owner:** CaseOps Product and Engineering
 
-**Source:** `Bulk_Matter_Creation_Enhancement.docx` (4 pages, 25 paragraphs)
+**Sources:** `Bulk_Matter_Creation_Enhancement.docx` (4 pages, 25 paragraphs);
+`Bulk_Matter_Validation_Issue_Report.docx`
 
 **Module:** Matter Management
 
 **Submodule:** Matters
 
-**Last updated:** 17 July 2026
+**Last updated:** 23 July 2026
+
+The 23 July validation issue report defines six linked themes: reduce unnecessary
+failures caused by overly strict validation; judge values by business
+correctness rather than presentation; make supported-value validation
+case-insensitive; accept normal business punctuation; preserve minimal-change
+compatibility with existing client Excel data; and add a Court Forum Number
+template column. It also calls for normalization and user-friendly support. It
+does not define exact aliases, encodings, delimiters, worksheet scoring, date
+formats, optional/default fields, or safety limits. Those details below are
+explicit product/engineering resolutions that make the broad source request
+testable; they are not quoted source requirements.
 
 ## 1. Executive summary
 
 CaseOps must let authorized legal-operations users create many matters in one controlled operation by uploading the CaseOps CSV or XLSX template. The product validates the complete file before confirmation, creates every row that remains valid at commit time, preserves every invalid or failed row, provides a downloadable error report, exposes searchable tenant-scoped import history, emits durable notifications, and records a complete audit trail.
+
+The planned 23 July compatibility revision preserves that controlled workflow
+while accepting client-maintained exports that match the documented formats and
+aliases. The canonical template has 21 columns, including a distinct Court
+Forum Number. Client Name and Matter Status are optional, with omitted status
+defaulting to Active. Non-catalog practice areas and normal legal/business
+punctuation are accepted. Controlled values, headers, CSV formats, workbook
+layouts, and filing dates tolerate the documented presentation differences.
+Spreadsheet-formula protection and the shared strict Matter Code grammar remain
+unchanged by design.
 
 This capability replaces the prior ADP-11 dry-run foundation as the user-facing workflow. The legacy dry-run API remains available for backward compatibility and document-manifest planning, but it does not represent the production bulk-creation workflow.
 
@@ -91,7 +113,7 @@ Restricted users do not see the Matter portfolio action, receive a permission-re
 - Dedicated **Bulk upload matters** page.
 - CSV and XLSX template downloads.
 - Upload and validation of CSV and XLSX files.
-- All 20 source-document fields.
+- All 21 template fields, including distinct Court and Court Forum Number fields.
 - Required-field, type, reference, duplicate, security, and tenant validation.
 - Persisted validation job with 24-hour confirmation window.
 - Explicit import confirmation.
@@ -117,10 +139,10 @@ Restricted users do not see the Matter portfolio action, receive a permission-re
 |---|---|---|---|---|
 | UC-001 | Open Bulk upload matters | Authorized user | Signed in to active tenant | Dedicated workflow page opens |
 | UC-002 | Download XLSX template | Authorized user | UC-001 | Workbook contains Matter Import, Reference Values, and Instructions sheets |
-| UC-003 | Download CSV template | Authorized user | UC-001 | UTF-8 CSV with all 20 headers and example row downloads |
-| UC-004 | Populate template | Authorized user | Template downloaded | User enters one row per matter without changing header meaning |
-| UC-005 | Upload CSV | Authorized user | File is CSV, <=2 MB, <=500 rows | File is parsed, validated, fingerprinted, and persisted |
-| UC-006 | Upload XLSX | Authorized user | File is XLSX, <=2 MB, <=500 rows | First worksheet is parsed safely, validated, fingerprinted, and persisted |
+| UC-003 | Download CSV template | Authorized user | UC-001 | UTF-8 CSV with all 21 headers and example row downloads |
+| UC-004 | Populate template | Authorized user | Template downloaded or compatible client register | User enters one row per matter; canonical headers are recommended and documented aliases are accepted |
+| UC-005 | Upload CSV | Authorized user | File is CSV, <=2 MB, <=500 rows | Compatible encoding, delimiter, and header row are detected; file is validated, fingerprinted, and persisted |
+| UC-006 | Upload XLSX | Authorized user | File is XLSX, <=2 MB, <=500 rows | The best matching worksheet/header row is parsed safely, validated, fingerprinted, and persisted |
 | UC-007 | Validate before import | Authorized user | UC-005/006 | No matters are created; every row becomes valid or invalid |
 | UC-008 | Review validation results | Authorized user | Validation job exists | Total, valid, invalid, validation-error counts and row errors display |
 | UC-009 | Correct and re-upload | Authorized user | One or more invalid rows | User edits original file and creates a new validation job |
@@ -141,48 +163,124 @@ Restricted users do not see the Matter portfolio action, receive a permission-re
 | UC-024 | Deny restricted role | Viewer/read-only | Direct UI/API attempt | UI hides action and API returns 403 |
 | UC-025 | Delegate Matter Manager | Owner | Custom-role management access | Custom role can import without acquiring workspace administration |
 | UC-026 | Protect tenant isolation | Any user | References/job belongs to another tenant | Reference is rejected or job returns 404 without existence disclosure |
-| UC-027 | Reject unsafe spreadsheet content | Authorized user | Cell is a formula/formula-like payload | Row is invalid; formula content is not evaluated or echoed unsafely |
-| UC-028 | Preserve international phone | Authorized user | Phone text begins `+` and otherwise contains phone characters | Value is treated as a phone, not a formula, and validated normally |
+| UC-027 | Reject unsafe spreadsheet content | Authorized user | Selected import header/data cell is a formula/formula-like payload | Row is invalid; formula content is not evaluated or echoed unsafely |
+| UC-028 | Preserve international phone | Authorized user | Client Contact Number begins with one `+` and otherwise matches the narrower formula-safe grammar | Value is treated as a phone, not a formula, and validated normally |
+| UC-029 | Accept compatible controlled values | Authorized user | Status/forum uses different case or separators | Recognized value normalizes to the canonical enum |
+| UC-030 | Accept a client-maintained workbook | Authorized user | Import sheet/header is not the first sheet/row or uses documented aliases | System finds the best compatible table without reading an instruction sheet as data |
+| UC-031 | Preserve court/forum reference | Authorized user | Row supplies Court Forum Number | Optional reference is previewed, created, returned, and editable independently of Court |
 
 ## 7. Template and field specification
 
-The template column order follows the source document exactly.
+The generated template uses the following canonical order. The 23 July
+compatibility revision adds **Court Forum Number** immediately after **Court**
+so the court/forum name and its local number/reference are never conflated.
 
 | # | Template header | Internal field | Required | Type/limit | Normalization and validation |
 |---:|---|---|:---:|---|---|
 | 1 | Matter Title | `title` | Yes | Text, 3-255 | Trim; duplicate title+client check |
-| 2 | Matter Code | `matter_code` | Yes | 2-80; A-Z, 0-9, hyphen | Trim, uppercase; tenant-unique; file duplicate check |
+| 2 | Matter Code | `matter_code` | Yes | Text, 2-80 | Trim and uppercase; must start/end alphanumeric and contain only A-Z, 0-9, and internal hyphens; tenant-unique; file duplicate check |
 | 3 | Matter Type | `matter_type` | No | Text, <=120 | Trim; stored on matter |
-| 4 | Practice Area | `practice_area` | Yes | Text, 2-120 | Must match standard reference, active practice-area team, or established tenant value |
-| 5 | Matter Status | `status` | Yes | `active`, `intake`, `on_hold` | Lowercase; `closed` normalizes to disposed and is rejected for creation |
+| 4 | Practice Area | `practice_area` | Yes | Text, 2-120 | Known standard/team/tenant values are canonicalized; a valid non-catalog business label is also accepted and preserved |
+| 5 | Matter Status | `status` | No | `active`, `intake`, `on_hold` | Blank defaults to `active`; recognized values are case/separator-insensitive; `closed`/`disposed` is rejected for creation |
 | 6 | Matter Description | `description` | No | Text, <=4000 | Trim; stored on matter |
-| 7 | Client Name | `client_name` | Yes | Text, 2-255 | Trim; participates in duplicate-title check |
+| 7 | Client Name | `client_name` | No | Text, 2-255 when supplied | Trim; participates in duplicate-title check when supplied |
 | 8 | Client Code | `client_code` | No | Text, <=80 | Trim; stored as imported client reference snapshot |
-| 9 | Client Contact Number | `client_contact_number` | No | Text, <=40; 7-20 digits | Allows spaces, parentheses, hyphens, leading international `+` |
-| 10 | Client Email | `client_email` | No | Email, <=320 | Trim, lowercase, RFC-style validation |
+| 9 | Client Contact Number | `client_contact_number` | No | Text, <=40; 7-20 main-number digits | Allows the documented phone punctuation and optional trailing `ext`, `ext.`, or `x` followed by 1-10 digits; a leading international `+` must match the narrower formula-safe grammar |
+| 10 | Client Email | `client_email` | No | Email, <=254 | Trim, lowercase, RFC-style validation |
 | 11 | Opposing Party Name | `opposing_party` | No | Text, 2-255 | Trim; stored on matter |
 | 12 | Opposing Counsel | `opposing_counsel` | No | Text, <=255 | Trim; stored on matter |
-| 13 | Forum | `forum_level` | Yes* | Controlled enum | `lower_court`, `high_court`, `supreme_court`, `tribunal`, `arbitration`, `advisory` |
+| 13 | Forum | `forum_level` | Yes* | Controlled enum | Recognized values/aliases normalize case- and separator-insensitively to `lower_court`, `high_court`, `supreme_court`, `tribunal`, `arbitration`, or `advisory` |
 | 14 | Court | `court_name` | No | Text, 2-255 | Resolved through existing forum/court selection logic where possible |
-| 15 | Case Number | `case_number` | No | Text, <=120 | Case-insensitive duplicate check within file and visible tenant records |
-| 16 | Filing Number | `filing_number` | No | Text, <=120 | Trim; stored and indexed |
-| 17 | Filing Date | `filing_date` | No | Date | Accepts `YYYY-MM-DD`, `DD/MM/YYYY`, `DD-MM-YYYY`, or native Excel serial date |
-| 18 | Matter Owner | `assignee_membership_id` | No | Work email | Must resolve to active user in current tenant |
-| 19 | Assigned Team | `team_id` | No | Team name or slug | Must resolve to active team in current tenant |
-| 20 | Responsible Lawyer | `responsible_lawyer_membership_id` | No | Work email | Must resolve to active user in current tenant |
+| 15 | Court Forum Number | `court_forum_number` | No | Text, <=120 | Trim; stores the court, bench, room, or forum reference independently of Court |
+| 16 | Case Number | `case_number` | No | Text, <=120 | Case-insensitive duplicate check within file and visible tenant records |
+| 17 | Filing Number | `filing_number` | No | Text, <=120 | Trim; stored and indexed |
+| 18 | Filing Date | `filing_date` | No | Date | Accepts documented ISO, year-first, day-first, month-name, and 1900/1904 Excel serial formats; fractional time is discarded |
+| 19 | Matter Owner | `assignee_membership_id` | No | Work email | Must resolve to active user in current tenant |
+| 20 | Assigned Team | `team_id` | No | Team name or slug | Must resolve to active team in current tenant |
+| 21 | Responsible Lawyer | `responsible_lawyer_membership_id` | No | Work email | Must resolve to active user in current tenant |
 
 `*` The source required-field list omitted Forum, but the existing CaseOps matter domain requires `forum_level`. The specification closes that gap by making Forum mandatory rather than inventing a potentially wrong forum during import.
+
+Normal business punctuation is preserved in applicable free-text and reference
+fields. Examples include `M/s.`, `&`, apostrophes, commas, parentheses, `#`,
+periods, slashes, semicolons, and internal hyphens. In CSV, a field containing
+the selected delimiter must use standard CSV double-quote escaping; otherwise
+that character is structurally a delimiter, not field data. Punctuation support
+does not relax field length/type rules, email validation, duplicate checks,
+formula controls, or the Matter Code grammar.
+
+### 7.1 Controlled-value compatibility
+
+Comparison removes case and separator/punctuation differences before resolving
+known values. This means `On Hold`, `on-hold`, and `on_hold` resolve to
+`on_hold`; `HIGH COURT`, `high-court`, and `high_court` resolve to
+`high_court`.
+
+- Status aliases: `active`; `intake`; `on hold`/`hold`; and
+  `closed`/`disposed` (recognized but rejected for creation).
+- Forum aliases: lower/district/sessions court; high court; Supreme Court or
+  Supreme Court of India; tribunal/consumer forum/consumer commission;
+  arbitration/arbitral tribunal; and advisory.
+
+### 7.2 Header and layout compatibility
+
+Header matching is case-insensitive and ignores punctuation, whitespace,
+slashes, periods, parentheses, `#`, hyphens, and underscores. The canonical
+headers remain recommended. Compatibility aliases include:
+
+| Canonical field | Accepted compatibility examples |
+|---|---|
+| Matter Title | Title, Matter Name, Case Title, Name |
+| Matter Code | Code, Matter ID |
+| Practice Area | Area of Practice, Area |
+| Matter Status | Status, Current Status |
+| Client Name | Client, Existing Client, Existing Client Name, Party Name, Client Reference/Ref |
+| Client Contact Number | Client Phone, Client Phone No., Phone, Phone No., Phone Number |
+| Forum | Forum Level, Court / Forum |
+| Court | Court Name, Forum Name |
+| Court Forum Number | Court / Forum No., Court No., Forum No., Court/Forum Reference |
+| Filing Date | Date of Filing |
+| Matter Owner | Owner, Owner Email, Assignee |
+| Assigned Team | Team, Team Slug |
+| Responsible Lawyer | Responsible Lawyer Email |
+
+The parser scores the first 25 non-empty rows of each XLSX worksheet and chooses
+the strongest table candidate, preferring one containing both Matter Title and
+Matter Code. The same header-row search applies to CSV, which allows report
+titles or metadata above the actual column headings. Source row numbers are
+preserved in preview/error output: CSV reports the physical starting line of
+each logical record, including quoted multiline records, and XLSX reports its
+validated worksheet row reference.
 
 ## 8. Validation requirements
 
 ### 8.1 File-level validation
 
-- Accepted extensions and MIME families: `.csv` and `.xlsx` only.
+- User-facing workflow extensions and MIME families: `.csv` and `.xlsx` only.
 - Maximum file size: 2 MB.
 - Maximum non-empty data rows: 500.
 - Empty file or header-only file is rejected.
-- CSV must be UTF-8/UTF-8 with BOM.
-- XLSX must be a readable Open Packaging Convention ZIP with safe XML.
+- CSV may be UTF-8 (with or without BOM), BOM-marked UTF-16, or Windows-1252.
+- CSV delimiter detection supports comma, semicolon, tab, and pipe.
+- CSV/XLSX header detection examines the first 25 non-empty rows and recognizes
+  case-/punctuation-insensitive canonical headers and documented aliases.
+- XLSX must be a readable Open Packaging Convention ZIP with safe XML, use
+  stored or Deflate compression only, and have no encryption. Other ZIP
+  compression methods are rejected with a validation error.
+- XLSX accepts at most 1,000 ZIP entries, 16 MiB per uncompressed entry,
+  32 MiB cumulative uncompressed content, and a 250:1 compression ratio for
+  entries of at least 1 MiB.
+- XLSX workbook and workbook-relationship metadata are limited to 512 KiB
+  each. Shared strings are parsed as a stream and bounded to 100,000 entries,
+  32,767 characters per entry, and 8,388,608 characters of aggregate text.
+- XLSX cell coordinates are bounded to the standard Excel range: columns A-XFD
+  (1-16,384) and rows 1-1,048,576. Malformed cell references, coordinates
+  outside those bounds, and duplicate or out-of-order worksheet row references
+  are rejected.
+- XLSX worksheet selection examines workbook order and chooses the sheet/header
+  candidate with the strongest recognized-column score, weighted toward Matter
+  Title and Matter Code. Instruction/reference sheets are not assumed to be the
+  import data simply because they occur first.
 - XML DTD/entity expansion is rejected by `defusedxml`.
 - The server never executes macros, formulas, external links, or embedded code.
 - Source SHA-256 is persisted for forensic correlation and retry diagnosis.
@@ -193,12 +291,12 @@ Every production preview row requires:
 
 1. Matter Title.
 2. Matter Code.
-3. Client Name.
-4. Matter Status.
-5. Practice Area.
-6. Forum (gap closure required by the Matter model).
+3. Practice Area.
+4. Forum (gap closure required by the Matter model).
 
-The backward-compatible `/imports/dry-run` endpoint retains its prior omitted-status-to-active behavior. The production `/imports/preview` workflow enforces the BRD’s explicit mandatory status rule.
+Client Name is optional. Matter Status is optional and defaults to `active` in
+both production preview and the backward-compatible `/imports/dry-run`
+endpoint. A supplied `closed`/`disposed` status remains invalid for creation.
 
 ### 8.3 Duplicate detection
 
@@ -214,12 +312,31 @@ The backward-compatible `/imports/dry-run` endpoint retains its prior omitted-st
 
 ### 8.4 Data-format and reference validation
 
-- Matter code uses the existing CaseOps normalized pattern.
+- Matter Code uses the shared CaseOps create/update/import grammar: trim,
+  uppercase, 2-80 characters, alphanumeric at both ends, and only A-Z, 0-9,
+  and internal hyphens. Spaces, underscores, slashes, and other punctuation are
+  invalid.
+- Status and forum comparisons are case-insensitive and ignore presentation
+  separators such as spaces, hyphens, and underscores; aliases normalize to
+  canonical enum values.
 - Status must be an allowed operational creation status; disposed/closed creation is rejected.
-- Practice area must be a standard value, an existing tenant value, or an active team of kind `practice_area`.
-- Email must be valid.
-- Phone must contain 7-20 digits and only supported phone punctuation.
-- Filing date must parse using an accepted unambiguous format.
+- Practice Area is required but is not catalog-gated. Known standard,
+  established tenant, or active practice-area team values are canonicalized;
+  other valid 2-120 character labels are preserved.
+- Email must be valid and at most 254 characters.
+- Phone main number must contain 7-20 digits and may have a trailing `ext`,
+  `ext.`, or `x` followed by 1-10 digits. Without a leading `+`, supported punctuation is spaces,
+  parentheses, periods, commas, `#`, hyphens, slashes, and `&`. A value
+  beginning with exactly one international `+` is formula-safe only when the
+  main number uses digits, spaces, parentheses, and hyphens; `+` anywhere else
+  is invalid.
+- Filing date accepts ISO dates/timestamps, `YYYY/MM/DD`, `YYYY.MM.DD`,
+  day-first `DD/MM/YYYY`, `DD-MM-YYYY`, and `DD.MM.YYYY` (four- or two-digit
+  year where documented), day-first abbreviated/full English month names, and
+  valid Excel serial dates. XLSX uses the workbook's declared 1900 or 1904 date
+  system; numeric serials outside XLSX use 1900 because no workbook metadata is
+  present. Fractional serials are accepted and their time-of-day fraction is
+  discarded.
 - Forum must be a supported CaseOps forum level.
 - Matter Owner and Responsible Lawyer must be active users of the current company.
 - Assigned Team must be active and belong to the current company.
@@ -228,11 +345,17 @@ The backward-compatible `/imports/dry-run` endpoint retains its prior omitted-st
 
 ### 8.5 Spreadsheet-injection controls
 
-- Actual XLSX formula nodes are invalid, even if cached text exists.
-- Text beginning with `=`, `-`, `@`, or an unsafe `+` form is invalid.
-- A syntactically valid `+`-prefixed phone is allowed only in Client Contact Number.
+- Actual XLSX formula nodes in the selected import header/data cells are
+  invalid, even if cached text exists. Ignored report rows and nonselected
+  worksheets are never evaluated or imported.
+- In the selected import table, text whose first non-space character is `=`,
+  `-`, `@`, or an unsafe `+` form is invalid.
+- A `+`-prefixed phone is allowed only in Client Contact Number and only when it
+  matches the narrower grammar in section 8.4.
 - Stored raw rows replace unsafe formula values with `[unsafe formula removed]`.
 - Error-report cells beginning with formula control characters receive a leading apostrophe.
+- Relaxed punctuation, header, encoding, delimiter, and controlled-value
+  compatibility never bypasses these controls.
 
 ## 9. Workflow and state model
 
@@ -241,7 +364,7 @@ The backward-compatible `/imports/dry-run` endpoint retains its prior omitted-st
 1. User opens Matter portfolio.
 2. User selects **Bulk upload matters**.
 3. User downloads XLSX (recommended) or CSV template.
-4. User populates one row per matter.
+4. User populates one row per matter in the canonical template or a documented compatible client register.
 5. User uploads file.
 6. System parses safely, validates all rows, creates a persistent job, emits upload/validation notification, and displays summary.
 7. User reviews errors. Invalid rows do not block import of other valid rows.
@@ -297,10 +420,12 @@ This policy avoids throwing away 95 valid matters because 5 rows require correct
 - Template panel with XLSX and CSV actions.
 - Upload control restricted to CSV/XLSX.
 - Selected file name and approximate size.
+- Compatibility guidance explains optional Client Name/Status, default Active,
+  accepted value/header variants, and the strict Matter Code/formula controls.
 - Primary action: **Validate data before import**.
 - Summary metrics: Total Records, Valid, Validation Errors, Imported, Failed.
 - Status, file name, confirm, cancel, and error-report actions.
-- Row table with row number, matter code, title, client, row status, and all errors.
+- Row table with row number, matter code, title, client, Court Forum Number, row status, and all errors.
 - Invalid rows appear first; first 50 additional valid rows appear next; hidden-row count is disclosed.
 - Confirmation label includes the number of valid rows.
 - Success/failure toast communicates result counts.
@@ -333,7 +458,10 @@ For a 100-row file where 95 rows are created and 5 are invalid/failed:
   4. Status.
   5. Errors.
 - Errors are semicolon-separated within the CSV cell.
-- Example reasons include missing client, duplicate matter code, duplicate case number, invalid practice area, invalid status, invalid date/email, unknown user/team, and stale commit conflict.
+- Example reasons include a missing required title/code/practice area/forum,
+  duplicate matter code, duplicate case number, malformed/out-of-range field,
+  invalid status/forum/date/email, unknown user/team, unsafe formula-like value,
+  strict Matter Code violation, and stale commit conflict.
 - The download itself is audited using counts only.
 
 ## 12. History and audit trail
@@ -387,11 +515,16 @@ The Matter record gains:
 - `client_contact_number`.
 - `client_email`.
 - `opposing_counsel`.
+- `court_forum_number`.
 - `filing_number` (indexed).
 - `filing_date`.
 - `responsible_lawyer_membership_id` (tenant membership FK, indexed).
 
 Existing fields provide title, code, client name, opposing party, description, status, practice area, forum/court, case number, matter owner (`assignee_membership_id`), and assigned team (`team_id`).
+
+`court_forum_number` is nullable, limited to 120 characters, and round-trips
+through ordinary Matter create/read/update APIs as well as bulk import. It is
+not a synonym for `court_name`.
 
 ### 14.2 Import tables
 
@@ -422,7 +555,9 @@ Every endpoint uses the server-side `matters:bulk_import` capability gate and te
 - People and team references must belong to the authenticated tenant.
 - Ethical-wall filters apply to duplicate-candidate detail.
 - Upload byte and row limits bound memory/CPU use.
-- CSV decoding, XLSX ZIP/XML parsing, XML entity rejection, and formula rejection are explicit.
+- CSV decoding/dialect detection, XLSX ZIP/XML parsing, worksheet/header
+  selection, XML entity rejection, and formula rejection are explicit and
+  bounded.
 - The XLSX parser reads values only and never invokes Microsoft Excel.
 - Error-report CSV is spreadsheet-injection safe.
 - Source payload is not stored as an uploaded binary; only fingerprint, metadata, sanitized raw rows, and normalized values are retained.
@@ -462,8 +597,17 @@ Every endpoint uses the server-side `matters:bulk_import` capability gate and te
 
 ### 17.3 Compatibility
 
-- UTF-8 CSV.
+- UTF-8 (with/without BOM), BOM-marked UTF-16, and Windows-1252 CSV.
+- Comma-, semicolon-, tab-, and pipe-delimited CSV.
 - Office Open XML `.xlsx` without macros.
+- Header rows within the first 25 non-empty rows and import data on any
+  worksheet, using canonical headings or documented aliases.
+- Standard XLSX A-XFD column and 1-1,048,576 row coordinates, subject to the
+  archive and upload bounds in section 8.1.
+- Case-/separator-insensitive recognized status and forum values.
+- ISO/year-first/day-first/month-name and fractional 1900/1904 Excel-serial
+  filing dates.
+- Business punctuation in applicable text/reference and phone fields.
 - Current supported browsers in the CaseOps web application.
 - SQLite migration replay for local/test and PostgreSQL for production.
 
@@ -479,13 +623,20 @@ Every endpoint uses the server-side `matters:bulk_import` capability gate and te
 | Source gap/ambiguity | Resolution |
 |---|---|
 | “Forum” listed as a field but not mandatory, while Matter requires it | Forum is mandatory in production preview |
+| Client Name marked mandatory in the earlier interpretation | Optional, matching the Matter domain and client files that legitimately omit it |
+| Matter Status missing in client exports | Optional; normalize recognized variants and default a blank value to `active` |
+| Court name and court/forum number were conflated | Add a distinct optional 120-character Court Forum Number field after Court |
 | Whether invalid rows block all valid rows | Partial success; source explicitly asks for successful and failed counts |
 | Duplicate comparison scope/case | Case-insensitive within current tenant; blanks ignored |
 | Existing walled matter duplicates | Do not expose candidate; database/service conflict still prevents write |
 | Matter Manager absent from fixed role enum | Dedicated delegable capability via tenant custom role |
-| Date format unspecified | ISO recommended; Indian day-first and native Excel serial also accepted |
-| Phone format unspecified | Preserve international `+`; validate 7-20 digits and safe punctuation |
-| Practice-area catalogue unspecified | Standard list plus tenant-established values and active practice-area teams |
+| Date format varies across spreadsheets | ISO recommended; compatible year-first, Indian day-first, month-name, ISO timestamp, and fractional 1900/1904 Excel serial values also accepted; time-of-day is discarded |
+| Phone format varies across business registers | Preserve the documented business punctuation and an optional trailing `ext`, `ext.`, or `x` followed by 1-10 digits; validate 7-20 main-number digits; require the narrower formula-safe grammar for a leading `+` |
+| Practice-area catalogue does not cover every client | Canonicalize a known standard/tenant/team value, but preserve any other valid 2-120 character practice-area label |
+| Client files use different encodings and delimiters | Accept UTF-8, BOM-marked UTF-16, or Windows-1252 and detect comma, semicolon, tab, or pipe |
+| Client workbooks contain title rows/instructions and reordered sheets | Score the first 25 non-empty rows on every worksheet and choose the strongest recognized header candidate |
+| Client headers contain punctuation or familiar synonyms | Compare case-insensitively after removing presentation punctuation and support documented aliases |
+| Relaxed compatibility could weaken identifiers/security | Keep the shared Matter Code grammar and formula/formula-like value rejection strict |
 | Owner/responsible lawyer identifiers unspecified | Active tenant work email |
 | Team identifier unspecified | Active tenant team name or slug |
 | Commit idempotency unspecified | Job ID is the idempotency boundary; terminal repeat is read-only |
@@ -500,13 +651,13 @@ Every endpoint uses the server-side `matters:bulk_import` capability gate and te
 
 ### 19.1 Functional
 
-- AC-001: Authorized user can download CSV and XLSX templates containing all 20 source headers.
+- AC-001: Authorized user can download CSV and XLSX templates containing all 21 canonical headers, with Court Forum Number immediately after Court.
 - AC-002: XLSX includes separate reference and instruction sheets.
 - AC-003: CSV/XLSX upload creates no matters before confirmation.
 - AC-004: Summary shows total, valid, invalid, imported, failed, and validation-error counts.
-- AC-005: Missing title/code/client/status/practice area/forum produces row errors.
+- AC-005: Missing title/code/practice area/forum produces row errors; blank Client Name is accepted and blank Matter Status normalizes to `active`.
 - AC-006: Duplicate code, case number, and title+client are detected within file and visible tenant records.
-- AC-007: Invalid date/email/status/practice area produces row errors.
+- AC-007: Invalid date/email/status/forum or an out-of-range practice-area label produces row errors.
 - AC-008: Unknown/inactive/cross-tenant owner, responsible lawyer, or team is rejected.
 - AC-009: Confirmation creates every still-valid row and no invalid row.
 - AC-010: A mixed job ends `completed_with_errors` with correct counts.
@@ -515,46 +666,64 @@ Every endpoint uses the server-side `matters:bulk_import` capability gate and te
 - AC-013: Upload-success, validation-failure, and completion notification intents are recorded.
 - AC-014: Audit events cover validation, created rows, completion, cancellation, and report download.
 - AC-015: Owner/Admin and delegated Matter Manager are allowed; Viewer/read-only is denied.
+- AC-016: Court Forum Number is previewed and round-trips independently through bulk commit and ordinary Matter create/read/update.
+- AC-017: Recognized status/forum values normalize regardless of case and common space/hyphen/underscore separator differences.
+- AC-018: A valid non-catalog practice area and normal business punctuation in applicable text/reference/phone fields are preserved under their field-specific grammar and CSV quoting rules.
+- AC-019: UTF-8, BOM-marked UTF-16, and Windows-1252 CSV with comma, semicolon, tab, or pipe delimiters are parsed consistently.
+- AC-020: An XLSX import table may occur on a later worksheet, have title rows above its header, use documented aliases, and supply any documented compatible filing-date representation.
 
 ### 19.2 Safety and regression
 
-- AC-016: Other-tenant job access returns 404.
-- AC-017: XML entities and formula cells are rejected without evaluation.
-- AC-018: Error CSV cannot execute a source formula.
-- AC-019: Commit revalidation detects a matter created after preview.
-- AC-020: Repeating terminal commit creates no additional matter.
-- AC-021: Normal single-matter creation and legacy ADP-11 dry-run remain operational.
-- AC-022: Newly added Matter fields round-trip through API read models.
-- AC-023: SQLite migration replay reaches head; PostgreSQL constraints/indexes compile in CI.
+- AC-021: Other-tenant job access returns 404.
+- AC-022: XML entities, formula nodes in the selected XLSX import header/data cells, and formula-like selected-table text are rejected without evaluation; only a Client Contact Number matching the narrower leading-`+` grammar is exempt.
+- AC-023: Error CSV cannot execute a source formula.
+- AC-024: Matter Code retains the shared 2-80 character, alphanumeric-ended, letters/digits/internal-hyphens-only grammar.
+- AC-025: Commit revalidation detects a matter created after preview.
+- AC-026: Repeating terminal commit creates no additional matter.
+- AC-027: Normal single-matter creation and legacy ADP-11 dry-run remain operational.
+- AC-028: SQLite migration replay reaches head; PostgreSQL constraints/indexes compile in CI.
 
 ## 20. Test and traceability matrix
 
 | Requirement group | Automated evidence |
 |---|---|
-| Templates | API workbook/CSV tests; web download action test |
-| Full field set | API preview/commit/read round-trip test |
-| Mandatory/format/reference validation | API invalid/partial-success tests |
+| Templates | API 21-column workbook/CSV tests, including Court Forum Number order; web download action test |
+| Full field set | API preview/commit/read round-trip test; ordinary Matter create/read/update Court Forum Number test |
+| Optional/default fields | API blank Client Name and blank Matter Status/default-Active tests |
+| Controlled/free business values | Case/separator-normalization, status/forum alias, non-catalog practice area, and punctuation-preservation API tests |
+| CSV compatibility | Encoding (UTF-8/UTF-16/Windows-1252), delimiter (comma/semicolon/tab/pipe), title-row, and header-alias API tests |
+| XLSX compatibility | Later-worksheet selection, first-25-row header detection, aliases, physical row-number preservation, Excel coordinate/archive bounds, and compatible date API tests including fractional 1900/1904 serials |
+| Mandatory/format/reference validation | API invalid/partial-success tests, including strict shared Matter Code grammar and required title/code/practice area/forum |
 | Duplicate and staleness | API tenant duplicate and commit-time revalidation tests |
 | Partial success/idempotency | API terminal status/count and repeat-commit tests |
 | History/error report | API search and CSV-content tests; web history search test |
+| Spreadsheet safety | Selected-table XLSX formula-node/formula-like cell rejection, narrow safe international-phone exception, sanitized persistence, and formula-safe error CSV tests |
 | Notifications/audit | Database assertion tests against delivery intent/audit tables |
 | Permissions | Owner, Viewer, delegated Matter Manager, and tenant-isolation tests |
 | Legacy regression | Existing `test_matter_imports.py` dry-run/security tests |
 | Web workflow | Vitest portfolio navigation, validation table, confirm, and history tests |
 | Browser E2E | Playwright local production-like upload, validation, commit, portfolio visibility, history, and report download |
 
-The executed-case workbook delivered with this change records the exact command, case ID, layer, result, and evidence location for the final verification run.
+The exact commands, case IDs, result counts, and production evidence must be
+recorded in the dated compatibility guide and final delivery artifact after the
+verification run. This PRD does not pre-claim those results.
 
 ## 21. Release and rollback
 
 ### 21.1 Release sequence
 
-1. Apply database migration.
-2. Deploy API with new capability, models, and endpoints.
-3. Deploy web UI and generated OpenAPI types.
-4. Smoke-test Owner/Admin permissions and template download.
-5. Run a two-row production-like import in the target environment using non-sensitive test data.
-6. Verify history, audit, notifications, and error report.
+1. Apply the database migration that adds nullable `court_forum_number`.
+2. Deploy the API compatibility parser, Matter contracts, and existing import endpoints.
+3. Deploy the web UI, in-product guide, and generated OpenAPI types.
+4. Smoke-test Owner/Admin permissions and both 21-column template downloads.
+5. Run non-mutating health/revision checks, then a controlled production import
+   using unique, non-sensitive test data that covers blank Client Name/Status,
+   non-catalog Practice Area, normalized Forum, business punctuation, and Court
+   Forum Number.
+6. Verify the created Matter, history, audit, notifications, partial-success
+   error report, and formula/Matter Code rejection behavior.
+7. Record exact revision, traffic, commands, results, timestamps, and cleanup in
+   the dated validation guide and final delivery artifact.
 
 ### 21.2 Rollback
 
@@ -566,9 +735,12 @@ The executed-case workbook delivered with this change records the exact command,
 ## 22. Documentation deliverables
 
 - This PRD.
+- Bulk matter validation compatibility implementation/validation guide dated 23 July 2026.
 - Updated ADP 01-19 end-user product guide.
 - Updated in-product `/guide` content.
 - Updated API README endpoint documentation.
 - Generated OpenAPI TypeScript contract.
 - Regression tests and Playwright scenario.
-- Executed-test evidence workbook in the user-specified Downloads folder.
+- Final implementation/test-results artifact in the user-specified Downloads
+  folder, completed only after automated and production validation evidence is
+  available.

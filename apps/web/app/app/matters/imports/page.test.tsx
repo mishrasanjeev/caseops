@@ -68,7 +68,7 @@ const validatedJob = {
   invalid_rows: 1,
   created_count: 0,
   failed_count: 0,
-  validation_error_count: 1,
+  validation_error_count: 2,
   error_message: null,
   uploaded_by_membership_id: "membership-1",
   uploaded_by_name: "Sanjay Mishra",
@@ -87,6 +87,7 @@ const validatedJob = {
         matter_code: "BULK-1",
         title: "Valid matter",
         client_name: "Acme",
+        court_forum_number: "Court #7 / Bench-A",
       },
       errors: [],
       created_matter_id: null,
@@ -96,10 +97,10 @@ const validatedJob = {
       row_number: 3,
       status: "invalid" as const,
       normalized: {
-        matter_code: "BULK-2",
+        matter_code: "BULK/2#",
         title: "Invalid matter",
       },
-      errors: ["Client name is required."],
+      errors: ["Matter code may contain only letters, numbers, and hyphens."],
       created_matter_id: null,
     },
   ],
@@ -126,6 +127,20 @@ describe("BulkMatterImportPage", () => {
     getMatterImportMock.mockResolvedValue(validatedJob);
   });
 
+  it("downloads the canonical XLSX template and explains compatibility rules", async () => {
+    downloadMatterImportTemplateMock.mockReturnValue(new Promise<Blob>(() => undefined));
+    render(withClient(<BulkMatterImportPage />));
+
+    fireEvent.click(screen.getByTestId("matter-import-template-xlsx"));
+
+    await waitFor(() =>
+      expect(downloadMatterImportTemplateMock).toHaveBeenCalledWith("xlsx"),
+    );
+    expect(screen.getByTestId("matter-import-compatibility-guidance")).toHaveTextContent(
+      /Court Forum Number is stored separately/i,
+    );
+  });
+
   it("validates, displays every error first, and commits all valid matter rows", async () => {
     render(withClient(<BulkMatterImportPage />));
 
@@ -136,9 +151,11 @@ describe("BulkMatterImportPage", () => {
     fireEvent.click(screen.getByTestId("matter-import-validate"));
 
     await waitFor(() => expect(previewMatterImportMock).toHaveBeenCalledWith(file));
-    expect(await screen.findByText(/Client name is required/)).toBeInTheDocument();
+    expect(await screen.findByText(/letters, numbers, and hyphens/)).toBeInTheDocument();
     expect(screen.getByText("BULK-1")).toBeInTheDocument();
-    expect(screen.getByText("BULK-2")).toBeInTheDocument();
+    expect(screen.getByText("BULK/2#")).toBeInTheDocument();
+    expect(screen.getByText("Court #7 / Bench-A")).toBeInTheDocument();
+    expect(screen.getByText("Validation errors").parentElement).toHaveTextContent("2");
 
     fireEvent.click(screen.getByTestId("matter-import-confirm"));
     await waitFor(() => expect(commitMatterImportMock).toHaveBeenCalledWith("job-1"));

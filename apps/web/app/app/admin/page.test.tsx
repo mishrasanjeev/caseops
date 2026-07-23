@@ -196,6 +196,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
               client_name: "Client",
               opposing_party: "Counterparty",
               status: "active",
+              lifecycle_version: 1,
               practice_area: "Commercial",
               forum_level: "high_court",
               court_name: "Delhi High Court",

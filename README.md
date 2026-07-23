@@ -29,7 +29,7 @@ until the agent trust plane is activated.
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
 | GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
 | Matter notices and optional pre-engagement conflict review: received/sent notice tracking, reply documents and linked deadlines, auditable candidate review, and nonblocking status changes | Production deployed and verified 2026-07-22 (`34f19ad`); July 22 verdict `Properly fixed` | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md), `/guide` |
-| Bulk matter creation: CSV/XLSX templates, validation preview, partial-success commit, error report, history, audit, notifications, and delegated Matter Manager capability | Implemented (2026-07-17) | [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), [`docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md`](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md), `/app/matters/imports`, `/guide` |
+| Bulk matter creation: 21-column CSV/XLSX template, compatibility-aware validation preview, partial-success commit, error report, history, audit, notifications, and delegated Matter Manager capability | `live` base workflow; compatibility candidate implemented and locally verified, with full CI/production deployment pending (2026-07-23) | [`docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md`](./docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md), [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), [`docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md`](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md), `/app/matters/imports`, `/guide` |
 | Production readiness, Pine Labs UAT evidence, secret-rotation proof, margin/profit gates, MFA login challenge, enterprise readiness scaffolding | Founder-only / disabled until UAT / planned as labelled | `/app/platform-admin/paid-production`, `/api/platform-admin/production-readiness`, `/api/admin/enterprise-readiness` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
@@ -46,7 +46,10 @@ until the agent trust plane is activated.
 - Deployed user guide: `/guide` on the web app.
 - Detailed GBA Law Office guide: [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md).
 - Notice workflow guide: [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md).
-- Bulk matter creation PRD and operating guide: [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md) and [ADP-11 in the end-user guide](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md#adp-11--bulk-matter-import).
+- Bulk matter creation compatibility/validation guide, PRD, and operating guide:
+  [`docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md`](./docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md),
+  [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), and
+  [ADP-11 in the end-user guide](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md#adp-11-bulk-matter-creation).
 - Source PRD: [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md).
 - Machine-readable public summaries: `/llms.txt` and `/llms-full.txt`.
 
@@ -67,6 +70,22 @@ Public product claims use these labels: `live`, `review-first`, `provider-gated`
   `planned` or readiness-only until UAT, approval, and audit evidence are complete.
 - Platform profit, provider cost, secret rotation, and production signoff surfaces are
   `founder-only` and must not be exposed to tenants.
+
+## Documentation changelog - 2026-07-23
+
+- Translated the outcome-level needs in
+  `Bulk_Matter_Validation_Issue_Report.docx` into an explicit engineering
+  contract. The planned canonical CSV/XLSX template has 21 columns, including
+  a distinct optional **Court Forum Number** field.
+- Documented compatibility for client-maintained files that match the supported
+  formats and aliases: case-/separator-insensitive controlled values and
+  headers, optional Client Name, Matter Status defaulting to Active,
+  non-catalog practice areas, business punctuation, standard CSV quoting,
+  multiple CSV encodings/delimiters, and bounded XLSX worksheet, header-row,
+  alias, coordinate, archive, and fractional-date handling.
+- Kept formula protection and the shared Matter Code grammar strict by design.
+  See the dated compatibility guide for the exact contract and the pending
+  validation/deployment evidence table.
 
 ## Documentation changelog - 2026-07-22
 

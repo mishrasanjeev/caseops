@@ -1730,7 +1730,9 @@ Tests:
 Type: Backend + Web
 Priority: P2
 Dependencies: Matter/document creation, attachment pipeline
-Status: Production matter-creation workflow implemented 2026-07-17. Authorized
+Status: Production matter-creation workflow implemented 2026-07-17. The
+23 July compatibility candidate is implemented and locally verified but awaits
+full CI and production deployment evidence. Authorized
 Owner/Admin/delegated Matter Manager users can download controlled CSV/XLSX
 templates, persist a row-level preview, confirm partial-success creation after
 commit-time revalidation, download a safe error CSV, search tenant history, and
@@ -1741,7 +1743,14 @@ processing, embeddings, and Google Drive import are separate workflows.
 
 Scope:
 
-- CSV/XLSX template and full 20-field mapping.
+- Canonical 21-column CSV/XLSX template, including a distinct optional Court
+  Forum Number after Court.
+- Documented client-register compatibility: header/value aliases, optional
+  Client Name/Status with Active default, non-catalog Practice Area,
+  business punctuation with standard CSV quoting, compatible encodings,
+  delimiters, worksheet/header layouts, and 1900/1904 fractional dates.
+- Bounded XLSX ZIP/XML parsing within Excel's A-XFD and 1-1,048,576 coordinate
+  range; formula protection and the shared Matter Code grammar remain strict.
 - Persistent validation queue and 24-hour preview.
 - Duplicate, format, tenant-reference, team-scope, and formula validation.
 - Explicit partial-success commit with commit-time revalidation.

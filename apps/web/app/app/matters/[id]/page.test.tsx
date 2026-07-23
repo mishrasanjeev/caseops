@@ -74,6 +74,7 @@ const BASE_DATA = {
     lifecycle_version: 3,
     practice_area: "Civil",
     forum_level: "high_court",
+    court_forum_number: "Court 7",
     updated_at: "2026-07-15T08:30:00Z",
   },
   tasks: [],
@@ -114,6 +115,7 @@ describe("MatterOverviewPage", () => {
       await screen.findByText("A short description."),
     ).toBeInTheDocument();
     expect(screen.getByText(/Matter summary/i)).toBeInTheDocument();
+    expect(screen.getByText("Court 7")).toBeInTheDocument();
   });
 
   it("mounts the BenchStrategyPanel sibling of CounselRecommendationsCard", async () => {
@@ -183,6 +185,7 @@ describe("MatterOverviewPage", () => {
           cnr_number: "OLD-CNR",
           practice_area: "Civil",
           court_name: "Old Court",
+          court_forum_number: "Court 3",
           judge_name: "Old Bench",
           next_hearing_on: "2026-07-10",
         },
@@ -213,6 +216,8 @@ describe("MatterOverviewPage", () => {
     await userEvent.type(screen.getByTestId("matter-edit-case-number"), "CASE-99");
     await userEvent.clear(screen.getByTestId("matter-edit-cnr-number"));
     await userEvent.type(screen.getByTestId("matter-edit-cnr-number"), "CNR99");
+    await userEvent.clear(screen.getByTestId("matter-edit-court-forum-number"));
+    await userEvent.type(screen.getByTestId("matter-edit-court-forum-number"), "Court 12");
     await userEvent.click(screen.getByTestId("matter-edit-save"));
 
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
@@ -226,6 +231,7 @@ describe("MatterOverviewPage", () => {
         opposing_party: "Correct Opponent",
         case_number: "CASE-99",
         cnr_number: "CNR99",
+        court_forum_number: "Court 12",
       }),
     );
     expect(updateMatterMock.mock.calls[0]?.[0]).not.toHaveProperty("status");

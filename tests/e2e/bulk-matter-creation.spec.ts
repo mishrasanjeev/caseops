@@ -72,9 +72,9 @@ test.describe.serial("Bulk matter creation", () => {
 
     const code = `BULK-E2E-${Date.now().toString(36).toUpperCase()}`;
     const csv = [
-      "Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum,Client Email",
-      `Bulk E2E valid matter,${code},Civil,active,E2E Client,high_court,client@example.com`,
-      "Bulk E2E invalid matter,BULK-E2E-BAD,Unknown Practice,,E2E Client,high_court,not-an-email",
+      "Matter Title,Matter Code,Practice Area,Matter Status,Client Name,Forum,Client Email,Court Forum Number",
+      `Bulk E2E valid matter,${code},Technology & Data / Privacy,ACTIVE,,High Court,client@example.com,Court #7 / Bench-A`,
+      "Bulk E2E invalid matter,BULK/E2E#BAD,Unknown Practice,,,HIGH COURT,,Court #8",
     ].join("\n");
     await page.getByTestId("matter-import-file").setInputFiles({
       name: "bulk-e2e.csv",
@@ -83,9 +83,9 @@ test.describe.serial("Bulk matter creation", () => {
     });
     await page.getByTestId("matter-import-validate").click();
 
-    await expect(page.getByText("Matter status is required.")).toBeVisible();
+    await expect(page.getByText(/letters, numbers, and hyphens/i)).toBeVisible();
     await expect(page.getByText(code)).toBeVisible();
-    await expect(page.getByText("BULK-E2E-BAD")).toBeVisible();
+    await expect(page.getByText("BULK/E2E#BAD")).toBeVisible();
     await expect(page.getByTestId("matter-import-confirm")).toContainText(
       "Confirm import (1)",
     );
@@ -102,9 +102,24 @@ test.describe.serial("Bulk matter creation", () => {
       headers: { Authorization: `Bearer ${ownerToken}` },
     });
     expect(matters.status(), await matters.text()).toBe(200);
-    const body = (await matters.json()) as { matters: Array<{ id: string; matter_code: string }> };
+    const body = (await matters.json()) as {
+      matters: Array<{
+        id: string;
+        matter_code: string;
+        practice_area: string;
+        status: string;
+        client_name: string | null;
+        forum_level: string;
+        court_forum_number: string | null;
+      }>;
+    };
     expect(body.matters).toHaveLength(1);
     expect(body.matters[0].matter_code).toBe(code);
+    expect(body.matters[0].practice_area).toBe("Technology & Data / Privacy");
+    expect(body.matters[0].status).toBe("active");
+    expect(body.matters[0].client_name).toBeNull();
+    expect(body.matters[0].forum_level).toBe("high_court");
+    expect(body.matters[0].court_forum_number).toBe("Court #7 / Bench-A");
 
     await page.getByText("bulk-e2e.csv").last().click();
     await expect(page.getByText(code)).toBeVisible();

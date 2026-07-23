@@ -323,6 +323,7 @@ def _forum_snapshot(matter: Matter) -> dict[str, str | None]:
         "forum_level": matter.forum_level,
         "court_id": matter.court_id,
         "court_name": matter.court_name,
+        "court_forum_number": matter.court_forum_number,
         "forum_catalog_entry_id": matter.forum_catalog_entry_id,
         "forum_state": matter.forum_state,
         "forum_district": matter.forum_district,
@@ -1422,6 +1423,9 @@ def create_matter(
         forum_level=forum_selection["forum_level"] or payload.forum_level,
         court_id=forum_selection["court_id"],
         court_name=forum_selection["court_name"],
+        court_forum_number=(
+            payload.court_forum_number.strip() if payload.court_forum_number else None
+        ),
         forum_catalog_entry_id=forum_selection["forum_catalog_entry_id"],
         forum_state=forum_selection["forum_state"],
         forum_district=forum_selection["forum_district"],
@@ -1489,6 +1493,7 @@ def create_matter(
             "forum_level": matter.forum_level,
             "court_id": matter.court_id,
             "court_name": matter.court_name,
+            "court_forum_number": matter.court_forum_number,
             "forum_catalog_entry_id": matter.forum_catalog_entry_id,
             "forum_state": matter.forum_state,
             "forum_district": matter.forum_district,
@@ -1534,6 +1539,7 @@ def _apply_list_filters(stmt, filters: MatterListFilters):
                 Matter.client_name.ilike(needle),
                 Matter.opposing_party.ilike(needle),
                 Matter.court_name.ilike(needle),
+                Matter.court_forum_number.ilike(needle),
                 Matter.practice_area.ilike(needle),
             )
         )
@@ -1931,6 +1937,7 @@ def update_matter(
             "opposing_party",
             "opposing_counsel",
             "court_name",
+            "court_forum_number",
             "judge_name",
             "description",
         } and isinstance(value, str):

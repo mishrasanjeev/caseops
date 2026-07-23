@@ -64,6 +64,7 @@ export const matter = z.object({
   forum_level: z.string().nullable().optional(),
   court_id: z.string().nullable().optional(),
   court_name: z.string().nullable().optional(),
+  court_forum_number: z.string().nullable().optional(),
   forum_catalog_entry_id: z.string().nullable().optional(),
   forum_state: z.string().nullable().optional(),
   forum_district: z.string().nullable().optional(),
