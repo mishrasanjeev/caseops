@@ -166,6 +166,7 @@ class MatterCreateRequest(BaseModel):
     forum_level: MatterForumLevelLiteral
     court_id: str | None = Field(default=None, max_length=36)
     court_name: str | None = Field(default=None, min_length=2, max_length=255)
+    court_forum_number: str | None = Field(default=None, max_length=120)
     forum_catalog_entry_id: str | None = Field(default=None, max_length=120)
     forum_state: str | None = Field(default=None, max_length=120)
     forum_district: str | None = Field(default=None, max_length=120)
@@ -201,6 +202,7 @@ class MatterCreateRequest(BaseModel):
         "case_number",
         "cnr_number",
         "filing_number",
+        "court_forum_number",
         "matter_type",
         "client_code",
         "client_contact_number",
@@ -226,6 +228,7 @@ class MatterCreateRequest(BaseModel):
                     "practice_area": "criminal",
                     "forum_level": "high_court",
                     "court_name": "Delhi High Court",
+                    "court_forum_number": "Court 7",
                     "description": (
                         "FIR No. 145/2025, P.S. Connaught Place — "
                         "BNS ss.318/319/336/340. Seeking regular bail "
@@ -266,6 +269,7 @@ class MatterUpdateRequest(BaseModel):
     forum_level: MatterForumLevelLiteral | None = None
     court_id: str | None = Field(default=None, max_length=36)
     court_name: str | None = Field(default=None, min_length=2, max_length=255)
+    court_forum_number: str | None = Field(default=None, max_length=120)
     forum_catalog_entry_id: str | None = Field(default=None, max_length=120)
     forum_state: str | None = Field(default=None, max_length=120)
     forum_district: str | None = Field(default=None, max_length=120)
@@ -315,6 +319,7 @@ class MatterUpdateRequest(BaseModel):
         "case_number",
         "cnr_number",
         "filing_number",
+        "court_forum_number",
         "matter_type",
         "client_code",
         "client_contact_number",
@@ -394,6 +399,7 @@ class MatterRecord(BaseModel):
                     "practice_area": "criminal",
                     "forum_level": "high_court",
                     "court_name": "Delhi High Court",
+                    "court_forum_number": "Court 7",
                     "judge_name": None,
                     "description": (
                         "FIR No. 145/2025, P.S. Connaught Place — "
@@ -427,6 +433,7 @@ class MatterRecord(BaseModel):
     forum_level: MatterForumLevelLiteral
     court_id: str | None = None
     court_name: str | None
+    court_forum_number: str | None = None
     forum_catalog_entry_id: str | None = None
     forum_state: str | None = None
     forum_district: str | None = None

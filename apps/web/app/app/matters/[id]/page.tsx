@@ -73,6 +73,7 @@ type MatterEditDraft = {
   practiceArea: string;
   forumLevel: string;
   courtName: string;
+  courtForumNumber: string;
   judgeName: string;
   nextHearingOn: string;
   description: string;
@@ -110,6 +111,7 @@ function draftFromMatter(matter: Matter): MatterEditDraft {
     practiceArea: matter.practice_area ?? "",
     forumLevel: matter.forum_level ?? "",
     courtName: matter.court_name ?? "",
+    courtForumNumber: matter.court_forum_number ?? "",
     judgeName: matter.judge_name ?? "",
     nextHearingOn: matter.next_hearing_on ?? "",
     description: matter.description ?? "",
@@ -143,6 +145,7 @@ function buildMatterUpdateInput(
   const caseNumber = blankToNull(draft.caseNumber);
   const cnrNumber = blankToNull(draft.cnrNumber);
   const courtName = blankToNull(draft.courtName);
+  const courtForumNumber = blankToNull(draft.courtForumNumber);
   const judgeName = blankToNull(draft.judgeName);
   const nextHearingOn = draft.nextHearingOn || null;
   const description = blankToNull(draft.description);
@@ -160,6 +163,9 @@ function buildMatterUpdateInput(
   }
   if (forumLevel !== (matter.forum_level ?? "")) input.forum_level = forumLevel;
   if (courtName !== (matter.court_name ?? null)) input.court_name = courtName;
+  if (courtForumNumber !== (matter.court_forum_number ?? null)) {
+    input.court_forum_number = courtForumNumber;
+  }
   if (judgeName !== (matter.judge_name ?? null)) input.judge_name = judgeName;
   if (nextHearingOn !== (matter.next_hearing_on ?? null)) {
     input.next_hearing_on = nextHearingOn;
@@ -482,6 +488,19 @@ export default function MatterOverviewPage() {
                 />
               </div>
               <div>
+                <Label htmlFor="matter-edit-court-forum-number">Court / forum number</Label>
+                <Input
+                  id="matter-edit-court-forum-number"
+                  className="mt-1.5"
+                  value={matterDraft.courtForumNumber}
+                  maxLength={120}
+                  onChange={(event) =>
+                    updateMatterDraft({ courtForumNumber: event.target.value })
+                  }
+                  data-testid="matter-edit-court-forum-number"
+                />
+              </div>
+              <div>
                 <Label htmlFor="matter-edit-judge">Judge / bench</Label>
                 <Input
                   id="matter-edit-judge"
@@ -569,6 +588,10 @@ export default function MatterOverviewPage() {
                 <MatterDetail label="Case number" value={data.matter.case_number} />
                 <MatterDetail label="CNR number" value={data.matter.cnr_number} />
                 <MatterDetail label="Court / forum" value={data.matter.court_name} />
+                <MatterDetail
+                  label="Court / forum number"
+                  value={data.matter.court_forum_number}
+                />
                 <MatterDetail label="Judge / bench" value={data.matter.judge_name} />
                 <MatterDetail
                   label="Next hearing"

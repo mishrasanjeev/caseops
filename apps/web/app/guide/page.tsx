@@ -146,7 +146,7 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-ink-2)]">Updated</span>{" "}
-                11 July 2026
+                23 July 2026
               </span>
             </div>
           </Container>
@@ -446,24 +446,45 @@ export default function GuidePage() {
                   <p>
                     Owners, Admins, and users with a delegated Matter Manager capability
                     can select <strong>Bulk upload matters</strong> from the Matter
-                    portfolio. Download the XLSX template for controlled status, forum,
-                    practice-area, date, people, and team guidance; CSV is also available
-                    for migration tooling.
+                    portfolio. Download the canonical 21-column XLSX template for
+                    status, forum, date, people, and team guidance; CSV is also available
+                    for migration tooling. <strong>Court</strong> stores the name, while{" "}
+                    <strong>Court Forum Number</strong> separately stores an optional
+                    court, bench, room, or forum reference.
                   </p>
                   <ol className="mt-3 list-decimal space-y-2 pl-6 text-[15px]">
                     <li>
-                      Enter one matter per row. Matter Title, Matter Code, Client Name,
-                      Matter Status, Practice Area, and Forum are required.
+                      Enter one matter per row. Matter Title, Matter Code, Practice Area,
+                      and Forum are required. Client Name is optional. Leave Matter Status
+                      blank to create the matter as Active.
                     </li>
                     <li>
                       Upload a CSV/XLSX file of at most 500 non-empty rows and 2 MB, then
                       select <strong>Validate data before import</strong>. Validation does
-                      not create matters.
+                      not create matters. CSV accepts UTF-8, BOM-marked UTF-16, or
+                      Windows-1252 with comma, semicolon, tab, or pipe separators. Quote
+                      any field that contains the selected separator.
                     </li>
                     <li>
-                      Review every row error. CaseOps checks duplicates, dates, email and
-                      phone formats, practice/status/forum values, active users and teams,
-                      tenant boundaries, team-scoping consistency, and unsafe formulas.
+                      CaseOps accepts the documented client-register heading aliases and
+                      can find a header below report-title rows or an import table on a
+                      later XLSX worksheet. Status and Forum ignore case and presentation
+                      separators: for example, <code>On Hold</code> and{" "}
+                      <code>on_hold</code> match.
+                    </li>
+                    <li>
+                      A valid non-catalog Practice Area is preserved. Normal business
+                      punctuation is supported in applicable text and reference fields.
+                      Client Email is limited to a valid 254-character address. Common
+                      ISO, Indian day-first, month-name, and fractional Excel dates are
+                      accepted; an XLSX workbook&apos;s 1900/1904 date system is honored
+                      and its time-of-day fraction is discarded.
+                    </li>
+                    <li>
+                      Review every row error. CaseOps checks required/type rules,
+                      duplicates, dates, email and phone formats, status/forum values,
+                      active users and teams, tenant boundaries, team scoping, and unsafe
+                      formulas.
                     </li>
                     <li>
                       Confirm the job to create every row that remains valid. Invalid rows
@@ -476,11 +497,27 @@ export default function GuidePage() {
                       counts.
                     </li>
                   </ol>
+                  <Callout tone="warn" title="Identifiers and spreadsheet safety stay strict">
+                    Matter Code is 2-80 characters after trimming and uppercasing, starts
+                    and ends with a letter or digit, and permits only letters, digits, and
+                    internal hyphens. Formula nodes in the selected import header/data
+                    cells and formula-like selected-table text remain blocked. A phone
+                    needs 7-20 main-number digits and may have a trailing{" "}
+                    <code>ext</code>, <code>ext.</code>, or <code>x</code> followed by
+                    1-10 digits.
+                    Only Client Contact Number may begin with <code>+</code>; after it,
+                    the formula-safe grammar permits digits, spaces, parentheses, and
+                    hyphens before the optional extension. Without <code>+</code>,
+                    periods, commas, <code>#</code>, slashes, and <code>&amp;</code> are
+                    also allowed.
+                  </Callout>
                   <Callout title="Safe and recoverable imports">
                     Validation expires after 24 hours and is repeated at confirmation.
                     Repeating confirmation for a completed job creates no duplicates. The
                     upload, validation failures, completion, row outcomes, cancellation,
-                    and error-report download remain tenant-scoped and audited.
+                    and error-report download remain tenant-scoped and audited. XLSX files
+                    must be unencrypted, remain inside standard Excel A-XFD/1-1,048,576
+                    coordinates, and pass bounded archive checks before parsing.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     The matter cockpit

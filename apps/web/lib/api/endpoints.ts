@@ -5444,6 +5444,7 @@ export async function createMatter(input: {
   cnr_number?: string;
   description?: string;
   court_name?: string;
+  court_forum_number?: string | null;
   forum_catalog_entry_id?: string | null;
   forum_state?: string | null;
   forum_district?: string | null;
@@ -5476,6 +5477,7 @@ export async function updateMatter(input: {
   forum_level?: string | null;
   court_id?: string | null;
   court_name?: string | null;
+  court_forum_number?: string | null;
   forum_catalog_entry_id?: string | null;
   forum_state?: string | null;
   forum_district?: string | null;

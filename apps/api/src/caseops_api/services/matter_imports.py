@@ -5,12 +5,13 @@ import io
 import json
 import logging
 import re
+import unicodedata
 import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from pathlib import PurePosixPath
-from typing import Literal
+from typing import BinaryIO, Literal
 from xml.sax.saxutils import escape
 
 from defusedxml import ElementTree
@@ -61,6 +62,17 @@ MATTER_IMPORT_MAX_ROWS = 500
 MATTER_IMPORT_MAX_DOCUMENT_REFERENCES = 2000
 MATTER_IMPORT_PREVIEW_TTL = timedelta(hours=24)
 MATTER_IMPORT_STALE_AFTER = timedelta(minutes=10)
+MATTER_IMPORT_XLSX_MAX_ENTRIES = 1000
+MATTER_IMPORT_XLSX_MAX_ENTRY_BYTES = 16 * 1024 * 1024
+MATTER_IMPORT_XLSX_MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
+MATTER_IMPORT_XLSX_MAX_COMPRESSION_RATIO = 250
+MATTER_IMPORT_XLSX_MAX_COLUMNS = 16_384
+MATTER_IMPORT_XLSX_MAX_ROWS = 1_048_576
+MATTER_IMPORT_XLSX_MAX_METADATA_BYTES = 512 * 1024
+MATTER_IMPORT_XLSX_MAX_SHARED_STRINGS = 100_000
+MATTER_IMPORT_XLSX_MAX_SHARED_STRING_CHARS = 32_767
+MATTER_IMPORT_XLSX_MAX_SHARED_TEXT_CHARS = 8 * 1024 * 1024
+MATTER_IMPORT_PARSE_ROW_BUFFER = MATTER_IMPORT_MAX_ROWS + 26
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +91,7 @@ MATTER_IMPORT_TEMPLATE_HEADERS = [
     "Opposing Counsel",
     "Forum",
     "Court",
+    "Court Forum Number",
     "Case Number",
     "Filing Number",
     "Filing Date",
@@ -146,26 +159,46 @@ _FIELD_ALIASES = {
     "title": "title",
     "mattertitle": "title",
     "mattername": "title",
+    "casetitle": "title",
     "name": "title",
     "client": "client_name",
     "clientname": "client_name",
+    "existingclient": "client_name",
+    "existingclientname": "client_name",
+    "partyname": "client_name",
     "clientreference": "client_name",
     "clientref": "client_name",
     "clientcode": "client_code",
     "clientcontactnumber": "client_contact_number",
+    "clientcontactno": "client_contact_number",
     "clientphone": "client_contact_number",
+    "clientphoneno": "client_contact_number",
+    "phone": "client_contact_number",
+    "phoneno": "client_contact_number",
+    "phonenumber": "client_contact_number",
     "clientemail": "client_email",
     "practicearea": "practice_area",
+    "areaofpractice": "practice_area",
     "area": "practice_area",
     "mattertype": "matter_type",
     "type": "matter_type",
     "status": "status",
     "matterstatus": "status",
+    "currentstatus": "status",
     "forum": "forum_level",
     "forumlevel": "forum_level",
+    "courtforum": "forum_level",
     "court": "court_name",
     "courtname": "court_name",
     "forumname": "court_name",
+    "courtforumnumber": "court_forum_number",
+    "courtforumno": "court_forum_number",
+    "courtforumref": "court_forum_number",
+    "courtforumreference": "court_forum_number",
+    "courtnumber": "court_forum_number",
+    "courtno": "court_forum_number",
+    "forumnumber": "court_forum_number",
+    "forumno": "court_forum_number",
     "matterdescription": "description",
     "description": "description",
     "opposingparty": "opposing_party",
@@ -174,6 +207,7 @@ _FIELD_ALIASES = {
     "casenumber": "case_number",
     "filingnumber": "filing_number",
     "filingdate": "filing_date",
+    "dateoffiling": "filing_date",
     "owner": "owner_email",
     "owneremail": "owner_email",
     "assignee": "owner_email",
@@ -229,13 +263,30 @@ def _clean_cell(value: object) -> str:
 
 
 def _canonical_header(value: str) -> str | None:
-    cleaned = re.sub(r"[\s_\-/.]+", "", value.strip().lower())
+    # Client-maintained spreadsheets commonly decorate headings with periods,
+    # slashes, ampersands, parentheses, or "#". Header punctuation is
+    # presentation, not business data, so compare only case-folded letters
+    # and digits.
+    cleaned = re.sub(r"[^a-z0-9]+", "", value.strip().casefold())
     return _FIELD_ALIASES.get(cleaned)
 
 
 def _unsafe_formula_cell(value: str) -> bool:
     cleaned = value.lstrip()
     return bool(cleaned) and cleaned[0] in {"=", "+", "-", "@"}
+
+
+def _valid_leading_plus_phone(value: str) -> bool:
+    cleaned = value.strip()
+    match = re.fullmatch(
+        r"(?P<number>\+[0-9()\s-]+)(?:(?:ext\.?|x)\s*\d{1,10})?",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return False
+    main_number_digits = re.sub(r"\D", "", match.group("number"))
+    return 7 <= len(main_number_digits) <= 20
 
 
 def _unsafe_import_cell(header: str, value: str) -> bool:
@@ -245,7 +296,7 @@ def _unsafe_import_cell(header: str, value: str) -> bool:
     if (
         _canonical_header(header) == "client_contact_number"
         and value.strip().startswith("+")
-        and re.fullmatch(r"\+[0-9 ()-]+", value.strip())
+        and _valid_leading_plus_phone(value)
     ):
         return False
     return _unsafe_formula_cell(value)
@@ -258,6 +309,64 @@ def _normalise_raw_row(raw: dict[str, str]) -> dict[str, str]:
         if key is not None and key not in canonical:
             canonical[key] = _clean_cell(value)
     return canonical
+
+
+def _canonical_header_set(values: list[str]) -> set[str]:
+    return {
+        key for value in values if value and (key := _canonical_header(value)) is not None
+    }
+
+
+def _header_score(values: list[str]) -> int:
+    canonical = _canonical_header_set(values)
+    # Required identity columns distinguish the real import sheet from
+    # instruction/reference sheets that may also mention status/forum names.
+    return len(canonical) + (10 if "title" in canonical else 0) + (
+        10 if "matter_code" in canonical else 0
+    )
+
+
+def _header_has_required_identity(values: list[str]) -> bool:
+    canonical = _canonical_header_set(values)
+    return {"title", "matter_code"}.issubset(canonical)
+
+
+def _header_row_index(rows: list[tuple[int, list[str], frozenset[int]]]) -> int:
+    if not rows:
+        return 0
+    candidates = list(enumerate(rows[:25]))
+    best_index, best_row = max(
+        candidates,
+        key=lambda item: (_header_score(item[1][1]), -item[0]),
+    )
+    return best_index if _header_score(best_row[1]) >= 2 else 0
+
+
+def _decode_csv_text(content: bytes) -> str:
+    if content.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return content.decode("utf-16")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CSV matter import could not be decoded.",
+            ) from exc
+    try:
+        decoded = content.decode("utf-8-sig")
+        if "\x00" not in decoded:
+            return decoded
+    except UnicodeDecodeError:
+        pass
+    # Excel on Windows commonly exports CSV using the local ANSI code page.
+    # cp1252 is deterministic and preserves the common legal/business
+    # punctuation that prompted this compatibility change.
+    try:
+        return content.decode("cp1252")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV matter import must be UTF-8, UTF-16, or Windows-1252 encoded.",
+        ) from exc
 
 
 def _detect_mapping_kind(
@@ -282,25 +391,68 @@ def _detect_mapping_kind(
 
 
 def _parse_csv(content: bytes) -> list[ParsedMatterImportRow]:
-    try:
-        text = content.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CSV matter import must be UTF-8 encoded.",
-        ) from exc
-    reader = csv.DictReader(io.StringIO(text))
-    if reader.fieldnames is None:
+    text = _decode_csv_text(content)
+    delimiter_candidates: list[
+        tuple[int, int, list[tuple[int, list[str], frozenset[int]]]]
+    ] = []
+    for delimiter_index, delimiter in enumerate((",", ";", "\t", "|")):
+        try:
+            candidate_rows: list[tuple[int, list[str], frozenset[int]]] = []
+            reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+            previous_line_number = 0
+            for values in reader:
+                row_number = previous_line_number + 1
+                previous_line_number = reader.line_num
+                cleaned_values = [_clean_cell(value) for value in values]
+                if not any(cleaned_values):
+                    continue
+                candidate_rows.append((row_number, cleaned_values, frozenset()))
+                if len(candidate_rows) >= MATTER_IMPORT_PARSE_ROW_BUFFER:
+                    break
+        except csv.Error as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CSV matter import file could not be parsed safely.",
+            ) from exc
+        if candidate_rows:
+            header_index = _header_row_index(candidate_rows)
+            delimiter_candidates.append(
+                (
+                    _header_score(candidate_rows[header_index][1]),
+                    -delimiter_index,
+                    candidate_rows,
+                )
+            )
+    if not delimiter_candidates:
         return []
+    parsed_rows = max(delimiter_candidates, key=lambda candidate: candidate[:2])[2]
+    if not parsed_rows:
+        return []
+    header_index = _header_row_index(parsed_rows)
+    headers = parsed_rows[header_index][1]
+    header_unsafe_indices = {
+        index for index, header in enumerate(headers) if _unsafe_formula_cell(header)
+    }
     rows: list[ParsedMatterImportRow] = []
-    for row_index, row in enumerate(reader, start=2):
+    for row_number, values, _unsafe_indices in parsed_rows[header_index + 1 :]:
         raw = {
-            str(key): _clean_cell(value)
-            for key, value in row.items()
-            if key is not None
+            header: values[index] if index < len(values) else ""
+            for index, header in enumerate(headers)
+            if header
         }
-        if any(raw.values()):
-            rows.append(ParsedMatterImportRow(row_number=row_index, raw=raw))
+        unsafe_headers = {
+            headers[index]
+            for index in header_unsafe_indices
+            if index < len(headers) and headers[index]
+        }
+        if any(raw.values()) or unsafe_headers:
+            rows.append(
+                ParsedMatterImportRow(
+                    row_number=row_number,
+                    raw=raw,
+                    unsafe_headers=frozenset(unsafe_headers),
+                )
+            )
     return rows
 
 
@@ -357,33 +509,252 @@ def _cell_text(
 
 
 def _xlsx_cell_col(ref: str) -> int:
-    letters = "".join(ch for ch in ref if ch.isalpha()).upper()
+    match = re.fullmatch(r"([A-Za-z]+)([1-9][0-9]*)", ref)
+    if match is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="XLSX matter import contains an invalid cell reference.",
+        )
+    letters = match.group(1).upper()
+    row_text = match.group(2)
+    max_row_text = str(MATTER_IMPORT_XLSX_MAX_ROWS)
+    if len(row_text) > len(max_row_text) or (
+        len(row_text) == len(max_row_text) and row_text > max_row_text
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "XLSX matter import uses a row beyond the supported "
+                f"{MATTER_IMPORT_XLSX_MAX_ROWS}-row safety limit."
+            ),
+        )
     index = 0
     for char in letters:
         index = index * 26 + ord(char) - 64
-    return max(index - 1, 0)
+        if index > MATTER_IMPORT_XLSX_MAX_COLUMNS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "XLSX matter import uses a column beyond the supported "
+                    f"{MATTER_IMPORT_XLSX_MAX_COLUMNS}-column safety limit."
+                ),
+            )
+    return index - 1
 
 
-def _parse_xlsx(content: bytes) -> list[ParsedMatterImportRow]:
-    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+def _xlsx_fallback_sheet_sort_key(path: str) -> tuple[int, str]:
+    match = re.search(r"(\d+)\.xml$", path)
+    if match is None:
+        return (0, "")
+    digits = match.group(1).lstrip("0") or "0"
+    return (len(digits), digits)
+
+
+def _validate_xlsx_archive(archive: zipfile.ZipFile) -> None:
+    entries = archive.infolist()
+    if len(entries) > MATTER_IMPORT_XLSX_MAX_ENTRIES:
+        _raise_bad_request("XLSX matter import contains too many archive entries.")
+    total_uncompressed = 0
+    for entry in entries:
+        if entry.flag_bits & 0x1:
+            _raise_bad_request("Encrypted XLSX matter import files are not supported.")
+        if entry.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
+            _raise_bad_request(
+                "XLSX matter import uses an unsupported ZIP compression method."
+            )
+        if entry.file_size > MATTER_IMPORT_XLSX_MAX_ENTRY_BYTES:
+            _raise_bad_request("XLSX matter import contains an oversized archive entry.")
+        total_uncompressed += entry.file_size
+        if total_uncompressed > MATTER_IMPORT_XLSX_MAX_UNCOMPRESSED_BYTES:
+            _raise_bad_request("XLSX matter import expands beyond the safe size limit.")
+        if entry.file_size >= 1024 * 1024:
+            compression_ratio = entry.file_size / max(entry.compress_size, 1)
+            if compression_ratio > MATTER_IMPORT_XLSX_MAX_COMPRESSION_RATIO:
+                _raise_bad_request(
+                    "XLSX matter import contains a suspiciously compressed archive entry."
+                )
+
+
+def _read_bounded_xlsx_metadata(
+    archive: zipfile.ZipFile,
+    entry_name: str,
+    *,
+    description: str,
+) -> bytes:
+    entry = archive.getinfo(entry_name)
+    if entry.file_size > MATTER_IMPORT_XLSX_MAX_METADATA_BYTES:
+        _raise_bad_request(f"XLSX matter import {description} is too large.")
+    with archive.open(entry) as source:
+        content = source.read(MATTER_IMPORT_XLSX_MAX_METADATA_BYTES + 1)
+    if len(content) > MATTER_IMPORT_XLSX_MAX_METADATA_BYTES:
+        _raise_bad_request(f"XLSX matter import {description} is too large.")
+    return content
+
+
+def _xlsx_uses_1904_date_system(archive: zipfile.ZipFile) -> bool:
     try:
-        with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            shared_strings: list[str] = []
-            if "xl/sharedStrings.xml" in archive.namelist():
-                shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
-                for item in shared_root.findall(".//m:si", namespace):
-                    shared_strings.append(
-                        "".join(node.text or "" for node in item.findall(".//m:t", namespace))
-                    )
-            sheet_root = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
-    except (KeyError, zipfile.BadZipFile, ElementTree.ParseError, DefusedXmlException) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="XLSX matter import file could not be read.",
-        ) from exc
+        workbook_root = ElementTree.fromstring(
+            _read_bounded_xlsx_metadata(
+                archive,
+                "xl/workbook.xml",
+                description="workbook metadata",
+            )
+        )
+    except (KeyError, ElementTree.ParseError, DefusedXmlException):
+        return False
+    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    workbook_properties = workbook_root.find("m:workbookPr", namespace)
+    if workbook_properties is None:
+        return False
+    return workbook_properties.attrib.get("date1904", "").strip().casefold() in {
+        "1",
+        "true",
+    }
 
-    rows: list[tuple[list[str], frozenset[int]]] = []
-    for row in sheet_root.findall(".//m:sheetData/m:row", namespace):
+
+def _normalise_1904_xlsx_date(value: str) -> str:
+    cleaned = value.strip()
+    if not re.fullmatch(r"[0-9]{1,7}(?:\.[0-9]+)?", cleaned):
+        return value
+    try:
+        serial = int(cleaned.partition(".")[0])
+        parsed = date(1904, 1, 1) + timedelta(days=serial)
+    except (OverflowError, ValueError):
+        return value
+    return parsed.isoformat()
+
+
+def _xlsx_worksheet_paths(archive: zipfile.ZipFile) -> list[str]:
+    names = set(archive.namelist())
+    fallback = sorted(
+        (name for name in names if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)),
+        key=_xlsx_fallback_sheet_sort_key,
+    )
+    try:
+        workbook_root = ElementTree.fromstring(
+            _read_bounded_xlsx_metadata(
+                archive,
+                "xl/workbook.xml",
+                description="workbook metadata",
+            )
+        )
+        relationships_root = ElementTree.fromstring(
+            _read_bounded_xlsx_metadata(
+                archive,
+                "xl/_rels/workbook.xml.rels",
+                description="workbook relationship metadata",
+            )
+        )
+    except (KeyError, ElementTree.ParseError, DefusedXmlException):
+        return fallback
+
+    relationship_namespace = {
+        "r": "http://schemas.openxmlformats.org/package/2006/relationships"
+    }
+    workbook_namespace = {
+        "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    }
+    rels_by_id = {
+        relation.attrib.get("Id", ""): relation.attrib.get("Target", "")
+        for relation in relationships_root.findall(".//r:Relationship", relationship_namespace)
+        if relation.attrib.get("Target")
+    }
+    ordered: list[str] = []
+    relationship_id_attr = (
+        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+    )
+    for sheet in workbook_root.findall(".//m:sheets/m:sheet", workbook_namespace):
+        target = rels_by_id.get(sheet.attrib.get(relationship_id_attr, ""))
+        if not target:
+            continue
+        normalized = target.replace("\\", "/").lstrip("/")
+        if not normalized.startswith("xl/"):
+            normalized = f"xl/{normalized}"
+        if ".." in PurePosixPath(normalized).parts:
+            continue
+        if normalized in names and normalized not in ordered:
+            ordered.append(normalized)
+    ordered.extend(path for path in fallback if path not in ordered)
+    return ordered
+
+
+def _xlsx_shared_strings(
+    shared_strings_stream: BinaryIO,
+    *,
+    namespace: dict[str, str],
+) -> list[str]:
+    shared_strings: list[str] = []
+    total_text_chars = 0
+    item_tag = f"{{{namespace['m']}}}si"
+    text_tag = f"{{{namespace['m']}}}t"
+    element_stack: list[ElementTree.Element] = []
+    current_pieces: list[str] | None = None
+    current_text_chars = 0
+    for event, item in ElementTree.iterparse(
+        shared_strings_stream,
+        events=("start", "end"),
+    ):
+        if event == "start":
+            element_stack.append(item)
+            if item.tag == item_tag:
+                if current_pieces is not None:
+                    _raise_bad_request(
+                        "XLSX matter import contains malformed nested shared strings."
+                    )
+                if len(shared_strings) >= MATTER_IMPORT_XLSX_MAX_SHARED_STRINGS:
+                    _raise_bad_request(
+                        "XLSX matter import contains too many shared strings."
+                    )
+                current_pieces = []
+                current_text_chars = 0
+            continue
+        parent = element_stack[-2] if len(element_stack) >= 2 else None
+        if item.tag == text_tag and current_pieces is not None:
+            piece = item.text or ""
+            current_text_chars += len(piece)
+            if current_text_chars > MATTER_IMPORT_XLSX_MAX_SHARED_STRING_CHARS:
+                _raise_bad_request(
+                    "XLSX matter import contains an oversized shared string."
+                )
+            current_pieces.append(piece)
+        elif item.tag == item_tag:
+            if current_pieces is None:
+                _raise_bad_request("XLSX matter import contains malformed shared strings.")
+            total_text_chars += current_text_chars
+            if total_text_chars > MATTER_IMPORT_XLSX_MAX_SHARED_TEXT_CHARS:
+                _raise_bad_request(
+                    "XLSX matter import shared-string text exceeds the safety limit."
+                )
+            shared_strings.append(_clean_cell("".join(current_pieces)))
+            current_pieces = None
+            current_text_chars = 0
+        if parent is not None:
+            parent.remove(item)
+        item.clear()
+        element_stack.pop()
+    return shared_strings
+
+
+def _xlsx_rows(
+    worksheet_stream: BinaryIO,
+    *,
+    namespace: dict[str, str],
+    shared_strings: list[str],
+) -> list[tuple[int, list[str], frozenset[int]]]:
+    rows: list[tuple[int, list[str], frozenset[int]]] = []
+    previous_row_number: int | None = None
+    row_tag = f"{{{namespace['m']}}}row"
+    element_stack: list[ElementTree.Element] = []
+    for event, row in ElementTree.iterparse(
+        worksheet_stream,
+        events=("start", "end"),
+    ):
+        if event == "start":
+            element_stack.append(row)
+            continue
+        if row.tag != row_tag:
+            element_stack.pop()
+            continue
         values: list[str] = []
         unsafe_indices: set[int] = set()
         for cell in row.findall("m:c", namespace):
@@ -399,27 +770,140 @@ def _parse_xlsx(content: bytes) -> list[ParsedMatterImportRow]:
             values[index] = value
             if unsafe:
                 unsafe_indices.add(index)
-        rows.append((values, frozenset(unsafe_indices)))
-    if not rows:
+        raw_row_number = row.attrib.get("r")
+        if raw_row_number is None:
+            row_number = 1 if previous_row_number is None else previous_row_number + 1
+        elif not re.fullmatch(r"[1-9][0-9]*", raw_row_number):
+            _raise_bad_request("XLSX matter import contains an invalid row reference.")
+        else:
+            max_row_text = str(MATTER_IMPORT_XLSX_MAX_ROWS)
+            if len(raw_row_number) > len(max_row_text) or (
+                len(raw_row_number) == len(max_row_text)
+                and raw_row_number > max_row_text
+            ):
+                _raise_bad_request(
+                    "XLSX matter import contains a row beyond the Excel safety limit."
+                )
+            row_number = int(raw_row_number)
+        if row_number == previous_row_number:
+            _raise_bad_request("XLSX matter import contains duplicate row references.")
+        if previous_row_number is not None and row_number < previous_row_number:
+            _raise_bad_request("XLSX matter import contains out-of-order row references.")
+        previous_row_number = row_number
+        parent = element_stack[-2] if len(element_stack) >= 2 else None
+        if parent is not None:
+            # Detach completed rows from ``sheetData``; ``Element.clear`` alone
+            # would leave one empty child object behind for every source row.
+            parent.remove(row)
+        row.clear()
+        element_stack.pop()
+        if any(values) or unsafe_indices:
+            rows.append((row_number, values, frozenset(unsafe_indices)))
+            if len(rows) >= MATTER_IMPORT_PARSE_ROW_BUFFER:
+                return rows
+    return rows
+
+
+def _parse_xlsx(content: bytes) -> list[ParsedMatterImportRow]:
+    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            _validate_xlsx_archive(archive)
+            uses_1904_date_system = _xlsx_uses_1904_date_system(archive)
+            shared_strings: list[str] = []
+            if "xl/sharedStrings.xml" in archive.namelist():
+                with archive.open("xl/sharedStrings.xml") as shared_strings_stream:
+                    shared_strings = _xlsx_shared_strings(
+                        shared_strings_stream,
+                        namespace=namespace,
+                    )
+            selected_worksheet: (
+                tuple[
+                    int,
+                    int,
+                    int,
+                    int,
+                    int,
+                    list[tuple[int, list[str], frozenset[int]]],
+                ]
+                | None
+            ) = None
+            for sheet_index, worksheet_path in enumerate(_xlsx_worksheet_paths(archive)):
+                with archive.open(worksheet_path) as worksheet_stream:
+                    sheet_rows = _xlsx_rows(
+                        worksheet_stream,
+                        namespace=namespace,
+                        shared_strings=shared_strings,
+                    )
+                if not sheet_rows:
+                    continue
+                header_index = _header_row_index(sheet_rows)
+                header_values = sheet_rows[header_index][1]
+                data_row_count = len(sheet_rows) - header_index - 1
+                candidate = (
+                    int(_header_has_required_identity(header_values)),
+                    int(data_row_count > 0),
+                    _header_score(header_values),
+                    data_row_count,
+                    -sheet_index,
+                    sheet_rows,
+                )
+                if (
+                    selected_worksheet is None
+                    or candidate[:5] > selected_worksheet[:5]
+                ):
+                    selected_worksheet = candidate
+    except (
+        KeyError,
+        NotImplementedError,
+        zipfile.BadZipFile,
+        ElementTree.ParseError,
+        DefusedXmlException,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="XLSX matter import file could not be read.",
+        ) from exc
+
+    if selected_worksheet is None:
         return []
-    headers = rows[0][0]
+    selected_rows = selected_worksheet[5]
+    header_index = _header_row_index(selected_rows)
+    headers = selected_rows[header_index][1]
+    header_unsafe_indices = set(selected_rows[header_index][2])
+    header_unsafe_indices.update(
+        index for index, header in enumerate(headers) if _unsafe_formula_cell(header)
+    )
     parsed: list[ParsedMatterImportRow] = []
-    for row_number, (values, unsafe_indices) in enumerate(rows[1:], start=2):
+    for row_number, values, unsafe_indices in selected_rows[header_index + 1 :]:
         raw = {
             header: values[index] if index < len(values) else ""
             for index, header in enumerate(headers)
             if header
         }
-        if any(raw.values()):
+        if uses_1904_date_system:
+            for header in headers:
+                if (
+                    header
+                    and _canonical_header(header) == "filing_date"
+                    and header in raw
+                ):
+                    raw[header] = _normalise_1904_xlsx_date(raw[header])
+        effective_unsafe_indices = set(header_unsafe_indices) | set(unsafe_indices)
+        unsafe_headers: set[str] = set()
+        for index in effective_unsafe_indices:
+            if index < len(headers) and headers[index]:
+                unsafe_headers.add(headers[index])
+                continue
+            synthetic_header = f"Unmapped Column {index + 1}"
+            raw[synthetic_header] = values[index] if index < len(values) else ""
+            unsafe_headers.add(synthetic_header)
+        if any(raw.values()) or effective_unsafe_indices:
             parsed.append(
                 ParsedMatterImportRow(
                     row_number=row_number,
                     raw=raw,
-                    unsafe_headers=frozenset(
-                        headers[index]
-                        for index in unsafe_indices
-                        if index < len(headers) and headers[index]
-                    ),
+                    unsafe_headers=frozenset(unsafe_headers),
                 )
             )
     return parsed
@@ -637,26 +1121,171 @@ def _duplicate_candidate_record(
     )
 
 
-def _catalog_key(value: str | None) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", (value or "").strip().lower()).strip()
+def _business_match_key(value: str | None) -> str:
+    normalized = unicodedata.normalize("NFKC", (value or "").strip()).casefold()
+    normalized = normalized.replace("&", " and ")
+    # Preserve symbols that carry meaning in names such as C++ and C#
+    # instead of collapsing distinct practice areas or teams to "c".
+    normalized = normalized.replace("+", " plus ").replace("#", " sharp ")
+    return " ".join(
+        "".join(char if char.isalnum() else " " for char in normalized).split()
+    )
+
+
+def _exact_business_match_key(value: str | None) -> str:
+    normalized = unicodedata.normalize("NFKC", (value or "").strip()).casefold()
+    return " ".join(normalized.split())
+
+
+def _add_unique_team_lookup(
+    lookup: dict[str, Team | None],
+    key: str,
+    team: Team,
+) -> None:
+    if not key:
+        return
+    if key not in lookup:
+        lookup[key] = team
+        return
+    existing = lookup[key]
+    if existing is not None and existing.id != team.id:
+        lookup[key] = None
+
+
+def _add_unique_label_lookup(
+    lookup: dict[str, str | None],
+    key: str,
+    label: str,
+) -> None:
+    if not key:
+        return
+    if key not in lookup:
+        lookup[key] = label
+        return
+    existing = lookup[key]
+    if existing is not None and _exact_business_match_key(
+        existing
+    ) != _exact_business_match_key(label):
+        lookup[key] = None
+
+
+def _resolve_team(
+    value: str,
+    *,
+    exact_lookup: dict[str, Team | None],
+    normalized_lookup: dict[str, Team | None],
+) -> tuple[Team | None, bool]:
+    exact_key = _exact_business_match_key(value)
+    if exact_key in exact_lookup:
+        team = exact_lookup[exact_key]
+        return team, team is None
+    normalized_key = _business_match_key(value)
+    if normalized_key in normalized_lookup:
+        team = normalized_lookup[normalized_key]
+        return team, team is None
+    return None, False
+
+
+def _resolve_business_label(
+    value: str,
+    *,
+    exact_lookup: dict[str, str | None],
+    normalized_lookup: dict[str, str | None],
+) -> str:
+    exact_key = _exact_business_match_key(value)
+    if exact_key in exact_lookup and exact_lookup[exact_key] is not None:
+        return exact_lookup[exact_key] or value
+    normalized_key = _business_match_key(value)
+    if (
+        normalized_key in normalized_lookup
+        and normalized_lookup[normalized_key] is not None
+    ):
+        return normalized_lookup[normalized_key] or value
+    # A non-catalog or ambiguous presentation-equivalent label is valid
+    # business data. Preserve it instead of silently choosing another label.
+    return value
+
+
+def _controlled_value_key(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (value or "").strip().casefold())
+
+
+_MATTER_STATUS_ALIASES = {
+    "active": "active",
+    "intake": "intake",
+    "onhold": "on_hold",
+    "hold": "on_hold",
+    "disposed": "disposed",
+    "closed": "disposed",
+}
+
+_FORUM_LEVEL_ALIASES = {
+    "lowercourt": "lower_court",
+    "districtcourt": "lower_court",
+    "districtandsessionscourt": "lower_court",
+    "districtsessionscourt": "lower_court",
+    "sessionscourt": "lower_court",
+    "highcourt": "high_court",
+    "supremecourt": "supreme_court",
+    "supremecourtofindia": "supreme_court",
+    "tribunal": "tribunal",
+    "consumerforum": "tribunal",
+    "consumercommission": "tribunal",
+    "arbitration": "arbitration",
+    "arbitraltribunal": "arbitration",
+    "advisory": "advisory",
+}
+
+
+def _normalise_matter_status(value: str | None) -> str | None:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return None
+    return _MATTER_STATUS_ALIASES.get(_controlled_value_key(cleaned), cleaned.casefold())
+
+
+def _normalise_forum_level(value: str | None) -> str | None:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return None
+    return _FORUM_LEVEL_ALIASES.get(_controlled_value_key(cleaned), cleaned.casefold())
 
 
 def _parse_import_date(value: str | None) -> tuple[date | None, str | None]:
     cleaned = (value or "").strip()
     if not cleaned:
         return None, None
-    if re.fullmatch(r"\d+(?:\.0+)?", cleaned):
+    if re.fullmatch(r"\d{1,7}(?:\.\d+)?", cleaned):
         serial_text = cleaned.partition(".")[0]
-        if len(serial_text) <= 7:
-            serial = int(serial_text)
-            if 1 <= serial <= 2_958_465:
-                return date(1899, 12, 30) + timedelta(days=serial), None
-    for date_format in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        serial = int(serial_text)
+        if 1 <= serial <= 2_958_465:
+            return date(1899, 12, 30) + timedelta(days=serial), None
+    try:
+        return datetime.fromisoformat(cleaned.replace("Z", "+00:00")).date(), None
+    except ValueError:
+        pass
+    for date_format in (
+        "%Y/%m/%d",
+        "%Y.%m.%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%d.%m.%Y",
+        "%d/%m/%y",
+        "%d-%m-%y",
+        "%d.%m.%y",
+        "%d %b %Y",
+        "%d-%b-%Y",
+        "%d %B %Y",
+        "%d-%B-%Y",
+    ):
         try:
             return datetime.strptime(cleaned, date_format).date(), None
         except ValueError:
             continue
-    return None, "Filing date must be YYYY-MM-DD, DD/MM/YYYY, or a valid Excel date."
+    return (
+        None,
+        "Filing date must be a common ISO/day-first date or a valid Excel date.",
+    )
 
 
 def _directory_lookups(
@@ -665,9 +1294,11 @@ def _directory_lookups(
     context: SessionContext,
 ) -> tuple[
     dict[str, CompanyMembership],
-    dict[str, Team],
+    dict[str, Team | None],
+    dict[str, Team | None],
     set[tuple[str, str]],
-    set[str],
+    dict[str, str | None],
+    dict[str, str | None],
 ]:
     memberships = list(
         session.scalars(
@@ -692,10 +1323,20 @@ def _directory_lookups(
             )
         )
     )
-    teams_by_key: dict[str, Team] = {}
+    teams_by_exact_key: dict[str, Team | None] = {}
+    teams_by_normalized_key: dict[str, Team | None] = {}
     for team in teams:
-        teams_by_key.setdefault(_catalog_key(team.slug), team)
-        teams_by_key.setdefault(_catalog_key(team.name), team)
+        for value in (team.slug, team.name):
+            _add_unique_team_lookup(
+                teams_by_exact_key,
+                _exact_business_match_key(value),
+                team,
+            )
+            _add_unique_team_lookup(
+                teams_by_normalized_key,
+                _business_match_key(value),
+                team,
+            )
     team_ids = {team.id for team in teams}
     team_memberships = (
         {
@@ -709,33 +1350,56 @@ def _directory_lookups(
         if team_ids
         else set()
     )
-    allowed_practice_areas = {_catalog_key(value) for value in _DEFAULT_PRACTICE_AREAS}
-    allowed_practice_areas.update(
-        _catalog_key(value)
-        for value in session.scalars(
-            select(Matter.practice_area).where(Matter.company_id == context.company.id).distinct()
+    practice_areas_by_exact_key: dict[str, str | None] = {}
+    practice_areas_by_normalized_key: dict[str, str | None] = {}
+
+    def remember_practice_area(key_source: str, canonical_label: str) -> None:
+        _add_unique_label_lookup(
+            practice_areas_by_exact_key,
+            _exact_business_match_key(key_source),
+            canonical_label,
         )
-        if value
+        _add_unique_label_lookup(
+            practice_areas_by_normalized_key,
+            _business_match_key(key_source),
+            canonical_label,
+        )
+
+    for value in _DEFAULT_PRACTICE_AREAS:
+        remember_practice_area(value, value)
+    for value in session.scalars(
+        select(Matter.practice_area).where(Matter.company_id == context.company.id).distinct()
+    ):
+        if value:
+            remember_practice_area(value, value)
+    for team in teams:
+        if team.kind != TeamKind.PRACTICE_AREA:
+            continue
+        remember_practice_area(team.name, team.name)
+        remember_practice_area(team.slug, team.name)
+    return (
+        members_by_email,
+        teams_by_exact_key,
+        teams_by_normalized_key,
+        team_memberships,
+        practice_areas_by_exact_key,
+        practice_areas_by_normalized_key,
     )
-    allowed_practice_areas.update(
-        _catalog_key(team.name)
-        for team in teams
-        if team.kind == TeamKind.PRACTICE_AREA
-    )
-    allowed_practice_areas.update(
-        _catalog_key(team.slug)
-        for team in teams
-        if team.kind == TeamKind.PRACTICE_AREA
-    )
-    return members_by_email, teams_by_key, team_memberships, allowed_practice_areas
 
 
 def _valid_phone(value: str | None) -> bool:
     if not value:
         return True
     cleaned = value.strip()
-    digits = re.sub(r"\D", "", cleaned)
-    return bool(re.fullmatch(r"\+?[0-9 ()-]+", cleaned)) and 7 <= len(digits) <= 20
+    phone_pattern = re.compile(
+        r"(?P<number>\+?[0-9()\s.,#\-/&]+)(?:(?:ext\.?|x)\s*\d{1,10})?",
+        flags=re.IGNORECASE,
+    )
+    match = phone_pattern.fullmatch(cleaned)
+    if match is None:
+        return False
+    main_number_digits = re.sub(r"\D", "", match.group("number"))
+    return 7 <= len(main_number_digits) <= 20
 
 
 def dry_run_bulk_matter_import(
@@ -751,9 +1415,11 @@ def dry_run_bulk_matter_import(
     available_document_keys = {_document_key(name) for name in available_document_filenames}
     (
         members_by_email,
-        teams_by_key,
+        teams_by_exact_key,
+        teams_by_normalized_key,
         team_memberships,
-        allowed_practice_areas,
+        practice_areas_by_exact_key,
+        practice_areas_by_normalized_key,
     ) = _directory_lookups(session, context=context)
     canonical_rows: list[tuple[ParsedMatterImportRow, dict[str, str], bool]] = []
     for row in parsed_import.rows:
@@ -835,12 +1501,24 @@ def dry_run_bulk_matter_import(
         client_email = row.get("client_email", "").strip().lower() or None
         opposing_party = row.get("opposing_party", "").strip() or None
         opposing_counsel = row.get("opposing_counsel", "").strip() or None
-        practice_area = row.get("practice_area", "").strip() or None
+        supplied_practice_area = row.get("practice_area", "").strip() or None
+        practice_area = (
+            _resolve_business_label(
+                supplied_practice_area,
+                exact_lookup=practice_areas_by_exact_key,
+                normalized_lookup=practice_areas_by_normalized_key,
+            )
+            if supplied_practice_area
+            else None
+        )
         supplied_status = row.get("status", "").strip()
-        matter_status = supplied_status or DEFAULT_MATTER_STATUS.value
+        matter_status = (
+            _normalise_matter_status(supplied_status) or DEFAULT_MATTER_STATUS.value
+        )
         description = row.get("description", "").strip() or None
-        forum_level = row.get("forum_level", "").strip() or None
+        forum_level = _normalise_forum_level(row.get("forum_level"))
         court_name = row.get("court_name", "").strip() or None
+        court_forum_number = row.get("court_forum_number", "").strip() or None
         case_number = row.get("case_number", "").strip() or None
         filing_number = row.get("filing_number", "").strip() or None
         filing_date, filing_date_error = _parse_import_date(row.get("filing_date"))
@@ -851,24 +1529,23 @@ def dry_run_bulk_matter_import(
         )
         owner_membership = members_by_email.get(owner_email or "")
         responsible_membership = members_by_email.get(responsible_lawyer_email or "")
-        team = teams_by_key.get(_catalog_key(team_slug)) if team_slug else None
+        team, team_lookup_ambiguous = (
+            _resolve_team(
+                team_slug,
+                exact_lookup=teams_by_exact_key,
+                normalized_lookup=teams_by_normalized_key,
+            )
+            if team_slug
+            else (None, False)
+        )
         category = _normalise_document_category(row.get("document_category"))
 
         if title is None:
             errors.append("Matter title is required.")
         if matter_code is None:
             errors.append("Matter code is required.")
-        if strict_business_rules and client_name is None:
-            errors.append("Client name is required.")
-        if strict_business_rules and not supplied_status:
-            errors.append("Matter status is required.")
         if practice_area is None:
             errors.append("Practice area is required.")
-        elif strict_business_rules and _catalog_key(practice_area) not in allowed_practice_areas:
-            errors.append(
-                "Practice area is invalid. Use a template reference value or an active "
-                "workspace practice-area team."
-            )
         if forum_level is None:
             errors.append("Forum level is required.")
         if filing_date_error:
@@ -879,7 +1556,12 @@ def dry_run_bulk_matter_import(
             errors.append("Matter owner must match an active user in this company.")
         if responsible_lawyer_email and responsible_membership is None:
             errors.append("Responsible lawyer must match an active user in this company.")
-        if team_slug and team is None:
+        if team_lookup_ambiguous:
+            errors.append(
+                "Assigned team matches more than one active team; use an exact team "
+                "name or slug."
+            )
+        elif team_slug and team is None:
             errors.append("Assigned team must match an active team in this company.")
         if context.company.team_scoping_enabled and team is not None:
             for label, membership in (
@@ -947,7 +1629,7 @@ def dry_run_bulk_matter_import(
             if case_candidates:
                 errors.append("Duplicate case number exists for this company.")
 
-        if matter_status in {"disposed", "closed"}:
+        if matter_status == "disposed":
             errors.append(
                 "A matter cannot be imported in a disposed state; use the "
                 "audited lifecycle workflow after creation."
@@ -955,7 +1637,7 @@ def dry_run_bulk_matter_import(
 
         if title and matter_code and practice_area and forum_level:
             try:
-                MatterCreateRequest.model_validate(
+                validated_payload = MatterCreateRequest.model_validate(
                     {
                         "title": title,
                         "matter_code": matter_code,
@@ -973,6 +1655,7 @@ def dry_run_bulk_matter_import(
                         "practice_area": practice_area,
                         "forum_level": forum_level,
                         "court_name": court_name,
+                        "court_forum_number": court_forum_number,
                         "description": description,
                         "assignee_membership_id": (
                             owner_membership.id if owner_membership else None
@@ -983,6 +1666,10 @@ def dry_run_bulk_matter_import(
                         "team_id": team.id if team else None,
                     }
                 )
+                matter_code = validated_payload.matter_code
+                matter_status = validated_payload.status
+                practice_area = validated_payload.practice_area
+                forum_level = validated_payload.forum_level
             except ValidationError as exc:
                 for item in exc.errors():
                     loc = ".".join(str(part) for part in item.get("loc", ()))
@@ -1007,6 +1694,7 @@ def dry_run_bulk_matter_import(
                 opposing_counsel=opposing_counsel,
                 forum_level=forum_level,
                 court_name=court_name,
+                court_forum_number=court_forum_number,
                 case_number=case_number,
                 filing_number=filing_number,
                 filing_date=filing_date,
@@ -1158,6 +1846,7 @@ def _matter_template_csv_bytes() -> bytes:
             "Rao Chambers",
             "high_court",
             "Delhi High Court",
+            "COURT-FORUM-123/2026",
             "CS(COMM) 123/2026",
             "FILING-123/2026",
             "2026-07-17",
@@ -1187,6 +1876,7 @@ def _matter_template_xlsx_bytes() -> bytes:
             "Rao Chambers",
             "high_court",
             "Delhi High Court",
+            "COURT-FORUM-123/2026",
             "CS(COMM) 123/2026",
             "FILING-123/2026",
             "2026-07-17",
@@ -1213,9 +1903,26 @@ def _matter_template_xlsx_bytes() -> bytes:
         ["Bulk Matter Import Instructions", "Details"],
         [
             "Required fields",
-            "Matter Title, Matter Code, Client Name, Matter Status, Practice Area, Forum",
+            "Matter Title, Matter Code, Practice Area, Forum",
         ],
-        ["Dates", "Use YYYY-MM-DD. DD/MM/YYYY and native Excel dates are also accepted."],
+        [
+            "Optional defaults",
+            "Matter Status defaults to active; Client Name is optional.",
+        ],
+        [
+            "Flexible values",
+            "Status and Forum ignore case, spaces, hyphens, and underscores. "
+            "Business punctuation is accepted in descriptive fields.",
+        ],
+        [
+            "Court Forum Number",
+            "Optional court/forum reference number, stored separately from Case Number "
+            "and Filing Number.",
+        ],
+        [
+            "Dates",
+            "ISO, common day-first formats, and native Excel dates are accepted.",
+        ],
         [
             "People",
             "Matter Owner and Responsible Lawyer must be active work-email " +
@@ -1227,7 +1934,12 @@ def _matter_template_xlsx_bytes() -> bytes:
             "Matter Code, Case Number, and matching Matter Title + Client Name are checked.",
         ],
         ["Import", "Upload this file, review every validation error, then confirm import."],
-        ["Security", "Formula cells and values beginning with =, +, -, or @ are rejected."],
+        [
+            "Security",
+            "Formula cells and values beginning with =, +, -, or @ are rejected. "
+            "A syntactically valid international phone may begin with + only in "
+            "Client Contact Number.",
+        ],
         [
             "Limits",
             f"Maximum {MATTER_IMPORT_MAX_ROWS} data rows and "
@@ -1236,7 +1948,7 @@ def _matter_template_xlsx_bytes() -> bytes:
     ]
     validations = (
         '<dataValidations count="3">'
-        '<dataValidation type="list" allowBlank="0" sqref="E2:E501">'
+        '<dataValidation type="list" allowBlank="1" sqref="E2:E501">'
         "<formula1>'Reference Values'!$A$2:$A$4</formula1></dataValidation>"
         '<dataValidation type="list" allowBlank="0" sqref="M2:M501">'
         "<formula1>'Reference Values'!$B$2:$B$7</formula1></dataValidation>"
@@ -1661,6 +2373,7 @@ def _payload_from_normalized(normalized: dict[str, object]) -> MatterCreateReque
             "opposing_counsel": normalized.get("opposing_counsel"),
             "forum_level": normalized.get("forum_level"),
             "court_name": normalized.get("court_name"),
+            "court_forum_number": normalized.get("court_forum_number"),
             "case_number": normalized.get("case_number"),
             "filing_number": normalized.get("filing_number"),
             "filing_date": normalized.get("filing_date"),
