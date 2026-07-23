@@ -4,9 +4,10 @@
 
 **Source:** `Bulk_Matter_Validation_Issue_Report.docx`
 
-**Status:** Compatibility candidate implemented; targeted API, full web,
-production build, and local browser E2E are green. Full CI and deployed
-production validation remain pending.
+**Status:** Production deployed from merge commit `e763584`. Targeted and full
+CI, security, CodeQL, migration, immutable-image, Cloud Run traffic, public
+health, ClamAV sidecar presence/digest, and post-deploy workflow
+`30019214017` passed.
 
 **Related PRD:** [Bulk Matter Creation](./PRD_BULK_MATTER_CREATION_2026-07-17.md)
 
@@ -228,25 +229,27 @@ For example, `RELAXED-CASE-1` is valid; `RELAXED/CASE#1` is invalid.
 | Matter UI | `apps/web/app/app/matters/[id]/page.tsx` | Court Forum Number display |
 | User documentation | `README.md`, `apps/api/README.md`, `docs/`, `apps/web/app/guide/page.tsx` | Operator and end-user contract |
 
-## 8. Validation evidence — to be completed
+## 8. Validation evidence
 
-No row below is a test or deployment claim. Replace `Pending` only with an
-exact command/run identifier, timestamp, result count, and durable evidence
-location.
+Results below identify exact local artifacts or remote run/execution IDs.
+Overlapping local subset reports are not added together as unique tests.
 
 ### 8.1 Automated validation
 
 | Gate | Command/scope | Expected proof | Status/evidence |
 |---|---|---|---|
-| Targeted API | `pytest -q tests/test_matter_imports.py tests/test_matter_court_forum_number.py tests/test_20260723_court_forum_number_migration.py tests/test_matter_code_validation.py tests/test_migration_order.py` | Compatibility, persistence, formula, strict-code, migration-order, and upgrade/downgrade/re-upgrade coverage passes | PASS - 54 tests on 2026-07-23; JUnit `.tmp/test-results/api-bulk-validation-final.xml` |
-| Full API regression | `npm run test:api` | No backend regressions | Pending |
-| API lint | `ruff check --no-cache src tests` | Complete API source/test lint passes | PASS on 2026-07-23 |
-| Full web unit regression | `vitest run` | Import/Matter views and all web regressions pass | PASS - 117 files/547 tests; JUnit `.tmp/test-results/web-unit.xml` |
-| Web typecheck | `npm run typecheck:web` | TypeScript contracts compile | PASS on 2026-07-23 |
-| Web production build | `npm run build:web` | Next.js production build completes | PASS - 64 static routes generated on 2026-07-23 |
-| Browser E2E | `playwright test --config=playwright.app.config.ts tests/e2e/bulk-matter-creation.spec.ts --project=app-chromium` | Preview, strict invalid row, commit, Matter readback, history, error report, and Viewer denial | PASS - 2 tests; JUnit `.tmp/test-results/bulk-matter-e2e.xml` |
+| Targeted API | `pytest -q tests/test_matter_imports.py tests/test_matter_court_forum_number.py tests/test_20260723_court_forum_number_migration.py tests/test_matter_code_validation.py tests/test_migration_order.py` | Compatibility, persistence, formula, strict-code, migration-order, and upgrade/downgrade/re-upgrade coverage passes | PASS - 54 tests; JUnit `.tmp/test-results/api-bulk-validation-post-security.xml` |
+| Full API regression | Four deterministic pytest/coverage shards in CI | No backend regressions and every coverage threshold passes | PASS - 2,137 passed, 21 skipped across 184 files; all 16 coverage gates passed; CI run `30012869723` |
+| PostgreSQL/pgvector | `pytest -m postgres` on PostgreSQL 17 + pgvector | Migration and PostgreSQL-specific behavior passes | PASS - 13 tests; CI run `30012869723` |
+| API lint | `ruff check src tests` | Complete API source/test lint passes | PASS - CI run `30012869723` |
+| Full web unit regression | `vitest run` | Import/Matter views and all web regressions pass | PASS - 117 files/547 tests; JUnit `.tmp/test-results/web-unit-post-security.xml`; CI run `30012869723` |
+| Web typecheck | `npm run typecheck:web` | TypeScript contracts compile | PASS - CI run `30012869723` |
+| Web production build | `npm run build:web` | Next.js production build completes | PASS - 64/64 pages generated locally and CI; local log `.tmp/test-results/web-build-post-security.stdout.log` |
+| Browser E2E | Local focused spec plus CI app configuration | Preview, strict invalid row, commit, Matter readback, history, error report, and Viewer denial; no wider app regression | PASS - local 2 tests in `.tmp/test-results/bulk-matter-e2e-post-security.xml`; CI 118 passed/1 skipped in run `30012869723` |
 | Production E2E discovery | `playwright test --config=playwright.prod-ram.config.ts tests/e2e/ram-2026-07-23-prod.spec.ts --project=tester-prod-chromium --list` | Dated deployed regression is selected | PASS - 1 production test discovered |
+| Deployed production E2E | GitHub Actions workflow `30019214017` | Templates, compatibility preview, strict code, partial commit, readback, idempotency, history, and cleanup pass on the live services | PASS - dated bulk-Matter test in 5.9 s; RAM batch 47 passed/4 skipped; notice suite 2/2 passed |
 | Diff hygiene | `git diff --check` | No whitespace errors | PASS on 2026-07-23 |
+| Security and generated contract | npm/pip audits, gitleaks, license allow-list, secret references, OpenAPI clean diff, CodeQL Actions/JavaScript/Python | No known high/critical dependency issue, secret leak, contract drift, or CodeQL alert | PASS - Security `30012868237`; CodeQL `30012868277` |
 
 Minimum compatibility cases:
 
@@ -269,36 +272,76 @@ Minimum compatibility cases:
 
 | Item | Evidence to record | Status/evidence |
 |---|---|---|
-| Source revision | Commit SHA and clean release scope | Pending |
-| Database | Migration revision applied and `court_forum_number` present | Pending |
-| API deployment | Cloud Run revision/image digest and traffic percentage | Pending |
-| Web deployment | Cloud Run revision/image digest and traffic percentage | Pending |
-| Health/revision | Production health and revision responses | Pending |
-| Rollback target | Prior known-good API/web revisions | Pending |
+| Source revision | Commit SHA and clean release scope | PASS - PR #144 head `d7b576f`; merge/deployed SHA `e763584f12d87ce07da84d201b430b3d9f8cfc92`; at deploy start `2026-07-23T14:46:47Z`, `HEAD == origin/main == e763584`; tested application trees were identical and API/web contexts were clean |
+| Database | Migration revision applied and `court_forum_number` present | PASS - `caseops-migrate-job-dh6tv`, 1/1 task, completed 2026-07-23T14:51:23Z; runtime import/readback is the column proof |
+| API deployment | Cloud Run revision/image digest and traffic percentage | PASS - `caseops-api-00211-fgf`; `sha256:88cd609ff212afd44169e52926dfc8474fa11b90fcb65479e6ed5a1d7b922aba`; 100% |
+| Web deployment | Cloud Run revision/image digest and traffic percentage | PASS - `caseops-web-00190-d7b`; `sha256:acb8f24eb3a52ee832598f48e74ccd0454ce944389c8ce615cb9ec782e626928`; 100% |
+| Health/revision | Production health and revision responses | PASS - API `status=ok`; web HTTP 200; latest-created equals latest-ready; runtime/artifact digests match; ClamAV present |
+| Background jobs | Migration and four recurring templates use immutable API image | PASS - all five point to API digest `sha256:88cd609ff212afd44169e52926dfc8474fa11b90fcb65479e6ed5a1d7b922aba` |
+| Rollback target | Prior known-good API/web revisions | `caseops-api-00210-fnv` / `caseops-web-00189-k9f`; do not downgrade additive migration `20260723_0001` after writes |
+
+The PowerShell evidence wrapper classified ordinary `gcloud` progress written
+to stderr as a `NativeCommandError` after the native deployment completed.
+That wrapper result is not used as release proof. Certification above comes
+from independent Cloud Build results, migration execution state, Cloud Run
+latest-created/latest-ready revisions and traffic, Artifact Registry/runtime
+digests, recurring-job images, public health, and ClamAV sidecar
+presence/digest checks.
+
+Pre-existing operations note: the legal-update and case-tracking midnight
+schedulers reported status code 7 on their 22 July attempts, and their latest
+actual executions remained from 31 May at the pre-deploy check. This release
+updated their job templates to the new immutable API digest; it does not claim
+that unrelated scheduler invocation issue is resolved.
 
 ### 8.3 Production smoke matrix
 
-Use a unique prefix and non-sensitive data. Record created IDs and remove test
-records only through an approved audited workflow.
+Workflow `30019214017` ran against `https://caseops.ai` and
+`https://api.caseops.ai` from verifier commit `b06795b`. Its production
+application files are identical to deployed `e763584`; it adds only a one-line
+verifier-selector correction. The workflow completed at
+2026-07-23T15:23:57Z: the 51-test RAM batch reported
+47 passed/4 skipped in 13.3 minutes, the dated bulk-Matter test passed in
+5.9 seconds, and the separate notice suite passed 2/2.
+
+The first post-deploy run `30018039479` had already passed the feature's
+template, preview, strict-code, partial-commit, readback, and idempotency
+assertions. It then stopped at line 698 because `getByLabel("Search")` matched
+four page elements. The corrected verifier targets
+`#matter-import-history-search`. The first run's other failure was the
+pre-existing 15 July notice-row timing case also seen before deployment in
+scheduled run `30012441624`; it passed on the corrected run. The first run's
+RAM batch reported 46 passed/2 failed/2 skipped/1 did not run in 11.7 minutes,
+and the separate notice-module step was skipped.
 
 | Case | Expected result | Status/evidence |
 |---|---|---|
-| Download CSV and XLSX templates | 21 columns; Court Forum Number follows Court | Pending |
-| Compatible valid row | Blank Client/Status, non-catalog Practice Area, normalized Forum, punctuation, and Court Forum Number preview as valid | Pending |
-| Commit/readback | Matter is Active; optional client remains blank; all compatible text/date/court fields match | Pending |
-| Strict invalid row | Slash/`#` Matter Code and formula-like value are rejected with actionable errors | Pending |
-| Partial success | Valid row is created; invalid row remains in formula-safe error CSV | Pending |
-| History/audit/notification | Tenant-scoped records and expected event intents exist without sensitive row payload in audit metadata | Pending |
-| Idempotency/staleness | Repeat commit creates nothing; commit-time duplicate is caught | Pending |
-| Access control | Owner/Admin/delegated capability allowed; Viewer and cross-tenant access denied | Pending |
+| Download CSV and XLSX templates | 21 columns; Court Forum Number follows Court | PASS in `30019214017` |
+| Compatible valid row | Blank Client/Status, non-catalog Practice Area, normalized Forum, asserted punctuation, and Court Forum Number preview as valid | PASS - Windows-1252, semicolon delimiter, title row, aliases, `HIGH COURT`, and punctuation in title, Practice Area, Court Forum Number, and phone; filing date normalized |
+| Commit/readback | Asserted Matter fields match the preview | PASS - title, code, Active status, null Client, contact number, Practice Area, canonical forum, Court Forum Number, and filing date |
+| Strict invalid row | Slash/`#` Matter Code and formula-like value are rejected with actionable errors | Matter Code PASS in production; formula-like input was not executed in production and remains local/CI evidence only |
+| Partial success | Valid row is created; invalid row remains in a downloadable error CSV | PASS - 1 created/1 failed; leading-formula error-cell sanitization was not separately exercised in production |
+| History/audit/notification | Tenant-scoped history reopens; expected audit and notification intents exist | History PASS; audit-event and notification-intent inspection was not executed in production |
+| Idempotency/staleness | Repeat commit creates nothing; commit-time duplicate is caught | Repeat-commit idempotency PASS; commit-time staleness injection was not executed in production |
+| Access control | Authorized capability allowed; Viewer and cross-tenant access denied | Configured QA tester slug/email and `matters:create`, `matters:edit`, `matters:archive`, and `matters:bulk_import` capabilities PASS; role/Owner status, delegated Manager, Viewer, and cross-tenant cases were not executed in production |
+| Case variants | All four source High Court case examples normalize | `HIGH COURT` PASS in production; `High Court`, `high court`, and `High court` are local/CI evidence only |
+| Cleanup | Lifecycle cleanup is requested without hard deletion | PASS at request/hook level: each discovered non-Disposed Matter received an HTTP-200 lifecycle request to `Disposed`; any still-validated preview was cancelled; no cleanup/hook failure. The test did not re-read post-transition state or inspect audit events |
+
+The successful workflow uploaded no failure artifact because the
+failure-only upload step was correctly skipped. Its run and job logs are the
+durable production proof. Local/CI cases are not promoted to
+production-executed claims.
 
 ## 9. Release decision and rollback
 
-Release only when every required automated gate and production smoke case has
-evidence, the deployed revisions receive intended traffic, and no unrelated
-regression remains open.
+**Decision: ACCEPTED for the bulk-Matter compatibility feature.** The exact
+merged application commit is deployed, migration and immutable-image
+certification passed, both services receive 100% intended traffic, health
+checks pass, full CI/security/CodeQL are green, and the dated live feature
+scenario passed. The unexecuted production cases identified above retain green
+local/CI evidence but are not represented as live-production proof.
 
-If production validation fails:
+No rollback was triggered. If a later production validation fails:
 
 1. stop new bulk imports by removing/hiding the entry point or capability;
 2. route API/web traffic to the recorded prior known-good revisions;
@@ -310,11 +353,11 @@ If production validation fails:
 
 ## 10. Final handoff fields
 
-- Final commit SHA: Pending
-- Automated test summary: Local targeted API 54 passed; full web 547 passed; API lint, TypeScript, and production build passed. Full CI pending.
-- E2E result: Local bulk-import browser regression 2 passed; deployed-production regression pending.
-- Production API revision/digest/traffic: Pending
-- Production web revision/digest/traffic: Pending
-- Production smoke result: Pending
-- Final evidence artifact in `C:\Users\mishr\Downloads`: Pending
-- Reviewer/date: Pending
+- Final commit SHA: `e763584f12d87ce07da84d201b430b3d9f8cfc92`
+- Automated test summary: Local targeted API 54 passed; full API CI 2,137 passed/21 skipped plus 13 PostgreSQL tests; full web 547 passed; CI Playwright 118 passed/1 skipped; lint, typecheck, build, security, OpenAPI, and CodeQL passed.
+- E2E result: Local bulk-import browser regression 2 passed; deployed-production workflow `30019214017` passed (RAM 47 passed/4 skipped; dated feature 5.9 s; notice suite 2/2).
+- Production API revision/digest/traffic: `caseops-api-00211-fgf`; `sha256:88cd609ff212afd44169e52926dfc8474fa11b90fcb65479e6ed5a1d7b922aba`; 100%.
+- Production web revision/digest/traffic: `caseops-web-00190-d7b`; `sha256:acb8f24eb3a52ee832598f48e74ccd0454ce944389c8ce615cb9ec782e626928`; 100%.
+- Production smoke result: PASS within the explicit production-coverage boundary in section 8.3; cleanup PASS by enforced hook.
+- Final evidence artifact in `C:\Users\mishr\Downloads`: `CaseOps_Bulk_Matter_Validation_2026-07-23`
+- Reviewer/date: CaseOps Engineering with Codex verification / 23 July 2026

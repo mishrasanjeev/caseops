@@ -1731,8 +1731,10 @@ Type: Backend + Web
 Priority: P2
 Dependencies: Matter/document creation, attachment pipeline
 Status: Production matter-creation workflow implemented 2026-07-17. The
-23 July compatibility candidate is implemented and locally verified but awaits
-full CI and production deployment evidence. Authorized
+23 July compatibility release was deployed from merge commit `e763584`;
+full CI, security, migration, immutable-image, traffic, and health
+certification passed. Post-deploy workflow `30019214017` passed, including
+the dated bulk-Matter production scenario. Authorized
 Owner/Admin/delegated Matter Manager users can download controlled CSV/XLSX
 templates, persist a row-level preview, confirm partial-success creation after
 commit-time revalidation, download a safe error CSV, search tenant history, and

@@ -695,7 +695,7 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
         response.request().method() === "GET"
       );
     });
-    await page.getByLabel("Search").fill(importFilename);
+    await page.locator("#matter-import-history-search").fill(importFilename);
     await page.getByRole("button", { name: "Search" }).click();
     const historyResponse = await historyPromise;
     await expectStatus(historyResponse, 200, "search production import history");

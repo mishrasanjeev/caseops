@@ -2,7 +2,7 @@
 
 **Document ID:** PRD-BMC-2026-07-17
 
-**Status:** Compatibility candidate implemented and locally verified; full CI and production deployment pending
+**Status:** Compatibility release deployed to production from `e763584`; full CI, infrastructure certification, and post-deploy workflow `30019214017` passed
 
 **Owner:** CaseOps Product and Engineering
 
