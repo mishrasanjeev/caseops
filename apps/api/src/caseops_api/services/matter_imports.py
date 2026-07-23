@@ -356,6 +356,7 @@ def _decode_csv_text(content: bytes) -> str:
         if "\x00" not in decoded:
             return decoded
     except UnicodeDecodeError:
+        # A failed UTF-8 probe is expected for supported Windows-1252 exports.
         pass
     # Excel on Windows commonly exports CSV using the local ANSI code page.
     # cp1252 is deterministic and preserves the common legal/business
@@ -1911,13 +1912,17 @@ def _matter_template_xlsx_bytes() -> bytes:
         ],
         [
             "Flexible values",
-            "Status and Forum ignore case, spaces, hyphens, and underscores. "
-            "Business punctuation is accepted in descriptive fields.",
+            (
+                "Status and Forum ignore case, spaces, hyphens, and underscores. "
+                + "Business punctuation is accepted in descriptive fields."
+            ),
         ],
         [
             "Court Forum Number",
-            "Optional court/forum reference number, stored separately from Case Number "
-            "and Filing Number.",
+            (
+                "Optional court/forum reference number, stored separately from Case Number "
+                + "and Filing Number."
+            ),
         ],
         [
             "Dates",
@@ -1936,9 +1941,11 @@ def _matter_template_xlsx_bytes() -> bytes:
         ["Import", "Upload this file, review every validation error, then confirm import."],
         [
             "Security",
-            "Formula cells and values beginning with =, +, -, or @ are rejected. "
-            "A syntactically valid international phone may begin with + only in "
-            "Client Contact Number.",
+            (
+                "Formula cells and values beginning with =, +, -, or @ are rejected. "
+                + "A syntactically valid international phone may begin with + only in "
+                + "Client Contact Number."
+            ),
         ],
         [
             "Limits",

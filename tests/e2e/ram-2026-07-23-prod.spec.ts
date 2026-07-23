@@ -337,12 +337,17 @@ function readZipEntry(bytes: Buffer, targetName: string): Buffer {
 }
 
 function decodeXmlText(value: string): string {
-  return value
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'");
+  const entities = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&apos;": "'",
+  } as const;
+  return value.replace(
+    /&(amp|lt|gt|quot|apos);/g,
+    (entity) => entities[entity as keyof typeof entities],
+  );
 }
 
 function xlsxTemplateHeaders(bytes: Buffer): string[] {
@@ -485,6 +490,8 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
   });
 
   test("downloads templates, validates compatibility, commits once, and reopens history", async () => {
+    expect(decodeXmlText("&amp;lt;&lt;")).toBe("&lt;<");
+
     await page.goto(`${PROD_BASE_URL}/app/matters/imports`);
     await expect(
       page.getByRole("heading", { name: "Bulk upload matters" }),

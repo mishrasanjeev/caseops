@@ -12,7 +12,6 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-import caseops_api.services.matter_imports as matter_imports_service
 from caseops_api.db.models import (
     AuditEvent,
     DocumentProcessingJob,
@@ -28,6 +27,7 @@ from caseops_api.services.matter_imports import (
     MATTER_IMPORT_XLSX_MAX_METADATA_BYTES,
     MATTER_IMPORT_XLSX_MAX_SHARED_STRING_CHARS,
     MATTER_IMPORT_XLSX_MAX_SHARED_STRINGS,
+    ElementTree,
     _business_match_key,
     _normalise_forum_level,
     _parse_import_date,
@@ -647,14 +647,14 @@ def test_xlsx_parser_streams_shared_strings_without_materializing_the_xml(
             "</sst>"
         ),
     )
-    original_fromstring = matter_imports_service.ElementTree.fromstring
+    original_fromstring = ElementTree.fromstring
 
-    def reject_shared_string_dom(content: bytes) -> matter_imports_service.ElementTree.Element:
+    def reject_shared_string_dom(content: bytes) -> ElementTree.Element:
         assert b"<sst " not in content
         return original_fromstring(content)
 
     monkeypatch.setattr(
-        matter_imports_service.ElementTree,
+        ElementTree,
         "fromstring",
         reject_shared_string_dom,
     )
@@ -751,8 +751,7 @@ def test_xlsx_parser_caps_shared_string_count_and_text(
     assert "too many shared strings" in str(count_error.value.detail)
 
     monkeypatch.setattr(
-        matter_imports_service,
-        "MATTER_IMPORT_XLSX_MAX_SHARED_TEXT_CHARS",
+        "caseops_api.services.matter_imports.MATTER_IMPORT_XLSX_MAX_SHARED_TEXT_CHARS",
         5,
     )
     excessive_total_text = _with_xlsx_entry(
