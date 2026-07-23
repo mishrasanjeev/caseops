@@ -4,8 +4,8 @@
  * This suite signs in with tester credentials supplied through environment
  * variables, verifies both deployed templates, imports one uniquely identified
  * Matter from a Windows-1252 semicolon-delimited client register, proves strict
- * Matter Code validation and commit idempotency, and leaves every created
- * Matter in the terminal Disposed state.
+ * Matter Code validation and commit idempotency, and verifies successful
+ * cleanup requests for every discovered non-Disposed Matter.
  *
  * Run only after the candidate commit and database migration are deployed:
  *
@@ -485,7 +485,7 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
     }
     expect(
       cleanupFailures,
-      "production regression cleanup must cancel previews and leave no test Matter operational",
+      "production regression cleanup requests must cancel previews and return HTTP 200 for discovered Matters",
     ).toEqual([]);
   });
 
@@ -695,7 +695,7 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
         response.request().method() === "GET"
       );
     });
-    await page.getByLabel("Search").fill(importFilename);
+    await page.locator("#matter-import-history-search").fill(importFilename);
     await page.getByRole("button", { name: "Search" }).click();
     const historyResponse = await historyPromise;
     await expectStatus(historyResponse, 200, "search production import history");

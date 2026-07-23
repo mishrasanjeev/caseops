@@ -239,9 +239,11 @@ compatible client register, create every valid matter after confirmation, and
 retain a searchable audit/error history.
 
 Release status (23 July 2026): the compatibility revision described below is
-prepared, but its automated, end-to-end, and production deployment evidence is
-still pending. The existing bulk-creation workflow remains the production
-baseline until the dated validation guide records completion.
+deployed from merge commit `e763584`. Full CI, security, database migration,
+Cloud Run revision/digest/traffic, and public-health certification passed.
+Post-deploy workflow `30019214017` passed, including the dated bulk-Matter
+scenario and its lifecycle-cleanup hook. See the dated validation guide for
+the exact live-production coverage boundary and cleanup-proof limits.
 
 Who can use it:
 

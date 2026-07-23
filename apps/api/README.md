@@ -22,11 +22,13 @@ CaseOps local API runtime is Postgres-first. Use `CASEOPS_DATABASE_URL` to point
 
 ## Bulk Matter Creation
 
-The base workflow is in production. The 23 July 2026 compatibility revision
-documented in this section is a release candidate whose targeted API, full web,
-production-build, and local browser E2E evidence is green. Full CI and
-production deployment evidence remain pending in the dated validation guide
-linked below.
+The 23 July 2026 compatibility revision is deployed in production from merge
+commit `e763584`. Targeted and full CI, security, CodeQL, migration, Cloud Run
+revision/digest/traffic, public-health, and local browser evidence are green.
+Post-deploy workflow `30019214017` also passed: its 51-test RAM batch reported
+47 passed/4 skipped, the dated bulk-Matter scenario passed in 5.9 seconds, and
+the separate notice suite passed 2/2. The dated validation guide distinguishes
+live-production assertions from cases proved only by local or pull-request CI.
 
 The production matter import workflow is tenant-scoped and capability-gated by
 `matters:bulk_import` (Owner/Admin by default; delegable to a custom Matter
