@@ -345,6 +345,14 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   executed cleanly (`caseops-migrate-job-nxbkc`, no-op since alembic
   already at `20260424_0001`).
 
+  **2026-07-28 release-lineage regression discovered:** the same gate
+  correctly stopped candidate `7495bc6` because production's
+  `alembic_version` referenced `20260723_0001`, which was absent from the
+  candidate API image. The web-only navigation fix was deployed safely; the
+  API image was not promoted. Keep this follow-up open until a migration
+  inventory/CI check proves every production-referenced revision is present in
+  the candidate image before the next API rollout.
+
 - `EG-003` `Implemented` Malware scanning enforcement (closed
   2026-04-25, deployed in revision `caseops-api-00049-m6c`).
   Evidence: `scripts/eg003-apply-clamav.sh` wires

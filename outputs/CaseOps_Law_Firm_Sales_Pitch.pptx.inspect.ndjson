@@ -1,0 +1,688 @@
+{"kind":"deck","id":"pr/doz8zh","name":"Deck"}
+{"kind":"layout","layoutId":"5981e6b6-f307-4a97-bd0a-093cfe80bda4","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"a3e70795-cea7-4699-addb-4f3babd2639c","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/yqmhft","slide":1,"title":"CASEOPS FOR LAW FIRMS","textShapes":8}
+{"kind":"shape","id":"sh/mtwra5gb","slide":1,"bbox":[0,0,610,720]}
+{"kind":"textbox","id":"sh/fepkzupw","slide":1,"text":"CASEOPS FOR LAW FIRMS","textPreview":"CASEOPS FOR LAW FIRMS","textChars":21,"textLines":1,"bbox":[42,44,430,24]}
+{"kind":"textbox","id":"sh/4r65wjud","slide":1,"text":"The operating system for litigation-heavy law firms.","textPreview":"The operating system for litigation-heavy law firms.","textChars":52,"textLines":1,"bbox":[42,116,500,250]}
+{"kind":"textbox","id":"sh/xc3ylc7u","slide":1,"text":"Run matters, research, drafting, hearings, court-order compliance, contracts, outside counsel, billing, and review queues from one matter-native workspace.","textPreview":"Run matters, research, drafting, hearings, court-order compliance, contracts, outside counsel, billing, and review queues from one matter...","textChars":155,"textLines":1,"bbox":[42,388,500,110]}
+{"kind":"shape","id":"sh/mlkjm1cf","slide":1,"bbox":[42,535,178,28]}
+{"kind":"textbox","id":"sh/f6dcbulw","slide":1,"text":"Citation-grounded AI","textPreview":"Citation-grounded AI","textChars":20,"textLines":1,"bbox":[54,541,154,18]}
+{"kind":"shape","id":"sh/4fu18jqh","slide":1,"bbox":[236,535,200,28]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":1,"text":"Review-first workflows","textPreview":"Review-first workflows","textChars":22,"textLines":1,"bbox":[248,541,176,18]}
+{"kind":"shape","id":"sh/lkjm1cfa","slide":1,"bbox":[42,578,170,28]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":1,"text":"India-ready billing","textPreview":"India-ready billing","textChars":19,"textLines":1,"bbox":[54,584,146,18]}
+{"kind":"textbox","id":"sh/3ex0nuxc","slide":1,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"image","id":"im/g7adsji5","slide":1,"name":"","alt":"Modern legal operations workspace with laptop dashboard and court papers","bbox":[468,0,812,720]}
+{"kind":"notes","id":"nt/yqmhft","slide":1,"text":""}
+{"kind":"slide","id":"sl/92ddzn","slide":2,"title":"MARKET MOMENT","textShapes":19}
+{"kind":"textbox","id":"sh/byhgn29g","slide":2,"text":"MARKET MOMENT","textPreview":"MARKET MOMENT","textChars":13,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/0je9cvix","slide":2,"text":"The data says litigation work is already at system scale.","textPreview":"The data says litigation work is already at system scale.","textChars":57,"textLines":1,"bbox":[42,72,920,108]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":2,"text":"Indian court data shows the operational load. AI economics shows the capacity upside. The law-firm buyer needs both in one controlled workflow.","textPreview":"Indian court data shows the operational load. AI economics shows the capacity upside. The law-firm buyer needs both in one controlled wor...","textChars":143,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/il0rqd4v","slide":2,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/0rqd4vmt","slide":2,"bbox":[42,238,270,250]}
+{"kind":"textbox","id":"sh/tcj6tova","slide":2,"text":"5.00Cr","textPreview":"5.00Cr","textChars":6,"textLines":1,"bbox":[64,260,226,72]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":2,"text":"district pending cases","textPreview":"district pending cases","textChars":22,"textLines":1,"bbox":[66,400,222,26]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":2,"text":"NJDG shows 5,00,47,690 pending District Court cases.","textPreview":"NJDG shows 5,00,47,690 pending District Court cases.","textChars":52,"textLines":1,"bbox":[66,432,222,42]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":2,"bbox":[352,238,270,250]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":2,"text":"12.69L","textPreview":"12.69L","textChars":6,"textLines":1,"bbox":[374,260,226,72]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":2,"text":"listed today","textPreview":"listed today","textChars":12,"textLines":1,"bbox":[376,400,222,26]}
+{"kind":"textbox","id":"sh/gfmlkjm1","slide":2,"text":"NJDG shows 12,68,577 District Court cases listed today.","textPreview":"NJDG shows 12,68,577 District Court cases listed today.","textChars":55,"textLines":1,"bbox":[376,432,222,42]}
+{"kind":"shape","id":"sh/rmhk3q5o","slide":2,"bbox":[662,238,270,250]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":2,"text":"64.56L","textPreview":"64.56L","textChars":6,"textLines":1,"bbox":[684,260,226,72]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":2,"text":"High Court pending","textPreview":"High Court pending","textChars":18,"textLines":1,"bbox":[686,400,222,26]}
+{"kind":"textbox","id":"sh/g7adsji5","slide":2,"text":"HC NJDG shows 64,55,550 pending High Court cases.","textPreview":"HC NJDG shows 64,55,550 pending High Court cases.","textChars":49,"textLines":1,"bbox":[686,432,222,42]}
+{"kind":"shape","id":"sh/nih4byhg","slide":2,"bbox":[972,238,266,250]}
+{"kind":"textbox","id":"sh/yxobm58z","slide":2,"text":"240h","textPreview":"240h","textChars":4,"textLines":1,"bbox":[994,260,222,72]}
+{"kind":"textbox","id":"sh/61032lsz","slide":2,"text":"AI time upside","textPreview":"AI time upside","textChars":14,"textLines":1,"bbox":[996,400,218,26]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":2,"text":"TR benchmark: nearly 240 hours per professional/year.","textPreview":"TR benchmark: nearly 240 hours per professional/year.","textChars":53,"textLines":1,"bbox":[996,432,218,42]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":2,"bbox":[0,570,1280,62]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":2,"text":"The sales question: can the firm turn live court pressure, matter work, review, and billing into one controlled system?","textPreview":"The sales question: can the firm turn live court pressure, matter work, review, and billing into one controlled system?","textChars":119,"textLines":1,"bbox":[42,592,1100,28]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":2,"text":"Sources: NJDG District Court and HC dashboards accessed 2026-07-10; Thomson Reuters Future of Professionals Report 2025.","textPreview":"Sources: NJDG District Court and HC dashboards accessed 2026-07-10; Thomson Reuters Future of Professionals Report 2025.","textChars":120,"textLines":1,"bbox":[42,638,1020,16]}
+{"kind":"notes","id":"nt/92ddzn","slide":2,"text":""}
+{"kind":"slide","id":"sl/e1t6q0","slide":3,"title":"THE OPERATING PAIN","textShapes":14}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":3,"text":"THE OPERATING PAIN","textPreview":"THE OPERATING PAIN","textChars":18,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":3,"text":"Firms lose margin when matter truth is scattered.","textPreview":"Firms lose margin when matter truth is scattered.","textChars":49,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/72x4nap4","slide":3,"text":"The problem is not lack of tools. It is that the tools do not share the same legal and operational truth.","textPreview":"The problem is not lack of tools. It is that the tools do not share the same legal and operational truth.","textChars":105,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/0z61032l","slide":3,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/itgfmlkj","slide":3,"bbox":[42,250,581,154]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":3,"bbox":[64,274,12,12]}
+{"kind":"textbox","id":"sh/0bi9s36h","slide":3,"text":"State gets rebuilt","textPreview":"State gets rebuilt","textChars":18,"textLines":1,"bbox":[90,268,511,44]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":3,"text":"Associates reconstruct the matter every time they move between email, folders, research, drafting, and billing.","textPreview":"Associates reconstruct the matter every time they move between email, folders, research, drafting, and billing.","textChars":111,"textLines":1,"bbox":[90,320,511,66]}
+{"kind":"shape","id":"sh/94fu18jq","slide":3,"bbox":[657,250,581,154]}
+{"kind":"shape","id":"sh/kjm1cfa9","slide":3,"bbox":[679,274,12,12]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":3,"text":"Partner review slows","textPreview":"Partner review slows","textChars":20,"textLines":1,"bbox":[705,268,511,44]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":3,"text":"The draft, authorities, last order, facts, and missing evidence rarely sit together when the reviewer opens the file.","textPreview":"The draft, authorities, last order, facts, and missing evidence rarely sit together when the reviewer opens the file.","textChars":117,"textLines":1,"bbox":[705,320,511,66]}
+{"kind":"shape","id":"sh/9gr2p8nq","slide":3,"bbox":[42,464,581,154]}
+{"kind":"shape","id":"sh/gvy90je9","slide":3,"bbox":[64,488,12,12]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":3,"text":"Deadlines become brittle","textPreview":"Deadlines become brittle","textChars":24,"textLines":1,"bbox":[90,482,511,44]}
+{"kind":"textbox","id":"sh/2p8nqxs7","slide":3,"text":"Court orders, listings, compliance directions, and ownership get lost between diaries, chats, and spreadsheets.","textPreview":"Court orders, listings, compliance directions, and ownership get lost between diaries, chats, and spreadsheets.","textChars":111,"textLines":1,"bbox":[90,534,511,66]}
+{"kind":"shape","id":"sh/9knih4by","slide":3,"bbox":[657,464,581,154]}
+{"kind":"shape","id":"sh/kzupwb2h","slide":3,"bbox":[679,488,12,12]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":3,"text":"Revenue arrives late","textPreview":"Revenue arrives late","textChars":20,"textLines":1,"bbox":[705,482,511,44]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":3,"text":"Time, invoice, recovery, write-off, and spend data sit outside the matter, so profitability is discovered after the work.","textPreview":"Time, invoice, recovery, write-off, and spend data sit outside the matter, so profitability is discovered after the work.","textChars":121,"textLines":1,"bbox":[705,534,511,66]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":3,"text":"Operational load signal: NJDG District Court dashboard shows 48,52,203 cases above 10 years, 15,27,325 undated cases, and 44,14,807 excessive dated cases.","textPreview":"Operational load signal: NJDG District Court dashboard shows 48,52,203 cases above 10 years, 15,27,325 undated cases, and 44,14,807 exces...","textChars":154,"textLines":1,"bbox":[42,633,1000,28]}
+{"kind":"notes","id":"nt/e1t6q0","slide":3,"text":""}
+{"kind":"slide","id":"sl/ri3ir1","slide":4,"title":"POSITIONING","textShapes":14}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":4,"text":"POSITIONING","textPreview":"POSITIONING","textChars":11,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":4,"text":"CaseOps makes the matter the operating system.","textPreview":"CaseOps makes the matter the operating system.","textChars":46,"textLines":1,"bbox":[42,72,850,92]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":4,"text":"Every workflow attaches back to one matter graph, so legal context, review state, team boundaries, and commercial state move together.","textPreview":"Every workflow attaches back to one matter graph, so legal context, review state, team boundaries, and commercial state move together.","textChars":134,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/3ex0nuxc","slide":4,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/lkjm1cfa","slide":4,"bbox":[486,256,310,150]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":4,"text":"Matter Graph","textPreview":"Matter Graph","textChars":12,"textLines":1,"bbox":[514,288,254,48]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":4,"text":"the live record of legal work","textPreview":"the live record of legal work","textChars":29,"textLines":1,"bbox":[522,348,238,32]}
+{"kind":"shape","id":"sh/ex0nuxc3","slide":4,"bbox":[70,256,150,82]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":4,"text":"Matters","textPreview":"Matters","textChars":7,"textLines":1,"bbox":[82,282,126,28]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":4,"bbox":[278,188,150,82]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":4,"text":"Documents","textPreview":"Documents","textChars":9,"textLines":1,"bbox":[290,214,126,28]}
+{"kind":"shape","id":"sh/7u54zido","slide":4,"bbox":[278,448,150,82]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":4,"text":"Research","textPreview":"Research","textChars":8,"textLines":1,"bbox":[290,474,126,28]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":4,"bbox":[842,188,150,82]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":4,"text":"Drafts","textPreview":"Drafts","textChars":6,"textLines":1,"bbox":[854,214,126,28]}
+{"kind":"shape","id":"sh/36hcrmhk","slide":4,"bbox":[842,448,150,82]}
+{"kind":"textbox","id":"sh/wval87ed","slide":4,"text":"Hearings","textPreview":"Hearings","textChars":8,"textLines":1,"bbox":[854,474,126,28]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":4,"bbox":[1050,256,150,82]}
+{"kind":"textbox","id":"sh/9knih4by","slide":4,"text":"Billing","textPreview":"Billing","textChars":7,"textLines":1,"bbox":[1062,282,126,28]}
+{"kind":"shape","id":"sh/kzupwb2h","slide":4,"bbox":[432,330,54,4]}
+{"kind":"shape","id":"sh/re1w7mp0","slide":4,"bbox":[796,330,54,4]}
+{"kind":"textbox","id":"sh/2t83itgf","slide":4,"text":"One record. Many workflows. Shared accountability.","textPreview":"One record. Many workflows. Shared accountability.","textChars":50,"textLines":1,"bbox":[350,576,580,42]}
+{"kind":"notes","id":"nt/ri3ir1","slide":4,"text":""}
+{"kind":"slide","id":"sl/izq1md","slide":5,"title":"WHY CASEOPS WINS","textShapes":12}
+{"kind":"textbox","id":"sh/upwb2hwf","slide":5,"text":"WHY CASEOPS WINS","textPreview":"WHY CASEOPS WINS","textChars":16,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":5,"text":"It combines practice management, legal intelligence, and trust controls.","textPreview":"It combines practice management, legal intelligence, and trust controls.","textChars":72,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/cvixczed","slide":5,"text":"Most tools solve one part of the law firm stack. CaseOps is designed to run the work end to end.","textPreview":"Most tools solve one part of the law firm stack. CaseOps is designed to run the work end to end.","textChars":96,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/nyd0z610","slide":5,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/54zidony","slide":5,"bbox":[42,250,374,300]}
+{"kind":"shape","id":"sh/cj6tovah","slide":5,"bbox":[66,280,18,18]}
+{"kind":"textbox","id":"sh/judg7ads","slide":5,"text":"Matter OS","textPreview":"Matter OS","textChars":9,"textLines":1,"bbox":[66,325,300,42]}
+{"kind":"textbox","id":"sh/u9knih4b","slide":5,"text":"Matters, parties, documents, hearings, drafts, tasks, billing, audit, and status live in one operating cockpit.","textPreview":"Matters, parties, documents, hearings, drafts, tasks, billing, audit, and status live in one operating cockpit.","textChars":111,"textLines":1,"bbox":[66,386,318,110]}
+{"kind":"shape","id":"sh/47y1kre1","slide":5,"bbox":[453,250,374,300]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":5,"bbox":[477,280,18,18]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":5,"text":"Legal AI inside the workflow","textPreview":"Legal AI inside the workflow","textChars":28,"textLines":1,"bbox":[477,325,300,42]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":5,"text":"Research, drafting, hearing prep, recommendations, and contract extraction are grounded in sources and matter facts.","textPreview":"Research, drafting, hearing prep, recommendations, and contract extraction are grounded in sources and matter facts.","textChars":116,"textLines":1,"bbox":[477,386,318,110]}
+{"kind":"shape","id":"sh/4vmtwra5","slide":5,"bbox":[864,250,374,300]}
+{"kind":"shape","id":"sh/tgfmlkjm","slide":5,"bbox":[888,280,18,18]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":5,"text":"Trust plane","textPreview":"Trust plane","textChars":11,"textLines":1,"bbox":[888,325,300,42]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":5,"text":"Tenant isolation, ethical walls, model policy, review gates, audit exports, and provider readiness labels are designed in from day one.","textPreview":"Tenant isolation, ethical walls, model policy, review gates, audit exports, and provider readiness labels are designed in from day one.","textChars":135,"textLines":1,"bbox":[888,386,318,110]}
+{"kind":"shape","id":"sh/4nap4r65","slide":5,"bbox":[0,614,1280,42]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":5,"text":"Sales translation: fewer fragmented subscriptions, less partner review friction, cleaner proof for clients and IT.","textPreview":"Sales translation: fewer fragmented subscriptions, less partner review friction, cleaner proof for clients and IT.","textChars":114,"textLines":1,"bbox":[42,624,1120,24]}
+{"kind":"notes","id":"nt/izq1md","slide":5,"text":""}
+{"kind":"slide","id":"sl/pa1x7k","slide":6,"title":"MATTER COCKPIT","textShapes":15}
+{"kind":"textbox","id":"sh/yxobm58z","slide":6,"text":"MATTER COCKPIT","textPreview":"MATTER COCKPIT","textChars":14,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":6,"text":"Every workflow starts from the live matter record.","textPreview":"Every workflow starts from the live matter record.","textChars":50,"textLines":1,"bbox":[42,72,900,92]}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":6,"text":"A matter is not just metadata. It is the operating surface where lawyers see what is true, what is pending, and what needs review.","textPreview":"A matter is not just metadata. It is the operating surface where lawyers see what is true, what is pending, and what needs review.","textChars":130,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/r65wjudg","slide":6,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/9cvixcze","slide":6,"bbox":[42,250,580,344]}
+{"kind":"textbox","id":"sh/gr2p8nqx","slide":6,"text":"Matter cockpit contains","textPreview":"Matter cockpit contains","textChars":23,"textLines":1,"bbox":[70,280,330,32]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":6,"bbox":[74,335,10,10]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":6,"text":"Parties, forum, stage, owner, team scope","textPreview":"Parties, forum, stage, owner, team scope","textChars":40,"textLines":1,"bbox":[98,326,466,26]}
+{"kind":"shape","id":"sh/wb2hwfyx","slide":6,"bbox":[74,373,10,10]}
+{"kind":"textbox","id":"sh/lwval87e","slide":6,"text":"Documents, orders, pleadings, evidence","textPreview":"Documents, orders, pleadings, evidence","textChars":38,"textLines":1,"bbox":[98,364,466,26]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":6,"bbox":[74,411,10,10]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":6,"text":"Hearings, next date, provenance, manual locks","textPreview":"Hearings, next date, provenance, manual locks","textChars":45,"textLines":1,"bbox":[98,402,466,26]}
+{"kind":"shape","id":"sh/w3m94fu1","slide":6,"bbox":[74,449,10,10]}
+{"kind":"textbox","id":"sh/loj2t83i","slide":6,"text":"Drafts, review state, citations, versions","textPreview":"Drafts, review state, citations, versions","textChars":41,"textLines":1,"bbox":[98,440,466,26]}
+{"kind":"shape","id":"sh/ex0nuxc3","slide":6,"bbox":[74,487,10,10]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":6,"text":"Tasks, deadlines, compliance directions","textPreview":"Tasks, deadlines, compliance directions","textChars":39,"textLines":1,"bbox":[98,478,466,26]}
+{"kind":"shape","id":"sh/szqtcj6t","slide":6,"bbox":[74,525,10,10]}
+{"kind":"textbox","id":"sh/lkjm1cfa","slide":6,"text":"Time, invoices, payments, write-offs, audit","textPreview":"Time, invoices, payments, write-offs, audit","textChars":43,"textLines":1,"bbox":[98,516,466,26]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":6,"bbox":[675,250,563,344]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":6,"text":"Partner payoff","textPreview":"Partner payoff","textChars":14,"textLines":1,"bbox":[714,292,370,38]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":6,"text":"The reviewer opens one matter and sees the draft, citations, last order, missing facts, authority context, billing state, and audit trail without asking three people for status.","textPreview":"The reviewer opens one matter and sees the draft, citations, last order, missing facts, authority context, billing state, and audit trail...","textChars":177,"textLines":1,"bbox":[714,354,420,130]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":6,"text":"Less status chasing. Better legal review.","textPreview":"Less status chasing. Better legal review.","textChars":41,"textLines":1,"bbox":[714,528,420,34]}
+{"kind":"notes","id":"nt/pa1x7k","slide":6,"text":""}
+{"kind":"slide","id":"sl/nipziz","slide":7,"title":"RESEARCH AND CITATIONS","textShapes":18}
+{"kind":"textbox","id":"sh/al87ed8b","slide":7,"text":"RESEARCH AND CITATIONS","textPreview":"RESEARCH AND CITATIONS","textChars":22,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":7,"text":"Research is grounded before it is generative.","textPreview":"Research is grounded before it is generative.","textChars":45,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":7,"text":"CaseOps does not treat legal research as a chatbot prompt. It retrieves, filters, cites, and keeps uncertainty visible.","textPreview":"CaseOps does not treat legal research as a chatbot prompt. It retrieves, filters, cites, and keeps uncertainty visible.","textChars":119,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/zupwb2hw","slide":7,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/a9w3m94f","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/h0fepkzu","slide":7,"bbox":[42,258,270,244]}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":7,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[64,284,62,52]}
+{"kind":"textbox","id":"sh/zqtcj6to","slide":7,"text":"Ask the issue","textPreview":"Ask the issue","textChars":13,"textLines":1,"bbox":[64,358,220,28]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":7,"text":"Phrase the fact pattern or legal question in natural language.","textPreview":"Phrase the fact pattern or legal question in natural language.","textChars":62,"textLines":1,"bbox":[64,402,220,62]}
+{"kind":"shape","id":"sh/g3ex0nux","slide":7,"bbox":[346,258,270,244]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":7,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[368,284,62,52]}
+{"kind":"textbox","id":"sh/yxobm58z","slide":7,"text":"Retrieve sources","textPreview":"Retrieve sources","textChars":16,"textLines":1,"bbox":[368,358,220,28]}
+{"kind":"textbox","id":"sh/nih4byhg","slide":7,"text":"Search statutes, judgments, matter documents, and internal precedents.","textPreview":"Search statutes, judgments, matter documents, and internal precedents.","textChars":70,"textLines":1,"bbox":[368,402,220,62]}
+{"kind":"shape","id":"sh/gr2p8nqx","slide":7,"bbox":[650,258,270,244]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":7,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[672,284,62,52]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":7,"text":"Cite the answer","textPreview":"Cite the answer","textChars":15,"textLines":1,"bbox":[672,358,220,28]}
+{"kind":"textbox","id":"sh/r65wjudg","slide":7,"text":"Return authorities, snippets, assumptions, contrary signals, and gaps.","textPreview":"Return authorities, snippets, assumptions, contrary signals, and gaps.","textChars":70,"textLines":1,"bbox":[672,402,220,62]}
+{"kind":"shape","id":"sh/gfmlkjm1","slide":7,"bbox":[954,258,270,244]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":7,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[976,284,62,52]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":7,"text":"Save to matter","textPreview":"Save to matter","textChars":14,"textLines":1,"bbox":[976,358,220,28]}
+{"kind":"textbox","id":"sh/4nap4r65","slide":7,"text":"Attach the note, shortlist, or authority card to the matter for reuse.","textPreview":"Attach the note, shortlist, or authority card to the matter for reuse.","textChars":70,"textLines":1,"bbox":[976,402,220,62]}
+{"kind":"shape","id":"sh/b2hwfyxo","slide":7,"bbox":[42,554,1196,54]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":7,"text":"Rule: weak evidence returns uncertainty or refusal. The system should never invent a case, statute, fact, or quote.","textPreview":"Rule: weak evidence returns uncertainty or refusal. The system should never invent a case, statute, fact, or quote.","textChars":115,"textLines":1,"bbox":[64,571,1080,22]}
+{"kind":"notes","id":"nt/nipziz","slide":7,"text":""}
+{"kind":"slide","id":"sl/gmdf1q","slide":8,"title":"DRAFTING STUDIO","textShapes":15}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":8,"text":"DRAFTING STUDIO","textPreview":"DRAFTING STUDIO","textChars":15,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":8,"text":"First drafts get faster, review gets stricter.","textPreview":"First drafts get faster, review gets stricter.","textChars":46,"textLines":1,"bbox":[42,72,910,92]}
+{"kind":"textbox","id":"sh/0fepkzup","slide":8,"text":"The product promise is not unverifiable speed. It is reviewable legal work grounded in matter facts, authorities, and court-specific requirements.","textPreview":"The product promise is not unverifiable speed. It is reviewable legal work grounded in matter facts, authorities, and court-specific requ...","textChars":146,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":8,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/tovahoza","slide":8,"bbox":[42,258,258,190]}
+{"kind":"shape","id":"sh/032lszqt","slide":8,"bbox":[64,282,12,12]}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":8,"text":"Input","textPreview":"Input","textChars":5,"textLines":1,"bbox":[90,276,188,44]}
+{"kind":"textbox","id":"sh/il0rqd4v","slide":8,"text":"Matter facts, confirmed extraction fields, statute sections, orders, documents, and internal templates.","textPreview":"Matter facts, confirmed extraction fields, statute sections, orders, documents, and internal templates.","textChars":103,"textLines":1,"bbox":[90,332,188,98]}
+{"kind":"shape","id":"sh/ovahoza1","slide":8,"bbox":[350,258,258,190]}
+{"kind":"shape","id":"sh/dg7adsji","slide":8,"bbox":[372,282,12,12]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":8,"text":"Generate","textPreview":"Generate","textChars":8,"textLines":1,"bbox":[398,276,188,44]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":8,"text":"Draft types include litigation templates, Supreme Court escalation pack, court-format profiles, and filing bundles.","textPreview":"Draft types include litigation templates, Supreme Court escalation pack, court-format profiles, and filing bundles.","textChars":115,"textLines":1,"bbox":[398,332,188,98]}
+{"kind":"shape","id":"sh/onyd0z61","slide":8,"bbox":[658,258,258,190]}
+{"kind":"shape","id":"sh/d8v6psfi","slide":8,"bbox":[680,282,12,12]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":8,"text":"Verify","textPreview":"Verify","textChars":6,"textLines":1,"bbox":[706,276,188,44]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":8,"text":"Inline citations, placeholders for unknown facts, statute checks, citation coverage, and version comparison.","textPreview":"Inline citations, placeholders for unknown facts, statute checks, citation coverage, and version comparison.","textChars":108,"textLines":1,"bbox":[706,332,188,98]}
+{"kind":"shape","id":"sh/oj2t83it","slide":8,"bbox":[966,258,272,190]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":8,"bbox":[988,282,12,12]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":8,"text":"Review","textPreview":"Review","textChars":6,"textLines":1,"bbox":[1014,276,202,44]}
+{"kind":"textbox","id":"sh/obm58z25","slide":8,"text":"Submit, request changes, approve, finalize, export DOCX/PDF, and preserve audit on every state transition.","textPreview":"Submit, request changes, approve, finalize, export DOCX/PDF, and preserve audit on every state transition.","textChars":106,"textLines":1,"bbox":[1014,332,202,98]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":8,"bbox":[130,492,1020,4]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":8,"text":"What changes in the firm","textPreview":"What changes in the firm","textChars":24,"textLines":1,"bbox":[42,538,550,34]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":8,"text":"Associates spend less time assembling first drafts and more time improving arguments. Partners review the chain of facts and sources directly in the matter.","textPreview":"Associates spend less time assembling first drafts and more time improving arguments. Partners review the chain of facts and sources dire...","textChars":156,"textLines":1,"bbox":[486,530,705,52]}
+{"kind":"notes","id":"nt/gmdf1q","slide":8,"text":""}
+{"kind":"slide","id":"sl/cs5owr","slide":9,"title":"HEARING READINESS","textShapes":17}
+{"kind":"textbox","id":"sh/7u54zido","slide":9,"text":"HEARING READINESS","textPreview":"HEARING READINESS","textChars":17,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":9,"text":"Tomorrow's hearing pack should assemble itself, then wait for lawyer review.","textPreview":"Tomorrow's hearing pack should assemble itself, then wait for lawyer review.","textChars":76,"textLines":1,"bbox":[42,72,980,98]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":9,"text":"The morning of a listing should not be spent reconstructing chronology, directions, last order context, or oral points.","textPreview":"The morning of a listing should not be spent reconstructing chronology, directions, last order context, or oral points.","textChars":119,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":9,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/wra5gbq1","slide":9,"bbox":[42,250,555,92]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":9,"bbox":[64,274,12,12]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":9,"text":"Chronology","textPreview":"Chronology","textChars":10,"textLines":1,"bbox":[90,268,485,24]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":9,"text":"Events assembled from filings, orders, communications, and matter activity.","textPreview":"Events assembled from filings, orders, communications, and matter activity.","textChars":75,"textLines":1,"bbox":[90,300,485,24]}
+{"kind":"shape","id":"sh/nqxs72x4","slide":9,"bbox":[42,368,555,92]}
+{"kind":"shape","id":"sh/u54zidon","slide":9,"bbox":[64,392,12,12]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":9,"text":"Last order","textPreview":"Last order","textChars":10,"textLines":1,"bbox":[90,386,485,24]}
+{"kind":"textbox","id":"sh/cbulwval","slide":9,"text":"Source-backed directions and pending compliance items surfaced for review.","textPreview":"Source-backed directions and pending compliance items surfaced for review.","textChars":74,"textLines":1,"bbox":[90,418,485,24]}
+{"kind":"shape","id":"sh/neloj2t8","slide":9,"bbox":[42,486,555,92]}
+{"kind":"shape","id":"sh/ytsvu9kn","slide":9,"bbox":[64,510,12,12]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":9,"text":"Bench context","textPreview":"Bench context","textChars":13,"textLines":1,"bbox":[90,504,485,24]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":9,"text":"Court and judge context shown with limitations, not outcome forecasting.","textPreview":"Court and judge context shown with limitations, not outcome forecasting.","textChars":72,"textLines":1,"bbox":[90,536,485,24]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":9,"bbox":[670,250,568,328]}
+{"kind":"textbox","id":"sh/yhgn29gr","slide":9,"text":"Hearing pack output","textPreview":"Hearing pack output","textChars":19,"textLines":1,"bbox":[710,292,380,38]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":9,"bbox":[716,364,10,10]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":9,"text":"issues and questions for oral hearing","textPreview":"issues and questions for oral hearing","textChars":37,"textLines":1,"bbox":[744,354,420,28]}
+{"kind":"shape","id":"sh/onyd0z61","slide":9,"bbox":[716,402,10,10]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":9,"text":"authority cards and contrary signals","textPreview":"authority cards and contrary signals","textChars":36,"textLines":1,"bbox":[744,392,420,28]}
+{"kind":"shape","id":"sh/6tovahoz","slide":9,"bbox":[716,440,10,10]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":9,"text":"affidavit gaps and missing documents","textPreview":"affidavit gaps and missing documents","textChars":36,"textLines":1,"bbox":[744,430,420,28]}
+{"kind":"shape","id":"sh/ovahoza1","slide":9,"bbox":[716,478,10,10]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":9,"text":"review-required directions before activation","textPreview":"review-required directions before activation","textChars":44,"textLines":1,"bbox":[744,468,420,28]}
+{"kind":"shape","id":"sh/61032lsz","slide":9,"bbox":[716,516,10,10]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":9,"text":"post-hearing follow-up tasks","textPreview":"post-hearing follow-up tasks","textChars":28,"textLines":1,"bbox":[744,506,420,28]}
+{"kind":"notes","id":"nt/cs5owr","slide":9,"text":""}
+{"kind":"slide","id":"sl/89fo25","slide":10,"title":"COURT OPERATIONS","textShapes":14}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":10,"text":"COURT OPERATIONS","textPreview":"COURT OPERATIONS","textChars":16,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":10,"text":"Court updates become controlled work, not inbox noise.","textPreview":"Court updates become controlled work, not inbox noise.","textChars":54,"textLines":1,"bbox":[42,72,900,92]}
+{"kind":"textbox","id":"sh/fu18jqh0","slide":10,"text":"India-specific court operations are where CaseOps feels less like generic practice software and more like a legal operating system.","textPreview":"India-specific court operations are where CaseOps feels less like generic practice software and more like a legal operating system.","textChars":131,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/83itgfml","slide":10,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/qxs72x4n","slide":10,"bbox":[42,250,581,142]}
+{"kind":"shape","id":"sh/fil0rqd4","slide":10,"bbox":[64,274,12,12]}
+{"kind":"textbox","id":"sh/4zidonyd","slide":10,"text":"Tracked case refresh","textPreview":"Tracked case refresh","textChars":20,"textLines":1,"bbox":[90,268,511,44]}
+{"kind":"textbox","id":"sh/xkf6dcbu","slide":10,"text":"Opt-in CNR/case-number tracking with provider-gated refresh, safe skipped states, and admin visibility.","textPreview":"Opt-in CNR/case-number tracking with provider-gated refresh, safe skipped states, and admin visibility.","textChars":103,"textLines":1,"bbox":[90,314,511,60]}
+{"kind":"shape","id":"sh/1kre1w7m","slide":10,"bbox":[657,250,581,142]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":10,"bbox":[679,274,12,12]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":10,"text":"Court-order compliance","textPreview":"Court-order compliance","textChars":22,"textLines":1,"bbox":[705,268,511,44]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":10,"text":"Orders generate source-backed, review-required compliance items before tasks or deadlines activate.","textPreview":"Orders generate source-backed, review-required compliance items before tasks or deadlines activate.","textChars":99,"textLines":1,"bbox":[705,314,511,60]}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":10,"bbox":[42,444,581,142]}
+{"kind":"shape","id":"sh/crmhk3q5","slide":10,"bbox":[64,468,12,12]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":10,"text":"Next-hearing provenance","textPreview":"Next-hearing provenance","textChars":23,"textLines":1,"bbox":[90,462,511,44]}
+{"kind":"textbox","id":"sh/ulwval87","slide":10,"text":"Manual locks, accepted suggestions, source labels, and history prevent silent overwrites.","textPreview":"Manual locks, accepted suggestions, source labels, and history prevent silent overwrites.","textChars":89,"textLines":1,"bbox":[90,508,511,60]}
+{"kind":"shape","id":"sh/18jqh0fe","slide":10,"bbox":[657,444,581,142]}
+{"kind":"shape","id":"sh/8nqxs72x","slide":10,"bbox":[679,468,12,12]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":10,"text":"Cause-list PDFs","textPreview":"Cause-list PDFs","textChars":15,"textLines":1,"bbox":[705,462,511,44]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":10,"text":"Date-wise court-style PDFs with filters, missing-field warnings, row count, checksum, and download audit.","textPreview":"Date-wise court-style PDFs with filters, missing-field warnings, row count, checksum, and download audit.","textChars":105,"textLines":1,"bbox":[705,508,511,60]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":10,"text":"Internal product boundary: no captcha bypass, no unapproved live provider calls, external notifications remain provider-gated.","textPreview":"Internal product boundary: no captcha bypass, no unapproved live provider calls, external notifications remain provider-gated.","textChars":126,"textLines":1,"bbox":[42,633,1000,28]}
+{"kind":"notes","id":"nt/89fo25","slide":10,"text":""}
+{"kind":"slide","id":"sl/lyrufe","slide":11,"title":"CONTRACTS AND PLAYBOOKS","textShapes":11}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":11,"text":"CONTRACTS AND PLAYBOOKS","textPreview":"CONTRACTS AND PLAYBOOKS","textChars":23,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":11,"text":"Transactional work stays connected to the litigation and client record.","textPreview":"Transactional work stays connected to the litigation and client record.","textChars":71,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":11,"text":"Contract review is not a separate island: obligations, deviations, and risk signals should feed the same matter graph.","textPreview":"Contract review is not a separate island: obligations, deviations, and risk signals should feed the same matter graph.","textChars":118,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":11,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/oj2t83it","slide":11,"bbox":[42,250,370,310]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":11,"text":"Clause extraction","textPreview":"Clause extraction","textChars":17,"textLines":1,"bbox":[70,286,270,34]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":11,"text":"Parties, obligations, dates, notices, indemnities, payment terms, dispute resolution, and source snippets for review.","textPreview":"Parties, obligations, dates, notices, indemnities, payment terms, dispute resolution, and source snippets for review.","textChars":117,"textLines":1,"bbox":[70,352,300,102]}
+{"kind":"shape","id":"sh/z25kb6xk","slide":11,"bbox":[455,250,370,310]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":11,"text":"Playbook compare","textPreview":"Playbook compare","textChars":16,"textLines":1,"bbox":[483,286,270,34]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":11,"text":"Tenant playbooks flag matched, missing, deviation, and needs-review positions without exposing raw contract payloads in audit metadata.","textPreview":"Tenant playbooks flag matched, missing, deviation, and needs-review positions without exposing raw contract payloads in audit metadata.","textChars":135,"textLines":1,"bbox":[483,352,296,124]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":11,"bbox":[868,250,370,310]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":11,"text":"Obligations","textPreview":"Obligations","textChars":11,"textLines":1,"bbox":[896,286,270,34]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":11,"text":"Contract duties become matter-linked tasks and reporting items, so legal ops and litigation context stay synchronized.","textPreview":"Contract duties become matter-linked tasks and reporting items, so legal ops and litigation context stay synchronized.","textChars":118,"textLines":1,"bbox":[896,352,296,102]}
+{"kind":"notes","id":"nt/lyrufe","slide":11,"text":""}
+{"kind":"slide","id":"sl/8c1ssh","slide":12,"title":"PORTALS AND COMMUNICATION","textShapes":13}
+{"kind":"textbox","id":"sh/s36hcrmh","slide":12,"text":"PORTALS AND COMMUNICATION","textPreview":"PORTALS AND COMMUNICATION","textChars":25,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/zidonyd0","slide":12,"text":"Clients and outside counsel get scoped windows, not messy forwards.","textPreview":"Clients and outside counsel get scoped windows, not messy forwards.","textChars":67,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/a1gvy90j","slide":12,"text":"Law firms can collaborate without giving everyone the same system-level access.","textPreview":"Law firms can collaborate without giving everyone the same system-level access.","textChars":79,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/hgn29gr2","slide":12,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/svu9knih","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/za1gvy90","slide":12,"bbox":[42,248,580,132]}
+{"kind":"shape","id":"sh/ap4r65wj","slide":12,"bbox":[64,272,12,12]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":12,"text":"Outside counsel portal","textPreview":"Outside counsel portal","textChars":22,"textLines":1,"bbox":[90,266,510,44]}
+{"kind":"textbox","id":"sh/sji5snel","slide":12,"text":"Magic-link access to assigned matters, work-product upload, invoice submission, and time entries.","textPreview":"Magic-link access to assigned matters, work-product upload, invoice submission, and time entries.","textChars":97,"textLines":1,"bbox":[90,310,510,52]}
+{"kind":"shape","id":"sh/qh0fepkz","slide":12,"bbox":[657,248,580,132]}
+{"kind":"shape","id":"sh/j2t83itg","slide":12,"bbox":[679,272,12,12]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":12,"text":"Client portal and KYC","textPreview":"Client portal and KYC","textChars":21,"textLines":1,"bbox":[705,266,510,44]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":12,"text":"Matter-scoped client view with communications, hearings, KYC states, and audit on every transition.","textPreview":"Matter-scoped client view with communications, hearings, KYC states, and audit on every transition.","textChars":99,"textLines":1,"bbox":[705,310,510,52]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":12,"bbox":[42,432,580,132]}
+{"kind":"shape","id":"sh/jqh0fepk","slide":12,"bbox":[64,456,12,12]}
+{"kind":"textbox","id":"sh/8bat47y1","slide":12,"text":"Unified timeline","textPreview":"Unified timeline","textChars":16,"textLines":1,"bbox":[90,450,510,44]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":12,"text":"Emails, notes, platform messages, and review events attach to the matter rather than disappearing into inboxes.","textPreview":"Emails, notes, platform messages, and review events attach to the matter rather than disappearing into inboxes.","textChars":111,"textLines":1,"bbox":[90,494,510,52]}
+{"kind":"shape","id":"sh/uxc3ylc7","slide":12,"bbox":[657,432,580,132]}
+{"kind":"shape","id":"sh/ji5snelo","slide":12,"bbox":[679,456,12,12]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":12,"text":"Calendar candidates","textPreview":"Calendar candidates","textChars":19,"textLines":1,"bbox":[705,450,510,44]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":12,"text":"Imported invite metadata can become internal calendar items after explicit review, not silent automation.","textPreview":"Imported invite metadata can become internal calendar items after explicit review, not silent automation.","textChars":105,"textLines":1,"bbox":[705,494,510,52]}
+{"kind":"notes","id":"nt/8c1ssh","slide":12,"text":""}
+{"kind":"slide","id":"sl/p6ie04","slide":13,"title":"BILLING AND RECOVERY","textShapes":18}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":13,"text":"BILLING AND RECOVERY","textPreview":"BILLING AND RECOVERY","textChars":20,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":13,"text":"Revenue discipline belongs inside the matter.","textPreview":"Revenue discipline belongs inside the matter.","textChars":45,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":13,"text":"Matter billing is separate from CaseOps SaaS billing. The firm should see legal work and commercial state in one place.","textPreview":"Matter billing is separate from CaseOps SaaS billing. The firm should see legal work and commercial state in one place.","textChars":119,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/7ed8bat4","slide":13,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/itgfmlkj","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/pkzupwb2","slide":13,"bbox":[42,256,1196,118]}
+{"kind":"shape","id":"sh/0z61032l","slide":13,"bbox":[82,286,140,54]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":13,"text":"Time","textPreview":"Time","textChars":4,"textLines":1,"bbox":[92,302,120,24]}
+{"kind":"shape","id":"sh/i5sneloj","slide":13,"bbox":[234,312,60,4]}
+{"kind":"shape","id":"sh/0nuxc3yl","slide":13,"bbox":[312,286,140,54]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":13,"text":"Invoice","textPreview":"Invoice","textChars":7,"textLines":1,"bbox":[322,302,120,24]}
+{"kind":"shape","id":"sh/ih4byhgn","slide":13,"bbox":[464,312,60,4]}
+{"kind":"shape","id":"sh/72x4nap4","slide":13,"bbox":[542,286,140,54]}
+{"kind":"textbox","id":"sh/0z61032l","slide":13,"text":"Approval","textPreview":"Approval","textChars":8,"textLines":1,"bbox":[552,302,120,24]}
+{"kind":"shape","id":"sh/pkzupwb2","slide":13,"bbox":[694,312,60,4]}
+{"kind":"shape","id":"sh/itgfmlkj","slide":13,"bbox":[772,286,140,54]}
+{"kind":"textbox","id":"sh/7ed8bat4","slide":13,"text":"Payment","textPreview":"Payment","textChars":7,"textLines":1,"bbox":[782,302,120,24]}
+{"kind":"shape","id":"sh/0bi9s36h","slide":13,"bbox":[924,312,60,4]}
+{"kind":"shape","id":"sh/pwb2hwfy","slide":13,"bbox":[1002,286,140,54]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":13,"text":"Recovery","textPreview":"Recovery","textChars":8,"textLines":1,"bbox":[1012,302,120,24]}
+{"kind":"shape","id":"sh/kjm1cfa9","slide":13,"bbox":[42,438,270,128]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":13,"text":"GST/TDS","textPreview":"GST/TDS","textChars":7,"textLines":1,"bbox":[60,462,234,28]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":13,"text":"India-ready invoice fields and tax splits","textPreview":"India-ready invoice fields and tax splits","textChars":41,"textLines":1,"bbox":[60,506,234,42]}
+{"kind":"shape","id":"sh/9gr2p8nq","slide":13,"bbox":[342,438,270,128]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":13,"text":"PDFs","textPreview":"PDFs","textChars":4,"textLines":1,"bbox":[360,462,234,28]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":13,"text":"Server-rendered invoices and statements","textPreview":"Server-rendered invoices and statements","textChars":39,"textLines":1,"bbox":[360,506,234,42]}
+{"kind":"shape","id":"sh/2p8nqxs7","slide":13,"bbox":[642,438,270,128]}
+{"kind":"textbox","id":"sh/9knih4by","slide":13,"text":"Double billing guard","textPreview":"Double billing guard","textChars":20,"textLines":1,"bbox":[660,462,234,28]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":13,"text":"Time entries already invoiced cannot be billed again","textPreview":"Time entries already invoiced cannot be billed again","textChars":52,"textLines":1,"bbox":[660,506,234,42]}
+{"kind":"shape","id":"sh/u18jqh0f","slide":13,"bbox":[942,438,270,128]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":13,"text":"UAT gated","textPreview":"UAT gated","textChars":9,"textLines":1,"bbox":[960,462,234,28]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":13,"text":"Pine Labs live payments remain disabled until signoff","textPreview":"Pine Labs live payments remain disabled until signoff","textChars":53,"textLines":1,"bbox":[960,506,234,42]}
+{"kind":"notes","id":"nt/p6ie04","slide":13,"text":""}
+{"kind":"slide","id":"sl/rzln5g","slide":14,"title":"AI TRUST MODEL","textShapes":14}
+{"kind":"textbox","id":"sh/c7u54zid","slide":14,"text":"AI TRUST MODEL","textPreview":"AI TRUST MODEL","textChars":14,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":14,"text":"The AI posture is review-first by design.","textPreview":"The AI posture is review-first by design.","textChars":41,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":14,"text":"CaseOps sells speed through control, not speed instead of control.","textPreview":"CaseOps sells speed through control, not speed instead of control.","textChars":66,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/1032lszq","slide":14,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/judg7ads","slide":14,"bbox":[42,250,581,142]}
+{"kind":"shape","id":"sh/u9knih4b","slide":14,"bbox":[64,274,12,12]}
+{"kind":"textbox","id":"sh/54zidony","slide":14,"text":"Citation grounding","textPreview":"Citation grounding","textChars":18,"textLines":1,"bbox":[90,268,511,44]}
+{"kind":"textbox","id":"sh/cj6tovah","slide":14,"text":"Substantive answers and drafts are tied to named sources where available.","textPreview":"Substantive answers and drafts are tied to named sources where available.","textChars":73,"textLines":1,"bbox":[90,314,511,60]}
+{"kind":"shape","id":"sh/ex0nuxc3","slide":14,"bbox":[657,250,581,142]}
+{"kind":"shape","id":"sh/3itgfmlk","slide":14,"bbox":[679,274,12,12]}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":14,"text":"Refusal over fabrication","textPreview":"Refusal over fabrication","textChars":24,"textLines":1,"bbox":[705,268,511,44]}
+{"kind":"textbox","id":"sh/loj2t83i","slide":14,"text":"Missing facts become placeholders. Weak evidence becomes uncertainty, not false confidence.","textPreview":"Missing facts become placeholders. Weak evidence becomes uncertainty, not false confidence.","textChars":91,"textLines":1,"bbox":[705,314,511,60]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":14,"bbox":[42,444,581,142]}
+{"kind":"shape","id":"sh/3q5o7qpg","slide":14,"bbox":[64,468,12,12]}
+{"kind":"textbox","id":"sh/wb2hwfyx","slide":14,"text":"Tenant model policy","textPreview":"Tenant model policy","textChars":19,"textLines":1,"bbox":[90,462,511,44]}
+{"kind":"textbox","id":"sh/lwval87e","slide":14,"text":"Allowed providers, budgets, quotas, and usage lineage can be governed per tenant.","textPreview":"Allowed providers, budgets, quotas, and usage lineage can be governed per tenant.","textChars":81,"textLines":1,"bbox":[90,508,511,60]}
+{"kind":"shape","id":"sh/ahoza1gv","slide":14,"bbox":[657,444,581,142]}
+{"kind":"shape","id":"sh/32lszqtc","slide":14,"bbox":[679,468,12,12]}
+{"kind":"textbox","id":"sh/v6psfil0","slide":14,"text":"ModelRun audit","textPreview":"ModelRun audit","textChars":14,"textLines":1,"bbox":[705,462,511,44]}
+{"kind":"textbox","id":"sh/2lszqtcj","slide":14,"text":"Provider, model, tokens, latency, status, refusal, and action metadata are recorded without raw payload leakage.","textPreview":"Provider, model, tokens, latency, status, refusal, and action metadata are recorded without raw payload leakage.","textChars":112,"textLines":1,"bbox":[705,508,511,60]}
+{"kind":"textbox","id":"sh/d8bat47y","slide":14,"text":"Sources: CaseOps README and public law-firms page; Thomson Reuters 2025 notes AI ROI depends on strategy, leadership, operations, and individual adoption.","textPreview":"Sources: CaseOps README and public law-firms page; Thomson Reuters 2025 notes AI ROI depends on strategy, leadership, operations, and ind...","textChars":154,"textLines":1,"bbox":[42,633,1000,28]}
+{"kind":"notes","id":"nt/rzln5g","slide":14,"text":""}
+{"kind":"slide","id":"sl/fhk7vd","slide":15,"title":"SECURITY AND CONTROL","textShapes":15}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":15,"text":"SECURITY AND CONTROL","textPreview":"SECURITY AND CONTROL","textChars":20,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":15,"text":"Built for partner, IT, and client scrutiny.","textPreview":"Built for partner, IT, and client scrutiny.","textChars":43,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/il0rqd4v","slide":15,"text":"A law-firm pilot must earn trust from the managing partner, IT admin, compliance lead, and client relationship owner.","textPreview":"A law-firm pilot must earn trust from the managing partner, IT admin, compliance lead, and client relationship owner.","textChars":117,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":15,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/0je9cvix","slide":15,"text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/byhgn29g","slide":15,"bbox":[42,234,580,90]}
+{"kind":"shape","id":"sh/idonyd0z","slide":15,"bbox":[64,258,12,12]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":15,"text":"Tenant isolation","textPreview":"Tenant isolation","textChars":16,"textLines":1,"bbox":[90,252,510,44]}
+{"kind":"textbox","id":"sh/0fepkzup","slide":15,"text":"Every core record, storage object, retrieval path, and audit event is scoped by tenant.","textPreview":"Every core record, storage object, retrieval path, and audit event is scoped by tenant.","textChars":87,"textLines":1,"bbox":[90,282,510,24]}
+{"kind":"shape","id":"sh/itgfmlkj","slide":15,"bbox":[657,234,580,90]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":15,"bbox":[679,258,12,12]}
+{"kind":"textbox","id":"sh/0z61032l","slide":15,"text":"Ethical walls","textPreview":"Ethical walls","textChars":13,"textLines":1,"bbox":[705,252,510,44]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":15,"text":"Matter-level walls override broad role access and are audited when access is denied.","textPreview":"Matter-level walls override broad role access and are audited when access is denied.","textChars":84,"textLines":1,"bbox":[705,282,510,24]}
+{"kind":"shape","id":"sh/ih4byhgn","slide":15,"bbox":[42,358,580,90]}
+{"kind":"shape","id":"sh/72x4nap4","slide":15,"bbox":[64,382,12,12]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":15,"text":"Audit by default","textPreview":"Audit by default","textChars":16,"textLines":1,"bbox":[90,376,510,44]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":15,"text":"Draft approvals, compliance review, exports, billing actions, and admin changes are recorded.","textPreview":"Draft approvals, compliance review, exports, billing actions, and admin changes are recorded.","textChars":93,"textLines":1,"bbox":[90,406,510,24]}
+{"kind":"shape","id":"sh/ed8v6psf","slide":15,"bbox":[657,358,580,90]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":15,"bbox":[679,382,12,12]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":15,"text":"Data governance","textPreview":"Data governance","textChars":15,"textLines":1,"bbox":[705,376,510,44]}
+{"kind":"textbox","id":"sh/ulwval87","slide":15,"text":"No cross-tenant training by default; raw prompts, raw LLM responses, secrets, and provider payloads stay out of tenant views.","textPreview":"No cross-tenant training by default; raw prompts, raw LLM responses, secrets, and provider payloads stay out of tenant views.","textChars":125,"textLines":1,"bbox":[705,406,510,24]}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":15,"bbox":[42,482,580,90]}
+{"kind":"shape","id":"sh/crmhk3q5","slide":15,"bbox":[64,506,12,12]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":15,"text":"Upload controls","textPreview":"Upload controls","textChars":15,"textLines":1,"bbox":[90,500,510,44]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":15,"text":"File extension, content-type, magic-byte, and secure download protections are implemented foundations.","textPreview":"File extension, content-type, magic-byte, and secure download protections are implemented foundations.","textChars":102,"textLines":1,"bbox":[90,530,510,24]}
+{"kind":"notes","id":"nt/fhk7vd","slide":15,"text":""}
+{"kind":"slide","id":"sl/iccikm","slide":16,"title":"READINESS BOUNDARIES","textShapes":20}
+{"kind":"textbox","id":"sh/upwb2hwf","slide":16,"text":"READINESS BOUNDARIES","textPreview":"READINESS BOUNDARIES","textChars":20,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":16,"text":"The pitch is stronger because the boundaries are explicit.","textPreview":"The pitch is stronger because the boundaries are explicit.","textChars":58,"textLines":1,"bbox":[42,72,900,92]}
+{"kind":"textbox","id":"sh/cvixczed","slide":16,"text":"Law firms do not need magical claims. They need to know what is live, what is review-first, and what remains gated.","textPreview":"Law firms do not need magical claims. They need to know what is live, what is review-first, and what remains gated.","textChars":115,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/nyd0z610","slide":16,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":16,"text":"16","textPreview":"16","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/54zidony","slide":16,"bbox":[42,248,188,46]}
+{"kind":"textbox","id":"sh/cj6tovah","slide":16,"text":"Status","textPreview":"Status","textChars":6,"textLines":1,"bbox":[52,260,168,30]}
+{"kind":"shape","id":"sh/judg7ads","slide":16,"bbox":[230,248,340,46]}
+{"kind":"textbox","id":"sh/u9knih4b","slide":16,"text":"What to say in sales","textPreview":"What to say in sales","textChars":20,"textLines":1,"bbox":[240,260,320,30]}
+{"kind":"shape","id":"sh/47y1kre1","slide":16,"bbox":[570,248,668,46]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":16,"text":"Examples","textPreview":"Examples","textChars":8,"textLines":1,"bbox":[580,260,648,30]}
+{"kind":"shape","id":"sh/m1cfa9w3","slide":16,"bbox":[42,294,188,74]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":16,"text":"Live","textPreview":"Live","textChars":4,"textLines":1,"bbox":[52,304,168,60]}
+{"kind":"shape","id":"sh/4vmtwra5","slide":16,"bbox":[230,294,340,74]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":16,"text":"Safe to demo as product capability.","textPreview":"Safe to demo as product capability.","textChars":35,"textLines":1,"bbox":[240,304,320,60]}
+{"kind":"shape","id":"sh/mp0bi9s3","slide":16,"bbox":[570,294,668,74]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":16,"text":"Matter cockpit, drafting studio, invoice PDFs, audit export, cause-list preview/PDF, client/outside-counsel portal foundations.","textPreview":"Matter cockpit, drafting studio, invoice PDFs, audit export, cause-list preview/PDF, client/outside-counsel portal foundations.","textChars":127,"textLines":1,"bbox":[580,304,648,60]}
+{"kind":"shape","id":"sh/4nap4r65","slide":16,"bbox":[42,368,188,74]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":16,"text":"Review-first","textPreview":"Review-first","textChars":12,"textLines":1,"bbox":[52,378,168,60]}
+{"kind":"shape","id":"sh/xs72x4na","slide":16,"bbox":[230,368,340,74]}
+{"kind":"textbox","id":"sh/87ed8bat","slide":16,"text":"Automation proposes. Lawyers confirm.","textPreview":"Automation proposes. Lawyers confirm.","textChars":37,"textLines":1,"bbox":[240,378,320,60]}
+{"kind":"shape","id":"sh/fmlkjm1c","slide":16,"bbox":[570,368,668,74]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":16,"text":"Court-order compliance, extracted drafting facts, legal updates, recommendations, hearing packs.","textPreview":"Court-order compliance, extracted drafting facts, legal updates, recommendations, hearing packs.","textChars":96,"textLines":1,"bbox":[580,378,648,60]}
+{"kind":"shape","id":"sh/1gvy90je","slide":16,"bbox":[42,442,188,74]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":16,"text":"Provider-gated","textPreview":"Provider-gated","textChars":14,"textLines":1,"bbox":[52,452,168,60]}
+{"kind":"shape","id":"sh/je9cvixc","slide":16,"bbox":[230,442,340,74]}
+{"kind":"textbox","id":"sh/qtcj6tov","slide":16,"text":"Enabled only after lawful source, credentials, consent, and UAT proof.","textPreview":"Enabled only after lawful source, credentials, consent, and UAT proof.","textChars":70,"textLines":1,"bbox":[240,452,320,60]}
+{"kind":"shape","id":"sh/xczed8v6","slide":16,"bbox":[570,442,668,74]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":16,"text":"Court adapters, case tracking providers, Outlook/Google, external email/SMS/WhatsApp delivery, Pine Labs live payments.","textPreview":"Court adapters, case tracking providers, Outlook/Google, external email/SMS/WhatsApp delivery, Pine Labs live payments.","textChars":119,"textLines":1,"bbox":[580,452,648,60]}
+{"kind":"shape","id":"sh/25kb6xkf","slide":16,"bbox":[42,516,188,74]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":16,"text":"Planned","textPreview":"Planned","textChars":7,"textLines":1,"bbox":[52,526,168,60]}
+{"kind":"shape","id":"sh/kb6xkf6d","slide":16,"bbox":[230,516,340,74]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":16,"text":"Roadmap, not live-pilot promise.","textPreview":"Roadmap, not live-pilot promise.","textChars":32,"textLines":1,"bbox":[240,526,320,60]}
+{"kind":"shape","id":"sh/2t83itgf","slide":16,"bbox":[570,516,668,74]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":16,"text":"Full OIDC/SAML SSO, SCIM, private enterprise deployment, autonomous scoped-agent execution.","textPreview":"Full OIDC/SAML SSO, SCIM, private enterprise deployment, autonomous scoped-agent execution.","textChars":91,"textLines":1,"bbox":[580,526,648,60]}
+{"kind":"notes","id":"nt/iccikm","slide":16,"text":""}
+{"kind":"slide","id":"sl/d49d19","slide":17,"title":"PROOF PLANE","textShapes":24}
+{"kind":"textbox","id":"sh/bat47y1k","slide":17,"text":"PROOF PLANE","textPreview":"PROOF PLANE","textChars":11,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":17,"text":"Use product evidence the firm can verify.","textPreview":"Use product evidence the firm can verify.","textChars":41,"textLines":1,"bbox":[42,72,900,92]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":17,"text":"CaseOps is strongest when it sells workflow breadth, review gates, auditability, and explicit readiness labels. Unsourced performance claims do not belong in the pitch.","textPreview":"CaseOps is strongest when it sells workflow breadth, review gates, auditability, and explicit readiness labels. Unsourced performance cla...","textChars":168,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":17,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":17,"text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/47y1kre1","slide":17,"bbox":[42,224,374,154]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":17,"text":"31","textPreview":"31","textChars":2,"textLines":1,"bbox":[64,246,330,72]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":17,"text":"draft templates","textPreview":"draft templates","textChars":15,"textLines":1,"bbox":[66,290,326,26]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":17,"text":"Drafting Studio pack including Supreme Court escalation templates.","textPreview":"Drafting Studio pack including Supreme Court escalation templates.","textChars":66,"textLines":1,"bbox":[66,322,326,42]}
+{"kind":"shape","id":"sh/3ex0nuxc","slide":17,"bbox":[452,224,374,154]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":17,"text":"7 acts","textPreview":"7 acts","textChars":6,"textLines":1,"bbox":[474,246,330,72]}
+{"kind":"textbox","id":"sh/lkjm1cfa","slide":17,"text":"statute catalog","textPreview":"statute catalog","textChars":15,"textLines":1,"bbox":[476,290,326,26]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":17,"text":"BNSS, BNS, BSA, CrPC, IPC, Constitution, and NI Act.","textPreview":"BNSS, BNS, BSA, CrPC, IPC, Constitution, and NI Act.","textChars":52,"textLines":1,"bbox":[476,322,326,42]}
+{"kind":"shape","id":"sh/32lszqtc","slide":17,"bbox":[862,224,374,154]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":17,"text":"91","textPreview":"91","textChars":2,"textLines":1,"bbox":[884,246,330,72]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":17,"text":"statute sections","textPreview":"statute sections","textChars":16,"textLines":1,"bbox":[886,290,326,26]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":17,"text":"Public product copy says sections carry bare text and source links.","textPreview":"Public product copy says sections carry bare text and source links.","textChars":67,"textLines":1,"bbox":[886,322,326,42]}
+{"kind":"shape","id":"sh/3q5o7qpg","slide":17,"bbox":[42,418,374,154]}
+{"kind":"textbox","id":"sh/e9cvixcz","slide":17,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[64,440,330,72]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":17,"text":"narrow agents today","textPreview":"narrow agents today","textChars":19,"textLines":1,"bbox":[66,484,326,26]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":17,"text":"Cause-list watcher, corpus ingest, structured extraction, document retry.","textPreview":"Cause-list watcher, corpus ingest, structured extraction, document retry.","textChars":73,"textLines":1,"bbox":[66,516,326,42]}
+{"kind":"shape","id":"sh/4byhgn29","slide":17,"bbox":[452,418,374,154]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":17,"text":"250-2,500","textPreview":"250-2,500","textChars":9,"textLines":1,"bbox":[474,440,330,72]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":17,"text":"tracked-case quotas","textPreview":"tracked-case quotas","textChars":19,"textLines":1,"bbox":[476,484,326,26]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":17,"text":"Law-firm plans scale from Starter to Pro tracked-case entitlements.","textPreview":"Law-firm plans scale from Starter to Pro tracked-case entitlements.","textChars":67,"textLines":1,"bbox":[476,516,326,42]}
+{"kind":"shape","id":"sh/4nap4r65","slide":17,"bbox":[862,418,374,154]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":17,"text":"16:00-18:00","textPreview":"16:00-18:00","textChars":11,"textLines":1,"bbox":[884,440,330,72]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":17,"text":"refresh window","textPreview":"refresh window","textChars":14,"textLines":1,"bbox":[886,484,326,26]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":17,"text":"Tracked-case refresh runs in the Asia/Kolkata daily window.","textPreview":"Tracked-case refresh runs in the Asia/Kolkata daily window.","textChars":59,"textLines":1,"bbox":[886,516,326,42]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":17,"text":"Sources: CaseOps public law-firms page, README, GBA guide, and billing explainer reviewed 2026-07-10.","textPreview":"Sources: CaseOps public law-firms page, README, GBA guide, and billing explainer reviewed 2026-07-10.","textChars":101,"textLines":1,"bbox":[42,633,1000,28]}
+{"kind":"notes","id":"nt/d49d19","slide":17,"text":""}
+{"kind":"slide","id":"sl/hdx62c","slide":18,"title":"BUSINESS CASE","textShapes":18}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":18,"text":"BUSINESS CASE","textPreview":"BUSINESS CASE","textChars":13,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":18,"text":"The ROI case should be validated in a live pilot.","textPreview":"The ROI case should be validated in a live pilot.","textChars":49,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/fyxobm58","slide":18,"text":"Use external research as a benchmark, then let the firm's own matters prove time saved, review quality, deadline confidence, and billing discipline.","textPreview":"Use external research as a benchmark, then let the firm's own matters prove time saved, review quality, deadline confidence, and billing ...","textChars":148,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":18,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/xczed8v6","slide":18,"text":"18","textPreview":"18","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/qpg3ex0n","slide":18,"bbox":[42,248,560,312]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":18,"text":"Measured pilot model","textPreview":"Measured pilot model","textChars":20,"textLines":1,"bbox":[70,284,360,34]}
+{"kind":"shape","id":"sh/8z25kb6x","slide":18,"bbox":[76,352,9,9]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":18,"text":"15 lawyers in one practice group","textPreview":"15 lawyers in one practice group","textChars":32,"textLines":1,"bbox":[98,341,450,25]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":18,"bbox":[76,386,9,9]}
+{"kind":"textbox","id":"sh/wval87ed","slide":18,"text":"30 minutes reclaimed per lawyer per workday","textPreview":"30 minutes reclaimed per lawyer per workday","textChars":43,"textLines":1,"bbox":[98,375,450,25]}
+{"kind":"shape","id":"sh/7adsji5s","slide":18,"bbox":[76,420,9,9]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":18,"text":"220 working days per year","textPreview":"220 working days per year","textChars":25,"textLines":1,"bbox":[98,409,450,25]}
+{"kind":"shape","id":"sh/psfil0rq","slide":18,"bbox":[76,454,9,9]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":18,"text":"1,650 hours/year in pilot capacity","textPreview":"1,650 hours/year in pilot capacity","textChars":34,"textLines":1,"bbox":[98,443,450,25]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":18,"bbox":[76,488,9,9]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":18,"text":"Compare with 240 hours/year external benchmark","textPreview":"Compare with 240 hours/year external benchmark","textChars":46,"textLines":1,"bbox":[98,477,450,25]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":18,"bbox":[658,248,580,312]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":18,"text":"What the firm gets back","textPreview":"What the firm gets back","textChars":23,"textLines":1,"bbox":[696,288,380,34]}
+{"kind":"shape","id":"sh/svu9knih","slide":18,"bbox":[704,358,10,10]}
+{"kind":"textbox","id":"sh/hgn29gr2","slide":18,"text":"More matters handled without immediate headcount expansion","textPreview":"More matters handled without immediate headcount expansion","textChars":58,"textLines":1,"bbox":[732,348,410,26]}
+{"kind":"shape","id":"sh/ap4r65wj","slide":18,"bbox":[704,394,10,10]}
+{"kind":"textbox","id":"sh/za1gvy90","slide":18,"text":"Faster first-draft and hearing-pack cycles","textPreview":"Faster first-draft and hearing-pack cycles","textChars":42,"textLines":1,"bbox":[732,384,410,26]}
+{"kind":"shape","id":"sh/s36hcrmh","slide":18,"bbox":[704,430,10,10]}
+{"kind":"textbox","id":"sh/hoza1gvy","slide":18,"text":"Partner review focused on judgment, not assembly","textPreview":"Partner review focused on judgment, not assembly","textChars":48,"textLines":1,"bbox":[732,420,410,26]}
+{"kind":"shape","id":"sh/a1gvy90j","slide":18,"bbox":[704,466,10,10]}
+{"kind":"textbox","id":"sh/zidonyd0","slide":18,"text":"Better recoveries through matter-linked billing state","textPreview":"Better recoveries through matter-linked billing state","textChars":53,"textLines":1,"bbox":[732,456,410,26]}
+{"kind":"shape","id":"sh/s72x4nap","slide":18,"bbox":[704,502,10,10]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":18,"text":"Cleaner audit evidence for clients and governance","textPreview":"Cleaner audit evidence for clients and governance","textChars":49,"textLines":1,"bbox":[732,492,410,26]}
+{"kind":"textbox","id":"sh/nih4byhg","slide":18,"text":"Model is an assumption to validate during pilot; external benchmark from Thomson Reuters Future of Professionals 2025.","textPreview":"Model is an assumption to validate during pilot; external benchmark from Thomson Reuters Future of Professionals 2025.","textChars":118,"textLines":1,"bbox":[42,633,1000,28]}
+{"kind":"notes","id":"nt/hdx62c","slide":18,"text":""}
+{"kind":"slide","id":"sl/c69q0n","slide":19,"title":"PILOT PLAN","textShapes":21}
+{"kind":"textbox","id":"sh/t83itgfm","slide":19,"text":"PILOT PLAN","textPreview":"PILOT PLAN","textChars":10,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":19,"text":"Six weeks to a credible law-firm pilot.","textPreview":"Six weeks to a credible law-firm pilot.","textChars":39,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":19,"text":"A strong pilot proves one practice group's real workflows before the firm makes a broader platform decision.","textPreview":"A strong pilot proves one practice group's real workflows before the firm makes a broader platform decision.","textChars":108,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":19,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":19,"text":"19","textPreview":"19","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/m58z25kb","slide":19,"bbox":[42,256,200,246]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":19,"text":"0","textPreview":"0","textChars":1,"textLines":1,"bbox":[64,282,60,42]}
+{"kind":"textbox","id":"sh/47y1kre1","slide":19,"text":"Scope","textPreview":"Scope","textChars":5,"textLines":1,"bbox":[64,348,150,28]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":19,"text":"Pick one practice group, 10-25 active matters, roles, and success measures.","textPreview":"Pick one practice group, 10-25 active matters, roles, and success measures.","textChars":75,"textLines":1,"bbox":[64,394,156,80]}
+{"kind":"shape","id":"sh/90je9cvi","slide":19,"bbox":[282,256,200,246]}
+{"kind":"textbox","id":"sh/gfmlkjm1","slide":19,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[304,282,60,42]}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":19,"text":"Setup","textPreview":"Setup","textChars":5,"textLines":1,"bbox":[304,348,150,28]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":19,"text":"Workspace, users, sample matters, security policy, AI budgets, templates, and billing profile.","textPreview":"Workspace, users, sample matters, security policy, AI budgets, templates, and billing profile.","textChars":94,"textLines":1,"bbox":[304,394,156,80]}
+{"kind":"shape","id":"sh/9s36hcrm","slide":19,"bbox":[522,256,200,246]}
+{"kind":"textbox","id":"sh/g7adsji5","slide":19,"text":"2-3","textPreview":"2-3","textChars":3,"textLines":1,"bbox":[544,282,60,42]}
+{"kind":"textbox","id":"sh/rmhk3q5o","slide":19,"text":"Matter work","textPreview":"Matter work","textChars":11,"textLines":1,"bbox":[544,348,150,28]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":19,"text":"Upload documents, run drafting, research, hearing packs, and cause-list/court-order flows.","textPreview":"Upload documents, run drafting, research, hearing packs, and cause-list/court-order flows.","textChars":90,"textLines":1,"bbox":[544,394,156,80]}
+{"kind":"shape","id":"sh/5o7qpg3e","slide":19,"bbox":[762,256,200,246]}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":19,"text":"4-5","textPreview":"4-5","textChars":3,"textLines":1,"bbox":[784,282,60,42]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":19,"text":"Governance","textPreview":"Governance","textChars":10,"textLines":1,"bbox":[784,348,150,28]}
+{"kind":"textbox","id":"sh/1032lszq","slide":19,"text":"Review audit export, access walls, billing state, readiness labels, and objections.","textPreview":"Review audit export, access walls, billing state, readiness labels, and objections.","textChars":83,"textLines":1,"bbox":[784,394,156,80]}
+{"kind":"shape","id":"sh/u9knih4b","slide":19,"bbox":[1002,256,200,246]}
+{"kind":"textbox","id":"sh/judg7ads","slide":19,"text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[1024,282,60,42]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":19,"text":"Decision","textPreview":"Decision","textChars":8,"textLines":1,"bbox":[1024,348,150,28]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":19,"text":"Score adoption, time saved, risk controls, data migration, and rollout plan.","textPreview":"Score adoption, time saved, risk controls, data migration, and rollout plan.","textChars":76,"textLines":1,"bbox":[1024,394,156,80]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":19,"text":"Pilot success measures: draft cycle time, hearing-pack completeness, citation review quality, deadline confidence, partner adoption, and billing-state visibility.","textPreview":"Pilot success measures: draft cycle time, hearing-pack completeness, citation review quality, deadline confidence, partner adoption, and ...","textChars":162,"textLines":1,"bbox":[42,558,1100,42]}
+{"kind":"notes","id":"nt/c69q0n","slide":19,"text":""}
+{"kind":"slide","id":"sl/nk27bu","slide":20,"title":"BUYING COMMITTEE","textShapes":17}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":20,"text":"BUYING COMMITTEE","textPreview":"BUYING COMMITTEE","textChars":16,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":20,"text":"Each stakeholder has a reason to say yes.","textPreview":"Each stakeholder has a reason to say yes.","textChars":41,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/nuxc3ylc","slide":20,"text":"The deck should speak to the whole decision room, not just the technology sponsor.","textPreview":"The deck should speak to the whole decision room, not just the technology sponsor.","textChars":82,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":20,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":20,"text":"20","textPreview":"20","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/yhgn29gr","slide":20,"bbox":[42,238,374,128]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":20,"bbox":[64,262,12,12]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":20,"text":"Managing partner","textPreview":"Managing partner","textChars":16,"textLines":1,"bbox":[90,256,304,44]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":20,"text":"More capacity, stronger review, better visibility, partner-led governance.","textPreview":"More capacity, stronger review, better visibility, partner-led governance.","textChars":74,"textLines":1,"bbox":[90,296,304,52]}
+{"kind":"shape","id":"sh/x4nap4r6","slide":20,"bbox":[452,238,374,128]}
+{"kind":"shape","id":"sh/8jqh0fep","slide":20,"bbox":[474,262,12,12]}
+{"kind":"textbox","id":"sh/fyxobm58","slide":20,"text":"Litigation partner","textPreview":"Litigation partner","textChars":18,"textLines":1,"bbox":[500,256,304,44]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":20,"text":"Faster prep, cleaner chronology, better first drafts, fewer missed directions.","textPreview":"Faster prep, cleaner chronology, better first drafts, fewer missed directions.","textChars":78,"textLines":1,"bbox":[500,296,304,52]}
+{"kind":"shape","id":"sh/xczed8v6","slide":20,"bbox":[862,238,374,128]}
+{"kind":"shape","id":"sh/8v6psfil","slide":20,"bbox":[884,262,12,12]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":20,"text":"Associates","textPreview":"Associates","textChars":10,"textLines":1,"bbox":[910,256,304,44]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":20,"text":"Less repetitive assembly, better research trail, clearer review expectations.","textPreview":"Less repetitive assembly, better research trail, clearer review expectations.","textChars":77,"textLines":1,"bbox":[910,296,304,52]}
+{"kind":"shape","id":"sh/1gvy90je","slide":20,"bbox":[42,414,374,128]}
+{"kind":"shape","id":"sh/8z25kb6x","slide":20,"bbox":[64,438,12,12]}
+{"kind":"textbox","id":"sh/83itgfml","slide":20,"text":"Firm admin and finance","textPreview":"Firm admin and finance","textChars":22,"textLines":1,"bbox":[90,432,304,44]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":20,"text":"Billing profile, invoice PDFs, recoveries, spend, audit, export readiness.","textPreview":"Billing profile, invoice PDFs, recoveries, spend, audit, export readiness.","textChars":74,"textLines":1,"bbox":[90,472,304,52]}
+{"kind":"shape","id":"sh/qxs72x4n","slide":20,"bbox":[452,414,374,128]}
+{"kind":"shape","id":"sh/fil0rqd4","slide":20,"bbox":[474,438,12,12]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":20,"text":"IT and security","textPreview":"IT and security","textChars":15,"textLines":1,"bbox":[500,432,304,44]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":20,"text":"Tenant scoping, ethical walls, model policy, provider-gated controls, no cross-tenant training.","textPreview":"Tenant scoping, ethical walls, model policy, provider-gated controls, no cross-tenant training.","textChars":95,"textLines":1,"bbox":[500,472,304,52]}
+{"kind":"shape","id":"sh/m94fu18j","slide":20,"bbox":[862,414,374,128]}
+{"kind":"shape","id":"sh/fu18jqh0","slide":20,"bbox":[884,438,12,12]}
+{"kind":"textbox","id":"sh/4r65wjud","slide":20,"text":"Clients","textPreview":"Clients","textChars":7,"textLines":1,"bbox":[910,432,304,44]}
+{"kind":"textbox","id":"sh/xc3ylc7u","slide":20,"text":"Faster turnaround, traceable work, cleaner reporting, scoped portal access.","textPreview":"Faster turnaround, traceable work, cleaner reporting, scoped portal access.","textChars":75,"textLines":1,"bbox":[910,472,304,52]}
+{"kind":"notes","id":"nt/nk27bu","slide":20,"text":""}
+{"kind":"slide","id":"sl/xfwoqg","slide":21,"title":"COMPETITIVE POSITIONING","textShapes":29}
+{"kind":"textbox","id":"sh/adsji5sn","slide":21,"text":"COMPETITIVE POSITIONING","textPreview":"COMPETITIVE POSITIONING","textChars":23,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":21,"text":"CaseOps is not another point tool.","textPreview":"CaseOps is not another point tool.","textChars":34,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/sji5snel","slide":21,"text":"It can sit alongside research databases, document storage, and office suites while becoming the system that turns those inputs into legal work.","textPreview":"It can sit alongside research databases, document storage, and office suites while becoming the system that turns those inputs into legal...","textChars":143,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/3m94fu18","slide":21,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/a5gbq1or","slide":21,"text":"21","textPreview":"21","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/lszqtcj6","slide":21,"bbox":[42,242,224,46]}
+{"kind":"textbox","id":"sh/s72x4nap","slide":21,"text":"Category","textPreview":"Category","textChars":8,"textLines":1,"bbox":[52,254,204,30]}
+{"kind":"shape","id":"sh/zidonyd0","slide":21,"bbox":[266,242,300,46]}
+{"kind":"textbox","id":"sh/a1gvy90j","slide":21,"text":"What it does well","textPreview":"What it does well","textChars":17,"textLines":1,"bbox":[276,254,280,30]}
+{"kind":"shape","id":"sh/8nqxs72x","slide":21,"bbox":[566,242,300,46]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":21,"text":"What it misses","textPreview":"What it misses","textChars":14,"textLines":1,"bbox":[576,254,280,30]}
+{"kind":"shape","id":"sh/qh0fepkz","slide":21,"bbox":[866,242,372,46]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":21,"text":"CaseOps answer","textPreview":"CaseOps answer","textChars":14,"textLines":1,"bbox":[876,254,352,30]}
+{"kind":"shape","id":"sh/8bat47y1","slide":21,"bbox":[42,288,224,61.6]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":21,"text":"Generic AI chat","textPreview":"Generic AI chat","textChars":15,"textLines":1,"bbox":[52,298,204,47.6]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":21,"bbox":[266,288,300,61.6]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":21,"text":"Fast text generation","textPreview":"Fast text generation","textChars":20,"textLines":1,"bbox":[276,298,280,47.6]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":21,"bbox":[566,288,300,61.6]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":21,"text":"No matter graph, citations, access control, or workflow state","textPreview":"No matter graph, citations, access control, or workflow state","textChars":61,"textLines":1,"bbox":[576,298,280,47.6]}
+{"kind":"shape","id":"sh/58z25kb6","slide":21,"bbox":[866,288,372,61.6]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":21,"text":"Use AI inside reviewable legal workflows.","textPreview":"Use AI inside reviewable legal workflows.","textChars":41,"textLines":1,"bbox":[876,298,352,47.6]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":21,"bbox":[42,349.6,224,61.6]}
+{"kind":"textbox","id":"sh/yhgn29gr","slide":21,"text":"Practice management","textPreview":"Practice management","textChars":19,"textLines":1,"bbox":[52,359.6,204,47.6]}
+{"kind":"shape","id":"sh/5wjudg7a","slide":21,"bbox":[266,349.6,300,61.6]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":21,"text":"Tasks, calendar, contacts, billing","textPreview":"Tasks, calendar, contacts, billing","textChars":34,"textLines":1,"bbox":[276,359.6,280,47.6]}
+{"kind":"shape","id":"sh/nuxc3ylc","slide":21,"bbox":[566,349.6,300,61.6]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":21,"text":"Weak legal intelligence and AI governance","textPreview":"Weak legal intelligence and AI governance","textChars":41,"textLines":1,"bbox":[576,359.6,280,47.6]}
+{"kind":"shape","id":"sh/5sneloj2","slide":21,"bbox":[866,349.6,372,61.6]}
+{"kind":"textbox","id":"sh/cbulwval","slide":21,"text":"Put matter ops and legal work on one record.","textPreview":"Put matter ops and legal work on one record.","textChars":44,"textLines":1,"bbox":[876,359.6,352,47.6]}
+{"kind":"shape","id":"sh/q1orytsv","slide":21,"bbox":[42,411.2,224,61.6]}
+{"kind":"textbox","id":"sh/fmlkjm1c","slide":21,"text":"Research platform","textPreview":"Research platform","textChars":17,"textLines":1,"bbox":[52,421.2,204,47.6]}
+{"kind":"shape","id":"sh/87ed8bat","slide":21,"bbox":[266,411.2,300,61.6]}
+{"kind":"textbox","id":"sh/xs72x4na","slide":21,"text":"Corpus and authority discovery","textPreview":"Corpus and authority discovery","textChars":30,"textLines":1,"bbox":[276,421.2,280,47.6]}
+{"kind":"shape","id":"sh/qtcj6tov","slide":21,"bbox":[566,411.2,300,61.6]}
+{"kind":"textbox","id":"sh/je9cvixc","slide":21,"text":"Not the firm's operating system","textPreview":"Not the firm's operating system","textChars":31,"textLines":1,"bbox":[576,421.2,280,47.6]}
+{"kind":"shape","id":"sh/8z25kb6x","slide":21,"bbox":[866,411.2,372,61.6]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":21,"text":"Bring citations into drafts, recommendations, and hearings.","textPreview":"Bring citations into drafts, recommendations, and hearings.","textChars":59,"textLines":1,"bbox":[876,421.2,352,47.6]}
+{"kind":"shape","id":"sh/qpg3ex0n","slide":21,"bbox":[42,472.8,224,61.6]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":21,"text":"Contract tools","textPreview":"Contract tools","textChars":14,"textLines":1,"bbox":[52,482.8,204,47.6]}
+{"kind":"shape","id":"sh/z61032ls","slide":21,"bbox":[266,472.8,300,61.6]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":21,"text":"Clause review and playbooks","textPreview":"Clause review and playbooks","textChars":27,"textLines":1,"bbox":[276,482.8,280,47.6]}
+{"kind":"shape","id":"sh/hcrmhk3q","slide":21,"bbox":[566,472.8,300,61.6]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":21,"text":"Often isolated from litigation and portfolio ops","textPreview":"Often isolated from litigation and portfolio ops","textChars":48,"textLines":1,"bbox":[576,482.8,280,47.6]}
+{"kind":"shape","id":"sh/zupwb2hw","slide":21,"bbox":[866,472.8,372,61.6]}
+{"kind":"textbox","id":"sh/a9w3m94f","slide":21,"text":"Attach obligations and deviations to matter context.","textPreview":"Attach obligations and deviations to matter context.","textChars":52,"textLines":1,"bbox":[876,482.8,352,47.6]}
+{"kind":"shape","id":"sh/h0fepkzu","slide":21,"bbox":[42,534.4,224,61.6]}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":21,"text":"DMS and email","textPreview":"DMS and email","textChars":13,"textLines":1,"bbox":[52,544.4,204,47.6]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":21,"bbox":[266,534.4,300,61.6]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":21,"text":"Storage and communications","textPreview":"Storage and communications","textChars":26,"textLines":1,"bbox":[276,544.4,280,47.6]}
+{"kind":"shape","id":"sh/0je9cvix","slide":21,"bbox":[566,534.4,300,61.6]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":21,"text":"No structured legal decision layer","textPreview":"No structured legal decision layer","textChars":34,"textLines":1,"bbox":[576,544.4,280,47.6]}
+{"kind":"shape","id":"sh/idonyd0z","slide":21,"bbox":[866,534.4,372,61.6]}
+{"kind":"textbox","id":"sh/byhgn29g","slide":21,"text":"Convert documents and messages into reviewable work.","textPreview":"Convert documents and messages into reviewable work.","textChars":52,"textLines":1,"bbox":[876,544.4,352,47.6]}
+{"kind":"notes","id":"nt/xfwoqg","slide":21,"text":""}
+{"kind":"slide","id":"sl/yb5bep","slide":22,"title":"COMMERCIAL MODEL","textShapes":19}
+{"kind":"textbox","id":"sh/9knih4by","slide":22,"text":"COMMERCIAL MODEL","textPreview":"COMMERCIAL MODEL","textChars":16,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/2t83itgf","slide":22,"text":"Pilot pricing lets firms prove value before firmwide rollout.","textPreview":"Pilot pricing lets firms prove value before firmwide rollout.","textChars":61,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":22,"text":"The catalog can support simple law-firm entry and a path to enterprise deployment discussions.","textPreview":"The catalog can support simple law-firm entry and a path to enterprise deployment discussions.","textChars":94,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":22,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":22,"text":"22","textPreview":"22","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/25kb6xkf","slide":22,"bbox":[42,248,270,270]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":22,"text":"Firm Starter","textPreview":"Firm Starter","textChars":12,"textLines":1,"bbox":[64,282,220,26]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":22,"text":"INR 5,999/mo","textPreview":"INR 5,999/mo","textChars":12,"textLines":1,"bbox":[64,328,220,44]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":22,"text":"5 users, 300 matters, 250 tracked cases, 25 GB storage","textPreview":"5 users, 300 matters, 250 tracked cases, 25 GB storage","textChars":54,"textLines":1,"bbox":[64,404,214,72]}
+{"kind":"shape","id":"sh/1orytsvu","slide":22,"bbox":[342,248,270,270]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":22,"text":"Firm Growth","textPreview":"Firm Growth","textChars":11,"textLines":1,"bbox":[364,282,220,26]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":22,"text":"INR 19,999/mo","textPreview":"INR 19,999/mo","textChars":13,"textLines":1,"bbox":[364,328,220,44]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":22,"text":"15 users, 10 viewers, 1,500 matters, 1,000 tracked cases","textPreview":"15 users, 10 viewers, 1,500 matters, 1,000 tracked cases","textChars":56,"textLines":1,"bbox":[364,404,214,72]}
+{"kind":"shape","id":"sh/1032lszq","slide":22,"bbox":[642,248,270,270]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":22,"text":"Firm Pro","textPreview":"Firm Pro","textChars":8,"textLines":1,"bbox":[664,282,220,26]}
+{"kind":"textbox","id":"sh/judg7ads","slide":22,"text":"INR 49,999/mo","textPreview":"INR 49,999/mo","textChars":13,"textLines":1,"bbox":[664,328,220,44]}
+{"kind":"textbox","id":"sh/u9knih4b","slide":22,"text":"50 users, 50 viewers, 5,000 matters, API access, SSO readiness","textPreview":"50 users, 50 viewers, 5,000 matters, API access, SSO readiness","textChars":62,"textLines":1,"bbox":[664,404,214,72]}
+{"kind":"shape","id":"sh/54zidony","slide":22,"bbox":[942,248,270,270]}
+{"kind":"textbox","id":"sh/cj6tovah","slide":22,"text":"Enterprise","textPreview":"Enterprise","textChars":10,"textLines":1,"bbox":[964,282,220,26]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":22,"text":"Custom","textPreview":"Custom","textChars":6,"textLines":1,"bbox":[964,328,220,44]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":22,"text":"Unlimited/contract-defined, private deployment planning, security review","textPreview":"Unlimited/contract-defined, private deployment planning, security review","textChars":72,"textLines":1,"bbox":[964,404,214,72]}
+{"kind":"textbox","id":"sh/ulwval87","slide":22,"text":"Recommended sales motion: start with one practice group, lock pilot terms, then expand by matter volume, users, storage, AI credits, and security posture.","textPreview":"Recommended sales motion: start with one practice group, lock pilot terms, then expand by matter volume, users, storage, AI credits, and ...","textChars":154,"textLines":1,"bbox":[42,560,1120,44]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":22,"text":"Source: CaseOps billing catalog documentation reviewed 2026-07-10. Prices are pilot/catalog terms, subject to contract.","textPreview":"Source: CaseOps billing catalog documentation reviewed 2026-07-10. Prices are pilot/catalog terms, subject to contract.","textChars":119,"textLines":1,"bbox":[42,633,1000,28]}
+{"kind":"notes","id":"nt/yb5bep","slide":22,"text":""}
+{"kind":"slide","id":"sl/w53k8w","slide":23,"title":"OBJECTIONS","textShapes":17}
+{"kind":"textbox","id":"sh/je9cvixc","slide":23,"text":"OBJECTIONS","textPreview":"OBJECTIONS","textChars":10,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":23,"text":"The hard questions have answers.","textPreview":"The hard questions have answers.","textChars":32,"textLines":1,"bbox":[42,72,860,92]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":23,"text":"Law-firm buyers will ask about accuracy, adoption, confidentiality, integrations, migration, and money. Answer directly.","textPreview":"Law-firm buyers will ask about accuracy, adoption, confidentiality, integrations, migration, and money. Answer directly.","textChars":120,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":23,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/fmlkjm1c","slide":23,"text":"23","textPreview":"23","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/87ed8bat","slide":23,"bbox":[42,232,580,96]}
+{"kind":"shape","id":"sh/xs72x4na","slide":23,"bbox":[64,256,12,12]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":23,"text":"Will AI hallucinate?","textPreview":"Will AI hallucinate?","textChars":20,"textLines":1,"bbox":[90,250,510,44]}
+{"kind":"textbox","id":"sh/fyxobm58","slide":23,"text":"Grounding, refusal states, verified citations, placeholders, and lawyer approval are built into substantive workflows.","textPreview":"Grounding, refusal states, verified citations, placeholders, and lawyer approval are built into substantive workflows.","textChars":118,"textLines":1,"bbox":[90,282,510,28]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":23,"bbox":[657,232,580,96]}
+{"kind":"shape","id":"sh/e1w7mp0b","slide":23,"bbox":[679,256,12,12]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":23,"text":"Is our data safe?","textPreview":"Is our data safe?","textChars":17,"textLines":1,"bbox":[705,250,510,44]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":23,"text":"Tenant isolation, ethical walls, no cross-tenant training by default, redacted audit, and provider-gated integrations.","textPreview":"Tenant isolation, ethical walls, no cross-tenant training by default, redacted audit, and provider-gated integrations.","textChars":118,"textLines":1,"bbox":[705,282,510,28]}
+{"kind":"shape","id":"sh/7adsji5s","slide":23,"bbox":[42,364,580,96]}
+{"kind":"shape","id":"sh/epkzupwb","slide":23,"bbox":[64,388,12,12]}
+{"kind":"textbox","id":"sh/pg3ex0nu","slide":23,"text":"Will lawyers adopt it?","textPreview":"Will lawyers adopt it?","textChars":22,"textLines":1,"bbox":[90,382,510,44]}
+{"kind":"textbox","id":"sh/wval87ed","slide":23,"text":"Start from matter workflows they already run: drafts, hearings, research, cause lists, billing, and review.","textPreview":"Start from matter workflows they already run: drafts, hearings, research, cause lists, billing, and review.","textChars":107,"textLines":1,"bbox":[90,414,510,28]}
+{"kind":"shape","id":"sh/36hcrmhk","slide":23,"bbox":[657,364,580,96]}
+{"kind":"shape","id":"sh/eloj2t83","slide":23,"bbox":[679,388,12,12]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":23,"text":"Can it integrate?","textPreview":"Can it integrate?","textChars":17,"textLines":1,"bbox":[705,382,510,44]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":23,"text":"Use bounded provider workflows first. Enable Outlook, Google, court sources, and payments only after readiness and UAT.","textPreview":"Use bounded provider workflows first. Enable Outlook, Google, court sources, and payments only after readiness and UAT.","textChars":119,"textLines":1,"bbox":[705,414,510,28]}
+{"kind":"shape","id":"sh/4vmtwra5","slide":23,"bbox":[42,496,580,96]}
+{"kind":"shape","id":"sh/tgfmlkjm","slide":23,"bbox":[64,520,12,12]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":23,"text":"How hard is migration?","textPreview":"How hard is migration?","textChars":22,"textLines":1,"bbox":[90,514,510,44]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":23,"text":"Pilot with 10-25 matters, dry-run bulk import, Drive metadata planning, and scoped document upload.","textPreview":"Pilot with 10-25 matters, dry-run bulk import, Drive metadata planning, and scoped document upload.","textChars":99,"textLines":1,"bbox":[90,546,510,28]}
+{"kind":"shape","id":"sh/47y1kre1","slide":23,"bbox":[657,496,580,96]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":23,"bbox":[679,520,12,12]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":23,"text":"Will it hurt billing?","textPreview":"Will it hurt billing?","textChars":21,"textLines":1,"bbox":[705,514,510,44]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":23,"text":"Reclaimed time can become capacity, alternative fees, faster turnaround, better collections, and cleaner realization.","textPreview":"Reclaimed time can become capacity, alternative fees, faster turnaround, better collections, and cleaner realization.","textChars":117,"textLines":1,"bbox":[705,546,510,28]}
+{"kind":"notes","id":"nt/w53k8w","slide":23,"text":""}
+{"kind":"slide","id":"sl/0rqsla","slide":24,"title":"NEXT STEP","textShapes":14}
+{"kind":"textbox","id":"sh/p4r65wju","slide":24,"text":"NEXT STEP","textPreview":"NEXT STEP","textChars":9,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":24,"text":"Start with one practice group and ten real matters.","textPreview":"Start with one practice group and ten real matters.","textChars":51,"textLines":1,"bbox":[42,72,940,110]}
+{"kind":"textbox","id":"sh/7y1kre1w","slide":24,"text":"The cleanest close is a focused pilot: small enough to run quickly, real enough to prove whether CaseOps changes daily work.","textPreview":"The cleanest close is a focused pilot: small enough to run quickly, real enough to prove whether CaseOps changes daily work.","textChars":124,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/0bi9s36h","slide":24,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":24,"text":"24","textPreview":"24","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/i5sneloj","slide":24,"bbox":[42,278,540,220]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":24,"text":"The ask","textPreview":"The ask","textChars":7,"textLines":1,"bbox":[76,314,280,36]}
+{"kind":"textbox","id":"sh/0z61032l","slide":24,"text":"A 45-minute founder-led walkthrough, followed by a pilot workspace seeded with the firm's sample matters, templates, users, and access model.","textPreview":"A 45-minute founder-led walkthrough, followed by a pilot workspace seeded with the firm's sample matters, templates, users, and access mo...","textChars":141,"textLines":1,"bbox":[76,376,430,76]}
+{"kind":"shape","id":"sh/pkzupwb2","slide":24,"bbox":[664,278,574,220]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":24,"text":"Pilot inputs","textPreview":"Pilot inputs","textChars":12,"textLines":1,"bbox":[700,314,320,36]}
+{"kind":"shape","id":"sh/cbulwval","slide":24,"bbox":[706,374,8,8]}
+{"kind":"textbox","id":"sh/nqxs72x4","slide":24,"text":"10-25 active matters","textPreview":"10-25 active matters","textChars":20,"textLines":1,"bbox":[730,363,390,22]}
+{"kind":"shape","id":"sh/u54zidon","slide":24,"bbox":[706,402,8,8]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":24,"text":"4-6 lawyers plus admin","textPreview":"4-6 lawyers plus admin","textChars":22,"textLines":1,"bbox":[730,391,390,22]}
+{"kind":"shape","id":"sh/czed8v6p","slide":24,"bbox":[706,430,8,8]}
+{"kind":"textbox","id":"sh/neloj2t8","slide":24,"text":"priority courts and practice areas","textPreview":"priority courts and practice areas","textChars":34,"textLines":1,"bbox":[730,419,390,22]}
+{"kind":"shape","id":"sh/ytsvu9kn","slide":24,"bbox":[706,458,8,8]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":24,"text":"templates and billing profile","textPreview":"templates and billing profile","textChars":29,"textLines":1,"bbox":[730,447,390,22]}
+{"kind":"shape","id":"sh/gn29gr2p","slide":24,"bbox":[706,486,8,8]}
+{"kind":"textbox","id":"sh/cvixczed","slide":24,"text":"security and readiness review","textPreview":"security and readiness review","textChars":29,"textLines":1,"bbox":[730,475,390,22]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":24,"text":"Contact: mishra.sanjeev@gmail.com | caseops.ai","textPreview":"Contact: mishra.sanjeev@gmail.com | caseops.ai","textChars":46,"textLines":1,"bbox":[42,588,760,30]}
+{"kind":"notes","id":"nt/0rqsla","slide":24,"text":""}
+{"kind":"slide","id":"sl/aunk47","slide":25,"title":"SOURCES","textShapes":17}
+{"kind":"textbox","id":"sh/m94fu18j","slide":25,"text":"SOURCES","textPreview":"SOURCES","textChars":7,"textLines":1,"bbox":[42,34,580,24]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":25,"text":"Research and product sources used in this deck.","textPreview":"Research and product sources used in this deck.","textChars":47,"textLines":1,"bbox":[42,72,900,88]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":25,"text":"External statistics support market timing and ROI framing. Product claims are grounded in CaseOps docs reviewed 2026-07-10.","textPreview":"External statistics support market timing and ROI framing. Product claims are grounded in CaseOps docs reviewed 2026-07-10.","textChars":123,"textLines":1,"bbox":[42,164,780,72]}
+{"kind":"textbox","id":"sh/fil0rqd4","slide":25,"text":"CaseOps law firm pitch","textPreview":"CaseOps law firm pitch","textChars":22,"textLines":1,"bbox":[42,661,360,22]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":25,"text":"25","textPreview":"25","textChars":2,"textLines":1,"bbox":[1183,661,56,22]}
+{"kind":"shape","id":"sh/xobm58z2","slide":25,"bbox":[42,236,1196,44]}
+{"kind":"textbox","id":"sh/83itgfml","slide":25,"text":"Thomson Reuters Future of Professionals Report 2025","textPreview":"Thomson Reuters Future of Professionals Report 2025","textChars":51,"textLines":1,"bbox":[60,246,395,22]}
+{"kind":"textbox","id":"sh/fepkzupw","slide":25,"text":"https://www.thomsonreuters.com/content/dam/ewp-m/documents/thomsonreuters/en/pdf/reports/future-of-professionals-report-2025.pdf","textPreview":"https://www.thomsonreuters.com/content/dam/ewp-m/documents/thomsonreuters/en/pdf/reports/future-of-professionals-report-2025.pdf","textChars":128,"textLines":1,"bbox":[468,246,750,22]}
+{"kind":"shape","id":"sh/mtwra5gb","slide":25,"bbox":[42,294,1196,44]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":25,"text":"NJDG live dashboards accessed 2026-07-10","textPreview":"NJDG live dashboards accessed 2026-07-10","textChars":40,"textLines":1,"bbox":[60,304,395,22]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":25,"text":"https://njdg.ecourts.gov.in/ | https://njdg.ecourts.gov.in/hcnjdg_v2/ | https://scdg.sci.gov.in/","textPreview":"https://njdg.ecourts.gov.in/ | https://njdg.ecourts.gov.in/hcnjdg_v2/ | https://scdg.sci.gov.in/","textChars":96,"textLines":1,"bbox":[468,304,750,22]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":25,"bbox":[42,352,1196,44]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":25,"text":"PIB note on NJDG as the national case-data repository","textPreview":"PIB note on NJDG as the national case-data repository","textChars":53,"textLines":1,"bbox":[60,362,395,22]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":25,"text":"https://www.pib.gov.in/PressReleasePage.aspx?PRID=1957318","textPreview":"https://www.pib.gov.in/PressReleasePage.aspx?PRID=1957318","textChars":57,"textLines":1,"bbox":[468,362,750,22]}
+{"kind":"shape","id":"sh/dsji5sne","slide":25,"bbox":[42,410,1196,44]}
+{"kind":"textbox","id":"sh/61032lsz","slide":25,"text":"PIB e-Courts Phase III outlay and digitization scope","textPreview":"PIB e-Courts Phase III outlay and digitization scope","textChars":52,"textLines":1,"bbox":[60,420,395,22]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":25,"text":"https://www.pib.gov.in/PressReleasePage.aspx?PRID=2040232","textPreview":"https://www.pib.gov.in/PressReleasePage.aspx?PRID=2040232","textChars":57,"textLines":1,"bbox":[468,420,750,22]}
+{"kind":"shape","id":"sh/ovahoza1","slide":25,"bbox":[42,468,1196,44]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":25,"text":"CaseOps public law-firms page","textPreview":"CaseOps public law-firms page","textChars":29,"textLines":1,"bbox":[60,478,395,22]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":25,"text":"https://caseops.ai/law-firms","textPreview":"https://caseops.ai/law-firms","textChars":28,"textLines":1,"bbox":[468,478,750,22]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":25,"bbox":[42,526,1196,44]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":25,"text":"CaseOps local repository and product docs","textPreview":"CaseOps local repository and product docs","textChars":41,"textLines":1,"bbox":[60,536,395,22]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":25,"text":"README.md, docs/PRD.md, GBA guide, billing explainer, ADP roadmap, marketing components","textPreview":"README.md, docs/PRD.md, GBA guide, billing explainer, ADP roadmap, marketing components","textChars":87,"textLines":1,"bbox":[468,536,750,22]}
+{"kind":"notes","id":"nt/aunk47","slide":25,"text":""}

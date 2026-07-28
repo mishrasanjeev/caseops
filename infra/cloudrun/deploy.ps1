@@ -123,6 +123,33 @@ function Ensure-SchedulerJob {
     )
 
     & gcloud @commonArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to $schedulerAction Cloud Scheduler job '$JobName'."
+    }
+}
+
+function Ensure-CloudRunJobInvoker {
+    param(
+        [string]$ProjectId,
+        [string]$Region,
+        [string]$JobName,
+        [string]$SchedulerServiceAccount
+    )
+
+    $member = "serviceAccount:$SchedulerServiceAccount"
+    $iamArgs = @(
+        "run", "jobs", "add-iam-policy-binding", $JobName,
+        "--region", $Region,
+        "--project", $ProjectId,
+        "--member", $member,
+        "--role", "roles/run.invoker",
+        "--quiet"
+    )
+
+    & gcloud @iamArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to grant '$member' permission to execute Cloud Run job '$JobName'."
+    }
 }
 
 Ensure-Gcloud
@@ -183,6 +210,19 @@ Render-Template `
 & gcloud run jobs replace $activityReportManifest --region $Region --project $ProjectId
 
 if (-not $SkipScheduler) {
+    foreach ($runJobName in @(
+        "caseops-document-worker",
+        "caseops-legal-update-sync",
+        "caseops-case-tracking-poll",
+        "caseops-activity-report"
+    )) {
+        Ensure-CloudRunJobInvoker `
+            -ProjectId $ProjectId `
+            -Region $Region `
+            -JobName $runJobName `
+            -SchedulerServiceAccount $SchedulerServiceAccount
+    }
+
     Ensure-SchedulerJob `
         -ProjectId $ProjectId `
         -Location $SchedulerLocation `

@@ -52,7 +52,7 @@ Before deploying, replace these placeholders:
   -Region "asia-south1" `
   -CloudSqlInstance "caseops-sql" `
   -ServiceAccount "caseops-runtime@caseops-prod.iam.gserviceaccount.com" `
-  -SchedulerServiceAccount "caseops-scheduler@caseops-prod.iam.gserviceaccount.com" `
+  -SchedulerServiceAccount "caseops-scheduler-invoker@caseops-prod.iam.gserviceaccount.com" `
   -ApiImage "asia-south1-docker.pkg.dev/caseops-prod/platform/caseops-api:latest" `
   -DatabaseUrl "postgresql+psycopg://caseops:REPLACE_ME@/caseops?host=/cloudsql/caseops-prod:asia-south1:caseops-sql" `
   -GcsBucket "caseops-prod-documents" `
@@ -62,7 +62,9 @@ Before deploying, replace these placeholders:
 ## IAM Notes
 
 - the runtime service account should have access to `Cloud SQL`, `GCS`, and any secrets the API needs
-- the scheduler service account must be able to execute all Cloud Run jobs
+- `deploy.ps1` grants the scheduler service account job-level
+  `roles/run.invoker` on every Cloud Run job it schedules
+- the scheduler service account must be allowed to execute all Cloud Run jobs
   - Google’s current Cloud Run IAM docs list `roles/run.invoker` and `roles/run.jobsExecutor` as roles that grant `run.jobs.run`
 - the principal deploying these assets needs permission to update Cloud Run services, Cloud Run jobs, and Cloud Scheduler jobs
 

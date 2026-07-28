@@ -960,3 +960,36 @@ regression shards completed on 2026-07-16:
   terminal entry through create/import/generic PATCH;
 - production post-fix execution remains intentionally pending deployment and
   deployed-build identity proof.
+
+## Ram 2026-07-28 product-boundary and deployed lifecycle audit
+
+Source workbook: `C:\Users\mishr\Downloads\Enhancements_Ram28Jul2026.xlsx`.
+Permanent learning record: `docs/BUG_REOPEN_LEARNINGS_2026-07-28_RAM.md`.
+
+| ID | Classification | Verdict | Evidence / action |
+| --- | --- | --- | --- |
+| Workbook rows 1-3 | Valid-looking Edumatica work items, invalid for this CaseOps repository | `Inconclusive` / out of scope | The modules and external URL are absent from this repository. No CaseOps implementation was made for an unrelated product. |
+| ADJ-REOPEN-2026-07-28 | Valid deployed CaseOps lifecycle defect or deployment drift | `Inconclusive` | Local lifecycle code and local API/Playwright regressions pass; deployed `tests/e2e/ram-2026-07-15-prod.spec.ts:676` accepted pre-reopen conflict clearance with HTTP 200 and reactivated the Matter. Deploy the candidate, prove build identity, and rerun the same spec. |
+| ADJ-NOTICE-FILTER-2026-07-28 | Suspected transient production filter failure | `Inconclusive` | First production replay showed an empty combined filter result; the second replay passed and a direct authenticated API probe returned the filtered record. Keep the existing notice regression and monitor; do not claim a code fix from one flaky observation. |
+
+Why cases were reopening: previous local evidence was allowed to stand in for
+deployed-build evidence. The exact production lifecycle journey still allowed
+old conflict clearance to reactivate a reopened Matter. This audit does not
+upgrade the production verdict until the corrected candidate is deployed and
+the dated production spec passes on a provable build.
+
+## CaseOps BUG-001 — Ram 2026-07-28 Judge Aliases navigation
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps_Bugs_Ram28Jul2026.xlsx`.
+
+| ID | Classification | Formal verdict | Evidence / action |
+| --- | --- | --- | --- |
+| BUG-001 | Valid CaseOps UI/navigation bug | `Properly fixed` | `apps/web/components/app/Sidebar.tsx` now exposes `/app/admin/judge-aliases` with the `workspace:admin` capability gate. Local `tests/e2e/ram-2026-07-28-bugs.spec.ts` passed 1/1 and deployed `tests/e2e/ram-2026-07-28-prod.spec.ts` passed 1/1 on web candidate `7495bc6`, Cloud Run revision `caseops-web-00191-vn9`, 100% traffic. |
+| DEPLOY-GATE-2026-07-28 | Valid adjacent release blocker | `Inconclusive` | `caseops-migrate-job-7mmw2` failed before API rollout because production references absent Alembic revision `20260723_0001`. The web-only fix was deployed; API traffic was not changed. |
+
+The previous shallow failure pattern was also present in this row's shape: the
+route and Admin landing-page link existed, so a direct-URL or page-only test
+could pass while the actual main navigation remained broken. The regression now
+starts at the shared desktop/mobile navigation primitive and proves the loaded
+destination. The summary workbook records the item-level fix separately from
+the release-level migration blocker.

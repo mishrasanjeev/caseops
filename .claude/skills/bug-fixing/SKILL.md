@@ -398,3 +398,20 @@ For every terminal lifecycle repair, add all of the following where applicable:
   inventory (or documented non-overlapping shards covering it), plus the real
   production database dialect where behavior differs, before calling the local
   implementation verified.
+
+### Product-boundary and deployment-drift rules (added 2026-07-28)
+
+- Before changing code, confirm the reported workbook's product, URL, module
+  names, and data nouns exist in this repository. An external-product row is
+  not a CaseOps bug; classify it as out of scope and do not implement a
+  look-alike feature in the wrong system.
+- A local candidate can be correct while production still reopens a case when
+  the deployed build predates the candidate. A production failure of the
+  exact dated spec is a release finding, not evidence to patch around in the
+  local test.
+- A lifecycle closure must prove the post-reopen negative boundary: the
+  pre-reopen conflict clearance is rejected, the matter remains Intake, a
+  fresh check is required, and only that fresh check permits Active.
+- `/api/health` or an HTTP 200 response proves availability, not deployed
+  commit identity. Do not issue a clean production verdict without a build
+  fingerprint or an explicitly documented equivalent.

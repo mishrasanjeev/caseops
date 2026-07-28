@@ -57,6 +57,9 @@ playwright-report/
 test-results/
 tests/e2e/.auth/
 e2e-screenshots/
+# Local launch-video sources, renders, voiceovers, captions, and QA frames.
+# These are production artifacts, not repository source.
+outputs/caseops-launch-video/
 __pycache__/
 .pytest_cache/
 # pytest --basetemp output — a test run leaves 30+ synthetic

@@ -1,0 +1,2 @@
+CaseOps keeps VVAH autonomous remediation disabled by default.
+Use detection-only scans or remove this sentinel only for an explicitly reviewed remediation run.

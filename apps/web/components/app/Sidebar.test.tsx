@@ -71,6 +71,10 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/admin/inbound-email",
     );
+    expect(screen.getByRole("link", { name: "Judge aliases" })).toHaveAttribute(
+      "href",
+      "/app/admin/judge-aliases",
+    );
     expect(screen.queryByRole("link", { name: "Platform admin" })).not.toBeInTheDocument();
   });
 
