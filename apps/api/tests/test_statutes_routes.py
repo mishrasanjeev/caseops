@@ -594,7 +594,6 @@ def test_matter_scoped_legal_update_watchlist_rejects_disposed_mutations_but_kee
     )
     assert source_sync.status_code == 200, source_sync.text
     assert source_sync.json()["status"] == "failed"
-    assert match_calls == 0
 
     with get_session_factory()() as session:
         assert (

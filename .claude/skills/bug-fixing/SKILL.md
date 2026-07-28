@@ -282,6 +282,26 @@ actual contract remains broken.
   links, link multiple records, find it from main navigation, search/filter it,
   assign it, and track both received and sent variants.
 
+### Policy changes must retire the old invariant everywhere
+
+- Distinguish a regression from a deliberate policy change. Record the old
+  contract, the new effective contract, and the date/scope of supersession;
+  do not call intentional old behavior a code defect.
+- A workflow described as optional or nonblocking must be nonblocking at every
+  entry point. Remove the server denial, client precondition, recovery copy,
+  exact-error tests, lifecycle assumptions, public documentation, and helper
+  fixtures that silently preserve the old mandatory gate.
+- Prove optionality against the states most likely to retain hidden blocking:
+  no record, pending, conflicted, waived/cleared, stale party scope, and a
+  pre-reopen result. Separately prove that users can still run, review, and
+  resolve the optional workflow.
+- Historical learning documents remain history. Add an explicit supersession
+  annotation and link to the new contract instead of rewriting old acceptance
+  evidence as though it never existed.
+- A local green test cannot close a policy change. The committed production
+  Playwright spec must pass on the deployed build identity before the verdict
+  becomes `Properly fixed`.
+
 ### Terminal lifecycle changes require a state machine, not a dropdown
 
 - Maintain one explicit transition matrix. Generic metadata PATCH routes must
@@ -310,8 +330,11 @@ actual contract remains broken.
   children during migration and defensively repeat neutralization under the
   parent lock immediately before reopening a terminal row. Durable-tombstone
   any already-synced external calendar artifact tied to those children.
-- Prior conflict clearance is not permanent permission to reactivate a disposed
-  matter. Reopen invalidates it and requires a new check before Active.
+- Prior conflict clearance is not current evidence after a disposed matter is
+  reopened. Preserve it as historical/stale evidence, but under the effective
+  2026-07-22 policy neither that stale result nor the absence of a fresh check
+  may block a transition to Active. A fresh check is required only before the
+  product or user describes the matter as currently conflict-cleared.
 
 ### Mandatory reopen regressions
 
@@ -325,7 +348,9 @@ For every terminal lifecycle repair, add all of the following where applicable:
    timestamp preconditions plus audit evidence.
 4. A queued/background provider update after disposal cannot alter the matter or
    reintroduce it into active feeds.
-5. Reopen lands in Intake and old conflict clearance cannot activate it.
+5. Reopen lands in Intake, old conflict clearance is visibly historical/stale,
+   and the matter can move to Active without a fresh check; running and
+   resolving a fresh optional check still works.
 6. The dated Playwright spec is selected by the normal local and production
    configs. A committed spec omitted by a manual `testMatch` allowlist is not
    regression coverage.

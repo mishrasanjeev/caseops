@@ -8,7 +8,7 @@ import { siteConfig } from "@/lib/site";
 
 const body = `# CaseOps - Indian legal operating system
 
-> CaseOps is a matter-native legal operating system for Indian law firms and corporate legal teams. It unifies intake and conflict clearance, matter management, notices and reply deadlines, drafting, hearing preparation, tracked case refresh, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing into a single citation-grounded workspace.
+> CaseOps is a matter-native legal operating system for Indian law firms and corporate legal teams. It unifies intake and optional conflict review, matter management, notices and reply deadlines, drafting, hearing preparation, tracked case refresh, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing into a single citation-grounded workspace.
 
 - Home: ${siteConfig.url}
 - User guide: ${siteConfig.url}/guide
@@ -20,7 +20,7 @@ const body = `# CaseOps - Indian legal operating system
 ## What the product does
 
 - **Matter management**: intake, matter workspaces, timeline, tasks and deadlines, documents, notices, drafts, hearings, intelligence, communications, billing, Dispose status, next-hearing provenance, server-enforced matter access, and audit
-- **Conflict clearance**: direct New Matter creation starts Active by default; pre-engagement files deliberately kept in Intake or On hold require a cleared or waived latest check before moving to Active
+- **Conflict review**: checks are optional, auditable, and nonblocking; New Matter starts Active by default, and Intake or On hold can move to Active regardless of whether a check is absent, pending, conflicted, cleared, waived, or stale
 - **Notices**: centralized /app/notices register for standalone or zero/multi-matter-linked received/sent notices, with optional owner/file, status and reply tracking, workspace filters, and clearly read-only legacy matter attachments
 - **Status vocabulary**: every public claim is one of live, review-first, provider-gated, founder-only, disabled until UAT, or planned
 - **Case tracking**: explicitly tracked/bookmarked cases refresh in the configured 4 PM-6 PM IST window; disabled or misconfigured providers make no external calls and record blocked/skipped state

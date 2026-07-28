@@ -9554,6 +9554,8 @@ export interface components {
             client_email?: string | null;
             /** Client Name */
             client_name?: string | null;
+            /** Court Forum Number */
+            court_forum_number?: string | null;
             /** Court Name */
             court_name?: string | null;
             /** Description */
@@ -11397,7 +11399,8 @@ export interface components {
          *     `opposing_party_name` is required (most matters have one).
          *     `related_party_names` is the list of additional party names to scan
          *     (witnesses, related entities, beneficiaries, parent companies, etc.).
-         *     The scanner intersects every name across clients/matters/contacts.
+         *     The scanner compares every supplied name with existing client names and
+         *     matter client/opposing-party names.
          */
         ConflictCheckRunRequest: {
             /** Opposing Party Name */
@@ -17987,6 +17990,7 @@ export interface components {
          * MatterCreateRequest
          * @example {
          *       "client_name": "Rahul Verma",
+         *       "court_forum_number": "Court 7",
          *       "court_name": "Delhi High Court",
          *       "description": "FIR No. 145/2025, P.S. Connaught Place — BNS ss.318/319/336/340. Seeking regular bail under BNSS s.483.",
          *       "forum_level": "high_court",
@@ -18022,6 +18026,8 @@ export interface components {
             client_name?: string | null;
             /** Cnr Number */
             cnr_number?: string | null;
+            /** Court Forum Number */
+            court_forum_number?: string | null;
             /** Court Id */
             court_id?: string | null;
             /** Court Name */
@@ -18796,6 +18802,7 @@ export interface components {
          * @example {
          *       "client_name": "Rahul Verma",
          *       "company_id": "018f0000-0000-0000-0000-000000000001",
+         *       "court_forum_number": "Court 7",
          *       "court_name": "Delhi High Court",
          *       "created_at": "2026-04-18T05:00:00Z",
          *       "description": "FIR No. 145/2025, P.S. Connaught Place — BNS ss.318/319/336/340. Seeking regular bail under BNSS s.483.",
@@ -18839,6 +18846,8 @@ export interface components {
             cnr_number?: string | null;
             /** Company Id */
             company_id: string;
+            /** Court Forum Number */
+            court_forum_number?: string | null;
             /** Court Id */
             court_id?: string | null;
             /** Court Name */
@@ -19417,6 +19426,8 @@ export interface components {
             client_name?: string | null;
             /** Cnr Number */
             cnr_number?: string | null;
+            /** Court Forum Number */
+            court_forum_number?: string | null;
             /** Court Id */
             court_id?: string | null;
             /** Court Name */

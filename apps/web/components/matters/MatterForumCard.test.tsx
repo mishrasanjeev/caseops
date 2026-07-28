@@ -172,6 +172,7 @@ describe("MatterForumCard", () => {
               forum_level: "arbitration",
               court_name: "SIAC",
               created_at: "2026-05-05T00:00:00Z",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
@@ -226,6 +227,7 @@ describe("MatterForumCard", () => {
               forum_district: "Kamrup Metro",
               forum_city: null,
               created_at: "2026-06-24T00:00:00Z",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
@@ -294,6 +296,7 @@ describe("MatterForumCard", () => {
               forum_district: "South-West",
               forum_city: "Dwarka",
               created_at: "2026-06-23T00:00:00Z",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
@@ -358,6 +361,7 @@ describe("MatterForumCard", () => {
               forum_city: null,
               forum_consumer_level: "district",
               created_at: "2026-06-25T00:00:00Z",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
@@ -426,6 +430,7 @@ describe("MatterForumCard", () => {
               court_name: "NCDRC",
               forum_consumer_level: "national",
               created_at: "2026-06-25T00:00:00Z",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
@@ -481,6 +486,7 @@ describe("MatterForumCard", () => {
               forum_state: "Delhi",
               forum_city: "New Delhi",
               created_at: "2026-05-05T00:00:00Z",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }
@@ -510,6 +516,7 @@ describe("MatterForumCard", () => {
               practice_area: "Commercial",
               forum_level: "high_court",
               court_name: "Delhi High Court",
+              lifecycle_version: 0,
               updated_at: "2026-07-15T10:00:00Z",
             } as WorkspaceMatter
           }

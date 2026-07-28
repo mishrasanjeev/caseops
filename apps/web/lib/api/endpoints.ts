@@ -1789,6 +1789,7 @@ export type ConflictCheckRecord = {
   resolved_by_membership_id: string | null;
   resolved_at: string | null;
   ran_by_membership_id: string | null;
+  matter_lifecycle_version: number;
   ran_at: string;
   created_at: string;
 };
@@ -5443,6 +5444,7 @@ export async function createMatter(input: {
   cnr_number?: string;
   description?: string;
   court_name?: string;
+  court_forum_number?: string | null;
   forum_catalog_entry_id?: string | null;
   forum_state?: string | null;
   forum_district?: string | null;
@@ -5475,6 +5477,7 @@ export async function updateMatter(input: {
   forum_level?: string | null;
   court_id?: string | null;
   court_name?: string | null;
+  court_forum_number?: string | null;
   forum_catalog_entry_id?: string | null;
   forum_state?: string | null;
   forum_district?: string | null;

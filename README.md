@@ -2,7 +2,7 @@
 
 **The matter-native legal operating system for Indian law firms and corporate legal teams.**
 
-CaseOps unifies legal intake and conflict clearance, matter management, notice and reply-deadline
+CaseOps unifies legal intake and optional conflict review, matter management, notice and reply-deadline
 tracking, legal research, AI-assisted drafting, hearing preparation, tracked case refresh,
 court-order compliance review, date-wise cause-list PDFs, contract workflows,
 outside-counsel management, and India-ready matter billing into one
@@ -28,14 +28,14 @@ until the agent trust plane is activated.
 | Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
 | GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
-| Matter notices and pre-engagement conflict clearance: received/sent notice tracking, reply documents and linked deadlines, conflict candidate review, and Active-status gate | Implemented (2026-07-08) | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-07_CONFLICT_CHECKS.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-07_CONFLICT_CHECKS.md), `/guide` |
-| Bulk matter creation: CSV/XLSX templates, validation preview, partial-success commit, error report, history, audit, notifications, and delegated Matter Manager capability | Implemented (2026-07-17) | [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), [`docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md`](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md), `/app/matters/imports`, `/guide` |
+| Matter notices and optional pre-engagement conflict review: received/sent notice tracking, reply documents and linked deadlines, auditable candidate review, and nonblocking status changes | Production deployed and verified 2026-07-22 (`34f19ad`); July 22 verdict `Properly fixed` | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md), `/guide` |
+| Bulk matter creation: 21-column CSV/XLSX template, compatibility-aware validation preview, partial-success commit, error report, history, audit, notifications, and delegated Matter Manager capability | Production deployed and verified 2026-07-23 (`e763584`); full CI, infrastructure certification, and post-deploy workflow `30019214017` passed | [`docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md`](./docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md), [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), [`docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md`](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md), `/app/matters/imports`, `/guide` |
 | Production readiness, Pine Labs UAT evidence, secret-rotation proof, margin/profit gates, MFA login challenge, enterprise readiness scaffolding | Founder-only / disabled until UAT / planned as labelled | `/app/platform-admin/paid-production`, `/api/platform-admin/production-readiness`, `/api/admin/enterprise-readiness` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
 | Work plan | Current | [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) |
-| Strict bug ledger | Closed (10/10 Properly fixed) | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
+| Strict bug ledger | Original April 22 gate closed (10/10); later dated batches retain their own verdicts, including July 22 `Properly fixed` on deployed `34f19ad` | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
 | Drafting studio (31 specialised templates including the SC escalation pack — SLP, supreme-court appeal, review, curative, transfer, contempt, interim relief, condonation of delay, exemption, synopsis / list of dates, filing index — plus court-aware PDF + filing bundle + revision diff + bench-aware drafting + filing checklist + mobile + solo mode + governance + live-LLM eval) | Implemented (PG-005, 12 sprints, 2026-05-01; SC pack 2026-05-03) | [`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md) |
 | Litigation Strategy & Escalation Planner (matter-level strategy: current posture, primary + alternative routes, forum sequence up to Supreme Court, recommended draft pack with one-click generation, limitation flags, missing facts, risks, authorities, lawyer-review workflow) | Implemented (MOD-LSE, 2026-05-03) | [`docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md`](./docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md) |
 
@@ -46,7 +46,10 @@ until the agent trust plane is activated.
 - Deployed user guide: `/guide` on the web app.
 - Detailed GBA Law Office guide: [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md).
 - Notice workflow guide: [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md).
-- Bulk matter creation PRD and operating guide: [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md) and [ADP-11 in the end-user guide](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md#adp-11--bulk-matter-import).
+- Bulk matter creation compatibility/validation guide, PRD, and operating guide:
+  [`docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md`](./docs/BULK_MATTER_VALIDATION_COMPATIBILITY_IMPLEMENTATION_AND_VALIDATION_GUIDE_2026-07-23.md),
+  [`docs/PRD_BULK_MATTER_CREATION_2026-07-17.md`](./docs/PRD_BULK_MATTER_CREATION_2026-07-17.md), and
+  [ADP-11 in the end-user guide](./docs/ADP_01_TO_19_END_USER_PRODUCT_GUIDE_2026-05-25.md#adp-11-bulk-matter-creation).
 - Source PRD: [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md).
 - Machine-readable public summaries: `/llms.txt` and `/llms-full.txt`.
 
@@ -68,10 +71,39 @@ Public product claims use these labels: `live`, `review-first`, `provider-gated`
 - Platform profit, provider cost, secret rotation, and production signoff surfaces are
   `founder-only` and must not be exposed to tenants.
 
+## Documentation changelog - 2026-07-23
+
+- Translated the outcome-level needs in
+  `Bulk_Matter_Validation_Issue_Report.docx` into an explicit engineering
+  contract. The deployed canonical CSV/XLSX template has 21 columns, including
+  a distinct optional **Court Forum Number** field.
+- Documented compatibility for client-maintained files that match the supported
+  formats and aliases: case-/separator-insensitive controlled values and
+  headers, optional Client Name, Matter Status defaulting to Active,
+  non-catalog practice areas, business punctuation, standard CSV quoting,
+  multiple CSV encodings/delimiters, and bounded XLSX worksheet, header-row,
+  alias, coordinate, archive, and fractional-date handling.
+- Kept formula protection and the shared Matter Code grammar strict by design.
+  See the dated compatibility guide for the exact contract, completed
+  validation/deployment evidence, and live-production coverage boundary.
+
+## Documentation changelog - 2026-07-22
+
+- Superseded the July 7/15 mandatory conflict-activation rule. Conflict checks
+  remain optional, auditable review evidence and no longer block creating a
+  matter or moving Intake/On hold to Active.
+- Kept pre-reopen and pre-party-change results as historical evidence. A fresh
+  check is needed before claiming current clearance, not before changing status.
+- Deployed exact commit `34f19ad2bc0a5b48398144998cf546cc9e7a815a` and
+  proved API/web revision digests plus 100% traffic. The committed July 22
+  production spec passed 2/2 with the supplied tester account, and GitHub run
+  `29929098217` passed the broader RAM and notice suites. Formal verdict:
+  `Properly fixed`.
+
 ## Documentation changelog - 2026-07-11
 
 - Refreshed the public landing page and `/guide` for Today, intake, clients, conflict
-  clearance, current matter-cockpit navigation, notices and reply deadlines, communications,
+  review, current matter-cockpit navigation, notices and reply deadlines, communications,
   mailbox/Drive review queues, notification preferences, portals, and the current statute
   catalog.
 - Corrected stale or unsupported guide claims for roles, keyboard navigation, cause-list

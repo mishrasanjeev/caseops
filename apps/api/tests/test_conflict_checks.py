@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -11,8 +10,6 @@ from caseops_api.db.models import AuditEvent, Client, Matter, MatterConflictChec
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import conflict_checks as conflict_check_service
 from tests.test_auth_company import auth_headers, bootstrap_company
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _new_matter(
@@ -292,7 +289,7 @@ def test_run_conflict_check_flags_existing_client_as_pending(
     assert "matter" in kinds
 
 
-def test_intake_to_active_requires_completed_conflict_check(
+def test_intake_to_active_does_not_require_conflict_check(
     client: TestClient,
 ) -> None:
     boot = bootstrap_company(client)
@@ -310,21 +307,24 @@ def test_intake_to_active_requires_completed_conflict_check(
 
     activate = _activate_matter(client, token=token, matter_id=matter_id)
 
-    assert activate.status_code == 409, activate.text
-    assert "conflict check" in activate.json()["detail"].lower()
-    assert "Conflict check card" in activate.json()["detail"]
-    assert _matter_status(matter_id) == "intake"
-    events = _audit_events(
+    assert activate.status_code == 200, activate.text
+    assert activate.json()["status"] == "active"
+    assert _matter_status(matter_id) == "active"
+    blocked_events = _audit_events(
         company_id=company_id,
         action="matter.status_transition.blocked",
     )
-    assert len(events) == 1
-    metadata = json.loads(events[0].metadata_json or "{}")
+    assert blocked_events == []
+    completed_events = _audit_events(
+        company_id=company_id,
+        action="matter.status_transition.completed",
+    )
+    assert len(completed_events) == 1
+    metadata = json.loads(completed_events[0].metadata_json or "{}")
     assert metadata["from_status"] == "intake"
     assert metadata["to_status"] == "active"
-    assert metadata["conflict_gate"]["reason"] == "missing_check"
-    assert "Acme" not in json.dumps(metadata)
-    assert events[0].result == "denied"
+    assert "conflict_gate" not in metadata
+    assert completed_events[0].result == "success"
 
 
 def test_direct_active_matter_create_does_not_require_conflict_check(
@@ -359,7 +359,7 @@ def test_direct_active_matter_create_does_not_require_conflict_check(
     assert events == []
 
 
-def test_clear_conflict_check_allows_intake_activation(
+def test_completed_conflict_check_remains_recorded_independently_of_activation(
     client: TestClient,
 ) -> None:
     boot = bootstrap_company(client)
@@ -394,12 +394,17 @@ def test_clear_conflict_check_allows_intake_activation(
     metadata = json.loads(events[0].metadata_json or "{}")
     assert metadata["from_status"] == "intake"
     assert metadata["to_status"] == "active"
-    assert metadata["conflict_gate"]["latest_check_id"] == check["id"]
-    assert metadata["conflict_gate"]["latest_status"] == "cleared"
-    assert "Unrelated Co" not in json.dumps(metadata)
+    assert "conflict_gate" not in metadata
+    recorded = client.get(
+        f"/api/matters/{matter_id}/conflict-checks",
+        headers=auth_headers(token),
+    )
+    assert recorded.status_code == 200, recorded.text
+    assert recorded.json()["checks"][0]["id"] == check["id"]
+    assert recorded.json()["checks"][0]["status"] == "cleared"
 
 
-def test_any_non_active_status_transition_into_active_requires_conflict_clearance(
+def test_on_hold_to_active_is_independent_of_conflict_check_state(
     client: TestClient,
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
@@ -412,14 +417,15 @@ def test_any_non_active_status_transition_into_active_requires_conflict_clearanc
         status="on_hold",
     )
 
-    blocked = _activate_matter(
+    without_check = _activate_matter(
         client,
         token=token,
         matter_id=missing_check_matter,
     )
 
-    assert blocked.status_code == 409, blocked.text
-    assert _matter_status(missing_check_matter) == "on_hold"
+    assert without_check.status_code == 200, without_check.text
+    assert without_check.json()["status"] == "active"
+    assert _matter_status(missing_check_matter) == "active"
 
     cleared_matter = _new_matter(
         client,
@@ -443,7 +449,7 @@ def test_any_non_active_status_transition_into_active_requires_conflict_clearanc
     assert allowed.json()["status"] == "active"
 
 
-def test_active_to_active_update_does_not_recheck_conflict_gate(
+def test_active_to_active_update_is_independent_of_conflict_check_status(
     client: TestClient,
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
@@ -488,7 +494,7 @@ def test_active_to_active_update_does_not_recheck_conflict_gate(
     assert update.json()["court_name"] == "Bombay High Court"
 
 
-def test_pending_conflict_check_blocks_intake_activation(
+def test_pending_conflict_check_does_not_block_intake_activation(
     client: TestClient,
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
@@ -518,13 +524,19 @@ def test_pending_conflict_check_blocks_intake_activation(
 
     activate = _activate_matter(client, token=token, matter_id=matter_id)
 
-    assert activate.status_code == 409, activate.text
-    assert "requires review" in activate.json()["detail"].lower()
-    assert "Conflict check card" in activate.json()["detail"]
-    assert _matter_status(matter_id) == "intake"
+    assert activate.status_code == 200, activate.text
+    assert activate.json()["status"] == "active"
+    assert _matter_status(matter_id) == "active"
+    recorded = client.get(
+        f"/api/matters/{matter_id}/conflict-checks",
+        headers=auth_headers(token),
+    )
+    assert recorded.status_code == 200, recorded.text
+    assert recorded.json()["checks"][0]["id"] == check["id"]
+    assert recorded.json()["checks"][0]["status"] == "pending"
 
 
-def test_invalid_latest_conflict_check_status_blocks_activation(
+def test_invalid_latest_conflict_check_status_does_not_block_activation(
     client: TestClient,
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
@@ -553,13 +565,20 @@ def test_invalid_latest_conflict_check_status_blocks_activation(
 
     activate = _activate_matter(client, token=token, matter_id=matter_id)
 
-    assert activate.status_code == 409, activate.text
-    assert "requires review" in activate.json()["detail"].lower()
-    assert "Conflict check card" in activate.json()["detail"]
-    assert _matter_status(matter_id) == "intake"
+    assert activate.status_code == 200, activate.text
+    assert activate.json()["status"] == "active"
+    assert _matter_status(matter_id) == "active"
+    factory = get_session_factory()
+    with factory() as session:
+        recorded_status = session.scalar(
+            select(MatterConflictCheck.status).where(
+                MatterConflictCheck.id == check["id"]
+            )
+        )
+    assert recorded_status == "failed"
 
 
-def test_latest_pending_conflict_check_makes_older_clear_check_stale(
+def test_latest_pending_check_does_not_make_older_clearance_an_activation_gate(
     client: TestClient,
 ) -> None:
     boot = bootstrap_company(client)
@@ -598,18 +617,26 @@ def test_latest_pending_conflict_check_makes_older_clear_check_stale(
 
     activate = _activate_matter(client, token=token, matter_id=matter_id)
 
-    assert activate.status_code == 409, activate.text
+    assert activate.status_code == 200, activate.text
+    assert activate.json()["status"] == "active"
+    recorded = client.get(
+        f"/api/matters/{matter_id}/conflict-checks",
+        headers=auth_headers(token),
+    )
+    assert recorded.status_code == 200, recorded.text
+    recorded_checks = recorded.json()["checks"]
+    assert [item["id"] for item in recorded_checks[:2]] == [latest["id"], clear["id"]]
     events = _audit_events(
         company_id=company_id,
-        action="matter.status_transition.blocked",
+        action="matter.status_transition.completed",
     )
     metadata = json.loads(events[-1].metadata_json or "{}")
-    assert metadata["conflict_gate"]["latest_check_id"] == latest["id"]
-    assert metadata["conflict_gate"]["latest_check_id"] != clear["id"]
-    assert metadata["conflict_gate"]["latest_status"] == "pending"
+    assert metadata["from_status"] == "intake"
+    assert metadata["to_status"] == "active"
+    assert "conflict_gate" not in metadata
 
 
-def test_clear_check_for_different_opposing_party_is_stale_for_activation(
+def test_stale_party_scope_check_does_not_block_activation_or_party_update(
     client: TestClient,
 ) -> None:
     boot = bootstrap_company(client)
@@ -644,22 +671,25 @@ def test_clear_check_for_different_opposing_party_is_stale_for_activation(
         },
     )
 
-    assert activate.status_code == 409, activate.text
-    assert "requires review" in activate.json()["detail"].lower()
-    assert "Conflict check card" in activate.json()["detail"]
-    assert _matter_status(matter_id) == "intake"
-    events = _audit_events(
+    assert activate.status_code == 200, activate.text
+    assert activate.json()["status"] == "active"
+    assert activate.json()["opposing_party"] == "Acme Pvt Ltd"
+    assert _matter_status(matter_id) == "active"
+    blocked_events = _audit_events(
         company_id=company_id,
         action="matter.status_transition.blocked",
     )
-    metadata = json.loads(events[-1].metadata_json or "{}")
-    assert metadata["conflict_gate"]["reason"] == "stale_party_scope"
-    assert metadata["conflict_gate"]["latest_check_id"] == clear["id"]
-    assert "Acme" not in json.dumps(metadata)
-    assert "Unrelated" not in json.dumps(metadata)
+    assert blocked_events == []
+    recorded = client.get(
+        f"/api/matters/{matter_id}/conflict-checks",
+        headers=auth_headers(token),
+    )
+    assert recorded.status_code == 200, recorded.text
+    assert recorded.json()["checks"][0]["id"] == clear["id"]
+    assert recorded.json()["checks"][0]["status"] == "cleared"
 
 
-def test_cross_tenant_check_cannot_satisfy_activation(
+def test_cross_tenant_conflict_check_access_isolated_without_gating_activation(
     client: TestClient,
 ) -> None:
     boot_a = bootstrap_company(client)
@@ -698,11 +728,12 @@ def test_cross_tenant_check_cannot_satisfy_activation(
 
     activate = _activate_matter(client, token=token_a, matter_id=matter_a)
 
-    assert activate.status_code == 409, activate.text
-    assert _matter_status(matter_a) == "intake"
+    assert activate.status_code == 200, activate.text
+    assert activate.json()["status"] == "active"
+    assert _matter_status(matter_a) == "active"
 
 
-def test_conflicted_check_blocks_and_waived_check_allows_activation(
+def test_conflicted_and_waived_checks_are_advisory_for_activation(
     client: TestClient,
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
@@ -736,15 +767,14 @@ def test_conflicted_check_blocks_and_waived_check_allows_activation(
         note="Confirmed possible conflict requiring review.",
     )
 
-    blocked = _activate_matter(
+    conflicted_activation = _activate_matter(
         client,
         token=token,
         matter_id=conflicted_matter,
     )
 
-    assert blocked.status_code == 409, blocked.text
-    assert "possible conflict" in blocked.json()["detail"].lower()
-    assert "Conflict check card" in blocked.json()["detail"]
+    assert conflicted_activation.status_code == 200, conflicted_activation.text
+    assert conflicted_activation.json()["status"] == "active"
 
     waived_matter = _new_matter(
         client,
@@ -773,6 +803,18 @@ def test_conflicted_check_blocks_and_waived_check_allows_activation(
 
     assert allowed.status_code == 200, allowed.text
     assert allowed.json()["status"] == "active"
+    conflicted_record = client.get(
+        f"/api/matters/{conflicted_matter}/conflict-checks",
+        headers=auth_headers(token),
+    )
+    waived_record = client.get(
+        f"/api/matters/{waived_matter}/conflict-checks",
+        headers=auth_headers(token),
+    )
+    assert conflicted_record.status_code == 200, conflicted_record.text
+    assert waived_record.status_code == 200, waived_record.text
+    assert conflicted_record.json()["checks"][0]["status"] == "conflicted"
+    assert waived_record.json()["checks"][0]["status"] == "waived"
     factory = get_session_factory()
     with factory() as session:
         event = session.scalar(
@@ -785,12 +827,12 @@ def test_conflicted_check_blocks_and_waived_check_allows_activation(
         )
         assert event is not None
         metadata = json.loads(event.metadata_json or "{}")
-        assert metadata["conflict_gate"]["reason"] == "waived"
-        assert metadata["conflict_gate"]["latest_status"] == "waived"
-        assert "Acme" not in json.dumps(metadata)
+        assert metadata["from_status"] == "intake"
+        assert metadata["to_status"] == "active"
+        assert "conflict_gate" not in metadata
 
 
-def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
+def test_status_activation_respects_tenant_restricted_wall_and_team_scoping(
     client: TestClient,
 ) -> None:
     slug = "pg001-access"
@@ -950,23 +992,14 @@ def test_conflict_gate_respects_tenant_restricted_wall_and_team_scoping(
     assert cross.status_code == 404
 
 
-def test_pg001_docs_mark_conflict_gate_implemented() -> None:
-    future = (REPO_ROOT / "docs/FUTURE_WORKPLAN_2026-05-14.md").read_text(
-        encoding="utf-8"
-    )
-    strict = (REPO_ROOT / "docs/STRICT_PRODUCT_GAPS_2026-04-30.md").read_text(
-        encoding="utf-8"
-    )
-    pg001 = strict.split("### `PG-001` Conflict check workflow", 1)[1].split(
-        "### `PG-002`",
-        1,
-    )[0]
+def test_pg001_contract_keeps_conflict_review_advisory_and_nonblocking() -> None:
+    module_contract = " ".join((conflict_check_service.__doc__ or "").lower().split())
+    model_contract = " ".join((MatterConflictCheck.__doc__ or "").lower().split())
 
-    assert "`PG-001` conflict check workflow" not in future
-    assert "Status: **`Implemented`**" in pg001
-    assert "created directly as `active`" in pg001
-    assert "`intake` or `on_hold`" in pg001
-    assert "Follow-on caveats:" in pg001
+    assert "advisory review workflow" in module_contract
+    assert "do not block matter status changes" in module_contract
+    assert "does not control the matter lifecycle" in model_contract
+    assert not hasattr(conflict_check_service, "evaluate_matter_opening_gate")
 
 
 def test_resolve_conflict_check_records_partner_decision(

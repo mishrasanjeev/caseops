@@ -25,7 +25,7 @@ const features = [
   {
     icon: ShieldAlert,
     title: "Intake & Conflict Checks",
-    body: "Triage inbound legal requests, promote them into matters, scan clients, matters, and contacts for overlap, and require partner or admin clearance before Active status.",
+    body: "Triage inbound legal requests, promote them into matters, and run optional overlap scans across clients and matters with auditable partner or admin review that never blocks Active status.",
   },
   {
     icon: MailCheck,

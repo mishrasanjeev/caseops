@@ -46,13 +46,14 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Reset completion stores the new session through the existing auth response/cookie path and revokes older sessions for that membership
 - Local/test debug tokens are for automated verification only and are not rendered in browser UI
 
-### 1b. Intake and conflict clearance
+### 1b. Intake and optional conflict review
 
 - Intake requests move through triage and can be promoted into matters when scope is clear
-- Conflict checks compare the proposed opposing and related parties against workspace clients, matters, and contacts
+- Conflict checks compare the proposed opposing and related parties against workspace clients and matters
 - Candidate similarity is a review aid, not automatic clearance
 - A partner or admin records cleared, conflicted, or an explicit waiver with a note
-- Direct New Matter creation starts Active by default; a matter deliberately kept in Intake or On hold requires a cleared or waived latest conflict check before moving to Active
+- Conflict checks are optional review evidence, not a status gate; direct New Matter creation starts Active by default, and a matter kept in Intake or On hold can move to Active with no check or with any check result
+- A check from before a material party-scope change or matter reopen remains historical; run a fresh check before describing the matter as currently cleared, but never block activation on it
 
 ### 1c. Notices and reply deadlines
 

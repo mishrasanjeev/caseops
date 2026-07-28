@@ -79,6 +79,36 @@ function Ensure-Gcloud {
     }
 }
 
+function Resolve-ImmutableImage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ImageReference
+    )
+
+    $digest = [string](& gcloud artifacts docker images describe $ImageReference `
+        --project $ProjectId `
+        --format "value(image_summary.digest)")
+    if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[a-f0-9]{64}$') {
+        throw "Could not resolve an immutable digest for API image '$ImageReference'."
+    }
+
+    $imageName = $ImageReference
+    $digestSeparator = $imageName.IndexOf("@")
+    if ($digestSeparator -ge 0) {
+        $imageName = $imageName.Substring(0, $digestSeparator)
+    } else {
+        $lastSlash = $imageName.LastIndexOf("/")
+        $lastColon = $imageName.LastIndexOf(":")
+        if ($lastColon -gt $lastSlash) {
+            $imageName = $imageName.Substring(0, $lastColon)
+        }
+    }
+    return "$imageName@$digest"
+}
+
 function Ensure-SchedulerJob {
     param(
         [string]$ProjectId,
@@ -153,6 +183,7 @@ function Ensure-CloudRunJobInvoker {
 }
 
 Ensure-Gcloud
+$ApiImage = Resolve-ImmutableImage -ProjectId $ProjectId -ImageReference $ApiImage
 
 $replacements = @{
     "__PROJECT_ID__" = $ProjectId
@@ -204,10 +235,17 @@ Render-Template `
 # api-service.yaml here — a full-spec replace drops the clamav sidecar and
 # resets tuned scaling. This script only manages the jobs + schedulers.
 # ($apiManifest is still rendered above for reference / manual inspection.)
-& gcloud run jobs replace $workerManifest --region $Region --project $ProjectId
-& gcloud run jobs replace $legalUpdateManifest --region $Region --project $ProjectId
-& gcloud run jobs replace $caseTrackingManifest --region $Region --project $ProjectId
-& gcloud run jobs replace $activityReportManifest --region $Region --project $ProjectId
+foreach ($manifest in @(
+    $workerManifest,
+    $legalUpdateManifest,
+    $caseTrackingManifest,
+    $activityReportManifest
+)) {
+    & gcloud run jobs replace $manifest --region $Region --project $ProjectId
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to replace Cloud Run job from manifest '$manifest'."
+    }
+}
 
 if (-not $SkipScheduler) {
     foreach ($runJobName in @(
@@ -264,5 +302,5 @@ if (-not $SkipScheduler) {
         -TimeZone $SchedulerTimeZone
 }
 
-Write-Host "Cloud Run API deployed; document worker, legal update sync, and case tracking poll jobs deployed; schedulers configured."
+Write-Host "Cloud Run jobs deployed with immutable images; schedulers configured."
 Write-Host "Rendered manifests: $renderRoot"

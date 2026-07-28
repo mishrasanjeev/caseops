@@ -4,15 +4,13 @@ import { readFile } from "node:fs/promises";
 
 import { apiBaseUrl } from "./support/env";
 import { makeUploadFixture } from "./support/helpers";
+import {
+  authenticateOrBootstrapLocalLegalTenant,
+  LOCAL_LEGAL_PASSWORD,
+} from "./support/local-legal-tenant";
 
 const COMPANY_SLUG = "legal";
 const OWNER_EMAIL = "hari.gupta@gmail.com";
-// Normal regression runs use an isolated synthetic password. The July 15
-// workstation replay sets CASEOPS_RAM_LOCAL_PASSWORD to the supplied tester
-// password so the local account has the exact requested credentials without
-// committing the secret to source control.
-const OWNER_PASSWORD =
-  process.env.CASEOPS_RAM_LOCAL_PASSWORD ?? "RamLocalRegression0715!";
 
 type MatterRecord = {
   id: string;
@@ -52,7 +50,7 @@ async function signIn(page: Page): Promise<void> {
   await page.goto("/sign-in");
   await page.locator("#company-slug").fill(COMPANY_SLUG);
   await page.locator("#email").fill(OWNER_EMAIL);
-  await page.locator("#password").fill(OWNER_PASSWORD);
+  await page.locator("#password").fill(LOCAL_LEGAL_PASSWORD);
   await page.getByRole("button", { name: /^Sign in$/ }).click();
   await page.waitForURL(/\/app/);
 }
@@ -132,18 +130,10 @@ test.describe.serial("Ram 2026-07-15 workbook and case-reopening regressions", (
 
   test.beforeAll(async () => {
     api = await request.newContext();
-    const response = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
-      data: {
-        company_name: "Legal - Ram July 15 local regression",
-        company_slug: COMPANY_SLUG,
-        company_type: "law_firm",
-        owner_full_name: "Hari Gupta",
-        owner_email: OWNER_EMAIL,
-        owner_password: OWNER_PASSWORD,
-      },
+    token = await authenticateOrBootstrapLocalLegalTenant(api, {
+      companyName: "Legal - Ram July 15 local regression",
+      ownerFullName: "Hari Gupta",
     });
-    await expectStatus(response, 200, "bootstrap local legal tenant");
-    token = ((await response.json()) as { access_token: string }).access_token;
   });
 
   test.afterAll(async () => {
@@ -352,8 +342,8 @@ test.describe.serial("Ram 2026-07-15 workbook and case-reopening regressions", (
   test("disposed matters resist stale edits and background/operational reopening, then reopen only to Intake", async ({
     page,
   }) => {
-    // Establish a valid clearance before disposal. It must not be reusable
-    // after the explicit reopen.
+    // Keep an existing conflict-review record across the lifecycle exercise.
+    // It is advisory and must not weaken any terminal-state guard.
     await runClearedConflictCheck(
       firstMatter.id,
       "Ram Regression Opponent",
@@ -565,35 +555,15 @@ test.describe.serial("Ram 2026-07-15 workbook and case-reopening regressions", (
     expect(todayAfterReopenPayload).not.toContain(preDisposalDeadline.id);
     expect(todayAfterReopenPayload).not.toContain(preDisposalHearing.id);
 
-    let current = await getMatter(firstMatter.id);
-    const staleClearanceActivation = await api.patch(
+    const current = await getMatter(firstMatter.id);
+    const activation = await api.patch(
       `${apiBaseUrl}/api/matters/${firstMatter.id}`,
       {
         headers: authHeaders(),
         data: { status: "active", expected_updated_at: current.updated_at },
       },
     );
-    await expectStatus(
-      staleClearanceActivation,
-      409,
-      "reject pre-reopen conflict clearance",
-    );
-    expect((await getMatter(firstMatter.id)).status).toBe("intake");
-
-    await runClearedConflictCheck(
-      firstMatter.id,
-      "Ram Regression Opponent",
-      "run post-reopen conflict check",
-    );
-    current = await getMatter(firstMatter.id);
-    const freshActivation = await api.patch(
-      `${apiBaseUrl}/api/matters/${firstMatter.id}`,
-      {
-        headers: authHeaders(),
-        data: { status: "active", expected_updated_at: current.updated_at },
-      },
-    );
-    await expectStatus(freshActivation, 200, "activate after fresh conflict check");
-    expect(((await freshActivation.json()) as MatterRecord).status).toBe("active");
+    await expectStatus(activation, 200, "activate reopened matter without conflict gate");
+    expect(((await activation.json()) as MatterRecord).status).toBe("active");
   });
 });

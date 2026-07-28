@@ -110,7 +110,7 @@ export type Capability =
   // Phase C-1 (2026-04-24, MOD-TS-014) — portal admin
   | "portal:invite"
   | "portal:manage_grants"
-  // PG-001 (2026-04-30) — pre-engagement conflict gate
+  // PG-001 (2026-04-30) — optional pre-engagement conflict review
   | "conflicts:run"
   | "conflicts:resolve"
   // Founder-only platform console. Tenant owner/admin roles never imply these.

@@ -232,7 +232,7 @@ describe("MattersPage", () => {
     );
   });
 
-  it("lets matter editors update status from the portfolio without opening the row", async () => {
+  it("lets matter editors activate an On-hold matter from the portfolio", async () => {
     const push = vi.fn();
     useRouterMock.mockReturnValue({
       push,
@@ -245,7 +245,7 @@ describe("MattersPage", () => {
           id: "m1",
           matter_code: "ACME-1",
           title: "Acme v Smith",
-          status: "active",
+          status: "on_hold",
           practice_area: "Commercial",
           forum_level: "high_court",
           next_hearing_on: null,
@@ -259,12 +259,12 @@ describe("MattersPage", () => {
     render(withClient(<MattersPage />));
 
     const statusSelect = await screen.findByLabelText("Status for ACME-1");
-    fireEvent.change(statusSelect, { target: { value: "on_hold" } });
+    fireEvent.change(statusSelect, { target: { value: "active" } });
 
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m1",
-      status: "on_hold",
+      status: "active",
       expected_updated_at: "2026-04-15T00:00:00Z",
     });
     expect(push).not.toHaveBeenCalled();

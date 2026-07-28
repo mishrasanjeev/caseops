@@ -230,6 +230,29 @@ export default function BulkMatterImportPage() {
             <p className="mt-1 text-sm text-[var(--color-mute)]">
               XLSX includes reference values and instructions. CSV is provided for migrations.
             </p>
+            <div
+              className="mt-3 space-y-1.5 rounded-md bg-[var(--color-bg-2)] p-3 text-xs text-[var(--color-mute)]"
+              data-testid="matter-import-compatibility-guidance"
+            >
+              <p>
+                Client registers that match the documented formats are supported:
+                familiar header aliases, title rows, later XLSX worksheets, and
+                case-insensitive Status/Forum values are normalized where possible.
+              </p>
+              <p>
+                Matter Title, Matter Code, Practice Area, and Forum are required. Client
+                Name is optional, and blank Matter Status defaults to Active. Court Forum
+                Number is stored separately from Court.
+              </p>
+              <p>
+                Quote fields that contain the selected CSV delimiter. Matter Code and
+                selected-table formula protections remain strict. A leading + is allowed
+                only for Client Contact Number; its main-number portion may use digits,
+                spaces, parentheses, and hyphens. Phones need 7-20 main digits, may have a
+                trailing ext, ext., or x followed by 1-10 digits, and cannot contain +
+                anywhere else.
+              </p>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {(["xlsx", "csv"] as const).map((format) => (
@@ -292,7 +315,11 @@ export default function BulkMatterImportPage() {
               <div className="grid gap-3 border-b border-[var(--color-line)] bg-[var(--color-bg-2)] p-4 sm:grid-cols-5">
                 <Metric label="Total records" value={job.total_rows} />
                 <Metric label="Valid" value={job.valid_rows} kind="good" />
-                <Metric label="Validation errors" value={job.invalid_rows} kind="bad" />
+                <Metric
+                  label="Validation errors"
+                  value={job.validation_error_count}
+                  kind="bad"
+                />
                 <Metric label="Imported" value={job.created_count} kind="good" />
                 <Metric label="Failed" value={job.failed_count} kind="bad" />
               </div>
@@ -331,6 +358,7 @@ export default function BulkMatterImportPage() {
                       <th className="px-3 py-2">Matter code</th>
                       <th className="px-3 py-2">Matter title</th>
                       <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">Court forum no.</th>
                       <th className="px-3 py-2">Status</th>
                       <th className="px-3 py-2">Errors</th>
                     </tr>
@@ -342,6 +370,9 @@ export default function BulkMatterImportPage() {
                         <td className="px-3 py-2 font-mono text-xs">{normalizedText(row, "matter_code")}</td>
                         <td className="px-3 py-2">{normalizedText(row, "title")}</td>
                         <td className="px-3 py-2">{normalizedText(row, "client_name")}</td>
+                        <td className="px-3 py-2">
+                          {normalizedText(row, "court_forum_number")}
+                        </td>
                         <td className="px-3 py-2"><Badge tone={statusTone(row.status)}>{row.status}</Badge></td>
                         <td className="max-w-md px-3 py-2">
                           {row.errors.length ? (

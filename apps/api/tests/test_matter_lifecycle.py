@@ -705,7 +705,9 @@ def test_dispose_atomically_clears_operational_state_and_blocks_new_work(
     )
 
 
-def test_reopen_invalidates_pre_reopen_conflict_clearance(client: TestClient) -> None:
+def test_reopen_keeps_prior_conflict_check_historical_without_gating_activation(
+    client: TestClient,
+) -> None:
     token = str(bootstrap_company(client)["access_token"])
     matter = _create_matter(client, token, code="LIFE-CONFLICT", status="intake")
     first_check = client.post(
@@ -737,31 +739,24 @@ def test_reopen_invalidates_pre_reopen_conflict_clearance(client: TestClient) ->
     )
     assert reopened_response.status_code == 200, reopened_response.text
 
-    stale_activation = client.patch(
-        f"/api/matters/{matter['id']}",
-        headers=auth_headers(token),
-        json={
-            "status": "active",
-            "expected_updated_at": reopened_response.json()["updated_at"],
-        },
-    )
-    assert stale_activation.status_code == 409, stale_activation.text
-    assert "before it was reopened" in stale_activation.json()["detail"]
-
-    fresh_check = client.post(
+    listed_checks = client.get(
         f"/api/matters/{matter['id']}/conflict-checks",
         headers=auth_headers(token),
-        json={
-            "opposing_party_name": "Unique Counterparty Ltd",
-            "related_party_names": [],
-        },
     )
-    assert fresh_check.status_code == 200, fresh_check.text
+    assert listed_checks.status_code == 200, listed_checks.text
+    assert len(listed_checks.json()["checks"]) == 1
+    historical_check = listed_checks.json()["checks"][0]
+    assert historical_check["id"] == first_check.json()["id"]
     assert (
-        fresh_check.json()["matter_lifecycle_version"]
-        == reopened_response.json()["lifecycle_version"]
+        historical_check["matter_lifecycle_version"]
+        == matter["lifecycle_version"]
     )
-    final_activation = client.patch(
+    assert (
+        historical_check["matter_lifecycle_version"]
+        < reopened_response.json()["lifecycle_version"]
+    )
+
+    reactivated = client.patch(
         f"/api/matters/{matter['id']}",
         headers=auth_headers(token),
         json={
@@ -769,7 +764,12 @@ def test_reopen_invalidates_pre_reopen_conflict_clearance(client: TestClient) ->
             "expected_updated_at": reopened_response.json()["updated_at"],
         },
     )
-    assert final_activation.status_code == 200, final_activation.text
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["status"] == "active"
+    assert (
+        reactivated.json()["lifecycle_version"]
+        == reopened_response.json()["lifecycle_version"]
+    )
 
 
 def test_reopen_neutralizes_open_children_on_legacy_disposed_row(

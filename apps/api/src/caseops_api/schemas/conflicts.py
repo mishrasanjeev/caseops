@@ -13,7 +13,8 @@ class ConflictCheckRunRequest(BaseModel):
     `opposing_party_name` is required (most matters have one).
     `related_party_names` is the list of additional party names to scan
     (witnesses, related entities, beneficiaries, parent companies, etc.).
-    The scanner intersects every name across clients/matters/contacts.
+    The scanner compares every supplied name with existing client names and
+    matter client/opposing-party names.
     """
 
     opposing_party_name: str = Field(min_length=1, max_length=255)

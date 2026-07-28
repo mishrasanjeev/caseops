@@ -360,8 +360,10 @@ Happy path:
 2. User enters matter type, title, client, parties, court, practice area, and
    matter code.
 3. System pre-validates matter code uniqueness before submit.
-4. System creates the matter, initial notes, and initial team or owner links.
-5. User is routed into the new matter cockpit.
+4. User may run a conflict check before or after opening the matter; the check
+   records review evidence but is optional and nonblocking.
+5. System creates the matter, initial notes, and initial team or owner links.
+6. User is routed into the new matter cockpit.
 
 Failure and edge rules:
 
@@ -369,11 +371,17 @@ Failure and edge rules:
 - unsupported courts must be explicit, not implicit
 - matter creation must be tenant-scoped and audited
 - intake must support both litigation and corporate workflows
+- no missing, pending, conflicted, waived, cleared, or stale conflict-check
+  result may block matter creation or an Intake/On hold to Active transition
+- a result from before a material party-scope change or matter reopen remains
+  historical evidence and must not be presented as current clearance
 
 Done when:
 
 - matter creation is fast, obvious, and low-error
 - user never loses entered context on validation failure
+- conflict review remains discoverable and auditable without becoming a status
+  precondition
 
 ### J03. Daily matter workspace
 
@@ -394,6 +402,8 @@ Failure and edge rules:
 - empty states must never render misleading cards
 - restricted-access matters must honor grants and ethical walls
 - matter team scoping must behave consistently across list and detail surfaces
+- reopen returns a disposed matter to Intake and keeps prior conflict evidence
+  historical; that evidence is advisory and cannot block a later Active change
 
 Done when:
 
@@ -865,7 +875,7 @@ Done when:
 | Module ID | Module | Status now | Required build target |
 | --- | --- | --- | --- |
 | M01 | Auth and workspace | Shipped | secure browser session model, SSO, MFA-ready posture |
-| M02 | Matter graph and intake | Shipped | richer intake, better portfolio controls |
+| M02 | Matter graph and intake | Shipped | richer intake, better portfolio controls, optional/nonblocking conflict review |
 | M03 | Documents, OCR, viewer, annotations | Partial | broader parsers, safe OCR, richer viewer |
 | M04 | Research and authority retrieval | Partial | public-law depth, tenant overlays, stronger benchmarks |
 | M05 | Court, judge, bench, tribunal intelligence | Partial | tribunal corpus, bench analytics, arbitrator registry |
@@ -982,6 +992,8 @@ Production ingestion order:
   legal work, not empty noise.
 - `US-006` As a GC, I want portfolio summaries across matters, deadlines, spend,
   and risk.
+- `US-056` As a matter owner, I want conflict review to remain available and
+  auditable without preventing me from opening or activating a matter.
 
 ### Documents and OCR
 
@@ -1224,6 +1236,11 @@ Production ingestion order:
   cross-counsel visibility stays off by default.
 - `FT-075` Revoking a MatterPortalGrant invalidates active portal sessions
   for that grant within the next request cycle (no stale-session leak).
+- `FT-076` Intake and On-hold matters can move to Active with no conflict check,
+  persist after reload, and emit no conflict-gate denial.
+- `FT-077` Pending, conflicted, stale-party-scope, and pre-reopen conflict
+  results remain nonblocking while the separate run/review/resolve workflow
+  continues to work and historical results are not labelled current.
 
 ### 14.2 Non-functional test cases
 

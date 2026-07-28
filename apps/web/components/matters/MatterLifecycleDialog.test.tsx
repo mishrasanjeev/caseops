@@ -111,6 +111,7 @@ describe("MatterLifecycleDialog", () => {
 
     await user.click(screen.getByTestId("matter-reopen-trigger"));
     expect(screen.getByText(/returns this matter to Intake/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not block Active status/i)).toBeInTheDocument();
     await user.type(
       screen.getByTestId("matter-lifecycle-reason"),
       "Fresh instructions require restoration.",

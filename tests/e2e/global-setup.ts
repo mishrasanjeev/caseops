@@ -62,6 +62,17 @@ export default async function globalSetup(): Promise<void> {
       env: {
         ...process.env,
         ...e2eEnv,
+        // The canonical workstation bootstrap intentionally uses
+        // `uv sync --no-install-project`.  The direct venv interpreter above
+        // therefore needs the src-layout root explicitly; otherwise a fresh
+        // checkout only works when an unrelated editable install happens to
+        // exist in the venv.
+        PYTHONPATH: [
+          path.join(repoRoot, "apps", "api", "src"),
+          process.env.PYTHONPATH,
+        ]
+          .filter(Boolean)
+          .join(path.delimiter),
         CASEOPS_AUTO_MIGRATE: "true",
       },
       encoding: "utf8",

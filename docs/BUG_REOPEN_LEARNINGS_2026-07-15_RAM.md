@@ -1,5 +1,13 @@
 # Ram 2026-07-15 Bug/Enhancement Audit And Permanent Reopen Learnings
 
+> **Scope note, superseded in part on 2026-07-22.** The July 15 acceptance
+> contract changed direct creation only and deliberately retained the
+> Intake/On-hold activation gate. The July 22 workbook expands the policy:
+> conflict review is optional and nonblocking for every creation and status
+> transition path. The July 15 deployment evidence remains valid for its dated
+> scope, but cannot close the July 22 enhancement. See
+> `docs/BUG_REOPEN_LEARNINGS_2026-07-22_RAM.md`.
+
 Source workbook: `CaseOps_Bugs_Ram15Jul2026.xlsx`
 Audit date: 2026-07-15
 Production tenant used for baseline: `legal` (the tester password is not stored
@@ -267,7 +275,7 @@ that no output, child, final ModelRun, or audit survives.
   unsafe automatic migration or duplication
 - tenant and restricted-matter visibility enforced server-side
 
-### Matter creation policy
+### Matter creation policy (historical July 15 contract)
 
 - omitted status and the New Matter UI default to Active
 - direct Active creation is allowed without a conflict check
@@ -275,6 +283,11 @@ that no output, child, final ModelRun, or audit survives.
   gate for a newly created matter
 - explicit transitions from Intake/On hold to Active retain the conflict gate
 - adjacent create/import paths are audited so defaults do not drift
+
+The preceding transition-gate bullet records the July 15 contract and is
+superseded. Effective 2026-07-22, missing, pending, conflicted, cleared, waived,
+invalid, stale-scope, and pre-reopen results are all nonblocking. Conflict
+checks remain available as auditable review evidence.
 
 ### Terminal matter lifecycle
 
@@ -284,7 +297,9 @@ that no output, child, final ModelRun, or audit survives.
 - dedicated lifecycle endpoint requires `matters:archive`, source status,
   timestamp, and reason
 - disposal is non-terminal-to-Disposed only; reopen is Disposed-to-Intake only
-- reopen invalidates prior conflict clearance; Active requires a fresh check
+- reopen invalidates prior conflict clearance as current evidence; the July 15
+  requirement for a fresh check before Active is superseded, so the historical
+  result and the absence of a new one do not block activation
 - disposal reconciles operational children and blocks later background writes
 - migration and reopen both neutralize legacy open children so old work cannot
   resurrect
@@ -297,7 +312,7 @@ that no output, child, final ModelRun, or audit survives.
 | Layer | Required assertion |
 | --- | --- |
 | API | notice zero-link create, multi-link create/update, search/filter/assignment, legacy visibility, tenant/restricted-matter isolation, file security |
-| API | omitted/explicit Active matter create succeeds; Intake activation still conflict-gated |
+| API | omitted/explicit Active matter create succeeds; Intake/On-hold activation succeeds with no check and with pending/conflicted/stale/pre-reopen results |
 | API | generic terminal/status/is_active writes fail; stale metadata write fails 409; lifecycle capability/reason/status/timestamp enforced |
 | API inventory | every non-negative generic Matter PATCH caller supplies the concurrency token; repository-wide static audit has no silent legacy payloads |
 | DB integrity | SQLite FK-on negative controls and fresh PostgreSQL migration/constraint proof reject dangling parents and cross-tenant Notice ownership/linkage |
@@ -328,8 +343,9 @@ that no output, child, final ModelRun, or audit survives.
 The local API, React, typecheck/build, Alembic, and Playwright gates passed; the
 code commit was pushed and deployed; deployed image identity and health were
 proven; and the committed production spec passed with the supplied reporting
-account. BUG-001, BUG-002, and the adjacent lifecycle defect therefore meet the
-repository's `Properly fixed` standard. Release verdict: **GO**.
+account. BUG-001, BUG-002, and the adjacent lifecycle defect therefore met the
+repository's `Properly fixed` standard **for the July 15 acceptance scope**.
+This is not closure evidence for the July 22 nonblocking-transition policy.
 
 ## 2026-07-17 reopen audit addendum: BUG-002 default drift
 
@@ -368,3 +384,22 @@ Permanent correction and learning:
    and timestamp compare-and-swap, and a reason, may reopen one. BUG-002
    resurfaced because verification stopped at two boundaries, not because a
    disposed Matter was automatically reactivated.
+
+## 2026-07-22 policy supersession addendum
+
+Ram's July 22 workbook explicitly requires an Intake or On-hold matter to move
+to Active without completing a conflict check. That is a valid product-policy
+enhancement, not a regression against the July 15 implementation: July 15 only
+exempted direct creation and explicitly retained the later activation gate.
+
+The durable contract is now:
+
+- conflict scanning, candidate review, clear/conflict/waive decisions, tenant
+  scoping, and audit provenance remain available;
+- no conflict-check state can block matter creation or a status transition;
+- reopen still lands in Intake and still marks pre-reopen clearance historical,
+  but neither condition requires a fresh check before Active;
+- a fresh check is required only before representing the matter as currently
+  conflict-cleared; and
+- the formal July 22 verdict remains `Inconclusive` until the committed
+  production Playwright spec passes on the deployed build identity.

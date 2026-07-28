@@ -71,8 +71,10 @@ const BASE_DATA = {
     opposing_party: null as string | null,
     description: "A short description.",
     status: "active",
+    lifecycle_version: 3,
     practice_area: "Civil",
     forum_level: "high_court",
+    court_forum_number: "Court 7",
     updated_at: "2026-07-15T08:30:00Z",
   },
   tasks: [],
@@ -113,6 +115,7 @@ describe("MatterOverviewPage", () => {
       await screen.findByText("A short description."),
     ).toBeInTheDocument();
     expect(screen.getByText(/Matter summary/i)).toBeInTheDocument();
+    expect(screen.getByText("Court 7")).toBeInTheDocument();
   });
 
   it("mounts the BenchStrategyPanel sibling of CounselRecommendationsCard", async () => {
@@ -182,6 +185,7 @@ describe("MatterOverviewPage", () => {
           cnr_number: "OLD-CNR",
           practice_area: "Civil",
           court_name: "Old Court",
+          court_forum_number: "Court 3",
           judge_name: "Old Bench",
           next_hearing_on: "2026-07-10",
         },
@@ -212,6 +216,8 @@ describe("MatterOverviewPage", () => {
     await userEvent.type(screen.getByTestId("matter-edit-case-number"), "CASE-99");
     await userEvent.clear(screen.getByTestId("matter-edit-cnr-number"));
     await userEvent.type(screen.getByTestId("matter-edit-cnr-number"), "CNR99");
+    await userEvent.clear(screen.getByTestId("matter-edit-court-forum-number"));
+    await userEvent.type(screen.getByTestId("matter-edit-court-forum-number"), "Court 12");
     await userEvent.click(screen.getByTestId("matter-edit-save"));
 
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
@@ -225,24 +231,15 @@ describe("MatterOverviewPage", () => {
         opposing_party: "Correct Opponent",
         case_number: "CASE-99",
         cnr_number: "CNR99",
+        court_forum_number: "Court 12",
       }),
     );
     expect(updateMatterMock.mock.calls[0]?.[0]).not.toHaveProperty("status");
   });
 
-  it("keeps conflict-gate activation guidance visible and links to the conflict card", async () => {
-    const scrollIntoView = vi.fn();
-    const focus = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
-    });
-    Object.defineProperty(HTMLElement.prototype, "focus", {
-      configurable: true,
-      value: focus,
-    });
-    useCapabilityMock.mockImplementation((capability: string) =>
-      capability === "matters:edit" || capability === "conflicts:run",
+  it("activates an Intake matter without requiring a conflict check", async () => {
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:edit",
     );
     useMatterWorkspaceMock.mockReturnValue({
       data: {
@@ -257,13 +254,10 @@ describe("MatterOverviewPage", () => {
         },
       },
     });
-    updateMatterMock.mockRejectedValue({
-      name: "ApiError",
-      status: 409,
-      detail:
-        "Matter cannot be activated because the latest conflict check requires review or waiver. Use the Conflict check card to clear or waive it, then save Active again.",
-      problemType: null,
-      data: null,
+    updateMatterMock.mockResolvedValue({
+      ...BASE_DATA.matter,
+      status: "active",
+      updated_at: "2026-07-22T08:30:00Z",
     });
     fetchBenchStrategyMock.mockResolvedValue({
       matter_id: "m-1",
@@ -279,19 +273,19 @@ describe("MatterOverviewPage", () => {
 
     await userEvent.click(screen.getByTestId("matter-edit-open"));
     await userEvent.selectOptions(screen.getByTestId("matter-edit-status"), "active");
-    expect(screen.getByTestId("matter-edit-active-conflict-hint")).toHaveTextContent(
-      /Conflict check card/i,
-    );
+    expect(screen.queryByTestId("matter-edit-active-conflict-hint")).toBeNull();
     await userEvent.click(screen.getByTestId("matter-edit-save"));
 
-    expect(await screen.findByTestId("matter-edit-conflict-gate")).toHaveTextContent(
-      /requires review or waiver/i,
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-1",
+      expected_updated_at: "2026-07-15T08:30:00Z",
+      status: "active",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("matter-edit-form")).not.toBeInTheDocument(),
     );
-    expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Conflict check card"));
-
-    await userEvent.click(screen.getByTestId("matter-edit-review-conflict"));
-    expect(scrollIntoView).toHaveBeenCalled();
-    expect(focus).toHaveBeenCalled();
+    expect(screen.queryByTestId("matter-edit-conflict-gate")).toBeNull();
   });
 
   it("does not replay untouched status and surfaces a rejected stale metadata edit", async () => {
