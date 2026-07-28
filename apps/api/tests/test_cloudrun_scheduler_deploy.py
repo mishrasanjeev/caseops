@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEPLOY_SCRIPT = REPO_ROOT / "infra" / "cloudrun" / "deploy.ps1"
 
@@ -23,7 +22,9 @@ def test_scheduler_deploy_grants_each_managed_job_invoker_access() -> None:
     for job_name in managed_jobs:
         assert f'"{job_name}"' in script
 
-    grant_call = script.index("Ensure-CloudRunJobInvoker `", script.index("if (-not $SkipScheduler)"))
+    grant_call = script.index(
+        "Ensure-CloudRunJobInvoker `", script.index("if (-not $SkipScheduler)")
+    )
     scheduler_call = script.index("Ensure-SchedulerJob `", grant_call)
     assert grant_call < scheduler_call
 
