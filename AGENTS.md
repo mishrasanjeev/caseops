@@ -28,3 +28,8 @@ requirements when using the fallback.
 - A lifecycle regression is not complete until it proves dispose, stale-write
   rejection, operational-view suppression, controlled Disposed -> Intake
   reopening, no child resurrection, and final-state persistence after reload.
+- `main` is the canonical source and release branch. Before declaring a
+  change complete, ensure the validated commit is fast-forwarded or merged
+  onto `main`, push `main` when remote publication is in scope, and verify
+  that local `main` and `origin/main` resolve to the released commit. Do not
+  leave completed fixes only on an agent branch.
