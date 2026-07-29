@@ -328,7 +328,7 @@ export default function AdminPage() {
         title="Admin & governance"
         description="Audit trail export, storage governance, security policy, AI policy, and enterprise-readiness status for this workspace."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 w-full flex-wrap items-center gap-2 md:w-auto">
             {canManageNotifications ? (
               <Link
                 href="/app/admin/notifications"
