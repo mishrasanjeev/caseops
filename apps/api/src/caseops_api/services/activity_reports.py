@@ -68,6 +68,12 @@ SNAPSHOT_METRICS = (
     ("outstanding_amount_minor", "Outstanding value (INR)", "currency"),
 )
 
+# Non-production and security-test tenants should not appear in the scheduled
+# operational report. Match substrings case-insensitively because account names
+# are operator-controlled and may use mixed casing (for example, ``Debug`` or
+# ``E2E``).
+EXCLUDED_ACCOUNT_NAME_TERMS = ("smoke", "csrf", "test", "debug", "e2e")
+
 
 def _window(now: datetime, unit: str) -> tuple[datetime, datetime]:
     local_now = now.astimezone(IST)
@@ -502,6 +508,13 @@ def build_activity_report(session: Session, *, now: datetime | None = None) -> d
             .order_by(Company.company_type, Company.name, Company.id)
         )
     )
+    companies = [
+        company
+        for company in companies
+        if not any(
+            term in company.name.casefold() for term in EXCLUDED_ACCOUNT_NAME_TERMS
+        )
+    ]
     accounts = {
         company.id: {
             "company_id": company.id,

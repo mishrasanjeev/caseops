@@ -205,3 +205,57 @@ def test_build_activity_report_groups_activity_by_account_and_period(client) -> 
     assert account["current"]["active_matters"] == 1
     assert account["current"]["open_notices"] == 1
     assert report["reporting_periods"]["till_date"]["end_date"] == "2026-07-10"
+
+
+def test_build_activity_report_excludes_non_production_account_names(client) -> None:
+    assert client.app is not None
+    created_at = datetime(2026, 7, 10, 2, 30, tzinfo=UTC)
+
+    with get_session_factory()() as session:
+        session.add_all(
+            [
+                Company(
+                    name="Production Legal",
+                    slug="production-legal",
+                    company_type=CompanyType.LAW_FIRM.value,
+                    tenant_key="production-legal",
+                    created_at=created_at,
+                ),
+                Company(
+                    name="Smoke Account",
+                    slug="smoke-account",
+                    company_type=CompanyType.LAW_FIRM.value,
+                    tenant_key="smoke-account",
+                    created_at=created_at,
+                ),
+                Company(
+                    name="CSRF Probe",
+                    slug="csrf-probe",
+                    company_type=CompanyType.LAW_FIRM.value,
+                    tenant_key="csrf-probe",
+                    created_at=created_at,
+                ),
+                Company(
+                    name="Debug E2E TEST tenant",
+                    slug="debug-e2e-test-tenant",
+                    company_type=CompanyType.CORPORATE_LEGAL.value,
+                    tenant_key="debug-e2e-test-tenant",
+                    created_at=created_at,
+                ),
+            ]
+        )
+        session.commit()
+
+        report = build_activity_report(
+            session,
+            now=datetime(2026, 7, 10, 2, 30, tzinfo=UTC),
+        )
+
+    accounts = [
+        account
+        for segment in report["segments"].values()
+        for account in segment["accounts"]
+    ]
+    assert [account["name"] for account in accounts] == ["Production Legal"]
+    assert report["segments"]["law_firms"]["company_count"] == 1
+    assert report["segments"]["general_counsels"]["company_count"] == 0
