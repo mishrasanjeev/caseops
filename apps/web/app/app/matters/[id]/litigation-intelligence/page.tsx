@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { Badge } from "@/components/ui/Badge";
+import { SourceAction } from "@/components/app/SourceAction";
 import {
   Card,
   CardContent,
@@ -473,6 +474,9 @@ function SourceBlock({ source }: { source: LitigationIntelligenceReviewSource })
           {source.snippet}
         </p>
       ) : null}
+      <div className="mt-2 flex min-w-0 flex-wrap">
+        <SourceAction action={source.source_action} compact />
+      </div>
     </div>
   );
 }

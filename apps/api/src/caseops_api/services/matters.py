@@ -24,6 +24,7 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
+    IpDocketRecord,
     Matter,
     MatterActivity,
     MatterAttachment,
@@ -2233,6 +2234,20 @@ def _neutralize_disposed_matter_operations(
         suggestion.decided_by_membership_id = context.membership.id
         suggestion.decided_at = now
 
+    ip_dockets = list(
+        session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.matter_id == matter.id,
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+            )
+        )
+    )
+    for docket in ip_dockets:
+        docket.status = "archived"
+        docket.archived_by_matter_disposal = True
+        docket.updated_at = now
+
     # Include children neutralized by an earlier disposal or the upgrade-time
     # legacy-data repair, not only rows cancelled in this invocation. Otherwise
     # a migrated child can stay cancelled in CaseOps while its old provider
@@ -2305,6 +2320,7 @@ def _neutralize_disposed_matter_operations(
         "cancelled_court_sync_jobs": len(court_sync_jobs),
         "blocked_notification_deliveries": len(delivery_intents),
         "rejected_next_hearing_suggestions": len(suggestions),
+        "archived_ip_dockets": len(ip_dockets),
     }
 
 

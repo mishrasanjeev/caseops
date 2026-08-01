@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import UTC, datetime
+from time import perf_counter
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
@@ -25,6 +26,7 @@ from caseops_api.db.models import (
     AuthorityDocumentChunk,
     AuthorityIngestionRun,
     AuthorityIngestionStatus,
+    AuthoritySearchObservation,
     MembershipRole,
 )
 from caseops_api.schemas.authorities import (
@@ -1078,6 +1080,7 @@ def search_authorities(
     context: SessionContext,
     payload: AuthoritySearchRequest,
 ) -> AuthoritySearchResponse:
+    started_at = perf_counter()
     # PG-110 (2026-05-01): over-fetch from the catalog to give language
     # filter + offset enough room. After the 2026-04-28 sweep widened
     # to non-EN documents, top-ranked results frequently include Garo
@@ -1121,6 +1124,8 @@ def search_authorities(
     treatment_lookup = compute_search_result_treatments(
         session, [r.authority_document_id for r in page],
     )
+    from caseops_api.services.source_actions import inspect_source_action
+
     enriched_page = [
         r.model_copy(
             update={
@@ -1130,6 +1135,10 @@ def search_authorities(
                 "adverse_count": treatment_lookup.get(
                     r.authority_document_id, (None, 0),
                 )[1],
+                "source_action": inspect_source_action(
+                    r.source_reference,
+                    verified=(r.source == "official"),
+                ),
             },
         )
         for r in page
@@ -1153,6 +1162,38 @@ def search_authorities(
             result_count=total,
         )
 
+    if enriched_page:
+        outcome = "results_found"
+    elif total and payload.offset >= total:
+        outcome = "offset_out_of_range"
+    elif unreadable_omitted_count and not total:
+        outcome = "unreadable_filtered"
+    else:
+        outcome = "no_results"
+
+    session.add(
+        AuthoritySearchObservation(
+            company_id=context.company.id,
+            membership_id=context.membership.id,
+            query_fingerprint=hashlib.sha256(
+                " ".join(payload.query.lower().split()).encode("utf-8")
+            ).hexdigest(),
+            mode=payload.mode,
+            outcome=outcome,
+            result_count=len(enriched_page),
+            raw_candidate_count=len(raw),
+            unreadable_omitted_count=unreadable_omitted_count,
+            latency_ms=max(0, round((perf_counter() - started_at) * 1000)),
+            filters_json={
+                "has_court_filter": bool(payload.court_name),
+                "has_forum_filter": bool(payload.forum_level),
+                "has_document_type_filter": bool(payload.document_type),
+                "language": payload.language,
+            },
+        )
+    )
+    session.commit()
+
     return AuthoritySearchResponse(
         query=payload.query,
         mode=payload.mode,
@@ -1175,6 +1216,13 @@ def search_authorities(
         ),
         total_after_filter=total,
         offset=payload.offset,
+        outcome=outcome,
+        diagnostics={
+            "raw_candidate_count": len(raw),
+            "unreadable_omitted_count": unreadable_omitted_count,
+            "returned_count": len(enriched_page),
+            "has_more": payload.offset + payload.limit < total,
+        },
     )
 
 

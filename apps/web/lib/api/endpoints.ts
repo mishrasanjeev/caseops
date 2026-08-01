@@ -2964,6 +2964,7 @@ export type CourtAnalyticsCase = {
   neutral_citation: string | null;
   source: string;
   source_reference: string | null;
+  source_action: import("@/components/app/SourceAction").SourceActionContract;
   practice_area: string;
   statutes_or_sections: string[];
   summary_preview: string | null;
@@ -3025,6 +3026,7 @@ export type JudgeAppointmentRecord = {
   end_date: string | null;
   source_url: string | null;
   source_evidence_text: string | null;
+  source_action: import("@/components/app/SourceAction").SourceActionContract;
 };
 
 export type JudgeProfile = {
@@ -3089,6 +3091,19 @@ export type StatuteSectionRecord = {
   section_url: string | null;
   parent_section_id: string | null;
   ordinal: number;
+  verification_status:
+    | "unverified"
+    | "verified_official"
+    | "verified_licensed"
+    | "quarantined"
+    | "retired";
+  source_sha256: string | null;
+  source_publisher: string | null;
+  source_retrieved_at: string | null;
+  source_version: number;
+  verified_at: string | null;
+  quarantine_reason: string | null;
+  source_action: import("@/components/app/SourceAction").SourceActionContract;
 };
 
 // Lightweight section row for the LIST endpoint — drops `section_text`
@@ -4502,6 +4517,15 @@ export type AuthorityCitationTreatment =
   | "considered"
   | "neutral";
 
+export type SourceActionContract = {
+  state: "available" | "missing" | "unverified" | "blocked" | "quarantined";
+  label: string;
+  open_url: string | null;
+  source_reference: string | null;
+  reason: string | null;
+  opens_new_tab: boolean;
+};
+
 export type AuthoritySearchResult = {
   authority_document_id: string;
   title: string;
@@ -4514,6 +4538,7 @@ export type AuthoritySearchResult = {
   summary: string;
   source: string;
   source_reference: string | null;
+  source_action: SourceActionContract | null;
   snippet: string;
   score: number;
   matched_terms: string[];
@@ -4552,6 +4577,12 @@ export async function searchAuthorities(input: {
   coverage_notice: string | null;
   total_after_filter: number;
   offset: number;
+  outcome:
+    | "results_found"
+    | "no_results"
+    | "offset_out_of_range"
+    | "unreadable_filtered";
+  diagnostics: Record<string, number | boolean>;
 }> {
   return apiRequest("/api/authorities/search", {
     method: "POST",
@@ -7478,4 +7509,149 @@ export async function fetchPlatformSupportMatrix(): Promise<CaseTrackingSupportM
 export async function fetchTenantEnterpriseReadiness(): Promise<TenantEnterpriseReadinessResponse> {
   const data = await apiRequest<unknown>("/api/admin/enterprise-readiness");
   return tenantEnterpriseReadinessResponse.parse(data);
+}
+
+export type IpTrademarkParticularVersion = {
+  id: string;
+  docket_id: string;
+  version: number;
+  form_key: string;
+  form_version: string;
+  mark_kind: string;
+  representation_json: Record<string, unknown>;
+  classes_json: Array<{ class_number: number; specification: string }>;
+  use_priority_json: Record<string, unknown> | null;
+  parties_json: Array<{ role: string; name: string }>;
+  agent_json: Record<string, unknown> | null;
+  filing_manifest_json: Array<Record<string, unknown>>;
+  readiness_status: string;
+  readiness_errors_json: string[];
+  finalized_at: string | null;
+  created_at: string;
+};
+
+export type IpDocket = {
+  id: string;
+  company_id: string;
+  matter_id: string | null;
+  record_type: string;
+  title: string;
+  primary_identifier: string | null;
+  status: string;
+  restricted: boolean;
+  current_version: number;
+  current_particulars: IpTrademarkParticularVersion;
+  notice_links: Array<Record<string, unknown>>;
+  deadline_coverages: Array<Record<string, unknown>>;
+  deadline_incidents: Array<Record<string, unknown>>;
+  title_interests: Array<{
+    id: string;
+    interest_type: string;
+    party_name: string;
+    effective_from: string;
+    effective_until: string | null;
+    recordal_status: string;
+    conflict_flags_json: string[];
+  }>;
+  cost_items: Array<{
+    id: string;
+    category: string;
+    description: string;
+    amount_minor: number;
+    currency: string;
+    evidence_reference: string;
+  }>;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
+  return apiRequest("/api/ip/dockets");
+}
+
+export async function createIpDocket(input: {
+  title: string;
+  matterId?: string | null;
+  primaryIdentifier?: string | null;
+  restricted?: boolean;
+  markText: string;
+  classNumber: number;
+  specification: string;
+  applicantName: string;
+  evidenceReference: string;
+}): Promise<IpDocket> {
+  return apiRequest("/api/ip/dockets", {
+    method: "POST",
+    body: {
+      title: input.title,
+      matter_id: input.matterId ?? null,
+      primary_identifier: input.primaryIdentifier ?? null,
+      restricted: input.restricted ?? false,
+      particulars: {
+        form_key: "TM-A",
+        form_version: "2026.1",
+        mark_kind: "word",
+        representation: {
+          text: input.markText,
+          evidence_reference: input.evidenceReference,
+        },
+        classes: [
+          { class_number: input.classNumber, specification: input.specification },
+        ],
+        use_priority: null,
+        parties: [{ role: "applicant", name: input.applicantName }],
+        agent: null,
+        filing_manifest: [
+          {
+            key: "representation",
+            label: "Mark representation",
+            required: true,
+            evidence_reference: input.evidenceReference,
+          },
+        ],
+      },
+    },
+  });
+}
+
+export async function addIpTitleInterest(
+  docketId: string,
+  input: {
+    interestType: "ownership" | "assignment" | "licence" | "encumbrance" | "security";
+    partyName: string;
+    effectiveFrom: string;
+    evidenceReference: string;
+  },
+): Promise<IpDocket> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/title-interests`, {
+    method: "POST",
+    body: {
+      interest_type: input.interestType,
+      party_name: input.partyName,
+      effective_from: input.effectiveFrom,
+      evidence_reference: input.evidenceReference,
+      recordal_status: "not_required",
+    },
+  });
+}
+
+export async function addIpCostItem(
+  docketId: string,
+  input: {
+    category: "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other";
+    description: string;
+    amountMinor: number;
+    evidenceReference: string;
+  },
+): Promise<IpDocket> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/cost-items`, {
+    method: "POST",
+    body: {
+      category: input.category,
+      description: input.description,
+      amount_minor: input.amountMinor,
+      currency: "INR",
+      evidence_reference: input.evidenceReference,
+    },
+  });
 }

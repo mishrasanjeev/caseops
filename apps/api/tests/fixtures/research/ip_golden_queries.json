@@ -1,0 +1,17 @@
+[
+  {
+    "id": "IP-GOLDEN-001",
+    "query": "passing off deceptive similarity prior user trademark",
+    "expected_terms": ["passing", "similarity", "trademark"]
+  },
+  {
+    "id": "IP-GOLDEN-002",
+    "query": "Trade Marks Act section 11 relative grounds refusal",
+    "expected_terms": ["section 11", "relative grounds"]
+  },
+  {
+    "id": "IP-GOLDEN-003",
+    "query": "interim injunction trademark infringement balance of convenience",
+    "expected_terms": ["injunction", "infringement"]
+  }
+]

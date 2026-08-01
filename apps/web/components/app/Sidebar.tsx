@@ -58,6 +58,13 @@ const NAV: NavItem[] = [
   // sessions start with "what must I do today".
   { href: "/app/today", label: "Today", icon: Sun, section: "work" },
   { href: "/app/matters", label: "Matters", icon: Briefcase, section: "work" },
+  {
+    href: "/app/ip",
+    label: "IP docket",
+    icon: BookOpenCheck,
+    section: "work",
+    requiresCapability: "ip:view",
+  },
   { href: "/app/notices", label: "Notices", icon: Bell, section: "work" },
   {
     href: "/app/intake",

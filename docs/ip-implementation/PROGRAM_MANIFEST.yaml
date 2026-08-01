@@ -4,7 +4,7 @@
   "program": {
     "id": "PRD-IPLF-2026-08-01",
     "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
-    "prd_sha256": "1d059fd723b04258b5d6c460b6a82754d65e996547543f76c0c411800843bdb5",
+    "prd_sha256": "14401d115ce45e532b37c8b43db2ae4226d42a7f949d05ce8b171b312a5b585f",
     "baseline": {
       "requirement_count": 436,
       "family_count": 50,
@@ -22,7 +22,7 @@
       "completed_scope": "Deployed IPLF-001B from main, converged all six required scheduler/job contracts to one immutable release digest and dedicated invoker, paused the superseded case-tracking schedule, passed a scheduler-to-job canary, and verified tenant-safe activity-report logging.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-003A",
-      "next_action": "Monitor every natural scheduler window and retain seven consecutive days of health evidence while beginning the next non-conflicting M1 source-contract slice.",
+      "next_action": "Deliver the remaining declared M1 and IPLF-039 slices, then verify the exact production revision; natural scheduler windows continue as operational monitoring without a fixed waiting-period gate.",
       "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
     }
   },
@@ -38,7 +38,7 @@
           "id": "M1-SCHEDULER-IAM-DRIFT",
           "summary": "Four enabled production schedulers report PERMISSION_DENIED because their caller/binding contract is not reconciled.",
           "owner": "Engineering/SRE",
-          "evidence_needed": "Approved IPLF-001B change and seven consecutive days of healthy required windows."
+          "evidence_needed": "Approved IPLF-001B change, exact-revision IAM/config drift verification, and bounded canaries for every required job."
         },
         {
           "id": "M1-IMAGE-LOG-DRIFT",
@@ -57,7 +57,7 @@
       "name": "Trust Recovery GA",
       "target": "4 Sep 2026",
       "deliverable": "Source links, Bare Acts quarantine/provenance, search diagnostics, notification convergence start/observability, scheduler IAM/health/replay",
-      "exit_criteria": "Seven consecutive days of required-job health; source-link E2E; UJ-48; no unverified statute presented; suppressed critical reminder produces visible fallback; deployed/IaC scheduler drift check passes",
+      "exit_criteria": "Exact deployed scheduler/job revision and IAM/config drift checks pass; bounded canaries prove every required job can be invoked by its configured scheduler identity; source-link E2E; UJ-48; no unverified statute presented; suppressed critical reminder produces visible fallback. Natural-run health remains monitored operational evidence but is not a release-duration blocker",
       "blockers": [],
       "implementation_status": "not_started",
       "verification_status": "not_run",
@@ -1038,7 +1038,7 @@
       "next_actions": [
         "Engineering/SRE reviews the audit matrix and confirms the required production scheduler inventory.",
         "Authorize and execute IPLF-001B as a separate mutation/release slice.",
-        "Collect seven consecutive days of required-job health before M1 exit."
+        "Continue natural-window scheduler monitoring and incident alerting without a fixed release-duration threshold."
       ],
       "data_impact": [
         "No application, database, object, provider, or customer data was mutated.",
@@ -1119,16 +1119,16 @@
       "blockers": [
         {
           "id": "M1-SCHEDULER-OBSERVATION",
-          "summary": "Configuration and safe canaries pass, but M1 still requires seven consecutive days covering every natural scheduler window.",
+          "summary": "Resolved by the 1 August 2026 product-owner change: exact-revision configuration verification and bounded canaries are the release gate; natural windows remain operational monitoring.",
           "owner": "Engineering/SRE",
-          "evidence_needed": "Dated attempt/execution evidence for all required jobs with no permission, stale-image, or duplicate-schedule regression.",
+          "evidence_needed": "Exact-revision configuration evidence, bounded scheduler-to-job canaries, and continuing dated natural-run monitoring.",
           "affected_milestone": "M1"
         }
       ],
       "next_actions": [
-        "Collect seven consecutive days of required-job health before M1 exit.",
+        "Continue natural-window health monitoring without a fixed release-duration threshold.",
         "Confirm the next natural legal-update, case-tracking, and authority-metadata windows clear their pre-repair status history.",
-        "Begin IPLF-003A without claiming M1 acceptance."
+        "Begin IPLF-003A after exact-revision drift verification and bounded canaries pass."
       ],
       "data_impact": [
         "No database schema or tenant record mutation is introduced by the implementation.",
@@ -1165,9 +1165,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1187,9 +1187,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1209,9 +1209,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1231,9 +1231,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1253,9 +1253,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1275,9 +1275,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1297,8 +1297,8 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -1319,9 +1319,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1341,8 +1341,8 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -1363,8 +1363,8 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -1385,9 +1385,9 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1407,8 +1407,8 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -1429,8 +1429,8 @@
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     }

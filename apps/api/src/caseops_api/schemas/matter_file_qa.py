@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from caseops_api.schemas.source_actions import SourceActionRecord
+
 MatterFileQAAnswerMode = Literal[
     "direct",
     "summary",
@@ -59,6 +61,7 @@ class MatterFileQASource(BaseModel):
     snippet: str = Field(max_length=800)
     score: int
     matched_terms: list[str] = Field(default_factory=list)
+    source_action: SourceActionRecord | None = None
 
 
 class MatterFileQAStructuredItem(BaseModel):

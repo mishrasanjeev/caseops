@@ -13,13 +13,15 @@ Slice S4. v1 endpoints:
 All endpoints are auth-gated (catalog is global; no per-tenant
 scoping). 404 on unknown id / section_number.
 """
+
 from __future__ import annotations
 
-from datetime import date
-from typing import Annotated
+from datetime import UTC, date, datetime
+from hashlib import sha256
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 
 from caseops_api.api.dependencies import (
@@ -48,6 +50,8 @@ from caseops_api.schemas.legal_updates import (
     LegalUpdateWatchlistUpdateRequest,
     StatuteAmendmentHistoryResponse,
 )
+from caseops_api.schemas.source_actions import SourceActionRecord
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.legal_update_sources import (
     list_source_records,
     list_statute_amendment_history,
@@ -66,6 +70,7 @@ from caseops_api.services.legal_updates import (
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.source_actions import inspect_source_action
 
 router = APIRouter()
 matter_scoped_router = APIRouter()
@@ -74,15 +79,9 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 # require the matters:edit capability (same gate as other matter-
 # scoped writes). Tenant scoping inside `_scoped_matter_or_404`
 # further restricts which matter the user can touch.
-MatterEditor = Annotated[
-    SessionContext, Depends(require_capability("matters:edit"))
-]
-LegalUpdateUser = Annotated[
-    SessionContext, Depends(require_capability("authorities:search"))
-]
-LegalUpdateAdmin = Annotated[
-    SessionContext, Depends(require_capability("notifications:manage"))
-]
+MatterEditor = Annotated[SessionContext, Depends(require_capability("matters:edit"))]
+LegalUpdateUser = Annotated[SessionContext, Depends(require_capability("authorities:search"))]
+LegalUpdateAdmin = Annotated[SessionContext, Depends(require_capability("notifications:manage"))]
 
 
 class StatuteRecord(BaseModel):
@@ -124,9 +123,37 @@ class StatuteSectionRecord(BaseModel):
     section_text: str | None
     section_text_source: str | None = None
     is_provisional: bool = False
+    verification_status: str = "unverified"
+    source_sha256: str | None = None
+    source_publisher: str | None = None
+    source_retrieved_at: datetime | None = None
+    section_text_fetched_at: datetime | None = Field(default=None, exclude=True)
+    source_version: int = 1
+    verified_at: datetime | None = None
+    quarantine_reason: str | None = None
+    source_action: SourceActionRecord | None = None
     section_url: str | None
     parent_section_id: str | None
     ordinal: int
+
+    @model_validator(mode="after")
+    def fail_closed_source(self) -> StatuteSectionRecord:
+        authoritative = self.verification_status in {
+            "verified_official",
+            "verified_licensed",
+        }
+        quarantined = self.verification_status in {"quarantined", "retired"}
+        self.source_retrieved_at = self.source_retrieved_at or getattr(
+            self, "section_text_fetched_at", None
+        )
+        if not authoritative:
+            self.section_text = None
+        self.source_action = inspect_source_action(
+            self.section_url,
+            verified=authoritative,
+            quarantined=quarantined,
+        )
+        return self
 
 
 class StatuteSectionListItem(BaseModel):
@@ -138,6 +165,7 @@ class StatuteSectionListItem(BaseModel):
     prod-Playwright tests. Callers who need the body fetch the
     section-detail endpoint, which keeps the full StatuteSectionRecord.
     """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -146,9 +174,22 @@ class StatuteSectionListItem(BaseModel):
     section_label: str | None
     section_text_source: str | None = None
     is_provisional: bool = False
+    verification_status: str = "unverified"
+    source_version: int = 1
+    quarantine_reason: str | None = None
+    source_action: SourceActionRecord | None = None
     section_url: str | None
     parent_section_id: str | None
     ordinal: int
+
+    @model_validator(mode="after")
+    def source_contract(self) -> StatuteSectionListItem:
+        self.source_action = inspect_source_action(
+            self.section_url,
+            verified=self.verification_status in {"verified_official", "verified_licensed"},
+            quarantined=self.verification_status in {"quarantined", "retired"},
+        )
+        return self
 
 
 class StatuteSectionsListResponse(BaseModel):
@@ -161,6 +202,28 @@ class StatuteSectionDetailResponse(BaseModel):
     section: StatuteSectionRecord
     parent_section: StatuteSectionRecord | None = None
     child_sections: list[StatuteSectionRecord] = Field(default_factory=list)
+
+
+class StatuteVerificationAuditResponse(BaseModel):
+    total: int
+    verified: int
+    unverified: int
+    quarantined: int
+    provisional: int
+    ai_generated: int
+    suspect_records: int
+
+
+class StatuteVerificationRequest(BaseModel):
+    status: Literal[
+        "verified_official",
+        "verified_licensed",
+        "unverified",
+        "quarantined",
+        "retired",
+    ]
+    expected_source_version: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 @router.get(
@@ -183,8 +246,7 @@ def list_statutes(
         )
         .outerjoin(
             StatuteSection,
-            (StatuteSection.statute_id == Statute.id)
-            & (StatuteSection.is_active.is_(True)),
+            (StatuteSection.statute_id == Statute.id) & (StatuteSection.is_active.is_(True)),
         )
         .where(Statute.is_active.is_(True))
         .group_by(Statute.id)
@@ -259,8 +321,7 @@ def patch_legal_update_watchlist(
     "/legal-updates/watchlists/{watchlist_id}/run",
     response_model=LegalUpdateRunResponse,
     summary=(
-        "Run or preview deterministic in-app legal update matches "
-        "against existing records only."
+        "Run or preview deterministic in-app legal update matches against existing records only."
     ),
 )
 def post_legal_update_watchlist_run(
@@ -382,6 +443,117 @@ def get_legal_update_source_records(
 
 
 @router.get(
+    "/verification/audit",
+    response_model=StatuteVerificationAuditResponse,
+    summary="Audit statute source provenance without publishing replacement text.",
+)
+def audit_statute_verification(
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteVerificationAuditResponse:
+    _ = context
+    sections = list(session.scalars(select(StatuteSection)).all())
+    suspect = 0
+    for section in sections:
+        body = section.section_text or ""
+        if (
+            section.section_text_source == "haiku_generated"
+            or "\ufffd" in body
+            or (body and len(body.strip()) < 20)
+        ):
+            suspect += 1
+    return StatuteVerificationAuditResponse(
+        total=len(sections),
+        verified=sum(
+            s.verification_status in {"verified_official", "verified_licensed"} for s in sections
+        ),
+        unverified=sum(s.verification_status == "unverified" for s in sections),
+        quarantined=sum(s.verification_status == "quarantined" for s in sections),
+        provisional=sum(bool(s.is_provisional) for s in sections),
+        ai_generated=sum(s.section_text_source == "haiku_generated" for s in sections),
+        suspect_records=suspect,
+    )
+
+
+@router.post(
+    "/verification/sections/{section_id}",
+    response_model=StatuteSectionRecord,
+    summary="Apply an optimistic, audited curator decision to statute text.",
+)
+def verify_statute_section(
+    section_id: str,
+    payload: StatuteVerificationRequest,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteSectionRecord:
+    section = session.scalar(
+        select(StatuteSection).where(StatuteSection.id == section_id).with_for_update()
+    )
+    if section is None:
+        raise HTTPException(status_code=404, detail="Statute section not found.")
+    if section.source_version != payload.expected_source_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Statute source version changed; reload before reviewing.",
+        )
+    if payload.status in {"verified_official", "verified_licensed"}:
+        text_value = (section.section_text or "").strip()
+        if (
+            len(text_value) < 20
+            or not section.section_url
+            or section.section_text_source == "haiku_generated"
+            or not section.source_publisher
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Only non-AI legal text with an official source URL may be marked verified."
+                ),
+            )
+        section.source_sha256 = sha256(text_value.encode("utf-8")).hexdigest()
+        section.section_text_fetched_at = section.section_text_fetched_at or datetime.now(UTC)
+        section.verified_at = datetime.now(UTC)
+        section.verified_by_membership_id = context.membership.id
+        section.quarantined_at = None
+        section.quarantine_reason = None
+        section.is_provisional = False
+    elif payload.status in {"quarantined", "retired"}:
+        if not (payload.reason or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A quarantine reason is required.",
+            )
+        section.verified_at = None
+        section.verified_by_membership_id = None
+        section.quarantined_at = datetime.now(UTC)
+        section.quarantine_reason = payload.reason.strip()
+        section.is_provisional = True
+    else:
+        section.verified_at = None
+        section.verified_by_membership_id = None
+        section.quarantined_at = None
+        section.quarantine_reason = payload.reason.strip() if payload.reason else None
+        section.is_provisional = True
+    section.verification_status = payload.status
+    section.source_version += 1
+    record_from_context(
+        session,
+        context,
+        action="statute_section.verification_changed",
+        target_type="statute_section",
+        target_id=section.id,
+        metadata={
+            "verification_status": payload.status,
+            "source_version": section.source_version,
+            "has_source_hash": bool(section.source_sha256),
+        },
+    )
+    session.commit()
+    session.refresh(section)
+    return StatuteSectionRecord.model_validate(section)
+
+
+@router.get(
     "/{statute_id}/amendment-history",
     response_model=StatuteAmendmentHistoryResponse,
     summary="List source-backed amendment and change events for an Act.",
@@ -490,16 +662,12 @@ def get_statute_section(
     if section is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"Section {section_number!r} not found in {statute.short_name}."
-            ),
+            detail=(f"Section {section_number!r} not found in {statute.short_name}."),
         )
     parent = None
     if section.parent_section_id:
         parent = session.scalar(
-            select(StatuteSection).where(
-                StatuteSection.id == section.parent_section_id
-            )
+            select(StatuteSection).where(StatuteSection.id == section.parent_section_id)
         )
     children = list(
         session.scalars(
@@ -514,12 +682,8 @@ def get_statute_section(
     return StatuteSectionDetailResponse(
         statute=StatuteRecord.model_validate(statute),
         section=StatuteSectionRecord.model_validate(section),
-        parent_section=(
-            StatuteSectionRecord.model_validate(parent) if parent else None
-        ),
-        child_sections=[
-            StatuteSectionRecord.model_validate(c) for c in children
-        ],
+        parent_section=(StatuteSectionRecord.model_validate(parent) if parent else None),
+        child_sections=[StatuteSectionRecord.model_validate(c) for c in children],
     )
 
 
@@ -584,9 +748,7 @@ def _scoped_matter_or_404(
     context: SessionContext,
 ) -> Matter:
     matter = session.scalar(
-        select(Matter)
-        .where(Matter.id == matter_id)
-        .where(Matter.company_id == context.company.id)
+        select(Matter).where(Matter.id == matter_id).where(Matter.company_id == context.company.id)
     )
     if matter is None:
         raise HTTPException(
@@ -634,10 +796,7 @@ def list_matter_statute_references(
     )
     return MatterStatuteReferenceListResponse(
         matter_id=matter.id,
-        references=[
-            _serialise_matter_ref(ref, section, statute)
-            for ref, section, statute in rows
-        ],
+        references=[_serialise_matter_ref(ref, section, statute) for ref, section, statute in rows],
     )
 
 
@@ -679,9 +838,7 @@ def add_matter_statute_reference(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Statute section {payload.section_id!r} not found.",
         )
-    statute = session.scalar(
-        select(Statute).where(Statute.id == section.statute_id)
-    )
+    statute = session.scalar(select(Statute).where(Statute.id == section.statute_id))
     if statute is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -692,9 +849,7 @@ def add_matter_statute_reference(
     if relevance not in {"cited", "opposing", "context"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "relevance must be one of 'cited' | 'opposing' | 'context'."
-            ),
+            detail=("relevance must be one of 'cited' | 'opposing' | 'context'."),
         )
     existing = session.scalar(
         select(MatterStatuteReference).where(
@@ -754,4 +909,5 @@ def delete_matter_statute_reference(
     session.delete(ref)
     session.commit()
     from fastapi import Response
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)

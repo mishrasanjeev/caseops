@@ -63,6 +63,11 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "calendar:view": _ALL_AUTHENTICATED,
     "calendar:sync": _ALL_FEE_EARNERS,
     "notifications:manage": _OWNER_ADMIN,
+    # --- intellectual property operations ---
+    "ip:view": _ALL_AUTHENTICATED,
+    "ip:write": _ALL_FEE_EARNERS,
+    "ip:review": _STAFF,
+    "ip:finance": _STAFF,
     # --- court sync --- ops action, not for paralegals
     "court_sync:run": _STAFF,
     # --- recommendations + AI ---

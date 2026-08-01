@@ -6,7 +6,6 @@ import {
   BarChart3,
   Briefcase,
   CalendarRange,
-  ExternalLink,
   Gavel,
   LibraryBig,
   Milestone,
@@ -26,6 +25,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SourceAction } from "@/components/app/SourceAction";
 import { fetchJudgeProfile } from "@/lib/api/endpoints";
 
 export default function JudgeProfilePage() {
@@ -223,17 +223,9 @@ export default function JudgeProfilePage() {
                       “{appt.source_evidence_text}”
                     </div>
                   ) : null}
-                  {appt.source_url ? (
-                    <a
-                      href={appt.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--color-brand-600)] hover:underline"
-                    >
-                      Source
-                      <ExternalLink className="h-3 w-3" aria-hidden />
-                    </a>
-                  ) : null}
+                  <div className="mt-1 flex min-w-0 flex-wrap">
+                    <SourceAction action={appt.source_action} compact />
+                  </div>
                 </li>
               ))}
             </ol>
@@ -489,6 +481,7 @@ function AuthorityCaseList({
     case_reference: string | null;
     neutral_citation: string | null;
     source_reference: string | null;
+    source_action: import("@/components/app/SourceAction").SourceActionContract;
     practice_area: string;
     summary_preview: string | null;
   }[];
@@ -529,17 +522,9 @@ function AuthorityCaseList({
                   {authority.summary_preview}
                 </p>
               ) : null}
-              {authority.source_reference ? (
-                <a
-                  href={authority.source_reference}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--color-brand-600)] hover:underline"
-                >
-                  Source
-                  <ExternalLink className="h-3 w-3" aria-hidden />
-                </a>
-              ) : null}
+              <div className="mt-2 flex min-w-0 flex-wrap">
+                <SourceAction action={authority.source_action} compact />
+              </div>
             </li>
           ))}
         </ul>

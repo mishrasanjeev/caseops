@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from caseops_api.schemas.source_actions import SourceActionRecord
+
 LitigationReviewItemTypeLiteral = Literal[
     "proceeding_signal",
     "affidavit_statement",
@@ -52,6 +54,7 @@ class LitigationIntelligenceReviewSource(BaseModel):
     reference: str | None = None
     snippet: str | None = None
     page_reference: str | None = None
+    source_action: SourceActionRecord | None = None
 
 
 class LitigationIntelligenceReviewItem(BaseModel):

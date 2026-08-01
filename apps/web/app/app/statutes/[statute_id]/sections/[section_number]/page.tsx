@@ -12,7 +12,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
-  ExternalLink,
   FileText,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +28,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SourceAction } from "@/components/app/SourceAction";
 import { fetchStatuteSection } from "@/lib/api/endpoints";
 
 function SourceBadge({ source }: { source: string | null | undefined }) {
@@ -90,6 +90,9 @@ export default function StatuteSectionDetailPage() {
   const data = query.data;
   if (!data) return null;
   const { statute, section, parent_section, child_sections } = data;
+  const authoritative =
+    section.verification_status === "verified_official" ||
+    section.verification_status === "verified_licensed";
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,17 +109,7 @@ export default function StatuteSectionDetailPage() {
         title={section.section_number}
         description={section.section_label ?? "Section of the Act"}
         actions={
-          section.section_url ? (
-            <a
-              href={section.section_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
-            >
-              indiacode.nic.in
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            </a>
-          ) : undefined
+          <SourceAction action={section.source_action} />
         }
       />
 
@@ -127,9 +120,11 @@ export default function StatuteSectionDetailPage() {
             <SourceBadge source={section.section_text_source} />
           </CardTitle>
           <CardDescription>
-            {section.section_text_source === "haiku_generated"
-              ? "AI-generated reproduction of the section text. Verify at the official source link above before relying on it in any submission."
-              : "Sourced from indiacode.nic.in (Government of India, public domain). Verify at the source link above."}
+            {section.verification_status === "quarantined" || section.verification_status === "retired"
+              ? `Quarantined: ${section.quarantine_reason ?? "curator verification required"}. The text is withheld.`
+              : section.verification_status === "verified_official" || section.verification_status === "verified_licensed"
+                ? `${section.source_publisher ?? "Verified publisher"}; curator-verified source version ${section.source_version}${section.source_sha256 ? ` (SHA-256 ${section.source_sha256.slice(0, 12)}â€¦)` : ""}.`
+                : "Unverified legal text is withheld until curator verification."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -150,7 +145,7 @@ export default function StatuteSectionDetailPage() {
               </span>
             </div>
           ) : null}
-          {section.section_text ? (
+          {authoritative && section.section_text ? (
             <pre
               className="whitespace-pre-wrap text-sm text-[var(--color-ink)]"
               data-testid="statute-section-text"

@@ -69,6 +69,10 @@ export type Capability =
   | "calendar:view"
   | "calendar:sync"
   | "notifications:manage"
+  | "ip:view"
+  | "ip:write"
+  | "ip:review"
+  | "ip:finance"
   // court sync
   | "court_sync:run"
   // recommendations + AI
@@ -134,6 +138,8 @@ const FEE_EARNER: Capability[] = [
   "hearing_packs:generate",
   "calendar:view",
   "calendar:sync",
+  "ip:view",
+  "ip:write",
   "ai:generate",
   "authorities:search",
   "authorities:annotate",
@@ -183,6 +189,8 @@ const STAFF: Capability[] = [
   "drafts:finalize",
   "hearing_packs:review",
   "court_sync:run",
+  "ip:review",
+  "ip:finance",
   "authorities:ingest",
   "recommendations:decide",
   // Strategy approval rides the same role tier as recommendations:decide.
@@ -222,6 +230,7 @@ const VIEWER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "clients:view",
   "communications:view",
   "calendar:view",
+  "ip:view",
 ]);
 
 const PARALEGAL_CAPS: ReadonlySet<Capability> = new Set<Capability>([

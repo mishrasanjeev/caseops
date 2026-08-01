@@ -3595,6 +3595,20 @@ class NotificationDeliveryIntent(Base):
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body: Mapped[str | None] = mapped_column(String(500), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    schedule_source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    schedule_source_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    recipient_snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dispatch_owner: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="durable_intent"
+    )
+    comparison_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_run"
+    )
+    suppression_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    fallback_intent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -3612,6 +3626,38 @@ class NotificationDeliveryIntent(Base):
     matter: Mapped[Matter | None] = relationship()
     notification_rule: Mapped[NotificationRule | None] = relationship()
     in_app_notification: Mapped[InAppNotification | None] = relationship()
+
+
+class NotificationDeliveryEvent(Base):
+    __tablename__ = "notification_delivery_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "provider_event_id",
+            name="uq_notification_delivery_provider_event",
+        ),
+        Index("ix_notification_delivery_events_intent_time", "intent_id", "occurred_at"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    intent_id: Mapped[str] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class JudgmentAlertRule(Base):
@@ -9023,6 +9069,40 @@ class DocumentProcessingJob(Base):
     )
 
 
+class AuthoritySearchObservation(Base):
+    """Search health telemetry that intentionally excludes raw query text."""
+
+    __tablename__ = "authority_search_observations"
+    __table_args__ = (
+        Index(
+            "ix_authority_search_observations_company_created",
+            "company_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+    )
+    query_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    mode: Mapped[str] = mapped_column(String(24), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    result_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_candidate_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unreadable_omitted_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    filters_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class AuthorityDocument(Base):
     __tablename__ = "authority_documents"
     __table_args__ = (
@@ -10721,6 +10801,22 @@ class StatuteSection(Base):
         default=False,
         server_default=false(),
     )
+    verification_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified", index=True
+    )
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_publisher: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verified_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+    )
+    quarantined_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    quarantine_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     section_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     parent_section_id: Mapped[str | None] = mapped_column(
         ForeignKey("statute_sections.id", ondelete="CASCADE"),
@@ -11872,3 +11968,286 @@ class TenantContractPlaybookRule(Base):
     )
 
     playbook: Mapped[TenantContractPlaybook] = relationship(back_populates="rules")
+
+
+class IpDocketRecord(Base):
+    __tablename__ = "ip_docket_records"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_ip_docket_matter_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_creator_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_docket_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "primary_identifier",
+            name="uq_ip_docket_company_identifier",
+        ),
+        Index("ix_ip_docket_company_status", "company_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    matter_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    record_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    primary_identifier: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    archived_by_matter_disposal: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpTrademarkParticularVersion(Base):
+    __tablename__ = "ip_trademark_particular_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_tm_version_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_tm_version_creator_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("docket_id", "version", name="uq_ip_tm_docket_version"),
+        Index("ix_ip_tm_versions_company_docket", "company_id", "docket_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    form_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    form_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    mark_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    representation_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    classes_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    use_priority_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    parties_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    agent_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    filing_manifest_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    readiness_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    readiness_errors_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    finalized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class CompanyNoticeIpLink(Base):
+    __tablename__ = "company_notice_ip_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_notice_ip_link_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["notice_id", "company_id"],
+            ["company_notices.id", "company_notices.company_id"],
+            name="fk_notice_ip_link_notice_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("notice_id", "docket_id", name="uq_notice_ip_link"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    notice_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    link_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    accepted_effect: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDeadlineCoverage(Base):
+    __tablename__ = "ip_deadline_coverages"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_deadline_coverage_docket_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "docket_id", "matter_deadline_id", name="uq_ip_deadline_coverage"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    matter_deadline_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="RESTRICT"), nullable=False
+    )
+    responsible_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    backup_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    coverage_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="accepted"
+    )
+    calendar_projection_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending"
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDeadlineIncident(Base):
+    __tablename__ = "ip_deadline_incidents"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_deadline_incident_docket_company",
+            ondelete="CASCADE",
+        ),
+        Index("ix_ip_deadline_incidents_company_status", "company_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    matter_deadline_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"), nullable=True
+    )
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    impact_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    containment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correction_deadline_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    corrective_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verified_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpTitleInterest(Base):
+    __tablename__ = "ip_title_interests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_title_interest_docket_company",
+            ondelete="CASCADE",
+        ),
+        Index("ix_ip_title_interests_company_docket", "company_id", "docket_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    interest_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    party_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    related_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    recordal_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_required"
+    )
+    conflict_flags_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpCostItem(Base):
+    __tablename__ = "ip_cost_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_cost_item_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_ip_cost_item_matter_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("amount_minor >= 0", name="ck_ip_cost_item_amount_nonnegative"),
+        CheckConstraint("length(currency) = 3", name="ck_ip_cost_item_currency"),
+        Index("ix_ip_cost_items_company_docket", "company_id", "docket_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    matter_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    billing_link_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    billing_link_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )

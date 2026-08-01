@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SourceAction } from "@/components/app/SourceAction";
 import {
   Select,
   SelectContent,
@@ -781,6 +782,7 @@ function AuthorityCard({
           ) : null}
         </div>
         <div className="flex flex-col gap-2">
+          <SourceAction action={result.source_action} compact />
           {canAnnotate ? (
             <Button
               size="sm"

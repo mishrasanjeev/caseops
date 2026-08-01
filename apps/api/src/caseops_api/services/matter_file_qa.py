@@ -52,6 +52,7 @@ from caseops_api.services.matters import (
 )
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.source_actions import inspect_source_action
 
 PURPOSE = "matter_file_qa"
 PROVIDER_LABEL = "caseops-matter-file-qa-v1"
@@ -756,7 +757,7 @@ def _response_from_llm(
 
     response_source_ids = set(dict.fromkeys([*cited_source_ids, *structured_source_ids]))
     cited = [source for source in retrieved if source.source_id in response_source_ids]
-    sources = [_source_record(source) for source in cited]
+    sources = [_source_record(source, matter_id=matter_id) for source in cited]
     return MatterFileQAResponse(
         matter_id=matter_id,
         question=question,
@@ -1100,7 +1101,10 @@ def _dedupe_structured_items(
     return out
 
 
-def _source_record(source: _RetrievedSource) -> MatterFileQASource:
+def _source_record(source: _RetrievedSource, *, matter_id: str) -> MatterFileQASource:
+    source_reference = (
+        f"/api/matters/{matter_id}/attachments/{source.attachment.id}/download"
+    )
     return MatterFileQASource(
         source_id=source.source_id,
         attachment_id=source.attachment.id,
@@ -1112,6 +1116,7 @@ def _source_record(source: _RetrievedSource) -> MatterFileQASource:
         snippet=_bounded_snippet(source.snippet),
         score=source.score,
         matched_terms=source.matched_terms[:8],
+        source_action=inspect_source_action(source_reference, verified=True),
     )
 
 

@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     InAppNotification,
     Matter,
     NotificationDeliveryChannel,
+    NotificationDeliveryEvent,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
 )
@@ -146,6 +147,32 @@ def _delivery_result(intent: NotificationDeliveryIntent) -> NotificationDelivery
     )
 
 
+def _record_delivery_event(
+    session: Session,
+    *,
+    intent: NotificationDeliveryIntent,
+    event_type: str,
+    status_value: str,
+    error: str | None = None,
+) -> None:
+    session.add(
+        NotificationDeliveryEvent(
+            company_id=intent.company_id,
+            intent_id=intent.id,
+            event_type=event_type,
+            provider=None,
+            provider_event_id=None,
+            status=status_value,
+            error_redacted=redact_provider_error(error) if error else None,
+            metadata_json={
+                "channel": str(intent.channel),
+                "dispatch_owner": intent.dispatch_owner,
+                "source_ref": redact_identifier(intent.source_id),
+            },
+        )
+    )
+
+
 def _recipient_context(
     *,
     actor_context: SessionContext,
@@ -216,6 +243,18 @@ def enqueue_notification_delivery_intent(
         return existing
 
     is_in_app = channel == NotificationDeliveryChannel.IN_APP
+    suppression_reason = None
+    if not is_in_app and channel == NotificationDeliveryChannel.EMAIL:
+        from caseops_api.services.email_suppression import is_suppressed
+
+        recipient_email = getattr(recipient_membership.user, "email", "") or ""
+        suppression = is_suppressed(
+            session,
+            company_id=context.company.id,
+            recipient_email=recipient_email,
+        )
+        if suppression is not None:
+            suppression_reason = f"email_{suppression.reason}"
     intent = NotificationDeliveryIntent(
         company_id=context.company.id,
         recipient_membership_id=recipient_membership.id,
@@ -236,18 +275,42 @@ def enqueue_notification_delivery_intent(
         title=title if is_in_app else None,
         body=_bounded_body(body) if is_in_app else None,
         failed_at=None if is_in_app else _now(),
-        dead_letter_reason=None if is_in_app else "provider_disabled",
+        dead_letter_reason=(
+            None if is_in_app else suppression_reason or "provider_disabled"
+        ),
         metadata_json=_safe_metadata(
             notification_rule_id=notification_rule_id,
             source_id=source_id,
             linked_court_order_id=linked_court_order_id,
             triggered_by_membership_id=context.membership.id,
         ),
+        schedule_source_type=(
+            "notification_rule" if notification_rule_id else source_type
+        ),
+        schedule_source_id=notification_rule_id or source_id,
+        recipient_snapshot_json={
+            "membership_ref": redact_identifier(recipient_membership.id),
+            "channel": str(channel),
+        },
+        dispatch_owner="durable_intent",
+        comparison_status="canonical" if is_in_app else "fallback_active",
+        suppression_reason=suppression_reason,
     )
     if not is_in_app:
-        intent.last_error_redacted = "external provider disabled"
+        intent.last_error_redacted = (
+            "recipient suppressed; in-app fallback required"
+            if suppression_reason
+            else "external provider disabled; in-app fallback required"
+        )
     session.add(intent)
     session.flush()
+    _record_delivery_event(
+        session,
+        intent=intent,
+        event_type="intent_created",
+        status_value=str(intent.status),
+        error=intent.last_error_redacted,
+    )
     if not is_in_app:
         record_from_context(
             session,
@@ -259,7 +322,7 @@ def enqueue_notification_delivery_intent(
             result=AuditResult.DENIED,
             metadata={
                 "channel": channel,
-                "reason": "provider_disabled",
+                "reason": suppression_reason or "provider_disabled",
                 "source_type": source_type,
                 "source_ref": redact_identifier(source_id),
                 "notification_rule_ref": redact_identifier(notification_rule_id),
@@ -268,6 +331,32 @@ def enqueue_notification_delivery_intent(
                 ),
             },
         )
+        fallback = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=recipient_membership,
+            channel=NotificationDeliveryChannel.IN_APP,
+            event_type=event_type,
+            source_type=source_type,
+            source_id=source_id,
+            matter=matter,
+            notification_rule_id=notification_rule_id,
+            title=title or "Delivery fallback",
+            body=(
+                _bounded_body(body)
+                or "An external notification could not be delivered. Review it in CaseOps."
+            ),
+            linked_court_order_id=linked_court_order_id,
+        )
+        if fallback is not None:
+            intent.fallback_intent_id = fallback.id
+            process_notification_delivery_intent(
+                session,
+                intent_id=fallback.id,
+                context=context,
+            )
+            session.add(intent)
+            session.flush()
     return intent
 
 
@@ -297,6 +386,13 @@ def record_notification_delivery_failure(
         intent.status = NotificationDeliveryStatus.RETRY_SCHEDULED
         intent.next_attempt_at = current_time + retry_delay_for_attempt(intent.attempts)
     session.add(intent)
+    _record_delivery_event(
+        session,
+        intent=intent,
+        event_type="delivery_failed",
+        status_value=str(intent.status),
+        error=intent.last_error_redacted,
+    )
     session.flush()
     return _delivery_result(intent)
 
@@ -459,6 +555,12 @@ def process_notification_delivery_intent(
     intent.in_app_notification_id = existing.id
     intent.updated_at = current_time
     session.add(intent)
+    _record_delivery_event(
+        session,
+        intent=intent,
+        event_type="delivered",
+        status_value=str(intent.status),
+    )
     session.flush()
     return _delivery_result(intent)
 

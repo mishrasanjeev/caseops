@@ -22,6 +22,7 @@ from caseops_api.api.routes import (
     health,
     intake,
     integrations,
+    ip_operations,
     mailbox,
     matter_billing,
     matter_tags,
@@ -36,6 +37,7 @@ from caseops_api.api.routes import (
     portal,
     provider_operations,
     recommendations,
+    source_actions,
     statutes,
     teams,
 )
@@ -47,6 +49,7 @@ api_router.include_router(bootstrap.router, prefix="/bootstrap", tags=["bootstra
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(companies.router, prefix="/companies", tags=["companies"])
+api_router.include_router(ip_operations.router, prefix="/ip", tags=["ip-operations"])
 api_router.include_router(matters.router, prefix="/matters", tags=["matters"])
 api_router.include_router(notices.router, prefix="/notices", tags=["notices"])
 api_router.include_router(matter_tags.router, prefix="/matter-tags", tags=["matter-tags"])
@@ -60,6 +63,11 @@ api_router.include_router(
 )
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(authorities.router, prefix="/authorities", tags=["authorities"])
+api_router.include_router(
+    source_actions.router,
+    prefix="/source-actions",
+    tags=["source-actions"],
+)
 api_router.include_router(case_tracking.router, prefix="/case-tracking", tags=["case-tracking"])
 api_router.include_router(cause_lists.router, prefix="/cause-lists", tags=["cause-lists"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])

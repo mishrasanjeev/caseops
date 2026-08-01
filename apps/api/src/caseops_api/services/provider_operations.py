@@ -173,6 +173,15 @@ def _notification_record(row: NotificationDeliveryIntent) -> ProviderOperationRe
             "External delivery remains blocked until provider policy and "
             "credentials are explicitly approved."
         )
+    notes.extend(
+        [
+            f"dispatch_owner={row.dispatch_owner}",
+            f"comparison_status={row.comparison_status}",
+            f"fallback_created={bool(row.fallback_intent_id)}",
+        ]
+    )
+    if row.suppression_reason:
+        notes.append(f"suppression={row.suppression_reason}")
     return ProviderOperationRecord(
         id=_operation_id("notification_delivery", row.id),
         job_kind="notification_delivery",

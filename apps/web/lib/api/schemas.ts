@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+export const sourceActionContract = z
+  .object({
+    state: z.enum(["available", "missing", "unverified", "blocked", "quarantined"]),
+    label: z.string(),
+    open_url: z.string().nullable(),
+    source_reference: z.string().nullable(),
+    reason: z.string().nullable(),
+    opens_new_tab: z.boolean(),
+  })
+  .strict();
+
 export const companyType = z.enum(["law_firm", "corporate_legal", "solo"]);
 
 export const companySummary = z.object({
@@ -462,6 +473,7 @@ export const matterFileQASource = z
     snippet: z.string().max(800),
     score: z.number().int(),
     matched_terms: z.array(z.string()).default([]),
+    source_action: sourceActionContract.nullable().optional(),
   })
   .strict();
 
@@ -747,6 +759,7 @@ export const mockHearingResponse = z
     source_chunk_id: z.string().nullable().optional(),
     source_chunk_index: z.number().int().nullable().optional(),
     page_reference: z.string().nullable().optional(),
+    source_action: sourceActionContract.nullable().optional(),
     response_text: z.string(),
     response_word_count: z.number().int().nonnegative(),
     elapsed_seconds: z.number().int().nonnegative().nullable(),
@@ -1419,6 +1432,7 @@ export const litigationIntelligenceReviewSource = z
     reference: z.string().nullable().optional(),
     snippet: z.string().nullable().optional(),
     page_reference: z.string().nullable().optional(),
+    source_action: sourceActionContract.nullable().optional(),
   })
   .strict();
 

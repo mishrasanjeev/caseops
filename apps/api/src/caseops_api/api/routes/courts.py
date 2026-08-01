@@ -28,7 +28,9 @@ from caseops_api.db.models import (
     JudgeAppointment,
     Matter,
 )
+from caseops_api.schemas.source_actions import SourceActionRecord
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.source_actions import inspect_source_action
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -377,6 +379,10 @@ def _build_descriptive_analytics(
                     neutral_citation=row.neutral_citation,
                     source=row.source,
                     source_reference=row.source_reference,
+                    source_action=inspect_source_action(
+                        row.source_reference,
+                        verified=bool(row.source_reference),
+                    ),
                     practice_area=practice_area,
                     statutes_or_sections=sections[:6],
                     summary_preview=_bounded_text(
@@ -587,6 +593,7 @@ class AuthorityAnalyticsCase(BaseModel):
     practice_area: str
     statutes_or_sections: list[str] = Field(default_factory=list)
     summary_preview: str | None = None
+    source_action: SourceActionRecord
 
 
 class DescriptiveAnalytics(BaseModel):
@@ -636,6 +643,7 @@ class JudgeAppointmentRecord(BaseModel):
     end_date: str | None
     source_url: str | None
     source_evidence_text: str | None
+    source_action: SourceActionRecord
 
 
 class JudgeProfileResponse(BaseModel):
@@ -933,6 +941,10 @@ def get_judge_profile(
                 end_date=row.end_date.isoformat() if row.end_date else None,
                 source_url=row.source_url,
                 source_evidence_text=row.source_evidence_text,
+                source_action=inspect_source_action(
+                    row.source_url,
+                    verified=bool(row.source_url),
+                ),
             )
             for row in career_rows
         ],

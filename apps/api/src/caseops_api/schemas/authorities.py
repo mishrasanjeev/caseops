@@ -5,9 +5,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from caseops_api.schemas.source_actions import SourceActionRecord
+
 AuthorityForumLevelLiteral = Literal["high_court", "supreme_court"]
 AuthorityDocumentTypeLiteral = Literal["judgment", "order", "practice_direction", "notice"]
 AuthoritySearchModeLiteral = Literal["keyword", "contextual"]
+AuthoritySearchOutcomeLiteral = Literal[
+    "results_found",
+    "no_results",
+    "offset_out_of_range",
+    "unreadable_filtered",
+]
 JudgmentAlertForumLevelLiteral = Literal[
     "lower_court",
     "high_court",
@@ -127,6 +135,7 @@ class AuthoritySearchResult(BaseModel):
     summary: str
     source: str
     source_reference: str | None
+    source_action: SourceActionRecord | None = None
     snippet: str
     score: int
     matched_terms: list[str]
@@ -155,6 +164,8 @@ class AuthoritySearchResponse(BaseModel):
     # echoes back the request so the UI can compute Prev/Next visibility.
     total_after_filter: int = 0
     offset: int = 0
+    outcome: AuthoritySearchOutcomeLiteral = "no_results"
+    diagnostics: dict[str, int | bool] = Field(default_factory=dict)
 
 
 class JudgmentAlertRuleBase(BaseModel):
