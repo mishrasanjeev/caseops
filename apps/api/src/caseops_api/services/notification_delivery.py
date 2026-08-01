@@ -341,6 +341,13 @@ def enqueue_notification_delivery_intent(
         error=intent.last_error_redacted,
     )
     if blocked_external:
+        # A notification rule owns its rendered message contract, so an
+        # external-only rule that cannot dispatch falls back to the generic
+        # safe notice used by the legacy path. Direct durable intents may use
+        # their caller-supplied in-app copy, while the blocked external row
+        # itself remains content-free in both cases.
+        fallback_title = title if notification_rule_id is None else None
+        fallback_body = _bounded_body(body) if notification_rule_id is None else None
         record_from_context(
             session,
             context,
@@ -368,9 +375,9 @@ def enqueue_notification_delivery_intent(
             source_id=source_id,
             matter=matter,
             notification_rule_id=notification_rule_id,
-            title=intent.title or "Delivery fallback",
+            title=fallback_title or "Delivery fallback",
             body=(
-                intent.body
+                fallback_body
                 or "An external notification could not be delivered. Review it in CaseOps."
             ),
             linked_court_order_id=linked_court_order_id,

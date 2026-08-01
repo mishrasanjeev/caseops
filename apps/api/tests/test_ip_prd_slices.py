@@ -656,6 +656,8 @@ def test_notification_external_block_creates_exactly_one_visible_fallback(
         assert external is not None
         session.commit()
         assert external.dispatch_owner == "durable_intent"
+        assert external.title is None
+        assert external.body is None
         assert external.fallback_intent_id is not None
         intents = list(session.scalars(select(NotificationDeliveryIntent)).all())
         visible = list(session.scalars(select(InAppNotification)).all())
