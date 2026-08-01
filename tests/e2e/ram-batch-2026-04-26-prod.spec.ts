@@ -475,7 +475,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     }
   });
 
-  test("STATUTE-LOOP: hand-curated BNS §318 text is retrievable from prod API (not just job-log evidence)", async ({
+  test("STATUTE-LOOP: unverified BNS §318 text is withheld until curator verification", async ({
     page,
     request,
   }) => {
@@ -536,22 +536,25 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     }
     // 2026-05-01: the list endpoint legitimately drops section_text from
     // its payload (commit 213dbde) to keep the response small; the full
-    // text only ships from the per-section detail endpoint. Fetch that
-    // and assert the hand-curated length there. Hand-curated BNS §318
-    // is ~1593 chars; require >500 to allow some pruning margin.
+    // text only ships from the per-section detail endpoint. Since the
+    // 2026-08-01 trust migration, legacy manual text remains unverified
+    // until a curator records official/licensed provenance. The API must
+    // preserve the section record while withholding its legal text.
     const detailUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections/${encodeURIComponent(sec318.section_number)}`;
     const detailResp = await request.get(detailUrl, {
       headers: { Cookie: cookieHeader, Accept: "application/json" },
       timeout: 60_000,
     });
     expect(detailResp.ok(), `${detailUrl} returned ${detailResp.status()}`).toBeTruthy();
-    const detail = (await detailResp.json()) as { section: { section_text: string | null } };
+    const detail = (await detailResp.json()) as {
+      section: {
+        section_text: string | null;
+        verification_status: string;
+      };
+    };
     const sectionText = detail.section?.section_text;
-    expect.soft(sectionText, "BNS §318 section_text is null or empty").not.toBeNull();
-    expect.soft(
-      sectionText?.length ?? 0,
-      `BNS §318 section_text shorter than expected (hand-curated ~1593 chars)`,
-    ).toBeGreaterThan(500);
+    expect(detail.section.verification_status).toBe("unverified");
+    expect(sectionText, "unverified legal text must fail closed").toBeNull();
   });
 
   test("BUG-017: POST /api/matters/{id}/statute-references returns 201 (not 422)", async ({

@@ -132,7 +132,7 @@ Five ordered, independently reversible Alembic revisions were added rather than 
 
 The chain upgrades successfully from an empty SQLite database during every focused API test startup. Named foreign keys are used for SQLite batch portability; composite company-matched foreign keys protect shared-owner links.
 
-## Verification evidence before production deployment
+## Verification evidence
 
 | Gate | Command | Result |
 |---|---|---|
@@ -146,18 +146,26 @@ The chain upgrades successfully from an empty SQLite database during every focus
 | Production web build | `npm run build` in `apps/web` | Passed; `/app/ip` included in 65 generated routes |
 | Dated narrow E2E | `npx playwright test tests/e2e/ram-2026-08-01-bugs.spec.ts --config=playwright.app.config.ts --project=app-chromium` | Passed; real create/readiness round trip at 360px |
 | Unsharded API suite | `uv run pytest -q --durations=25 --durations-min=1.0` | Reached the 30-minute local cap with no buffered result; not counted as a pass. Exact CI shards remain required. |
+| Exact-commit CI | GitHub run `30701839299` for `73c5e49` | Passed; four API shards, combined per-area coverage, PostgreSQL/pgvector, web, app Playwright, and staging deploy |
+| Security | GitHub run `30701839294` for `73c5e49` | Passed; generated OpenAPI client drift, secret scan, dependency audits, licence and manifest controls |
+| CodeQL | GitHub run `30701839297` for `73c5e49` | Passed |
 
-## Production verification contract
+## Production deployment and verification
 
-Production is not verified by the source-tree results above. Release closure additionally requires:
+The implementation commit `73c5e49c429d890fee6d9da02cc1f22aa35f4990` was fast-forwarded to `main`, pushed, built from clean API/web contexts, migrated, and deployed through `scripts/deploy-prod.sh`.
 
-- merge/fast-forward the validated commit onto canonical `main` and push it;
-- all GitHub CI, Security, CodeQL, and Postgres validation checks green for that exact commit;
-- execute all five migrations against production through the canonical migration job;
-- build fresh API and web images from that commit and route production traffic to their exact revisions;
-- verify health and release metadata;
-- rerun `ram-2026-08-01-prod.spec.ts` against the deployed production surface at desktop and 360px;
-- verify local `main`, `origin/main`, deployed source labels, and serving revisions agree.
+- Cloud Build API: `faca9bcc-c618-4e2a-ac4a-f41a821c1b34`.
+- Cloud Build web: `8209622b-3d96-43b9-b49f-ca2c5b260ea5`.
+- Immutable API digest: `sha256:30a2370da5e37b3bd487fe4e1a80db331b57bee86d6678cb8a638e55ad1dea9a`.
+- Migration execution: `caseops-migrate-job-vq7zh`, completed successfully through `20260801_0005`.
+- API revision: `caseops-api-00219-v7p`, 100% traffic.
+- Web revision: `caseops-web-00199-tt9`, 100% traffic.
+- Public API health: `{"status":"ok"}`.
+- ClamAV sidecar: present.
+- All six recurring jobs: pinned to the immutable API digest; scheduler target, cadence, timezone, OAuth identity, job-level Invoker binding, and enabled state passed reconciliation/verification.
+- Dated production E2E: `ram-2026-08-01-prod.spec.ts` passed in 5.6 seconds in GitHub run `30703713640`, including authenticated desktop rendering and all grouped controls within the 360px viewport.
+
+The broad historical production batch in run `30703713640` recorded 51 passes and three skips. Its only failure was an April test that required unverified BNS section text to remain visible. That expectation contradicts the new approved fail-closed statute contract; the test was corrected to require the record to remain discoverable while `section_text` is withheld until curator verification. This is a test-contract update, not publication of replacement legal text.
 
 ## Rollback
 
@@ -168,4 +176,4 @@ Production is not verified by the source-tree results above. Release closure add
 
 ## Truthful completion statement
 
-The fixed seven-day scheduler blocker is removed. The implemented trust, statute, search, lifecycle, IP docket, incident, and notification-fallback behaviors are release candidates with automated evidence. `IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F` remain in progress for the explicitly listed provider/automation/reconciliation breadth, and the complete M1-M10 program is not fully delivered by this release.
+The fixed seven-day scheduler blocker is removed. The implemented trust, statute, search, lifecycle, IP docket, incident, and notification-fallback behaviors are deployed with automated local, CI, migration, scheduler-configuration, health, and dated production-browser evidence. `IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F` remain in progress for the explicitly listed provider/automation/reconciliation breadth, and the complete M1-M10 program is not fully delivered by this release.

@@ -14,16 +14,16 @@
     "verification_status": "failed",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-001B",
+    "active_slice": "IPLF-007B",
     "checkpoint": {
-      "recorded_at": "2026-08-01T14:37:00+05:30",
-      "repository_revision": "635d586a368a22a9434b68e2d5cc51f9ffc7ee9f",
+      "recorded_at": "2026-08-01T20:11:37+05:30",
+      "repository_revision": "73c5e49c429d890fee6d9da02cc1f22aa35f4990",
       "environment": "production-deployment-verified",
-      "completed_scope": "Deployed IPLF-001B from main, converged all six required scheduler/job contracts to one immutable release digest and dedicated invoker, paused the superseded case-tracking schedule, passed a scheduler-to-job canary, and verified tenant-safe activity-report logging.",
+      "completed_scope": "Deployed IPLF-003A/B, IPLF-005A, IPLF-006A/B, IPLF-007A, IPLF-039A, and IPLF-039D from main; deployed the independently safe portions of IPLF-007B and IPLF-039B/C/E/F; passed exact-commit CI, PostgreSQL, Security, CodeQL, migrations, scheduler drift verification, health, and the dated desktop/mobile production IP workflow.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-003A",
-      "next_action": "Deliver the remaining declared M1 and IPLF-039 slices, then verify the exact production revision; natural scheduler windows continue as operational monitoring without a fixed waiting-period gate.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
+      "next_slice": "IPLF-007B",
+      "next_action": "Complete approved external-provider cutover and the explicit mailbox/Drive automation, bulk coverage reassignment, related-right obligations, and billing-export reconciliation gaps; continue the broader M2-M10 roadmap without treating natural scheduler elapsed time as a release blocker.",
+      "evidence_ref": "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
     }
   },
   "milestones": [
@@ -59,8 +59,8 @@
       "deliverable": "Source links, Bare Acts quarantine/provenance, search diagnostics, notification convergence start/observability, scheduler IAM/health/replay",
       "exit_criteria": "Exact deployed scheduler/job revision and IAM/config drift checks pass; bounded canaries prove every required job can be invoked by its configured scheduler identity; source-link E2E; UJ-48; no unverified statute presented; suppressed critical reminder produces visible fallback. Natural-run health remains monitored operational evidence but is not a release-duration blocker",
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "failed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -83,8 +83,8 @@
       "deliverable": "Complete filing particulars, IP portfolio, prosecution/renewal, legal deadlines and filing evidence integrated into existing intake/conflict, task/hearing/calendar, CompanyNotice/inbox/Communication, notification and Matter billing owners; neutral import orchestration and volume-appropriate reporting",
       "exit_criteria": "UJ-02 through UJ-10, UJ-14, UJ-26, UJ-31, UJ-32, UJ-49 through UJ-59, UJ-61, and UJ-62 pass pilot UAT; accepted legal notices exist once in `/app/notices`; imports have one job-state owner; costs have one amount/accounting owner; no duplicate shared row/control plane; critical deadlines have accepted coverage; restored-worker no-dual-send drill; allowlisted production smoke; no direct external send outside durable delivery service",
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "failed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -219,9 +219,9 @@
         "IPLF-003A",
         "IPLF-003B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -245,9 +245,9 @@
       "slice_ids": [
         "IPLF-005A"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -260,9 +260,9 @@
         "IPLF-006A",
         "IPLF-006B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -275,8 +275,8 @@
         "IPLF-007A",
         "IPLF-007B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -546,8 +546,8 @@
         "IPLF-039E",
         "IPLF-039F"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "in_progress",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -1167,7 +1167,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1189,7 +1189,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1211,7 +1211,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1233,7 +1233,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1255,7 +1255,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1277,7 +1277,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1321,7 +1321,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -1387,7 +1387,7 @@
       "documentation_impact": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
