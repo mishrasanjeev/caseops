@@ -57,9 +57,18 @@ def upgrade() -> None:
         "authority_search_observations",
         ["outcome"],
     )
+    op.create_index(
+        "ix_authority_search_observations_membership_id",
+        "authority_search_observations",
+        ["membership_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_authority_search_observations_membership_id",
+        table_name="authority_search_observations",
+    )
     op.drop_index(
         "ix_authority_search_observations_outcome",
         table_name="authority_search_observations",

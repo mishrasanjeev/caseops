@@ -51,6 +51,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("notice_id", "docket_id", name="uq_notice_ip_link"),
     )
     op.create_index("ix_notice_ip_links_company", "company_notice_ip_links", ["company_id"])
+    op.create_index(
+        "ix_company_notice_ip_links_docket_id", "company_notice_ip_links", ["docket_id"]
+    )
 
     op.create_table(
         "ip_deadline_coverages",
@@ -81,6 +84,11 @@ def upgrade() -> None:
         sa.UniqueConstraint("docket_id", "matter_deadline_id", name="uq_ip_deadline_coverage"),
     )
     op.create_index("ix_ip_deadline_coverage_company", "ip_deadline_coverages", ["company_id"])
+    op.create_index(
+        "ix_ip_deadline_coverages_matter_deadline_id",
+        "ip_deadline_coverages",
+        ["matter_deadline_id"],
+    )
 
     op.create_table(
         "ip_deadline_incidents",
@@ -114,6 +122,19 @@ def upgrade() -> None:
     op.create_index(
         "ix_ip_deadline_incidents_company_status", "ip_deadline_incidents", ["company_id", "status"]
     )
+    op.create_index(
+        "ix_ip_deadline_incidents_docket_id", "ip_deadline_incidents", ["docket_id"]
+    )
+    op.create_index(
+        "ix_ip_deadline_incidents_matter_deadline_id",
+        "ip_deadline_incidents",
+        ["matter_deadline_id"],
+    )
+    op.create_index(
+        "ix_ip_deadline_incidents_correction_deadline_id",
+        "ip_deadline_incidents",
+        ["correction_deadline_id"],
+    )
 
     op.create_table(
         "ip_title_interests",
@@ -139,6 +160,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_ip_title_interests_company_docket", "ip_title_interests", ["company_id", "docket_id"]
     )
+    op.create_index("ix_ip_title_interests_docket_id", "ip_title_interests", ["docket_id"])
 
     op.create_table(
         "ip_cost_items",
@@ -171,16 +193,35 @@ def upgrade() -> None:
         sa.CheckConstraint("length(currency) = 3", name="ck_ip_cost_item_currency"),
     )
     op.create_index("ix_ip_cost_items_company_docket", "ip_cost_items", ["company_id", "docket_id"])
+    op.create_index("ix_ip_cost_items_docket_id", "ip_cost_items", ["docket_id"])
+    op.create_index("ix_ip_cost_items_matter_id", "ip_cost_items", ["matter_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_ip_cost_items_matter_id", table_name="ip_cost_items")
+    op.drop_index("ix_ip_cost_items_docket_id", table_name="ip_cost_items")
     op.drop_index("ix_ip_cost_items_company_docket", table_name="ip_cost_items")
     op.drop_table("ip_cost_items")
+    op.drop_index("ix_ip_title_interests_docket_id", table_name="ip_title_interests")
     op.drop_index("ix_ip_title_interests_company_docket", table_name="ip_title_interests")
     op.drop_table("ip_title_interests")
+    op.drop_index(
+        "ix_ip_deadline_incidents_correction_deadline_id",
+        table_name="ip_deadline_incidents",
+    )
+    op.drop_index(
+        "ix_ip_deadline_incidents_matter_deadline_id",
+        table_name="ip_deadline_incidents",
+    )
+    op.drop_index("ix_ip_deadline_incidents_docket_id", table_name="ip_deadline_incidents")
     op.drop_index("ix_ip_deadline_incidents_company_status", table_name="ip_deadline_incidents")
     op.drop_table("ip_deadline_incidents")
+    op.drop_index(
+        "ix_ip_deadline_coverages_matter_deadline_id",
+        table_name="ip_deadline_coverages",
+    )
     op.drop_index("ix_ip_deadline_coverage_company", table_name="ip_deadline_coverages")
     op.drop_table("ip_deadline_coverages")
+    op.drop_index("ix_company_notice_ip_links_docket_id", table_name="company_notice_ip_links")
     op.drop_index("ix_notice_ip_links_company", table_name="company_notice_ip_links")
     op.drop_table("company_notice_ip_links")

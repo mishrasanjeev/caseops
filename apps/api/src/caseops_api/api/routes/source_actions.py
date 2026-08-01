@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
-from caseops_api.api.dependencies import get_current_context
+from caseops_api.api.dependencies import get_current_context, require_capability
 from caseops_api.schemas.source_actions import (
     SourceActionInspectRequest,
     SourceActionRecord,
@@ -18,12 +18,15 @@ from caseops_api.services.source_actions import (
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+SourceInspector = Annotated[
+    SessionContext, Depends(require_capability("authorities:search"))
+]
 
 
 @router.post("/inspect", response_model=SourceActionRecord)
 async def inspect_source(
     payload: SourceActionInspectRequest,
-    context: CurrentContext,
+    context: SourceInspector,
 ) -> SourceActionRecord:
     del context
     return inspect_source_action(

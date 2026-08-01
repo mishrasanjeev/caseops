@@ -45,6 +45,10 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
+        batch_op.create_index(
+            "ix_notification_delivery_intents_fallback_intent_id",
+            ["fallback_intent_id"],
+        )
 
     op.create_table(
         "notification_delivery_events",
@@ -94,6 +98,7 @@ def downgrade() -> None:
     )
     op.drop_table("notification_delivery_events")
     with op.batch_alter_table("notification_delivery_intents") as batch_op:
+        batch_op.drop_index("ix_notification_delivery_intents_fallback_intent_id")
         batch_op.drop_constraint(
             "fk_notification_intents_fallback_intent",
             type_="foreignkey",

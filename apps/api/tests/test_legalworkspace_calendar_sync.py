@@ -1129,17 +1129,23 @@ def test_external_only_new_order_rule_creates_blocked_delivery_intent(
 
     factory = get_session_factory()
     with factory() as session:
-        assert list(session.scalars(select(InAppNotification))) == []
+        notifications = list(session.scalars(select(InAppNotification)))
+        assert len(notifications) == 1
+        assert notifications[0].title == "Delivery fallback"
         intents = list(session.scalars(select(NotificationDeliveryIntent)))
-        assert len(intents) == 1
-        intent = intents[0]
+        assert len(intents) == 2
+        intent = next(item for item in intents if item.channel == "email")
+        fallback = next(item for item in intents if item.channel == "in_app")
         assert intent.channel == "email"
         assert intent.status == NotificationDeliveryStatus.BLOCKED
         assert intent.attempts == 0
         assert intent.dead_letter_reason == "provider_disabled"
-        assert intent.last_error_redacted == "external provider disabled"
+        assert intent.last_error_redacted == "external provider disabled; in-app fallback required"
         assert intent.title is None
         assert intent.body is None
+        assert intent.fallback_intent_id == fallback.id
+        assert fallback.status == NotificationDeliveryStatus.DELIVERED
+        assert fallback.in_app_notification_id == notifications[0].id
         audits = list(
             session.scalars(
                 select(AuditEvent).where(

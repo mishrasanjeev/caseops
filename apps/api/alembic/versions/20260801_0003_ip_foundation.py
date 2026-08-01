@@ -73,6 +73,11 @@ def upgrade() -> None:
     )
     op.create_index("ix_ip_docket_company_status", "ip_docket_records", ["company_id", "status"])
     op.create_index("ix_ip_docket_matter", "ip_docket_records", ["matter_id"])
+    op.create_index(
+        "ix_ip_docket_records_created_by_membership_id",
+        "ip_docket_records",
+        ["created_by_membership_id"],
+    )
 
     op.create_table(
         "ip_trademark_particular_versions",
@@ -118,11 +123,24 @@ def upgrade() -> None:
         "ip_trademark_particular_versions",
         ["company_id", "docket_id"],
     )
+    op.create_index(
+        "ix_ip_trademark_particular_versions_created_by_membership_id",
+        "ip_trademark_particular_versions",
+        ["created_by_membership_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_ip_trademark_particular_versions_created_by_membership_id",
+        table_name="ip_trademark_particular_versions",
+    )
     op.drop_index("ix_ip_tm_versions_company_docket", table_name="ip_trademark_particular_versions")
     op.drop_table("ip_trademark_particular_versions")
+    op.drop_index(
+        "ix_ip_docket_records_created_by_membership_id",
+        table_name="ip_docket_records",
+    )
     op.drop_index("ix_ip_docket_matter", table_name="ip_docket_records")
     op.drop_index("ix_ip_docket_company_status", table_name="ip_docket_records")
     op.drop_table("ip_docket_records")

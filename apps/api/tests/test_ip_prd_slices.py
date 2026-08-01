@@ -56,6 +56,13 @@ def _particulars(*, mark: str = "ASTER") -> dict:
 def test_source_action_contract_fails_closed_and_redirects_official(
     client: TestClient,
 ) -> None:
+    unauthorized = client.get(
+        "/api/source-actions/open",
+        params={"url": "https://www.indiacode.nic.in/document.pdf"},
+        follow_redirects=False,
+    )
+    assert unauthorized.status_code == 401
+
     token = str(bootstrap_company(client)["access_token"])
     headers = auth_headers(token)
     unsafe = client.post(
@@ -81,8 +88,9 @@ def test_source_action_contract_fails_closed_and_redirects_official(
     )
     assert official.json()["state"] == "available"
     redirect = client.get(
-        official.json()["open_url"],
+        "/api/source-actions/open",
         headers=headers,
+        params={"url": "https://www.indiacode.nic.in/document.pdf"},
         follow_redirects=False,
     )
     assert redirect.status_code == 307
@@ -117,6 +125,10 @@ def test_statute_curator_contract_quarantines_and_rejects_stale_write(
         session.add_all([statute, section])
         session.commit()
         section_id = section.id
+
+    audit = client.get("/api/statutes/verification/audit", headers=auth_headers(token))
+    assert audit.status_code == 200, audit.text
+    assert audit.json()["unverified"] == 1
 
     verified = client.post(
         f"/api/statutes/verification/sections/{section_id}",

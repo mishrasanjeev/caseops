@@ -52,6 +52,10 @@ def upgrade() -> None:
             "ix_statute_sections_verification_status",
             ["verification_status"],
         )
+        batch_op.create_index(
+            "ix_statute_sections_verified_by_membership_id",
+            ["verified_by_membership_id"],
+        )
 
     op.execute(
         sa.text(
@@ -72,6 +76,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("statute_sections") as batch_op:
+        batch_op.drop_index("ix_statute_sections_verified_by_membership_id")
         batch_op.drop_index("ix_statute_sections_verification_status")
         batch_op.drop_constraint(
             "fk_statute_sections_verified_by_membership",

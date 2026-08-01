@@ -3607,7 +3607,9 @@ class NotificationDeliveryIntent(Base):
     )
     suppression_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
     fallback_intent_id: Mapped[str | None] = mapped_column(
-        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -9088,7 +9090,9 @@ class AuthoritySearchObservation(Base):
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
     membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     query_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -10811,7 +10815,9 @@ class StatuteSection(Base):
         DateTime(timezone=True), nullable=True
     )
     verified_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     quarantined_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -12011,7 +12017,7 @@ class IpDocketRecord(Base):
     restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
+        String(36), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -12058,7 +12064,7 @@ class IpTrademarkParticularVersion(Base):
     readiness_status: Mapped[str] = mapped_column(String(24), nullable=False)
     readiness_errors_json: Mapped[list] = mapped_column(JSON, nullable=False)
     created_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
+        String(36), nullable=True, index=True
     )
     finalized_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -12090,7 +12096,7 @@ class CompanyNoticeIpLink(Base):
         String(36), primary_key=True, default=lambda: str(uuid4())
     )
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     notice_id: Mapped[str] = mapped_column(String(36), nullable=False)
     link_kind: Mapped[str] = mapped_column(String(40), nullable=False)
     accepted_effect: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -12122,7 +12128,9 @@ class IpDeadlineCoverage(Base):
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
     matter_deadline_id: Mapped[str] = mapped_column(
-        ForeignKey("matter_deadlines.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("matter_deadlines.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     responsible_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     backup_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -12156,16 +12164,20 @@ class IpDeadlineIncident(Base):
         String(36), primary_key=True, default=lambda: str(uuid4())
     )
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     matter_deadline_id: Mapped[str | None] = mapped_column(
-        ForeignKey("matter_deadlines.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
     impact_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     containment: Mapped[str | None] = mapped_column(Text, nullable=True)
     correction_deadline_id: Mapped[str | None] = mapped_column(
-        ForeignKey("matter_deadlines.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
     corrective_action: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -12196,7 +12208,7 @@ class IpTitleInterest(Base):
         String(36), primary_key=True, default=lambda: str(uuid4())
     )
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     interest_type: Mapped[str] = mapped_column(String(32), nullable=False)
     party_name: Mapped[str] = mapped_column(String(255), nullable=False)
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
@@ -12236,8 +12248,8 @@ class IpCostItem(Base):
         String(36), primary_key=True, default=lambda: str(uuid4())
     )
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    matter_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(40), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
