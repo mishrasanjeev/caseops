@@ -276,6 +276,10 @@ def enqueue_notification_delivery_intent(
         and not suppression_reason
     )
     blocked_external = not is_in_app and not external_ready
+    # Do not retain message content for an external provider that is disabled.
+    # This preserves the fail-closed privacy contract while allowing a provider
+    # that is explicitly enabled to dispatch from the durable queue.
+    retain_content = is_in_app or external_ready
     intent = NotificationDeliveryIntent(
         company_id=context.company.id,
         recipient_membership_id=recipient_membership.id,
@@ -293,8 +297,8 @@ def enqueue_notification_delivery_intent(
         ),
         attempts=0,
         max_attempts=DEFAULT_RETRY_MAXIMUM_ATTEMPTS,
-        title=title,
-        body=_bounded_body(body),
+        title=title if retain_content else None,
+        body=_bounded_body(body) if retain_content else None,
         failed_at=_now() if blocked_external else None,
         dead_letter_reason=(
             None if not blocked_external else suppression_reason or "provider_disabled"
@@ -364,9 +368,9 @@ def enqueue_notification_delivery_intent(
             source_id=source_id,
             matter=matter,
             notification_rule_id=notification_rule_id,
-            title=title or "Delivery fallback",
+            title=intent.title or "Delivery fallback",
             body=(
-                _bounded_body(body)
+                intent.body
                 or "An external notification could not be delivered. Review it in CaseOps."
             ),
             linked_court_order_id=linked_court_order_id,

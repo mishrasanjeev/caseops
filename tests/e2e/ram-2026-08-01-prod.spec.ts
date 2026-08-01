@@ -44,6 +44,19 @@ test.describe("Ram 2026-08-01 deployed IP slices", () => {
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+
+    for (const name of [
+      "Matter evidence intake",
+      "Deadline continuity",
+      "Related rights and obligations",
+      "IP cost evidence",
+    ]) {
+      const operationalSurface = page.getByRole("heading", { name });
+      await operationalSurface.scrollIntoViewIfNeeded();
+      await expect(operationalSurface).toBeVisible();
+    }
+
+    await create.scrollIntoViewIfNeeded();
     await create.click();
     await expect(page.getByRole("heading", { name: "New trademark particulars" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Validate and create" })).toBeVisible();
