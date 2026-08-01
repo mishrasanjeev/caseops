@@ -16,6 +16,8 @@ from caseops_api.db.models import (
     EthicalWall,
     HearingPack,
     HearingReminder,
+    IpDeadlineCoverage,
+    IpDocketRecord,
     Matter,
     MatterAccessGrant,
     MatterDeadline,
@@ -208,6 +210,25 @@ def _seed_owned_objects(
             assignee_membership_id=target_membership_id,
             created_by_membership_id=target_membership_id,
         )
+        session.add(deadline)
+        session.flush()
+        docket = IpDocketRecord(
+            company_id=company_id,
+            matter_id=matter.id,
+            record_type="trademark",
+            title="Offboarding trademark",
+            status="active",
+            created_by_membership_id=target_membership_id,
+        )
+        session.add(docket)
+        session.flush()
+        ip_coverage = IpDeadlineCoverage(
+            company_id=company_id,
+            docket_id=docket.id,
+            matter_deadline_id=deadline.id,
+            responsible_membership_id=target_membership_id,
+            coverage_status="accepted",
+        )
         hearing = MatterHearing(
             matter_id=matter.id,
             hearing_on=date(2026, 5, 22),
@@ -249,6 +270,7 @@ def _seed_owned_objects(
                 obligation,
                 task,
                 deadline,
+                ip_coverage,
                 reminder,
                 draft_review,
                 hearing_pack,
@@ -263,6 +285,7 @@ def _seed_owned_objects(
             "obligation_id": obligation.id,
             "task_id": task.id,
             "deadline_id": deadline.id,
+            "ip_coverage_id": ip_coverage.id,
             "reminder_id": reminder.id,
             "draft_id": draft.id,
             "draft_review_id": draft_review.id,
@@ -330,6 +353,7 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
     assert preview_body["supported_counts"]["contract_obligations"] == 1
     assert preview_body["supported_counts"]["matter_tasks"] == 1
     assert preview_body["supported_counts"]["matter_deadlines"] == 1
+    assert preview_body["supported_counts"]["ip_deadline_coverages"] == 1
     assert preview_body["supported_counts"]["hearing_reminders"] == 1
     assert preview_body["unsupported_counts"]["drafts"] == 1
     assert preview_body["unsupported_counts"]["draft_reviews"] == 1
@@ -369,6 +393,7 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
         obligation = session.get(ContractObligation, seeded["obligation_id"])
         task = session.get(MatterTask, seeded["task_id"])
         deadline = session.get(MatterDeadline, seeded["deadline_id"])
+        ip_coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
         reminder = session.get(HearingReminder, seeded["reminder_id"])
         draft = session.get(Draft, seeded["draft_id"])
         assert matter is not None and matter.assignee_membership_id == replacement_id
@@ -378,6 +403,9 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
         assert obligation is not None and obligation.owner_membership_id == replacement_id
         assert task is not None and task.owner_membership_id == replacement_id
         assert deadline is not None and deadline.assignee_membership_id == replacement_id
+        assert ip_coverage is not None
+        assert ip_coverage.responsible_membership_id == replacement_id
+        assert ip_coverage.reassignment_version == 2
         assert reminder is not None and reminder.recipient_membership_id == replacement_id
         assert draft is not None and draft.created_by_membership_id == target_id
 

@@ -89,7 +89,7 @@ async def notification_delivery_intent_activity(
     metadata = {
         **payload.metadata,
         "workflow_foundation": payload.foundation_version,
-        "external_provider_calls": 0,
+        "external_provider_calls": result.external_calls,
     }
     return NotificationDeliveryWorkflowResult(
         workflow_type=DELIVERY_WORKFLOW_TYPE,

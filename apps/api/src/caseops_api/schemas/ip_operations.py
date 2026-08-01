@@ -94,6 +94,38 @@ class IpNoticeLinkRecord(BaseModel):
     created_at: datetime
 
 
+class IpEvidenceCandidateRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    docket_id: str
+    source_type: str
+    source_id: str
+    source_fingerprint: str
+    evidence_kind: str
+    suggested_link_kind: str
+    status: str
+    accepted_effect: str | None
+    duplicate_of_candidate_id: str | None
+    metadata_json: dict | None
+    reviewed_by_membership_id: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+
+
+class IpEvidenceDiscoveryResponse(BaseModel):
+    candidates: list[IpEvidenceCandidateRecord]
+    discovered_count: int
+    duplicate_count: int
+
+
+class IpEvidenceCandidateReviewRequest(BaseModel):
+    expected_status: Literal["needs_review", "duplicate"]
+    action: Literal["accept", "reject"]
+    link_kind: Literal["correspondence", "service", "instruction", "official_notice"] | None = None
+    accepted_effect: str | None = Field(default=None, max_length=80)
+
+
 class IpDeadlineCoverageCreateRequest(BaseModel):
     matter_deadline_id: str
     responsible_membership_id: str
@@ -118,7 +150,23 @@ class IpDeadlineCoverageRecord(BaseModel):
     coverage_status: str
     calendar_projection_status: str
     accepted_at: datetime | None
+    reassignment_version: int
     created_at: datetime
+    updated_at: datetime
+
+
+class IpCoverageBulkReassignRequest(BaseModel):
+    from_membership_id: str
+    to_membership_id: str
+    reason: str = Field(min_length=5, max_length=500)
+    expected_versions: dict[str, int] = Field(default_factory=dict)
+
+
+class IpCoverageBulkReassignResponse(BaseModel):
+    reassigned_count: int
+    responsible_count: int
+    backup_count: int
+    coverage_ids: list[str]
 
 
 class IpDeadlineIncidentCreateRequest(BaseModel):
@@ -183,14 +231,62 @@ class IpTitleInterestRecord(BaseModel):
     created_at: datetime
 
 
+class IpRelatedRightObligationCreateRequest(BaseModel):
+    title_interest_id: str | None = None
+    obligation_type: Literal[
+        "renewal",
+        "royalty",
+        "recordal",
+        "consent",
+        "quality_control",
+        "termination",
+        "other",
+    ]
+    title: str = Field(min_length=3, max_length=255)
+    due_on: date | None = None
+    owner_membership_id: str
+    matter_deadline_id: str | None = None
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpRelatedRightObligationCompleteRequest(BaseModel):
+    expected_status: Literal["open"] = "open"
+    completion_evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpRelatedRightObligationRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    docket_id: str
+    title_interest_id: str | None
+    obligation_type: str
+    title: str
+    due_on: date | None
+    owner_membership_id: str
+    matter_deadline_id: str | None
+    status: str
+    evidence_reference: str
+    completion_evidence_reference: str | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class IpCostItemCreateRequest(BaseModel):
     category: Literal["official_fee", "professional_fee", "associate_fee", "disbursement", "other"]
     description: str = Field(min_length=3, max_length=500)
     amount_minor: int = Field(ge=0)
     currency: str = Field(default="INR", min_length=3, max_length=3)
     evidence_reference: str = Field(min_length=3, max_length=500)
-    billing_link_type: str | None = Field(default=None, max_length=40)
+    billing_link_type: Literal["invoice", "invoice_line_item", "time_entry"] | None = None
     billing_link_id: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def complete_billing_link(self) -> IpCostItemCreateRequest:
+        if bool(self.billing_link_type) != bool(self.billing_link_id):
+            raise ValueError("billing_link_type and billing_link_id must be supplied together.")
+        return self
 
 
 class IpCostItemRecord(BaseModel):
@@ -204,7 +300,34 @@ class IpCostItemRecord(BaseModel):
     evidence_reference: str
     billing_link_type: str | None
     billing_link_id: str | None
+    reconciliation_status: str
+    canonical_amount_minor: int | None
+    reconciliation_difference_minor: int | None
+    reconciled_at: datetime | None
     created_at: datetime
+
+
+class IpCostReconciliationRow(BaseModel):
+    cost_item_id: str
+    billing_link_type: str | None
+    billing_link_id: str | None
+    evidence_amount_minor: int
+    canonical_amount_minor: int | None
+    difference_minor: int | None
+    currency: str
+    status: Literal["matched", "mismatch", "missing", "unlinked"]
+
+
+class IpCostReconciliationReport(BaseModel):
+    generated_at: datetime
+    docket_id: str
+    accounting_owner: Literal["matter_billing"] = "matter_billing"
+    rows: list[IpCostReconciliationRow]
+    matched_count: int
+    mismatch_count: int
+    missing_count: int
+    unlinked_count: int
+    checksum_sha256: str
 
 
 class IpDocketRecordResponse(BaseModel):
@@ -219,9 +342,11 @@ class IpDocketRecordResponse(BaseModel):
     current_version: int
     current_particulars: TrademarkParticularVersionRecord
     notice_links: list[IpNoticeLinkRecord] = Field(default_factory=list)
+    evidence_candidates: list[IpEvidenceCandidateRecord] = Field(default_factory=list)
     deadline_coverages: list[IpDeadlineCoverageRecord] = Field(default_factory=list)
     deadline_incidents: list[IpDeadlineIncidentRecord] = Field(default_factory=list)
     title_interests: list[IpTitleInterestRecord] = Field(default_factory=list)
+    related_right_obligations: list[IpRelatedRightObligationRecord] = Field(default_factory=list)
     cost_items: list[IpCostItemRecord] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

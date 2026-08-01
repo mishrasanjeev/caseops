@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,22 +13,35 @@ from caseops_api.db.models import (
     CalendarConnectionStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    Communication,
     CompanyMembership,
     CompanyNotice,
     CompanyNoticeIpLink,
+    CompanyNoticeMatterLink,
+    DriveFileCandidate,
     IpCostItem,
     IpDeadlineCoverage,
     IpDeadlineIncident,
     IpDocketRecord,
+    IpEvidenceCandidate,
+    IpRelatedRightObligation,
     IpTitleInterest,
     IpTrademarkParticularVersion,
     Matter,
+    MatterAttachment,
     MatterDeadline,
+    MatterInvoice,
+    MatterInvoiceLineItem,
+    MatterTimeEntry,
     UserCalendarConnection,
 )
 from caseops_api.schemas.ip_operations import (
     IpCostItemCreateRequest,
     IpCostItemRecord,
+    IpCostReconciliationReport,
+    IpCostReconciliationRow,
+    IpCoverageBulkReassignRequest,
+    IpCoverageBulkReassignResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
     IpDeadlineCoverageRecord,
@@ -38,8 +53,14 @@ from caseops_api.schemas.ip_operations import (
     IpDocketListResponse,
     IpDocketRecordResponse,
     IpDocketVersionCreateRequest,
+    IpEvidenceCandidateRecord,
+    IpEvidenceCandidateReviewRequest,
+    IpEvidenceDiscoveryResponse,
     IpNoticeLinkCreateRequest,
     IpNoticeLinkRecord,
+    IpRelatedRightObligationCompleteRequest,
+    IpRelatedRightObligationCreateRequest,
+    IpRelatedRightObligationRecord,
     IpTitleInterestCreateRequest,
     IpTitleInterestRecord,
     TrademarkParticularPayload,
@@ -146,6 +167,13 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
             .order_by(CompanyNoticeIpLink.created_at)
         ).all()
     )
+    evidence_candidates = list(
+        session.scalars(
+            select(IpEvidenceCandidate)
+            .where(IpEvidenceCandidate.docket_id == docket.id)
+            .order_by(IpEvidenceCandidate.created_at.desc())
+        ).all()
+    )
     coverages = list(
         session.scalars(
             select(IpDeadlineCoverage)
@@ -167,6 +195,16 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
             .order_by(IpTitleInterest.effective_from, IpTitleInterest.created_at)
         ).all()
     )
+    obligations = list(
+        session.scalars(
+            select(IpRelatedRightObligation)
+            .where(IpRelatedRightObligation.docket_id == docket.id)
+            .order_by(
+                IpRelatedRightObligation.due_on,
+                IpRelatedRightObligation.created_at,
+            )
+        ).all()
+    )
     costs = list(
         session.scalars(
             select(IpCostItem)
@@ -186,9 +224,15 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
         current_version=docket.current_version,
         current_particulars=TrademarkParticularVersionRecord.model_validate(particulars),
         notice_links=[IpNoticeLinkRecord.model_validate(row) for row in notice_links],
+        evidence_candidates=[
+            IpEvidenceCandidateRecord.model_validate(row) for row in evidence_candidates
+        ],
         deadline_coverages=[IpDeadlineCoverageRecord.model_validate(row) for row in coverages],
         deadline_incidents=[IpDeadlineIncidentRecord.model_validate(row) for row in incidents],
         title_interests=[IpTitleInterestRecord.model_validate(row) for row in interests],
+        related_right_obligations=[
+            IpRelatedRightObligationRecord.model_validate(row) for row in obligations
+        ],
         cost_items=[IpCostItemRecord.model_validate(row) for row in costs],
         created_at=docket.created_at,
         updated_at=docket.updated_at,
@@ -419,6 +463,347 @@ def add_ip_notice_link(
     return _serialize_docket(session, docket)
 
 
+def _fingerprint(*parts: object) -> str:
+    canonical = "|".join(str(part or "").strip().casefold() for part in parts)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _evidence_source_specs(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+) -> list[dict[str, object]]:
+    if not docket.matter_id:
+        return []
+    matter_id = docket.matter_id
+    specs: list[dict[str, object]] = []
+
+    notices = list(
+        session.scalars(
+            select(CompanyNotice)
+            .join(
+                CompanyNoticeMatterLink,
+                CompanyNoticeMatterLink.notice_id == CompanyNotice.id,
+            )
+            .where(
+                CompanyNotice.company_id == docket.company_id,
+                CompanyNoticeMatterLink.company_id == docket.company_id,
+                CompanyNoticeMatterLink.matter_id == matter_id,
+            )
+        ).all()
+    )
+    accepted_notice_ids = set(
+        session.scalars(
+            select(CompanyNoticeIpLink.notice_id).where(
+                CompanyNoticeIpLink.company_id == docket.company_id,
+                CompanyNoticeIpLink.docket_id == docket.id,
+            )
+        ).all()
+    )
+    for row in notices:
+        if row.id in accepted_notice_ids:
+            continue
+        specs.append(
+            {
+                "source_type": "company_notice",
+                "source_id": row.id,
+                "fingerprint": row.sha256_hex or _fingerprint("notice", row.id),
+                "evidence_kind": "official_notice" if row.authority else "correspondence",
+                "link_kind": "official_notice" if row.authority else "correspondence",
+                "metadata": {
+                    "label": row.subject[:255],
+                    "direction": row.direction,
+                    "has_document": bool(row.storage_key),
+                    "reply_required": row.reply_required,
+                },
+            }
+        )
+
+    communications = list(
+        session.scalars(
+            select(Communication).where(
+                Communication.company_id == docket.company_id,
+                Communication.matter_id == matter_id,
+            )
+        ).all()
+    )
+    for row in communications:
+        specs.append(
+            {
+                "source_type": "communication",
+                "source_id": row.id,
+                "fingerprint": _fingerprint(
+                    "communication",
+                    row.external_message_id or row.id,
+                    row.subject,
+                    row.body,
+                ),
+                "evidence_kind": "correspondence",
+                "link_kind": "instruction" if row.direction == "inbound" else "correspondence",
+                "metadata": {
+                    "label": (row.subject or f"{row.channel} communication")[:255],
+                    "direction": row.direction,
+                    "channel": row.channel,
+                    "occurred_at": row.occurred_at.isoformat(),
+                },
+            }
+        )
+
+    attachments = list(
+        session.scalars(
+            select(MatterAttachment).where(MatterAttachment.matter_id == matter_id)
+        ).all()
+    )
+    for row in attachments:
+        specs.append(
+            {
+                "source_type": "matter_attachment",
+                "source_id": row.id,
+                "fingerprint": row.sha256_hex,
+                "evidence_kind": "official_notice" if row.notice_type else "document",
+                "link_kind": "official_notice" if row.notice_type else "correspondence",
+                "metadata": {
+                    "label": row.original_filename[:255],
+                    "document_type": row.document_type,
+                    "processing_status": row.processing_status,
+                    "has_notice_metadata": bool(row.notice_type),
+                },
+            }
+        )
+
+    drive_rows = list(
+        session.scalars(
+            select(DriveFileCandidate).where(
+                DriveFileCandidate.company_id == docket.company_id,
+                DriveFileCandidate.linked_matter_id == matter_id,
+            )
+        ).all()
+    )
+    attachment_hashes = {row.id: row.sha256_hex for row in attachments}
+    for row in drive_rows:
+        specs.append(
+            {
+                "source_type": "drive_file_candidate",
+                "source_id": row.id,
+                "fingerprint": (
+                    attachment_hashes.get(row.imported_attachment_id or "")
+                    or _fingerprint(
+                        "drive",
+                        row.provider,
+                        row.provider_file_id,
+                        row.provider_version,
+                    )
+                ),
+                "evidence_kind": "drive_document",
+                "link_kind": "correspondence",
+                "metadata": {
+                    "label": row.name[:255],
+                    "provider": row.provider,
+                    "status": row.status,
+                    "imported": bool(row.imported_attachment_id),
+                },
+            }
+        )
+    return specs
+
+
+def discover_ip_evidence_candidates(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+) -> IpEvidenceDiscoveryResponse:
+    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    discovered = 0
+    duplicates = 0
+    fingerprints: dict[str, IpEvidenceCandidate] = {}
+    for candidate in session.scalars(
+        select(IpEvidenceCandidate)
+        .where(
+            IpEvidenceCandidate.company_id == context.company.id,
+            IpEvidenceCandidate.docket_id == docket.id,
+        )
+        .order_by(IpEvidenceCandidate.created_at)
+    ):
+        fingerprints.setdefault(candidate.source_fingerprint, candidate)
+    for spec in _evidence_source_specs(session, docket=docket):
+        existing = session.scalar(
+            select(IpEvidenceCandidate).where(
+                IpEvidenceCandidate.company_id == context.company.id,
+                IpEvidenceCandidate.docket_id == docket.id,
+                IpEvidenceCandidate.source_type == spec["source_type"],
+                IpEvidenceCandidate.source_id == spec["source_id"],
+            )
+        )
+        if existing is not None:
+            continue
+        fingerprint = str(spec["fingerprint"])
+        duplicate = fingerprints.get(fingerprint)
+        row = IpEvidenceCandidate(
+            company_id=context.company.id,
+            docket_id=docket.id,
+            source_type=str(spec["source_type"]),
+            source_id=str(spec["source_id"]),
+            source_fingerprint=fingerprint,
+            evidence_kind=str(spec["evidence_kind"]),
+            suggested_link_kind=str(spec["link_kind"]),
+            status="duplicate" if duplicate else "needs_review",
+            duplicate_of_candidate_id=duplicate.id if duplicate else None,
+            metadata_json=dict(spec["metadata"]),
+        )
+        session.add(row)
+        session.flush()
+        fingerprints.setdefault(fingerprint, row)
+        discovered += 1
+        duplicates += int(duplicate is not None)
+    record_from_context(
+        session,
+        context,
+        action="ip_evidence.discovery_completed",
+        target_type="ip_docket_record",
+        target_id=docket.id,
+        matter_id=docket.matter_id,
+        metadata={"discovered_count": discovered, "duplicate_count": duplicates},
+    )
+    session.commit()
+    rows = list(
+        session.scalars(
+            select(IpEvidenceCandidate)
+            .where(IpEvidenceCandidate.docket_id == docket.id)
+            .order_by(IpEvidenceCandidate.created_at.desc())
+        ).all()
+    )
+    return IpEvidenceDiscoveryResponse(
+        candidates=[IpEvidenceCandidateRecord.model_validate(row) for row in rows],
+        discovered_count=discovered,
+        duplicate_count=duplicates,
+    )
+
+
+def _candidate_source_still_linked(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+    candidate: IpEvidenceCandidate,
+) -> bool:
+    if not docket.matter_id:
+        return False
+    if candidate.source_type == "company_notice":
+        return (
+            session.scalar(
+                select(CompanyNoticeMatterLink.id).where(
+                    CompanyNoticeMatterLink.company_id == docket.company_id,
+                    CompanyNoticeMatterLink.notice_id == candidate.source_id,
+                    CompanyNoticeMatterLink.matter_id == docket.matter_id,
+                )
+            )
+            is not None
+        )
+    if candidate.source_type == "communication":
+        return (
+            session.scalar(
+                select(Communication.id).where(
+                    Communication.company_id == docket.company_id,
+                    Communication.id == candidate.source_id,
+                    Communication.matter_id == docket.matter_id,
+                )
+            )
+            is not None
+        )
+    if candidate.source_type == "matter_attachment":
+        return (
+            session.scalar(
+                select(MatterAttachment.id).where(
+                    MatterAttachment.id == candidate.source_id,
+                    MatterAttachment.matter_id == docket.matter_id,
+                )
+            )
+            is not None
+        )
+    if candidate.source_type == "drive_file_candidate":
+        return (
+            session.scalar(
+                select(DriveFileCandidate.id).where(
+                    DriveFileCandidate.company_id == docket.company_id,
+                    DriveFileCandidate.id == candidate.source_id,
+                    DriveFileCandidate.linked_matter_id == docket.matter_id,
+                )
+            )
+            is not None
+        )
+    return False
+
+
+def review_ip_evidence_candidate(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    candidate_id: str,
+    payload: IpEvidenceCandidateReviewRequest,
+) -> IpDocketRecordResponse:
+    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    candidate = session.scalar(
+        select(IpEvidenceCandidate)
+        .where(
+            IpEvidenceCandidate.id == candidate_id,
+            IpEvidenceCandidate.docket_id == docket.id,
+            IpEvidenceCandidate.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="IP evidence candidate not found.")
+    if candidate.status != payload.expected_status:
+        raise HTTPException(status_code=409, detail="IP evidence candidate changed; reload.")
+    if not _candidate_source_still_linked(session, docket=docket, candidate=candidate):
+        raise HTTPException(
+            status_code=409,
+            detail="The source is no longer linked to this Matter.",
+        )
+    now = _now()
+    if payload.action == "accept":
+        candidate.status = "accepted"
+        candidate.accepted_effect = payload.accepted_effect
+        if candidate.source_type == "company_notice":
+            existing_link = session.scalar(
+                select(CompanyNoticeIpLink).where(
+                    CompanyNoticeIpLink.notice_id == candidate.source_id,
+                    CompanyNoticeIpLink.docket_id == docket.id,
+                )
+            )
+            if existing_link is None:
+                session.add(
+                    CompanyNoticeIpLink(
+                        company_id=context.company.id,
+                        docket_id=docket.id,
+                        notice_id=candidate.source_id,
+                        link_kind=payload.link_kind or candidate.suggested_link_kind,
+                        accepted_effect=payload.accepted_effect,
+                        created_by_membership_id=context.membership.id,
+                    )
+                )
+    else:
+        candidate.status = "rejected"
+    candidate.reviewed_by_membership_id = context.membership.id
+    candidate.reviewed_at = now
+    record_from_context(
+        session,
+        context,
+        action=f"ip_evidence.{candidate.status}",
+        target_type="ip_evidence_candidate",
+        target_id=candidate.id,
+        matter_id=docket.matter_id,
+        metadata={
+            "source_type": candidate.source_type,
+            "source_ref": candidate.source_fingerprint[:16],
+            "link_kind": payload.link_kind or candidate.suggested_link_kind,
+        },
+    )
+    session.commit()
+    return _serialize_docket(session, docket)
+
+
 def _deadline_for_docket(
     session: Session,
     *,
@@ -547,6 +932,8 @@ def reassign_ip_deadline_coverage(
     coverage.coverage_status = "reassigned"
     coverage.calendar_projection_status = "pending"
     coverage.accepted_at = _now()
+    coverage.reassignment_version += 1
+    coverage.updated_at = _now()
     record_from_context(
         session,
         context,
@@ -562,6 +949,118 @@ def reassign_ip_deadline_coverage(
     )
     session.commit()
     return _serialize_docket(session, docket)
+
+
+def bulk_reassign_ip_deadline_coverages(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpCoverageBulkReassignRequest,
+    commit: bool = True,
+) -> IpCoverageBulkReassignResponse:
+    if payload.from_membership_id == payload.to_membership_id:
+        raise HTTPException(status_code=422, detail="Coverage replacement must be different.")
+    source = session.scalar(
+        select(CompanyMembership).where(
+            CompanyMembership.id == payload.from_membership_id,
+            CompanyMembership.company_id == context.company.id,
+        )
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source membership not found.")
+    replacement = _membership_or_404(session, context, payload.to_membership_id)
+    rows = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                or_(
+                    IpDeadlineCoverage.responsible_membership_id == source.id,
+                    IpDeadlineCoverage.backup_membership_id == source.id,
+                ),
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update()
+        ).all()
+    )
+    responsible_count = 0
+    backup_count = 0
+    now = _now()
+    for row in rows:
+        expected_version = payload.expected_versions.get(row.id)
+        if expected_version is not None and row.reassignment_version != expected_version:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Coverage {row.id} changed; reload before bulk reassignment.",
+            )
+        changed_roles: list[str] = []
+        if row.responsible_membership_id == source.id:
+            row.responsible_membership_id = replacement.id
+            responsible_count += 1
+            changed_roles.append("responsible")
+        if row.backup_membership_id == source.id:
+            row.backup_membership_id = (
+                None if row.responsible_membership_id == replacement.id else replacement.id
+            )
+            backup_count += 1
+            changed_roles.append("backup")
+        if row.backup_membership_id == row.responsible_membership_id:
+            row.backup_membership_id = None
+        row.coverage_status = "reassigned"
+        row.calendar_projection_status = "pending"
+        row.accepted_at = now
+        row.reassignment_version += 1
+        row.updated_at = now
+        connection = session.scalar(
+            select(UserCalendarConnection).where(
+                UserCalendarConnection.company_id == context.company.id,
+                UserCalendarConnection.membership_id == replacement.id,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+            )
+        )
+        if connection is not None:
+            existing_sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.calendar_connection_id == connection.id,
+                    CalendarEventSync.source_type == "matter_deadline",
+                    CalendarEventSync.source_id == row.matter_deadline_id,
+                )
+            )
+            if existing_sync is None:
+                session.add(
+                    CalendarEventSync(
+                        company_id=context.company.id,
+                        calendar_connection_id=connection.id,
+                        source_type="matter_deadline",
+                        source_id=row.matter_deadline_id,
+                        sync_status=CalendarEventSyncStatus.PENDING,
+                    )
+                )
+        docket = session.get(IpDocketRecord, row.docket_id)
+        record_from_context(
+            session,
+            context,
+            action="ip_deadline_coverage.bulk_reassigned",
+            target_type="ip_deadline_coverage",
+            target_id=row.id,
+            matter_id=docket.matter_id if docket else None,
+            metadata={
+                "from_membership_id": source.id,
+                "to_membership_id": replacement.id,
+                "roles": changed_roles,
+                "reason": payload.reason,
+                "reassignment_version": row.reassignment_version,
+            },
+        )
+    session.flush()
+    if commit:
+        session.commit()
+    return IpCoverageBulkReassignResponse(
+        reassigned_count=len(rows),
+        responsible_count=responsible_count,
+        backup_count=backup_count,
+        coverage_ids=[row.id for row in rows],
+    )
 
 
 def add_ip_deadline_incident(
@@ -649,6 +1148,8 @@ def add_ip_title_interest(
 ) -> IpDocketRecordResponse:
     docket = _docket_or_404(session, context=context, docket_id=docket_id)
     if payload.related_docket_id:
+        if payload.related_docket_id == docket.id:
+            raise HTTPException(status_code=422, detail="A docket cannot be related to itself.")
         _docket_or_404(session, context=context, docket_id=payload.related_docket_id)
     existing = list(
         session.scalars(
@@ -664,7 +1165,22 @@ def add_ip_title_interest(
         row_until = row.effective_until or date.max
         overlaps = payload.effective_from <= row_until and row.effective_from <= new_until
         if overlaps and row.party_name.casefold() != payload.party_name.casefold():
-            flags.append(f"overlap:{row.id}")
+            flags.append(f"party_overlap:{row.id}")
+            if payload.interest_type in {"ownership", "assignment"} and row.interest_type in {
+                "ownership",
+                "assignment",
+            }:
+                flags.append(f"competing_title:{row.id}")
+        if (
+            overlaps
+            and payload.interest_type == "licence"
+            and row.interest_type
+            in {
+                "encumbrance",
+                "security",
+            }
+        ):
+            flags.append(f"licence_encumbrance_conflict:{row.id}")
     interest = IpTitleInterest(
         company_id=context.company.id,
         docket_id=docket.id,
@@ -695,6 +1211,178 @@ def add_ip_title_interest(
     return _serialize_docket(session, docket)
 
 
+def add_ip_related_right_obligation(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpRelatedRightObligationCreateRequest,
+) -> IpDocketRecordResponse:
+    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    _membership_or_404(session, context, payload.owner_membership_id)
+    if payload.title_interest_id:
+        interest = session.scalar(
+            select(IpTitleInterest).where(
+                IpTitleInterest.id == payload.title_interest_id,
+                IpTitleInterest.docket_id == docket.id,
+                IpTitleInterest.company_id == context.company.id,
+            )
+        )
+        if interest is None:
+            raise HTTPException(status_code=404, detail="Title interest not found.")
+    if payload.matter_deadline_id:
+        _deadline_for_docket(
+            session,
+            docket=docket,
+            deadline_id=payload.matter_deadline_id,
+        )
+    row = IpRelatedRightObligation(
+        company_id=context.company.id,
+        docket_id=docket.id,
+        title_interest_id=payload.title_interest_id,
+        obligation_type=payload.obligation_type,
+        title=payload.title.strip(),
+        due_on=payload.due_on,
+        owner_membership_id=payload.owner_membership_id,
+        matter_deadline_id=payload.matter_deadline_id,
+        status="open",
+        evidence_reference=payload.evidence_reference.strip(),
+    )
+    session.add(row)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="ip_related_right_obligation.created",
+        target_type="ip_related_right_obligation",
+        target_id=row.id,
+        matter_id=docket.matter_id,
+        metadata={
+            "obligation_type": row.obligation_type,
+            "due_on": row.due_on.isoformat() if row.due_on else None,
+            "has_operational_deadline": bool(row.matter_deadline_id),
+        },
+    )
+    session.commit()
+    return _serialize_docket(session, docket)
+
+
+def complete_ip_related_right_obligation(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    obligation_id: str,
+    payload: IpRelatedRightObligationCompleteRequest,
+) -> IpDocketRecordResponse:
+    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    row = session.scalar(
+        select(IpRelatedRightObligation)
+        .where(
+            IpRelatedRightObligation.id == obligation_id,
+            IpRelatedRightObligation.docket_id == docket.id,
+            IpRelatedRightObligation.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Related-right obligation not found.")
+    if row.status != payload.expected_status:
+        raise HTTPException(status_code=409, detail="Obligation changed; reload.")
+    row.status = "completed"
+    row.completion_evidence_reference = payload.completion_evidence_reference.strip()
+    row.completed_at = _now()
+    row.updated_at = row.completed_at
+    record_from_context(
+        session,
+        context,
+        action="ip_related_right_obligation.completed",
+        target_type="ip_related_right_obligation",
+        target_id=row.id,
+        matter_id=docket.matter_id,
+        metadata={"obligation_type": row.obligation_type},
+    )
+    session.commit()
+    return _serialize_docket(session, docket)
+
+
+def _canonical_billing_value(
+    session: Session,
+    *,
+    cost: IpCostItem,
+) -> tuple[int | None, str | None, str]:
+    if not cost.billing_link_type or not cost.billing_link_id:
+        return None, None, "unlinked"
+    amount: int | None = None
+    currency: str | None = None
+    if cost.billing_link_type == "invoice":
+        row = session.scalar(
+            select(MatterInvoice).where(
+                MatterInvoice.id == cost.billing_link_id,
+                MatterInvoice.company_id == cost.company_id,
+                MatterInvoice.matter_id == cost.matter_id,
+            )
+        )
+        if row is not None:
+            amount, currency = row.total_amount_minor, row.currency
+    elif cost.billing_link_type == "invoice_line_item":
+        result = session.execute(
+            select(MatterInvoiceLineItem, MatterInvoice)
+            .join(MatterInvoice, MatterInvoice.id == MatterInvoiceLineItem.invoice_id)
+            .where(
+                MatterInvoiceLineItem.id == cost.billing_link_id,
+                MatterInvoice.company_id == cost.company_id,
+                MatterInvoice.matter_id == cost.matter_id,
+            )
+        ).first()
+        if result is not None:
+            line, invoice = result
+            amount, currency = line.line_total_amount_minor, invoice.currency
+    elif cost.billing_link_type == "time_entry":
+        row = session.scalar(
+            select(MatterTimeEntry).where(
+                MatterTimeEntry.id == cost.billing_link_id,
+                MatterTimeEntry.matter_id == cost.matter_id,
+            )
+        )
+        if row is not None:
+            amount, currency = row.total_amount_minor, row.rate_currency
+    if amount is None:
+        return None, None, "missing"
+    if currency != cost.currency or amount != cost.amount_minor:
+        return amount, currency, "mismatch"
+    return amount, currency, "matched"
+
+
+def _apply_cost_reconciliation(
+    session: Session,
+    *,
+    context: SessionContext,
+    cost: IpCostItem,
+) -> IpCostReconciliationRow:
+    canonical_amount, _canonical_currency, status_value = _canonical_billing_value(
+        session,
+        cost=cost,
+    )
+    cost.reconciliation_status = status_value
+    cost.canonical_amount_minor = canonical_amount
+    cost.reconciliation_difference_minor = (
+        canonical_amount - cost.amount_minor if canonical_amount is not None else None
+    )
+    cost.reconciled_at = _now()
+    cost.reconciled_by_membership_id = context.membership.id
+    return IpCostReconciliationRow(
+        cost_item_id=cost.id,
+        billing_link_type=cost.billing_link_type,
+        billing_link_id=cost.billing_link_id,
+        evidence_amount_minor=cost.amount_minor,
+        canonical_amount_minor=canonical_amount,
+        difference_minor=cost.reconciliation_difference_minor,
+        currency=cost.currency,
+        status=status_value,
+    )
+
+
 def add_ip_cost_item(
     session: Session,
     *,
@@ -720,6 +1408,7 @@ def add_ip_cost_item(
     )
     session.add(cost)
     session.flush()
+    _apply_cost_reconciliation(session, context=context, cost=cost)
     record_from_context(
         session,
         context,
@@ -731,6 +1420,59 @@ def add_ip_cost_item(
     )
     session.commit()
     return _serialize_docket(session, docket)
+
+
+def reconcile_ip_cost_items(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+) -> IpCostReconciliationReport:
+    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    costs = list(
+        session.scalars(
+            select(IpCostItem)
+            .where(
+                IpCostItem.company_id == context.company.id,
+                IpCostItem.docket_id == docket.id,
+            )
+            .order_by(IpCostItem.created_at, IpCostItem.id)
+            .with_for_update()
+        ).all()
+    )
+    rows = [_apply_cost_reconciliation(session, context=context, cost=cost) for cost in costs]
+    checksum_payload = [row.model_dump(mode="json") for row in rows]
+    checksum = hashlib.sha256(
+        json.dumps(checksum_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    record_from_context(
+        session,
+        context,
+        action="ip_cost.reconciled",
+        target_type="ip_docket_record",
+        target_id=docket.id,
+        matter_id=docket.matter_id,
+        metadata={
+            "accounting_owner": "matter_billing",
+            "row_count": len(rows),
+            "checksum_sha256": checksum,
+            "status_counts": {
+                status_value: sum(row.status == status_value for row in rows)
+                for status_value in ("matched", "mismatch", "missing", "unlinked")
+            },
+        },
+    )
+    session.commit()
+    return IpCostReconciliationReport(
+        generated_at=_now(),
+        docket_id=docket.id,
+        rows=rows,
+        matched_count=sum(row.status == "matched" for row in rows),
+        mismatch_count=sum(row.status == "mismatch" for row in rows),
+        missing_count=sum(row.status == "missing" for row in rows),
+        unlinked_count=sum(row.status == "unlinked" for row in rows),
+        checksum_sha256=checksum,
+    )
 
 
 def ip_docket_control_report(session: Session, *, context: SessionContext) -> IpDocketControlReport:
@@ -776,12 +1518,18 @@ __all__ = [
     "add_ip_deadline_coverage",
     "add_ip_deadline_incident",
     "add_ip_notice_link",
+    "add_ip_related_right_obligation",
     "add_ip_title_interest",
     "append_ip_docket_version",
+    "bulk_reassign_ip_deadline_coverages",
+    "complete_ip_related_right_obligation",
     "create_ip_docket",
+    "discover_ip_evidence_candidates",
     "get_ip_docket",
     "ip_docket_control_report",
     "list_ip_dockets",
+    "reconcile_ip_cost_items",
     "reassign_ip_deadline_coverage",
+    "review_ip_evidence_candidate",
     "verify_ip_deadline_incident",
 ]

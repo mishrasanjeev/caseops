@@ -410,10 +410,10 @@ def create_new_order_uploaded_notifications(
 ) -> int:
     """Create durable notification delivery intents for LW-S10.
 
-    In-app intents are processed transactionally into existing
-    ``InAppNotification`` rows. External email/SMS/WhatsApp channels are
-    fail-closed into durable blocked intents until provider policy,
-    credentials, and runbooks are approved separately.
+    In-app intents are processed transactionally. External channels are owned
+    exclusively by the durable intent queue: the worker either dispatches
+    through the approved provider or creates one in-app fallback. The legacy
+    direct-send path is never called here.
     """
 
     rules = list(
@@ -453,15 +453,9 @@ def create_new_order_uploaded_notifications(
                     source_id=attachment_id,
                     matter=matter,
                     notification_rule_id=rule.id,
-                    title=(
-                        "New order uploaded"
-                        if channel == NotificationDeliveryChannel.IN_APP
-                        else None
-                    ),
+                    title="New order uploaded",
                     body=(
                         f"{matter.matter_code}: a linked court order document was uploaded."
-                        if channel == NotificationDeliveryChannel.IN_APP
-                        else None
                     ),
                     linked_court_order_id=linked_court_order_id,
                 )

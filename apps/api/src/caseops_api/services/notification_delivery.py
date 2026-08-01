@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditResult,
+    Company,
     CompanyMembership,
     InAppNotification,
     Matter,
@@ -140,7 +142,12 @@ def _delivery_result(intent: NotificationDeliveryIntent) -> NotificationDelivery
         status=str(intent.status),
         attempts=intent.attempts,
         delivered=intent.status == NotificationDeliveryStatus.DELIVERED,
-        external_calls=0,
+        external_calls=(
+            1
+            if intent.channel != NotificationDeliveryChannel.IN_APP
+            and intent.provider_event_id is not None
+            else 0
+        ),
         retry_scheduled=intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED,
         dead_lettered=intent.status == NotificationDeliveryStatus.DEAD_LETTER,
         blocked=intent.status == NotificationDeliveryStatus.BLOCKED,
@@ -154,20 +161,24 @@ def _record_delivery_event(
     event_type: str,
     status_value: str,
     error: str | None = None,
+    provider: str | None = None,
+    provider_event_id: str | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> None:
     session.add(
         NotificationDeliveryEvent(
             company_id=intent.company_id,
             intent_id=intent.id,
             event_type=event_type,
-            provider=None,
-            provider_event_id=None,
+            provider=provider,
+            provider_event_id=provider_event_id,
             status=status_value,
             error_redacted=redact_provider_error(error) if error else None,
             metadata_json={
                 "channel": str(intent.channel),
                 "dispatch_owner": intent.dispatch_owner,
                 "source_ref": redact_identifier(intent.source_id),
+                **(metadata or {}),
             },
         )
     )
@@ -243,6 +254,7 @@ def enqueue_notification_delivery_intent(
         return existing
 
     is_in_app = channel == NotificationDeliveryChannel.IN_APP
+    settings = get_settings()
     suppression_reason = None
     if not is_in_app and channel == NotificationDeliveryChannel.EMAIL:
         from caseops_api.services.email_suppression import is_suppressed
@@ -255,6 +267,15 @@ def enqueue_notification_delivery_intent(
         )
         if suppression is not None:
             suppression_reason = f"email_{suppression.reason}"
+    external_ready = bool(
+        channel == NotificationDeliveryChannel.EMAIL
+        and settings.notification_external_delivery_enabled
+        and settings.notification_external_delivery_provider == "sendgrid"
+        and settings.sendgrid_api_key
+        and settings.sendgrid_sender_email
+        and not suppression_reason
+    )
+    blocked_external = not is_in_app and not external_ready
     intent = NotificationDeliveryIntent(
         company_id=context.company.id,
         recipient_membership_id=recipient_membership.id,
@@ -267,16 +288,16 @@ def enqueue_notification_delivery_intent(
         idempotency_key=key,
         status=(
             NotificationDeliveryStatus.QUEUED
-            if is_in_app
+            if is_in_app or external_ready
             else NotificationDeliveryStatus.BLOCKED
         ),
         attempts=0,
         max_attempts=DEFAULT_RETRY_MAXIMUM_ATTEMPTS,
-        title=title if is_in_app else None,
-        body=_bounded_body(body) if is_in_app else None,
-        failed_at=None if is_in_app else _now(),
+        title=title,
+        body=_bounded_body(body),
+        failed_at=_now() if blocked_external else None,
         dead_letter_reason=(
-            None if is_in_app else suppression_reason or "provider_disabled"
+            None if not blocked_external else suppression_reason or "provider_disabled"
         ),
         metadata_json=_safe_metadata(
             notification_rule_id=notification_rule_id,
@@ -284,19 +305,23 @@ def enqueue_notification_delivery_intent(
             linked_court_order_id=linked_court_order_id,
             triggered_by_membership_id=context.membership.id,
         ),
-        schedule_source_type=(
-            "notification_rule" if notification_rule_id else source_type
-        ),
+        schedule_source_type=("notification_rule" if notification_rule_id else source_type),
         schedule_source_id=notification_rule_id or source_id,
         recipient_snapshot_json={
             "membership_ref": redact_identifier(recipient_membership.id),
             "channel": str(channel),
         },
         dispatch_owner="durable_intent",
-        comparison_status="canonical" if is_in_app else "fallback_active",
+        comparison_status=(
+            "canonical"
+            if is_in_app
+            else "dual_read_matched"
+            if external_ready
+            else "fallback_active"
+        ),
         suppression_reason=suppression_reason,
     )
-    if not is_in_app:
+    if blocked_external:
         intent.last_error_redacted = (
             "recipient suppressed; in-app fallback required"
             if suppression_reason
@@ -311,7 +336,7 @@ def enqueue_notification_delivery_intent(
         status_value=str(intent.status),
         error=intent.last_error_redacted,
     )
-    if not is_in_app:
+    if blocked_external:
         record_from_context(
             session,
             context,
@@ -326,9 +351,7 @@ def enqueue_notification_delivery_intent(
                 "source_type": source_type,
                 "source_ref": redact_identifier(source_id),
                 "notification_rule_ref": redact_identifier(notification_rule_id),
-                "recipient_membership_ref": redact_identifier(
-                    recipient_membership.id
-                ),
+                "recipient_membership_ref": redact_identifier(recipient_membership.id),
             },
         )
         fallback = enqueue_notification_delivery_intent(
@@ -368,6 +391,7 @@ def record_notification_delivery_failure(
     now: datetime | None = None,
 ) -> NotificationDeliveryProcessResult:
     if intent.status in {
+        NotificationDeliveryStatus.SENT,
         NotificationDeliveryStatus.DELIVERED,
         NotificationDeliveryStatus.BLOCKED,
         NotificationDeliveryStatus.DEAD_LETTER,
@@ -397,6 +421,49 @@ def record_notification_delivery_failure(
     return _delivery_result(intent)
 
 
+def _ensure_in_app_fallback(
+    session: Session,
+    *,
+    intent: NotificationDeliveryIntent,
+    context: SessionContext | None,
+) -> None:
+    if intent.fallback_intent_id is not None:
+        return
+    recipient = intent.recipient_membership
+    if context is None:
+        company = session.get(Company, intent.company_id)
+        if company is None:
+            return
+        context = SessionContext(
+            company=company,
+            membership=recipient,
+            user=recipient.user,
+        )
+    fallback = enqueue_notification_delivery_intent(
+        session,
+        context=context,
+        recipient_membership=recipient,
+        channel=NotificationDeliveryChannel.IN_APP,
+        event_type=intent.event_type,
+        source_type=intent.source_type,
+        source_id=intent.source_id,
+        matter=intent.matter,
+        notification_rule_id=intent.notification_rule_id,
+        title=intent.title or "Delivery fallback",
+        body=intent.body or "An external notification could not be delivered.",
+    )
+    if fallback is None:
+        return
+    intent.fallback_intent_id = fallback.id
+    process_notification_delivery_intent(
+        session,
+        intent_id=fallback.id,
+        context=context,
+    )
+    session.add(intent)
+    session.flush()
+
+
 def process_notification_delivery_intent(
     session: Session,
     *,
@@ -423,6 +490,7 @@ def process_notification_delivery_intent(
     if intent is None:
         raise ValueError("Notification delivery intent not found.")
     if intent.status in {
+        NotificationDeliveryStatus.SENT,
         NotificationDeliveryStatus.DELIVERED,
         NotificationDeliveryStatus.BLOCKED,
         NotificationDeliveryStatus.DEAD_LETTER,
@@ -461,6 +529,7 @@ def process_notification_delivery_intent(
     if intent is None:
         raise ValueError("Notification delivery intent not found.")
     if intent.status in {
+        NotificationDeliveryStatus.SENT,
         NotificationDeliveryStatus.DELIVERED,
         NotificationDeliveryStatus.BLOCKED,
         NotificationDeliveryStatus.DEAD_LETTER,
@@ -475,19 +544,101 @@ def process_notification_delivery_intent(
         session.add(intent)
         session.flush()
         return _delivery_result(intent)
-    if intent.channel != NotificationDeliveryChannel.IN_APP:
-        intent.status = NotificationDeliveryStatus.BLOCKED
-        intent.dead_letter_reason = "provider_disabled"
-        intent.last_error_redacted = "external provider disabled"
-        intent.failed_at = _now()
-        session.add(intent)
-        session.flush()
-        return _delivery_result(intent)
     if (
         intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED
         and intent.next_attempt_at is not None
         and intent.next_attempt_at > _now()
     ):
+        return _delivery_result(intent)
+    if intent.channel != NotificationDeliveryChannel.IN_APP:
+        settings = get_settings()
+        provider_ready = bool(
+            intent.channel == NotificationDeliveryChannel.EMAIL
+            and settings.notification_external_delivery_enabled
+            and settings.notification_external_delivery_provider == "sendgrid"
+            and settings.sendgrid_api_key
+            and settings.sendgrid_sender_email
+        )
+        if not provider_ready:
+            intent.status = NotificationDeliveryStatus.BLOCKED
+            intent.dead_letter_reason = "provider_disabled"
+            intent.last_error_redacted = "external provider disabled"
+            intent.failed_at = _now()
+            session.add(intent)
+            _record_delivery_event(
+                session,
+                intent=intent,
+                event_type="delivery_blocked",
+                status_value=str(intent.status),
+                error=intent.last_error_redacted,
+            )
+            session.flush()
+            _ensure_in_app_fallback(session, intent=intent, context=context)
+            return _delivery_result(intent)
+
+        from caseops_api.services.email_suppression import is_suppressed
+
+        recipient_email = intent.recipient_membership.user.email
+        suppression = is_suppressed(
+            session,
+            company_id=intent.company_id,
+            recipient_email=recipient_email,
+        )
+        if suppression is not None:
+            intent.status = NotificationDeliveryStatus.BLOCKED
+            intent.dead_letter_reason = f"email_{suppression.reason}"
+            intent.suppression_reason = intent.dead_letter_reason
+            intent.last_error_redacted = "recipient suppressed"
+            intent.failed_at = _now()
+            _record_delivery_event(
+                session,
+                intent=intent,
+                event_type="delivery_suppressed",
+                status_value=str(intent.status),
+                error=intent.last_error_redacted,
+                provider="sendgrid",
+            )
+            session.flush()
+            _ensure_in_app_fallback(session, intent=intent, context=context)
+            return _delivery_result(intent)
+
+        from caseops_api.services.communications import _send_via_sendgrid
+
+        intent.attempts += 1
+        try:
+            success, provider_event_id, error = _send_via_sendgrid(
+                to_email=recipient_email,
+                recipient_name=intent.recipient_membership.user.full_name,
+                subject=intent.title or "CaseOps notification",
+                body_text=intent.body or "Open CaseOps to review this notification.",
+                custom_args={"notification_intent_id": intent.id},
+            )
+        except Exception as exc:  # noqa: BLE001 - provider/network boundary
+            success, provider_event_id, error = False, None, str(exc)
+        if not success:
+            intent.attempts -= 1
+            result = record_notification_delivery_failure(
+                session,
+                intent=intent,
+                raw_error=error or "sendgrid delivery failed",
+            )
+            if result.dead_lettered:
+                _ensure_in_app_fallback(session, intent=intent, context=context)
+            return result
+        intent.status = NotificationDeliveryStatus.SENT
+        intent.provider_event_id = provider_event_id
+        intent.next_attempt_at = None
+        intent.updated_at = _now()
+        intent.last_error_redacted = None
+        _record_delivery_event(
+            session,
+            intent=intent,
+            event_type="provider_accepted",
+            status_value=str(intent.status),
+            provider="sendgrid",
+            provider_event_id=provider_event_id,
+        )
+        session.flush()
         return _delivery_result(intent)
     if intent.matter is not None and context is not None:
         recipient_context = _recipient_context(
@@ -504,9 +655,7 @@ def process_notification_delivery_intent(
     existing = session.scalar(
         select(InAppNotification).where(
             InAppNotification.company_id == intent.company_id,
-            InAppNotification.recipient_membership_id == (
-                intent.recipient_membership_id
-            ),
+            InAppNotification.recipient_membership_id == (intent.recipient_membership_id),
             InAppNotification.event_type == intent.event_type,
             InAppNotification.source_type == intent.source_type,
             InAppNotification.source_id == intent.source_id,
@@ -537,12 +686,8 @@ def process_notification_delivery_intent(
                 matter_id=intent.matter_id,
                 metadata={
                     "notification_delivery_intent_ref": redact_identifier(intent.id),
-                    "notification_rule_ref": redact_identifier(
-                        intent.notification_rule_id
-                    ),
-                    "recipient_membership_ref": redact_identifier(
-                        intent.recipient_membership_id
-                    ),
+                    "notification_rule_ref": redact_identifier(intent.notification_rule_id),
+                    "recipient_membership_ref": redact_identifier(intent.recipient_membership_id),
                     "event_type": intent.event_type,
                     "source_type": intent.source_type,
                     "source_ref": redact_identifier(intent.source_id),
@@ -583,9 +728,162 @@ def process_notification_delivery_intent_by_id(
         return result
 
 
+def drain_notification_delivery_intents(
+    session: Session,
+    *,
+    limit: int = 100,
+) -> dict[str, int]:
+    now = _now()
+    rows = list(
+        session.execute(
+            select(
+                NotificationDeliveryIntent.id,
+                NotificationDeliveryIntent.company_id,
+            )
+            .where(
+                NotificationDeliveryIntent.status.in_(
+                    (
+                        NotificationDeliveryStatus.QUEUED,
+                        NotificationDeliveryStatus.RETRY_SCHEDULED,
+                    )
+                ),
+                or_(
+                    NotificationDeliveryIntent.next_attempt_at.is_(None),
+                    NotificationDeliveryIntent.next_attempt_at <= now,
+                ),
+            )
+            .order_by(NotificationDeliveryIntent.created_at, NotificationDeliveryIntent.id)
+            .limit(limit)
+        ).all()
+    )
+    report = {
+        "examined": len(rows),
+        "sent": 0,
+        "delivered": 0,
+        "retry_scheduled": 0,
+        "dead_lettered": 0,
+        "blocked": 0,
+        "external_calls": 0,
+    }
+    for intent_id, company_id in rows:
+        result = process_notification_delivery_intent(
+            session,
+            intent_id=intent_id,
+            company_id=company_id,
+        )
+        report["sent"] += int(result.status == NotificationDeliveryStatus.SENT)
+        report["delivered"] += int(result.delivered)
+        report["retry_scheduled"] += int(result.retry_scheduled)
+        report["dead_lettered"] += int(result.dead_lettered)
+        report["blocked"] += int(result.blocked)
+        report["external_calls"] += result.external_calls
+        session.commit()
+    return report
+
+
+def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
+    intent_id = str(event.get("notification_intent_id") or "").strip()
+    provider_message_id = str(event.get("sg_message_id") or event.get("smtp-id") or "").strip()
+    intent: NotificationDeliveryIntent | None = None
+    if intent_id:
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+    if intent is None and provider_message_id:
+        prefix = provider_message_id.split(".", 1)[0]
+        intent = session.scalar(
+            select(NotificationDeliveryIntent)
+            .where(NotificationDeliveryIntent.provider_event_id.like(f"{prefix}%"))
+            .limit(1)
+        )
+    if intent is None:
+        return False
+    if provider_message_id and intent.provider_event_id:
+        expected_prefix = intent.provider_event_id.split(".", 1)[0]
+        actual_prefix = provider_message_id.split(".", 1)[0]
+        if actual_prefix != expected_prefix:
+            return False
+    event_type = str(event.get("event") or "").lower()
+    provider_event_key = str(event.get("sg_event_id") or "").strip() or None
+    if provider_event_key:
+        duplicate = session.scalar(
+            select(NotificationDeliveryEvent.id).where(
+                NotificationDeliveryEvent.company_id == intent.company_id,
+                NotificationDeliveryEvent.provider == "sendgrid",
+                NotificationDeliveryEvent.provider_event_id == provider_event_key,
+            )
+        )
+        if duplicate is not None:
+            return True
+    when_raw = event.get("timestamp")
+    when = datetime.fromtimestamp(int(when_raw), tz=UTC) if when_raw else _now()
+    error = event.get("reason") or event.get("response")
+    if event_type == "delivered":
+        intent.status = NotificationDeliveryStatus.DELIVERED
+        intent.delivered_at = when
+        intent.failed_at = None
+        intent.last_error_redacted = None
+    elif event_type in {"bounce", "dropped", "blocked", "spamreport"}:
+        intent.status = NotificationDeliveryStatus.DEAD_LETTER
+        intent.dead_letter_reason = f"sendgrid_{event_type}"
+        intent.failed_at = when
+        intent.last_error_redacted = redact_provider_error(error or event_type)
+        intent.next_attempt_at = None
+        from caseops_api.services.email_suppression import (
+            reason_for_event,
+            record_suppression,
+        )
+
+        email = str(event.get("email") or intent.recipient_membership.user.email).strip()
+        suppression_reason = reason_for_event(event_type)
+        if email and suppression_reason is not None:
+            record_suppression(
+                session,
+                company_id=intent.company_id,
+                recipient_email=email,
+                reason=suppression_reason,
+                detail=str(error) if error else None,
+                source_message_id=provider_message_id or intent.provider_event_id,
+            )
+        _ensure_in_app_fallback(session, intent=intent, context=None)
+    elif event_type in {"unsubscribe", "group_unsubscribe"}:
+        from caseops_api.services.email_suppression import (
+            reason_for_event,
+            record_suppression,
+        )
+
+        email = str(event.get("email") or intent.recipient_membership.user.email).strip()
+        suppression_reason = reason_for_event(event_type)
+        if email and suppression_reason is not None:
+            record_suppression(
+                session,
+                company_id=intent.company_id,
+                recipient_email=email,
+                reason=suppression_reason,
+                detail=str(error) if error else None,
+                source_message_id=provider_message_id or intent.provider_event_id,
+            )
+    elif event_type not in {"open", "click", "deferred", "processed"}:
+        return False
+    _record_delivery_event(
+        session,
+        intent=intent,
+        event_type=f"provider_{event_type}",
+        status_value=str(intent.status),
+        error=str(error) if error else None,
+        provider="sendgrid",
+        provider_event_id=provider_event_key,
+        metadata={"provider_message_ref": redact_identifier(provider_message_id)},
+    )
+    intent.updated_at = when
+    session.add(intent)
+    session.flush()
+    return True
+
+
 __all__ = [
     "NotificationDeliveryProcessResult",
     "enqueue_notification_delivery_intent",
+    "apply_notification_provider_event",
+    "drain_notification_delivery_intents",
     "notification_delivery_idempotency_key",
     "process_notification_delivery_intent",
     "process_notification_delivery_intent_by_id",

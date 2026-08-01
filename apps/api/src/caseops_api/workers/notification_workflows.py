@@ -7,6 +7,7 @@ import sys
 from collections.abc import Iterable
 from datetime import timedelta
 
+from caseops_api.core.settings import get_settings
 from caseops_api.services.durable_workflows import (
     build_notification_temporal_worker_config,
     create_temporal_client,
@@ -103,12 +104,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     status = durable_workflow_status()
     payload = {
         "service": "caseops-notification-workflow-worker",
-        "delivery_enabled": False,
+        "delivery_enabled": get_settings().notification_external_delivery_enabled,
         "reminder_scheduling_enabled": False,
-        "external_provider_calls_enabled": False,
+        "external_provider_calls_enabled": get_settings().notification_external_delivery_enabled,
         "durable_delivery_foundation_registered": True,
         "in_app_delivery_foundation_enabled": True,
-        "external_delivery_provider_enabled": False,
+        "external_delivery_provider_enabled": get_settings().notification_external_delivery_enabled,
         "durable_outlook_sync_foundation_registered": True,
         "outlook_provider_calls_require_tenant_readiness": True,
         "runtime_defaults": temporal_runtime_defaults().public_dict(),

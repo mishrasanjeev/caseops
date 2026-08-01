@@ -135,6 +135,14 @@ class Settings(BaseSettings):
     sendgrid_api_key: str | None = Field(default=None)
     sendgrid_sender_email: str | None = Field(default=None)
     sendgrid_sender_name: str = Field(default="CaseOps")
+    # IPLF-007B: one rollback switch for durable-intent-owned external
+    # delivery.  Disabled remains fail-closed with exactly one in-app
+    # fallback; enabling never reactivates the legacy direct-send path.
+    notification_external_delivery_enabled: bool = Field(default=False)
+    notification_external_delivery_provider: str = Field(
+        default="sendgrid",
+        pattern="^(sendgrid)$",
+    )
     activity_report_recipient_email: str = Field(default="mishra.sanjeev@gmail.com")
     activity_report_enabled: bool = Field(default=True)
     # Public key that SendGrid signs event webhooks with. When set,

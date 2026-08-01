@@ -7542,7 +7542,17 @@ export type IpDocket = {
   current_version: number;
   current_particulars: IpTrademarkParticularVersion;
   notice_links: Array<Record<string, unknown>>;
-  deadline_coverages: Array<Record<string, unknown>>;
+  evidence_candidates: IpEvidenceCandidate[];
+  deadline_coverages: Array<{
+    id: string;
+    matter_deadline_id: string;
+    responsible_membership_id: string;
+    backup_membership_id: string | null;
+    coverage_status: string;
+    calendar_projection_status: string;
+    reassignment_version: number;
+    updated_at: string;
+  }>;
   deadline_incidents: Array<Record<string, unknown>>;
   title_interests: Array<{
     id: string;
@@ -7553,6 +7563,7 @@ export type IpDocket = {
     recordal_status: string;
     conflict_flags_json: string[];
   }>;
+  related_right_obligations: IpRelatedRightObligation[];
   cost_items: Array<{
     id: string;
     category: string;
@@ -7560,9 +7571,65 @@ export type IpDocket = {
     amount_minor: number;
     currency: string;
     evidence_reference: string;
+    billing_link_type: "invoice" | "invoice_line_item" | "time_entry" | null;
+    billing_link_id: string | null;
+    reconciliation_status: "matched" | "mismatch" | "missing" | "unlinked";
+    canonical_amount_minor: number | null;
+    reconciliation_difference_minor: number | null;
+    reconciled_at: string | null;
   }>;
   created_at: string;
   updated_at: string;
+};
+
+export type IpEvidenceCandidate = {
+  id: string;
+  source_type: string;
+  source_id: string;
+  source_fingerprint: string;
+  evidence_kind: string;
+  suggested_link_kind: "correspondence" | "service" | "instruction" | "official_notice";
+  status: "needs_review" | "duplicate" | "accepted" | "rejected";
+  accepted_effect: string | null;
+  duplicate_of_candidate_id: string | null;
+  metadata_json: Record<string, unknown> | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
+export type IpRelatedRightObligation = {
+  id: string;
+  title_interest_id: string | null;
+  obligation_type: string;
+  title: string;
+  due_on: string | null;
+  owner_membership_id: string;
+  matter_deadline_id: string | null;
+  status: "open" | "completed";
+  evidence_reference: string;
+  completion_evidence_reference: string | null;
+  completed_at: string | null;
+};
+
+export type IpCostReconciliationReport = {
+  generated_at: string;
+  docket_id: string;
+  accounting_owner: "matter_billing";
+  rows: Array<{
+    cost_item_id: string;
+    billing_link_type: string | null;
+    billing_link_id: string | null;
+    evidence_amount_minor: number;
+    canonical_amount_minor: number | null;
+    difference_minor: number | null;
+    currency: string;
+    status: "matched" | "mismatch" | "missing" | "unlinked";
+  }>;
+  matched_count: number;
+  mismatch_count: number;
+  missing_count: number;
+  unlinked_count: number;
+  checksum_sha256: string;
 };
 
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
@@ -7642,6 +7709,8 @@ export async function addIpCostItem(
     description: string;
     amountMinor: number;
     evidenceReference: string;
+    billingLinkType?: "invoice" | "invoice_line_item" | "time_entry" | null;
+    billingLinkId?: string | null;
   },
 ): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/cost-items`, {
@@ -7652,6 +7721,110 @@ export async function addIpCostItem(
       amount_minor: input.amountMinor,
       currency: "INR",
       evidence_reference: input.evidenceReference,
+      billing_link_type: input.billingLinkType ?? null,
+      billing_link_id: input.billingLinkId ?? null,
     },
   });
+}
+
+export async function discoverIpEvidence(docketId: string): Promise<{
+  candidates: IpEvidenceCandidate[];
+  discovered_count: number;
+  duplicate_count: number;
+}> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/evidence/discover`, {
+    method: "POST",
+  });
+}
+
+export async function reviewIpEvidenceCandidate(input: {
+  docketId: string;
+  candidate: IpEvidenceCandidate;
+  action: "accept" | "reject";
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/evidence/${encodeURIComponent(input.candidate.id)}/review`,
+    {
+      method: "POST",
+      body: {
+        expected_status: input.candidate.status,
+        action: input.action,
+        link_kind: input.action === "accept" ? input.candidate.suggested_link_kind : null,
+        accepted_effect: input.action === "accept" ? "linked_to_ip_docket" : null,
+      },
+    },
+  );
+}
+
+export async function bulkReassignIpCoverage(input: {
+  fromMembershipId: string;
+  toMembershipId: string;
+  reason: string;
+  expectedVersions: Record<string, number>;
+}): Promise<{
+  reassigned_count: number;
+  responsible_count: number;
+  backup_count: number;
+  coverage_ids: string[];
+}> {
+  return apiRequest("/api/ip/deadline-coverages/bulk-reassign", {
+    method: "POST",
+    body: {
+      from_membership_id: input.fromMembershipId,
+      to_membership_id: input.toMembershipId,
+      reason: input.reason,
+      expected_versions: input.expectedVersions,
+    },
+  });
+}
+
+export async function addIpRelatedRightObligation(
+  docketId: string,
+  input: {
+    title: string;
+    obligationType: "renewal" | "royalty" | "recordal" | "consent" | "quality_control" | "termination" | "other";
+    ownerMembershipId: string;
+    dueOn?: string | null;
+    evidenceReference: string;
+  },
+): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/related-right-obligations`,
+    {
+      method: "POST",
+      body: {
+        title: input.title,
+        obligation_type: input.obligationType,
+        owner_membership_id: input.ownerMembershipId,
+        due_on: input.dueOn ?? null,
+        evidence_reference: input.evidenceReference,
+      },
+    },
+  );
+}
+
+export async function completeIpRelatedRightObligation(input: {
+  docketId: string;
+  obligationId: string;
+  completionEvidenceReference: string;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/related-right-obligations/${encodeURIComponent(input.obligationId)}/complete`,
+    {
+      method: "POST",
+      body: {
+        expected_status: "open",
+        completion_evidence_reference: input.completionEvidenceReference,
+      },
+    },
+  );
+}
+
+export async function reconcileIpCosts(
+  docketId: string,
+): Promise<IpCostReconciliationReport> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/cost-items/reconcile`,
+    { method: "POST" },
+  );
 }

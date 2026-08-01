@@ -1,5 +1,7 @@
 # IP Law Firm PRD remaining-slice implementation and release record
 
+> **Superseded completion note (1 August 2026):** The five implementation tails identified in this record were subsequently completed. See `docs/ip-implementation/evidence/release-2026-08-01-completion.md` and the canonical manifest for current status. Historical statements below describe the earlier deployed revision and are retained as immutable release evidence.
+
 **Evidence date:** 1 August 2026
 **Scope:** `IPLF-003A/B`, `IPLF-005A`, `IPLF-006A/B`, `IPLF-007A/B`, and `IPLF-039A/F`
 **Product direction:** remove the fixed “seven consecutive days” scheduler-health release blocker and execute all independently safe work in one continuous delivery run

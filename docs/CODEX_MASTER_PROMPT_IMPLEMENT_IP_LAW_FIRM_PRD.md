@@ -364,6 +364,14 @@ Do not hide skipped tests, missing providers, unavailable production access, leg
 
 This version has been reviewed specifically for execution failure modes: duplicate ledgers, paperwork-only progress, scope erosion, self-approved legal/security gates, unsafe production authority, unaudited legal data, synthetic-data overclaiming, untruthful public copy, shallow journey tests, skipped/flaky-test leakage, branch-versus-release confusion, child-PRD self-approval and false completion at a context boundary. These controls take precedence over any looser wording elsewhere in this prompt.
 
+## Execution checkpoint — 1 August 2026
+
+The product owner removed the fixed wait for “seven consecutive days of natural scheduler health.” The active release gate is exact-revision/IAM/config verification, bounded scheduler-to-job canaries, health checks, and a dated production journey; natural executions continue as SLO evidence.
+
+The fifteen slices currently decomposed in `PROGRAM_MANIFEST.yaml` have repository implementations. The five tails that an earlier release record left open—`IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F`—are implemented and locally verified as described in `docs/ip-implementation/evidence/release-2026-08-01-completion.md`. Their manifest release state remains `ready_for_review` until exact-commit CI, deployment, and production E2E finish; human acceptance remains pending.
+
+This checkpoint does not revise the PRD or mark the program complete. The 436 requirement rows, 68 journeys, undecomposed M0/M2-M10 epics, legal/provider fixtures, data-governance and recovery gates, pilot UAT, and specialist child PRDs remain governed by the canonical manifest and the completion rules above. Implemented slice breadth must not be represented as full-program delivery.
+
 ---
 
 End of master prompt.

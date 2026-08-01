@@ -22,6 +22,7 @@ from typing import Literal
 
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.hearing_reminders import run_reminder_worker
+from caseops_api.services.notification_delivery import drain_notification_delivery_intents
 
 
 def run(
@@ -34,6 +35,11 @@ def run(
     SessionFactory = get_session_factory()
     with SessionFactory() as session:
         report = run_reminder_worker(session, mode=mode, limit=limit)
+        report["durable_intents"] = (
+            {"examined": 0, "external_calls": 0, "mode": "dry_run"}
+            if mode == "dry_run"
+            else drain_notification_delivery_intents(session, limit=limit)
+        )
     # Machine-readable output for Cloud Scheduler → Cloud Run Job logs.
     sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")
     return 0

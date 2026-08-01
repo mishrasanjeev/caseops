@@ -990,6 +990,7 @@ def _send_via_sendgrid(
     recipient_name: str | None,
     subject: str,
     body_text: str,
+    custom_args: dict[str, str] | None = None,
 ) -> tuple[bool, str | None, str | None]:
     """Direct SendGrid Web API call. Mirrors the helper in
     services.hearing_reminders so we don't pull in the full SDK
@@ -1012,7 +1013,12 @@ def _send_via_sendgrid(
             "Content-Type": "application/json",
         },
         json={
-            "personalizations": [{"to": [to_block]}],
+            "personalizations": [
+                {
+                    "to": [to_block],
+                    **({"custom_args": custom_args} if custom_args else {}),
+                }
+            ],
             "from": {
                 "email": settings.sendgrid_sender_email,
                 "name": settings.sendgrid_sender_name,

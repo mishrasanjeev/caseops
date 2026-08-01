@@ -14,16 +14,16 @@
     "verification_status": "failed",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-007B",
+    "active_slice": "IPLF-039F",
     "checkpoint": {
-      "recorded_at": "2026-08-01T20:11:37+05:30",
+      "recorded_at": "2026-08-01T22:15:00+05:30",
       "repository_revision": "73c5e49c429d890fee6d9da02cc1f22aa35f4990",
-      "environment": "production-deployment-verified",
-      "completed_scope": "Deployed IPLF-003A/B, IPLF-005A, IPLF-006A/B, IPLF-007A, IPLF-039A, and IPLF-039D from main; deployed the independently safe portions of IPLF-007B and IPLF-039B/C/E/F; passed exact-commit CI, PostgreSQL, Security, CodeQL, migrations, scheduler drift verification, health, and the dated desktop/mobile production IP workflow.",
+      "environment": "implementation-and-local-e2e-verified; production release pending",
+      "completed_scope": "Implemented all previously recorded code tails for IPLF-007B and IPLF-039B/C/E/F: one durable external dispatcher with webhook evidence and rollback flag; review-gated Matter notice/Communication/attachment/Drive evidence discovery and dedupe; versioned bulk deadline coverage reassignment integrated with employee offboarding; effective-dated title conflicts and evidence-backed related-right obligations; and Matter-billing reconciliation with deterministic report checksum. Focused backend, frontend, migration/static, production build, and dated 360px browser journeys pass locally.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-007B",
-      "next_action": "Complete approved external-provider cutover and the explicit mailbox/Drive automation, bulk coverage reassignment, related-right obligations, and billing-export reconciliation gaps; continue the broader M2-M10 roadmap without treating natural scheduler elapsed time as a release blocker.",
-      "evidence_ref": "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+      "next_slice": "IPLF-039F",
+      "next_action": "Run full CI and PostgreSQL gates, release the exact main revision, rerun the dated production browser journey, then mark these five slices deployment_verified. The undecomposed M0/M2-M10 epics, legal fixtures, provider activation, pilot UAT, retention/export/recovery and child-PRD approvals remain program work and must not be represented as delivered by these slices.",
+      "evidence_ref": "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
     }
   },
   "milestones": [
@@ -1289,17 +1289,26 @@
       "journey_path_ids": [],
       "ownership": [],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/notification_delivery.py",
+        "apps/api/src/caseops_api/scripts/send_hearing_reminders.py",
+        "apps/api/src/caseops_api/api/routes/notifications.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_prd_slices.py::test_notification_external_cutover_uses_only_durable_intent_and_webhook",
+        "apps/api/tests/test_durable_workflows.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1333,17 +1342,26 @@
       "journey_path_ids": [],
       "ownership": [],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/web/app/app/ip/page.tsx"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1355,17 +1373,27 @@
       "journey_path_ids": [],
       "ownership": [],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/employees.py",
+        "apps/web/app/app/ip/page.tsx"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
+        "apps/api/tests/test_legalworkspace_offboarding.py::test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sessions",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1399,17 +1427,26 @@
       "journey_path_ids": [],
       "ownership": [],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/web/app/app/ip/page.tsx"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -1421,17 +1458,26 @@
       "journey_path_ids": [],
       "ownership": [],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/web/app/app/ip/page.tsx"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     }
   ],

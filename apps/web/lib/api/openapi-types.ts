@@ -3565,6 +3565,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadline-coverages/bulk-reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Coverage Bulk Reassignment */
+        post: operations["post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets": {
         parameters: {
             query?: never;
@@ -3611,6 +3628,23 @@ export interface paths {
         put?: never;
         /** Post Ip Cost Item */
         post: operations["post_ip_cost_item_api_ip_dockets__docket_id__cost_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/cost-items/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Cost Reconciliation */
+        post: operations["post_ip_cost_reconciliation_api_ip_dockets__docket_id__cost_items_reconcile_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3685,6 +3719,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/evidence/{candidate_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Evidence Review */
+        post: operations["post_ip_evidence_review_api_ip_dockets__docket_id__evidence__candidate_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/evidence/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Evidence Discovery */
+        post: operations["post_ip_evidence_discovery_api_ip_dockets__docket_id__evidence_discover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/notice-links": {
         parameters: {
             query?: never;
@@ -3696,6 +3764,40 @@ export interface paths {
         put?: never;
         /** Post Ip Notice Link */
         post: operations["post_ip_notice_link_api_ip_dockets__docket_id__notice_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/related-right-obligations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Related Right Obligation */
+        post: operations["post_ip_related_right_obligation_api_ip_dockets__docket_id__related_right_obligations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/related-right-obligations/{obligation_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Related Right Obligation Completion */
+        post: operations["post_ip_related_right_obligation_completion_api_ip_dockets__docket_id__related_right_obligations__obligation_id__complete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -15675,7 +15777,7 @@ export interface components {
             /** Billing Link Id */
             billing_link_id?: string | null;
             /** Billing Link Type */
-            billing_link_type?: string | null;
+            billing_link_type?: ("invoice" | "invoice_line_item" | "time_entry") | null;
             /**
              * Category
              * @enum {string}
@@ -15699,6 +15801,8 @@ export interface components {
             billing_link_id: string | null;
             /** Billing Link Type */
             billing_link_type: string | null;
+            /** Canonical Amount Minor */
+            canonical_amount_minor: number | null;
             /** Category */
             category: string;
             /**
@@ -15714,6 +15818,86 @@ export interface components {
             evidence_reference: string;
             /** Id */
             id: string;
+            /** Reconciled At */
+            reconciled_at: string | null;
+            /** Reconciliation Difference Minor */
+            reconciliation_difference_minor: number | null;
+            /** Reconciliation Status */
+            reconciliation_status: string;
+        };
+        /** IpCostReconciliationReport */
+        IpCostReconciliationReport: {
+            /**
+             * Accounting Owner
+             * @default matter_billing
+             * @constant
+             */
+            accounting_owner: "matter_billing";
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Matched Count */
+            matched_count: number;
+            /** Mismatch Count */
+            mismatch_count: number;
+            /** Missing Count */
+            missing_count: number;
+            /** Rows */
+            rows: components["schemas"]["IpCostReconciliationRow"][];
+            /** Unlinked Count */
+            unlinked_count: number;
+        };
+        /** IpCostReconciliationRow */
+        IpCostReconciliationRow: {
+            /** Billing Link Id */
+            billing_link_id: string | null;
+            /** Billing Link Type */
+            billing_link_type: string | null;
+            /** Canonical Amount Minor */
+            canonical_amount_minor: number | null;
+            /** Cost Item Id */
+            cost_item_id: string;
+            /** Currency */
+            currency: string;
+            /** Difference Minor */
+            difference_minor: number | null;
+            /** Evidence Amount Minor */
+            evidence_amount_minor: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "matched" | "mismatch" | "missing" | "unlinked";
+        };
+        /** IpCoverageBulkReassignRequest */
+        IpCoverageBulkReassignRequest: {
+            /** Expected Versions */
+            expected_versions?: {
+                [key: string]: number;
+            };
+            /** From Membership Id */
+            from_membership_id: string;
+            /** Reason */
+            reason: string;
+            /** To Membership Id */
+            to_membership_id: string;
+        };
+        /** IpCoverageBulkReassignResponse */
+        IpCoverageBulkReassignResponse: {
+            /** Backup Count */
+            backup_count: number;
+            /** Coverage Ids */
+            coverage_ids: string[];
+            /** Reassigned Count */
+            reassigned_count: number;
+            /** Responsible Count */
+            responsible_count: number;
         };
         /** IpDeadlineCoverageCreateRequest */
         IpDeadlineCoverageCreateRequest: {
@@ -15760,8 +15944,15 @@ export interface components {
             id: string;
             /** Matter Deadline Id */
             matter_deadline_id: string;
+            /** Reassignment Version */
+            reassignment_version: number;
             /** Responsible Membership Id */
             responsible_membership_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** IpDeadlineIncidentCreateRequest */
         IpDeadlineIncidentCreateRequest: {
@@ -15882,6 +16073,8 @@ export interface components {
             deadline_coverages?: components["schemas"]["IpDeadlineCoverageRecord"][];
             /** Deadline Incidents */
             deadline_incidents?: components["schemas"]["IpDeadlineIncidentRecord"][];
+            /** Evidence Candidates */
+            evidence_candidates?: components["schemas"]["IpEvidenceCandidateRecord"][];
             /** Id */
             id: string;
             /** Matter Id */
@@ -15892,6 +16085,8 @@ export interface components {
             primary_identifier: string | null;
             /** Record Type */
             record_type: string;
+            /** Related Right Obligations */
+            related_right_obligations?: components["schemas"]["IpRelatedRightObligationRecord"][];
             /** Restricted */
             restricted: boolean;
             /** Status */
@@ -15949,6 +16144,68 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** IpEvidenceCandidateRecord */
+        IpEvidenceCandidateRecord: {
+            /** Accepted Effect */
+            accepted_effect: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Duplicate Of Candidate Id */
+            duplicate_of_candidate_id: string | null;
+            /** Evidence Kind */
+            evidence_kind: string;
+            /** Id */
+            id: string;
+            /** Metadata Json */
+            metadata_json: {
+                [key: string]: unknown;
+            } | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Source Fingerprint */
+            source_fingerprint: string;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Status */
+            status: string;
+            /** Suggested Link Kind */
+            suggested_link_kind: string;
+        };
+        /** IpEvidenceCandidateReviewRequest */
+        IpEvidenceCandidateReviewRequest: {
+            /** Accepted Effect */
+            accepted_effect?: string | null;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "accept" | "reject";
+            /**
+             * Expected Status
+             * @enum {string}
+             */
+            expected_status: "needs_review" | "duplicate";
+            /** Link Kind */
+            link_kind?: ("correspondence" | "service" | "instruction" | "official_notice") | null;
+        };
+        /** IpEvidenceDiscoveryResponse */
+        IpEvidenceDiscoveryResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["IpEvidenceCandidateRecord"][];
+            /** Discovered Count */
+            discovered_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+        };
         /** IpNoticeLinkCreateRequest */
         IpNoticeLinkCreateRequest: {
             /** Accepted Effect */
@@ -15976,6 +16233,74 @@ export interface components {
             link_kind: string;
             /** Notice Id */
             notice_id: string;
+        };
+        /** IpRelatedRightObligationCompleteRequest */
+        IpRelatedRightObligationCompleteRequest: {
+            /** Completion Evidence Reference */
+            completion_evidence_reference: string;
+            /**
+             * Expected Status
+             * @default open
+             * @constant
+             */
+            expected_status: "open";
+        };
+        /** IpRelatedRightObligationCreateRequest */
+        IpRelatedRightObligationCreateRequest: {
+            /** Due On */
+            due_on?: string | null;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Matter Deadline Id */
+            matter_deadline_id?: string | null;
+            /**
+             * Obligation Type
+             * @enum {string}
+             */
+            obligation_type: "renewal" | "royalty" | "recordal" | "consent" | "quality_control" | "termination" | "other";
+            /** Owner Membership Id */
+            owner_membership_id: string;
+            /** Title */
+            title: string;
+            /** Title Interest Id */
+            title_interest_id?: string | null;
+        };
+        /** IpRelatedRightObligationRecord */
+        IpRelatedRightObligationRecord: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Completion Evidence Reference */
+            completion_evidence_reference: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Due On */
+            due_on: string | null;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
+            /** Matter Deadline Id */
+            matter_deadline_id: string | null;
+            /** Obligation Type */
+            obligation_type: string;
+            /** Owner Membership Id */
+            owner_membership_id: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Title Interest Id */
+            title_interest_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** IpTitleInterestCreateRequest */
         IpTitleInterestCreateRequest: {
@@ -32363,6 +32688,39 @@ export interface operations {
             };
         };
     };
+    post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageBulkReassignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageBulkReassignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_dockets_api_ip_dockets_get: {
         parameters: {
             query?: never;
@@ -32469,6 +32827,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_cost_reconciliation_api_ip_dockets__docket_id__cost_items_reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCostReconciliationReport"];
                 };
             };
             /** @description Validation Error */
@@ -32624,6 +33013,73 @@ export interface operations {
             };
         };
     };
+    post_ip_evidence_review_api_ip_dockets__docket_id__evidence__candidate_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpEvidenceCandidateReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_evidence_discovery_api_ip_dockets__docket_id__evidence_discover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpEvidenceDiscoveryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_notice_link_api_ip_dockets__docket_id__notice_links_post: {
         parameters: {
             query?: never;
@@ -32636,6 +33092,77 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["IpNoticeLinkCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_related_right_obligation_api_ip_dockets__docket_id__related_right_obligations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRelatedRightObligationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_related_right_obligation_completion_api_ip_dockets__docket_id__related_right_obligations__obligation_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                obligation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRelatedRightObligationCompleteRequest"];
             };
         };
         responses: {

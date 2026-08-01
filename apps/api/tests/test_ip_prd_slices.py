@@ -5,13 +5,19 @@ from datetime import date, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CalendarEventSync,
+    Communication,
     Company,
     CompanyMembership,
     CompanyNotice,
+    CompanyNoticeMatterLink,
     InAppNotification,
+    IpDeadlineCoverage,
     IpDocketRecord,
+    MatterAttachment,
+    MatterTimeEntry,
     NotificationDeliveryChannel,
     NotificationDeliveryEvent,
     NotificationDeliveryIntent,
@@ -22,7 +28,9 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.notification_delivery import (
+    apply_notification_provider_event,
     enqueue_notification_delivery_intent,
+    process_notification_delivery_intent,
 )
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -315,6 +323,246 @@ def test_ip_docket_end_to_end_uses_existing_notice_deadline_and_billing_owners(
     assert report.json()["inactive_coverage_count"] == 0
 
 
+def test_ip_remaining_operations_end_to_end(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_id = str(bootstrap["membership"]["id"])
+    matter = _mk_matter(client, token, "IP-COMPLETE-001")
+
+    with get_session_factory()() as session:
+        replacement_user = User(
+            email="ip-backup@example.test",
+            full_name="IP Backup",
+            password_hash="not-used-in-this-test",
+            is_active=True,
+        )
+        replacement = CompanyMembership(
+            company_id=company_id,
+            role="member",
+            is_active=True,
+        )
+        replacement.user = replacement_user
+        session.add_all([replacement_user, replacement])
+        session.commit()
+        replacement_id = replacement.id
+
+    created = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": "Completed operations mark",
+            "matter_id": matter["id"],
+            "primary_identifier": "TM-COMPLETE-001",
+            "restricted": True,
+            "particulars": _particulars(mark="COMPLETE"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket_id = created.json()["id"]
+
+    deadline = client.post(
+        f"/api/matters/{matter['id']}/deadlines",
+        headers=headers,
+        json={
+            "source": "custom",
+            "kind": "licence_royalty",
+            "title": "Pay licence royalty",
+            "due_on": str(date.today() + timedelta(days=45)),
+            "assignee_membership_id": owner_id,
+        },
+    )
+    assert deadline.status_code == 200, deadline.text
+    coverage = client.post(
+        f"/api/ip/dockets/{docket_id}/deadline-coverages",
+        headers=headers,
+        json={
+            "matter_deadline_id": deadline.json()["id"],
+            "responsible_membership_id": owner_id,
+            "backup_membership_id": replacement_id,
+            "coverage_status": "accepted",
+        },
+    )
+    assert coverage.status_code == 200, coverage.text
+    coverage_row = coverage.json()["deadline_coverages"][0]
+    bulk = client.post(
+        "/api/ip/deadline-coverages/bulk-reassign",
+        headers=headers,
+        json={
+            "from_membership_id": owner_id,
+            "to_membership_id": replacement_id,
+            "reason": "Responsible lawyer is on approved leave",
+            "expected_versions": {coverage_row["id"]: coverage_row["reassignment_version"]},
+        },
+    )
+    assert bulk.status_code == 200, bulk.text
+    assert bulk.json() == {
+        "reassigned_count": 1,
+        "responsible_count": 1,
+        "backup_count": 0,
+        "coverage_ids": [coverage_row["id"]],
+    }
+    refreshed_docket = client.get(f"/api/ip/dockets/{docket_id}", headers=headers)
+    assert refreshed_docket.status_code == 200
+    refreshed_coverage = refreshed_docket.json()["deadline_coverages"][0]
+    assert refreshed_coverage["responsible_membership_id"] == replacement_id
+    assert refreshed_coverage["backup_membership_id"] is None
+
+    shared_hash = "a" * 64
+    with get_session_factory()() as session:
+        notice = CompanyNotice(
+            company_id=company_id,
+            created_by_membership_id=owner_id,
+            direction="received",
+            subject="Registry examination report",
+            authority="Trade Marks Registry",
+            original_filename="examination.pdf",
+            storage_key="tests/ip/examination.pdf",
+            content_type="application/pdf",
+            size_bytes=10,
+            sha256_hex=shared_hash,
+        )
+        session.add(notice)
+        session.flush()
+        session.add(
+            CompanyNoticeMatterLink(
+                company_id=company_id,
+                notice_id=notice.id,
+                matter_id=matter["id"],
+            )
+        )
+        session.add(
+            MatterAttachment(
+                matter_id=matter["id"],
+                uploaded_by_membership_id=owner_id,
+                original_filename="duplicate-examination.pdf",
+                storage_key="tests/ip/duplicate-examination.pdf",
+                content_type="application/pdf",
+                size_bytes=10,
+                sha256_hex=shared_hash,
+            )
+        )
+        session.add(
+            Communication(
+                company_id=company_id,
+                matter_id=matter["id"],
+                direction="inbound",
+                channel="email",
+                subject="Client instruction",
+                body="Proceed with the response.",
+                status="logged",
+            )
+        )
+        time_entry = MatterTimeEntry(
+            matter_id=matter["id"],
+            author_membership_id=owner_id,
+            work_date=date.today(),
+            description="Official filing fee evidence owner",
+            duration_minutes=0,
+            billable=True,
+            rate_currency="INR",
+            total_amount_minor=900000,
+        )
+        session.add(time_entry)
+        session.commit()
+        time_entry_id = time_entry.id
+
+    discovered = client.post(
+        f"/api/ip/dockets/{docket_id}/evidence/discover",
+        headers=headers,
+    )
+    assert discovered.status_code == 200, discovered.text
+    assert discovered.json()["discovered_count"] == 3
+    assert discovered.json()["duplicate_count"] == 1
+    notice_candidate = next(
+        row for row in discovered.json()["candidates"] if row["source_type"] == "company_notice"
+    )
+    accepted = client.post(
+        f"/api/ip/dockets/{docket_id}/evidence/{notice_candidate['id']}/review",
+        headers=headers,
+        json={
+            "expected_status": notice_candidate["status"],
+            "action": "accept",
+            "link_kind": "official_notice",
+            "accepted_effect": "deadline_candidate",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["notice_links"][0]["link_kind"] == "official_notice"
+
+    title = client.post(
+        f"/api/ip/dockets/{docket_id}/title-interests",
+        headers=headers,
+        json={
+            "interest_type": "licence",
+            "party_name": "Aster Licensee Pvt Ltd",
+            "effective_from": "2026-08-01",
+            "evidence_reference": "attachment:licence-1",
+            "recordal_status": "pending",
+        },
+    )
+    assert title.status_code == 200, title.text
+    interest_id = title.json()["title_interests"][0]["id"]
+    obligation = client.post(
+        f"/api/ip/dockets/{docket_id}/related-right-obligations",
+        headers=headers,
+        json={
+            "title_interest_id": interest_id,
+            "obligation_type": "royalty",
+            "title": "Quarterly licence royalty",
+            "due_on": str(date.today() + timedelta(days=45)),
+            "owner_membership_id": replacement_id,
+            "matter_deadline_id": deadline.json()["id"],
+            "evidence_reference": "attachment:licence-1",
+        },
+    )
+    assert obligation.status_code == 200, obligation.text
+    obligation_id = obligation.json()["related_right_obligations"][0]["id"]
+    completed = client.post(
+        f"/api/ip/dockets/{docket_id}/related-right-obligations/{obligation_id}/complete",
+        headers=headers,
+        json={
+            "expected_status": "open",
+            "completion_evidence_reference": "receipt:royalty-1",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["related_right_obligations"][0]["status"] == "completed"
+
+    cost = client.post(
+        f"/api/ip/dockets/{docket_id}/cost-items",
+        headers=headers,
+        json={
+            "category": "official_fee",
+            "description": "TM-A filing fee",
+            "amount_minor": 900000,
+            "currency": "INR",
+            "evidence_reference": "receipt:tm-a-complete",
+            "billing_link_type": "time_entry",
+            "billing_link_id": time_entry_id,
+        },
+    )
+    assert cost.status_code == 200, cost.text
+    assert cost.json()["cost_items"][0]["reconciliation_status"] == "matched"
+    report = client.post(
+        f"/api/ip/dockets/{docket_id}/cost-items/reconcile",
+        headers=headers,
+    )
+    assert report.status_code == 200, report.text
+    assert report.json()["accounting_owner"] == "matter_billing"
+    assert report.json()["matched_count"] == 1
+    assert len(report.json()["checksum_sha256"]) == 64
+
+    with get_session_factory()() as session:
+        persisted_coverage = session.get(IpDeadlineCoverage, coverage_row["id"])
+        assert persisted_coverage is not None
+        assert persisted_coverage.responsible_membership_id == replacement_id
+        assert persisted_coverage.reassignment_version == 2
+
+
 def test_matter_disposal_archives_ip_docket_without_reopening_resurrection(
     client: TestClient,
 ) -> None:
@@ -416,3 +664,82 @@ def test_notification_external_block_creates_exactly_one_visible_fallback(
         assert len(visible) == 1
         assert visible[0].title == "Critical IP deadline"
         assert {event.event_type for event in events} >= {"intent_created", "delivered"}
+
+
+def test_notification_external_cutover_uses_only_durable_intent_and_webhook(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap_company(client)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "notification_external_delivery_enabled", True)
+    monkeypatch.setattr(settings, "sendgrid_api_key", "test-sendgrid-key")
+    monkeypatch.setattr(settings, "sendgrid_sender_email", "sender@example.test")
+    send_calls: list[dict] = []
+
+    def fake_send(**kwargs):
+        send_calls.append(kwargs)
+        return True, "sg-durable-1", None
+
+    monkeypatch.setattr(
+        "caseops_api.services.communications._send_via_sendgrid",
+        fake_send,
+    )
+    with get_session_factory()() as session:
+        membership = session.scalar(select(CompanyMembership))
+        assert membership is not None
+        company = session.get(Company, membership.company_id)
+        user = session.get(User, membership.user_id)
+        assert company is not None and user is not None
+        context = SessionContext(company=company, membership=membership, user=user)
+        intent = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=membership,
+            channel=NotificationDeliveryChannel.EMAIL,
+            event_type="ip.deadline.critical",
+            source_type="ip_deadline",
+            source_id="deadline-live-fixture",
+            title="Critical IP deadline",
+            body="Open CaseOps to review the deadline.",
+        )
+        assert intent is not None
+        assert intent.status == "queued"
+        assert intent.comparison_status == "dual_read_matched"
+        result = process_notification_delivery_intent(
+            session,
+            intent_id=intent.id,
+            context=context,
+        )
+        assert result.status == "sent"
+        assert result.external_calls == 1
+        assert intent.fallback_intent_id is None
+        assert len(send_calls) == 1
+        assert send_calls[0]["custom_args"] == {"notification_intent_id": intent.id}
+        mismatched = apply_notification_provider_event(
+            session,
+            event={
+                "event": "delivered",
+                "notification_intent_id": intent.id,
+                "sg_message_id": "different-message.filter",
+                "sg_event_id": "event-wrong-message",
+            },
+        )
+        assert mismatched is False
+        matched = apply_notification_provider_event(
+            session,
+            event={
+                "event": "delivered",
+                "notification_intent_id": intent.id,
+                "sg_message_id": "sg-durable-1.filter",
+                "sg_event_id": "event-durable-1",
+            },
+        )
+        assert matched is True
+        session.commit()
+        session.refresh(intent)
+        assert intent.status == "delivered"
+        assert intent.delivered_at is not None
+        assert intent.fallback_intent_id is None
+        visible = list(session.scalars(select(InAppNotification)).all())
+        assert visible == []

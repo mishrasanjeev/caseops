@@ -31,6 +31,7 @@ from caseops_api.db.models import (
     EthicalWall,
     HearingPack,
     HearingReminder,
+    IpDeadlineCoverage,
     Matter,
     MatterAccessGrant,
     MatterDeadline,
@@ -75,6 +76,7 @@ OFFBOARDING_SUPPORTED_TYPES = (
     "contract_obligations",
     "matter_tasks",
     "matter_deadlines",
+    "ip_deadline_coverages",
     "hearing_reminders",
 )
 OFFBOARDING_UNSUPPORTED_TYPES = (
@@ -528,6 +530,39 @@ def _collect_offboarding_objects(
             )
         )
 
+    ip_coverage_rows = list(
+        session.execute(
+            select(IpDeadlineCoverage, MatterDeadline, Matter)
+            .join(MatterDeadline, MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id)
+            .join(Matter, Matter.id == MatterDeadline.matter_id)
+            .where(
+                IpDeadlineCoverage.company_id == company_id,
+                or_(
+                    IpDeadlineCoverage.responsible_membership_id == target.id,
+                    IpDeadlineCoverage.backup_membership_id == target.id,
+                ),
+            )
+            .order_by(Matter.matter_code.asc(), MatterDeadline.due_on.asc())
+        ).all()
+    )
+    for coverage, deadline, matter in ip_coverage_rows:
+        affected_matter_ids.add(matter.id)
+        relations: list[str] = []
+        if coverage.responsible_membership_id == target.id:
+            relations.append("responsible")
+        if coverage.backup_membership_id == target.id:
+            relations.append("backup")
+        supported.append(
+            _offboarding_object(
+                "ip_deadline_coverages",
+                coverage.id,
+                label=f"{matter.matter_code} - {deadline.title}",
+                relation="IP deadline " + "/".join(relations),
+                supported=True,
+                matter_id=matter.id,
+            )
+        )
+
     reminder_rows = list(
         session.execute(
             select(HearingReminder, Matter)
@@ -617,11 +652,7 @@ def _collect_offboarding_objects(
     )
     for pack, matter in hearing_pack_rows:
         affected_matter_ids.add(matter.id)
-        relation = (
-            "generator"
-            if pack.generated_by_membership_id == target.id
-            else "reviewer"
-        )
+        relation = "generator" if pack.generated_by_membership_id == target.id else "reviewer"
         unsupported.append(
             _offboarding_object(
                 "hearing_packs",
@@ -695,9 +726,7 @@ def _build_offboarding_preview(
             matter_ids=affected_matter_ids,
         )
         if conflicts:
-            blockers.append(
-                "Replacement employee is ethically walled from affected matters."
-            )
+            blockers.append("Replacement employee is ethically walled from affected matters.")
 
     return EmployeeOffboardingPreviewResponse(
         employee=_employee_record(session, target),
@@ -998,8 +1027,7 @@ def list_employee_matter_access(
 
     matter_ids = [m.id for m in matters]
     grant_rows = session.execute(
-        select(MatterAccessGrant.matter_id, MatterAccessGrant.id)
-        .where(
+        select(MatterAccessGrant.matter_id, MatterAccessGrant.id).where(
             MatterAccessGrant.membership_id == target.id,
             MatterAccessGrant.matter_id.in_(matter_ids),
         )
@@ -1007,8 +1035,7 @@ def list_employee_matter_access(
     grants_by_matter: dict[str, str] = {row[0]: row[1] for row in grant_rows}
 
     wall_rows = session.execute(
-        select(EthicalWall.matter_id)
-        .where(
+        select(EthicalWall.matter_id).where(
             EthicalWall.excluded_membership_id == target.id,
             EthicalWall.matter_id.in_(matter_ids),
         )
@@ -1389,6 +1416,7 @@ def _merge_or_reassign_team_memberships(
 def _reassign_offboarding_objects(
     session: Session,
     *,
+    context: SessionContext,
     company_id: str,
     target_id: str,
     replacement_id: str,
@@ -1474,10 +1502,24 @@ def _reassign_offboarding_objects(
         deadline.assignee_membership_id = replacement_id
     counts["matter_deadlines"] = len(deadlines)
 
+    from caseops_api.schemas.ip_operations import IpCoverageBulkReassignRequest
+    from caseops_api.services.ip_operations import bulk_reassign_ip_deadline_coverages
+
+    ip_reassignment = bulk_reassign_ip_deadline_coverages(
+        session,
+        context=context,
+        payload=IpCoverageBulkReassignRequest(
+            from_membership_id=target_id,
+            to_membership_id=replacement_id,
+            reason="Employee offboarding coverage transfer",
+        ),
+        commit=False,
+    )
+    counts["ip_deadline_coverages"] = ip_reassignment.reassigned_count
+
     reminders = list(
         session.scalars(
-            select(HearingReminder)
-            .where(
+            select(HearingReminder).where(
                 HearingReminder.company_id == company_id,
                 HearingReminder.recipient_membership_id == target_id,
             )
@@ -1525,6 +1567,7 @@ def commit_employee_offboarding(
     before = _employee_record(session, target).model_dump(mode="json")
     reassigned_counts = _reassign_offboarding_objects(
         session,
+        context=context,
         company_id=context.company.id,
         target_id=target.id,
         replacement_id=reassign_to.id,
@@ -1549,8 +1592,7 @@ def commit_employee_offboarding(
         "reassigned_counts": reassigned_counts,
         "unsupported_counts": preview.unsupported_counts,
         "unsupported_object_ids": [
-            {"object_type": row.object_type, "id": row.id}
-            for row in preview.unsupported_objects
+            {"object_type": row.object_type, "id": row.id} for row in preview.unsupported_objects
         ],
         "notes": payload.notes,
         "sessions_revoked": True,
@@ -1861,9 +1903,7 @@ def start_password_reset(
     company_slug: str,
     email: str,
 ) -> PasswordResetStartResponse:
-    company = session.scalar(
-        select(Company).where(Company.slug == company_slug.strip().lower())
-    )
+    company = session.scalar(select(Company).where(Company.slug == company_slug.strip().lower()))
     debug_token: str | None = None
     if company is not None:
         membership = session.scalar(
@@ -1958,9 +1998,7 @@ def record_employee_login_async(membership_id: str) -> None:
         # sensitive. The traceback plus the request-scoped tenant/user
         # logging context (set_tenant_context) are sufficient to
         # diagnose which login dropped its audit.
-        logger.warning(
-            "deferred employee.login audit write failed", exc_info=True
-        )
+        logger.warning("deferred employee.login audit write failed", exc_info=True)
         session.rollback()
     finally:
         session.close()

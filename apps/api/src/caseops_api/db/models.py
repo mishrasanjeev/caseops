@@ -2182,6 +2182,7 @@ class NotificationDeliveryChannel(StrEnum):
 
 class NotificationDeliveryStatus(StrEnum):
     QUEUED = "queued"
+    SENT = "sent"
     DELIVERED = "delivered"
     RETRY_SCHEDULED = "retry_scheduled"
     BLOCKED = "blocked"
@@ -12108,6 +12109,69 @@ class CompanyNoticeIpLink(Base):
     )
 
 
+class IpEvidenceCandidate(Base):
+    """Reviewable projection of existing evidence into an IP docket.
+
+    The source row remains owned by Notice, Communication, Drive, or Matter
+    Attachment.  This table is only the permission-scoped triage/link record;
+    it never copies document bodies or provider credentials.
+    """
+
+    __tablename__ = "ip_evidence_candidates"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_evidence_candidate_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_evidence_candidate_reviewer_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "docket_id",
+            "source_type",
+            "source_id",
+            name="uq_ip_evidence_candidate_source",
+        ),
+        Index(
+            "ix_ip_evidence_candidates_company_status",
+            "company_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    evidence_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    suggested_link_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="needs_review")
+    accepted_effect: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    duplicate_of_candidate_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_evidence_candidates.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class IpDeadlineCoverage(Base):
     __tablename__ = "ip_deadline_coverages"
     __table_args__ = (
@@ -12143,8 +12207,12 @@ class IpDeadlineCoverage(Base):
     accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    reassignment_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
 
@@ -12224,6 +12292,62 @@ class IpTitleInterest(Base):
     )
 
 
+class IpRelatedRightObligation(Base):
+    __tablename__ = "ip_related_right_obligations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_related_obligation_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["owner_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_related_obligation_owner_company",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_ip_related_obligations_company_status_due",
+            "company_id",
+            "status",
+            "due_on",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    title_interest_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_title_interests.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    obligation_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    owner_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    matter_deadline_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    completion_evidence_reference: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class IpCostItem(Base):
     __tablename__ = "ip_cost_items"
     __table_args__ = (
@@ -12257,6 +12381,21 @@ class IpCostItem(Base):
     evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
     billing_link_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     billing_link_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reconciliation_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unlinked"
+    )
+    canonical_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reconciliation_difference_minor: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    reconciled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reconciled_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_by_membership_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )

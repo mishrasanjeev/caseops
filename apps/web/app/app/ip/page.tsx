@@ -13,10 +13,17 @@ import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
   addIpCostItem,
+  addIpRelatedRightObligation,
   addIpTitleInterest,
+  bulkReassignIpCoverage,
+  completeIpRelatedRightObligation,
   createIpDocket,
+  discoverIpEvidence,
   fetchIpDockets,
+  reconcileIpCosts,
+  reviewIpEvidenceCandidate,
   type IpDocket,
+  type IpEvidenceCandidate,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
@@ -223,7 +230,10 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <EvidenceCard docket={docket} enabled={canReview} onChanged={onChanged} />
+        <CoverageCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <TitleCard docket={docket} enabled={canReview} onChanged={onChanged} />
+        <ObligationCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <CostCard docket={docket} enabled={canFinance} onChanged={onChanged} />
       </div>
 
@@ -236,6 +246,84 @@ function DocketWorkspace({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function EvidenceCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
+  const discover = useMutation({
+    mutationFn: () => discoverIpEvidence(docket.id),
+    onSuccess: async (result) => {
+      toast.success(`Evidence scan complete: ${result.discovered_count} new, ${result.duplicate_count} duplicate.`);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not scan Matter evidence.")),
+  });
+  const review = useMutation({
+    mutationFn: ({ candidate, action }: { candidate: IpEvidenceCandidate; action: "accept" | "reject" }) =>
+      reviewIpEvidenceCandidate({ docketId: docket.id, candidate, action }),
+    onSuccess: async () => { toast.success("Evidence review recorded."); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not review evidence.")),
+  });
+  const pending = docket.evidence_candidates.filter((row) => row.status === "needs_review" || row.status === "duplicate");
+  return (
+    <Card className="min-w-0">
+      <CardHeader><CardTitle as="h3">Matter evidence intake</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <p className="text-xs text-[var(--color-mute)]">Discover linked notices, mailbox communications, attachments, and Drive candidates. Every result requires review; duplicates never auto-link.</p>
+        {pending.map((row) => (
+          <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+            <div className="break-words font-semibold">{String(row.metadata_json?.label ?? row.evidence_kind)}</div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">{row.source_type} · {row.status.replaceAll("_", " ")}</div>
+            {enabled ? (
+              <div className="mt-3 flex min-w-0 w-full flex-wrap gap-2">
+                <Button size="sm" onClick={() => review.mutate({ candidate: row, action: "accept" })} disabled={review.isPending}>Accept and link</Button>
+                <Button size="sm" variant="secondary" onClick={() => review.mutate({ candidate: row, action: "reject" })} disabled={review.isPending}>Reject</Button>
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {enabled && docket.matter_id ? (
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => discover.mutate()} disabled={discover.isPending}>{discover.isPending ? "Scanning…" : "Discover Matter evidence"}</Button>
+        ) : <p className="text-xs text-[var(--color-mute)]">Link this docket to a Matter to enable evidence discovery.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CoverageCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
+  const [fromMembershipId, setFromMembershipId] = useState("");
+  const [toMembershipId, setToMembershipId] = useState("");
+  const [reason, setReason] = useState("");
+  const mutation = useMutation({
+    mutationFn: () => bulkReassignIpCoverage({
+      fromMembershipId,
+      toMembershipId,
+      reason,
+      expectedVersions: Object.fromEntries(docket.deadline_coverages.filter((row) => row.responsible_membership_id === fromMembershipId || row.backup_membership_id === fromMembershipId).map((row) => [row.id, row.reassignment_version])),
+    }),
+    onSuccess: async (result) => { toast.success(`${result.reassigned_count} deadline coverage assignment(s) transferred.`); setReason(""); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not transfer deadline coverage.")),
+  });
+  return (
+    <Card className="min-w-0">
+      <CardHeader><CardTitle as="h3">Deadline continuity</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        {docket.deadline_coverages.map((row) => (
+          <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+            <div className="break-all font-semibold">Responsible: {row.responsible_membership_id}</div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">{row.coverage_status} · calendar {row.calendar_projection_status} · v{row.reassignment_version}</div>
+          </div>
+        ))}
+        {enabled && docket.deadline_coverages.length ? (
+          <form className="grid min-w-0 gap-2" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+            <Field label="Current membership ID"><Input value={fromMembershipId} onChange={(event) => setFromMembershipId(event.target.value)} /></Field>
+            <Field label="Replacement membership ID"><Input value={toMembershipId} onChange={(event) => setToMembershipId(event.target.value)} /></Field>
+            <Field label="Transfer reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+            <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!fromMembershipId || !toMembershipId || reason.length < 5 || mutation.isPending}>Transfer covered deadlines</Button>
+          </form>
+        ) : <p className="text-xs text-[var(--color-mute)]">No covered deadlines are attached to this docket.</p>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -269,14 +357,81 @@ function TitleCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: 
   );
 }
 
+function ObligationCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
+  const [title, setTitle] = useState("");
+  const [ownerMembershipId, setOwnerMembershipId] = useState("");
+  const [dueOn, setDueOn] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const [completionEvidence, setCompletionEvidence] = useState<Record<string, string>>({});
+  const create = useMutation({
+    mutationFn: () => addIpRelatedRightObligation(docket.id, { title, obligationType: "recordal", ownerMembershipId, dueOn: dueOn || null, evidenceReference: evidence }),
+    onSuccess: async () => { toast.success("Related-right obligation added."); setTitle(""); setDueOn(""); setEvidence(""); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not add obligation.")),
+  });
+  const complete = useMutation({
+    mutationFn: (obligationId: string) => completeIpRelatedRightObligation({ docketId: docket.id, obligationId, completionEvidenceReference: completionEvidence[obligationId] ?? "" }),
+    onSuccess: async () => { toast.success("Obligation completed with evidence."); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not complete obligation.")),
+  });
+  return (
+    <Card className="min-w-0">
+      <CardHeader><CardTitle as="h3">Related rights and obligations</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        {docket.related_right_obligations.map((row) => (
+          <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+            <div className="break-words font-semibold">{row.title}</div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">{row.obligation_type} · {row.status}{row.due_on ? ` · due ${row.due_on}` : ""}</div>
+            {enabled && row.status === "open" ? (
+              <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Input className="min-w-0 flex-1" aria-label={`Completion evidence for ${row.title}`} placeholder="Completion evidence reference" value={completionEvidence[row.id] ?? ""} onChange={(event) => setCompletionEvidence((current) => ({ ...current, [row.id]: event.target.value }))} />
+                <Button size="sm" className="w-full sm:w-auto" onClick={() => complete.mutate(row.id)} disabled={(completionEvidence[row.id] ?? "").length < 3 || complete.isPending}>Complete</Button>
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {enabled ? (
+          <form className="grid min-w-0 gap-2" onSubmit={(event) => { event.preventDefault(); create.mutate(); }}>
+            <Field label="Obligation"><Input value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+            <Field label="Owner membership ID"><Input value={ownerMembershipId} onChange={(event) => setOwnerMembershipId(event.target.value)} /></Field>
+            <Field label="Due date (optional)"><Input type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} /></Field>
+            <Field label="Obligation evidence"><Input value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field>
+            <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={title.length < 3 || !ownerMembershipId || evidence.length < 3 || create.isPending}>Add recordal obligation</Button>
+          </form>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [evidence, setEvidence] = useState("");
+  const [billingLinkType, setBillingLinkType] = useState<"" | "invoice" | "invoice_line_item" | "time_entry">("");
+  const [billingLinkId, setBillingLinkId] = useState("");
   const mutation = useMutation({
-    mutationFn: () => addIpCostItem(docket.id, { category: "official_fee", description, amountMinor: Math.round(Number(amount) * 100), evidenceReference: evidence }),
-    onSuccess: async () => { toast.success("Immutable cost evidence added."); setDescription(""); setAmount(""); setEvidence(""); await onChanged(); },
+    mutationFn: () => addIpCostItem(docket.id, {
+      category: "official_fee",
+      description,
+      amountMinor: Math.round(Number(amount) * 100),
+      evidenceReference: evidence,
+      billingLinkType: billingLinkType || null,
+      billingLinkId: billingLinkId || null,
+    }),
+    onSuccess: async () => {
+      toast.success("Immutable cost evidence added.");
+      setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
+      await onChanged();
+    },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not add cost evidence.")),
+  });
+  const reconcile = useMutation({
+    mutationFn: () => reconcileIpCosts(docket.id),
+    onSuccess: async (report) => {
+      toast.success(`Reconciled: ${report.matched_count} matched, ${report.mismatch_count} mismatched.`);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not reconcile IP costs.")),
   });
   return (
     <Card className="min-w-0">
@@ -292,7 +447,19 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
             <Field label="Amount (INR)"><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>
-            <Button size="sm" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || mutation.isPending}>Add cost evidence</Button>
+            <Field label="Matter billing link type">
+              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
+                <option value="">No billing link</option>
+                <option value="invoice">Invoice</option>
+                <option value="invoice_line_item">Invoice line item</option>
+                <option value="time_entry">Time entry</option>
+              </select>
+            </Field>
+            {billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
+            <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || Boolean(billingLinkType) !== Boolean(billingLinkId) || mutation.isPending}>Add cost evidence</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>Reconcile with Matter billing</Button>
+            </div>
           </form>
         ) : (
           <p className="text-xs text-[var(--color-mute)]">Cost items require a linked Matter so Matter billing remains the accounting owner.</p>

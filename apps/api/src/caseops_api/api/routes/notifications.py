@@ -42,6 +42,7 @@ from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
 )
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
+from caseops_api.services.notification_delivery import apply_notification_provider_event
 from caseops_api.services.notification_preferences import (
     notification_preferences,
     update_tenant_notification_preferences,
@@ -249,7 +250,8 @@ async def sendgrid_events(
             session,
             event=ev,
         )
-        if hit_reminder or hit_communication:
+        hit_intent = apply_notification_provider_event(session, event=ev)
+        if hit_reminder or hit_communication or hit_intent:
             matched += 1
     session.commit()
     return WebhookAckResponse(accepted=len(events), matched=matched)

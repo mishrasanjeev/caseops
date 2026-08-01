@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, status
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.ip_operations import (
     IpCostItemCreateRequest,
+    IpCostReconciliationReport,
+    IpCoverageBulkReassignRequest,
+    IpCoverageBulkReassignResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
     IpDeadlineIncidentCreateRequest,
@@ -16,7 +19,11 @@ from caseops_api.schemas.ip_operations import (
     IpDocketListResponse,
     IpDocketRecordResponse,
     IpDocketVersionCreateRequest,
+    IpEvidenceCandidateReviewRequest,
+    IpEvidenceDiscoveryResponse,
     IpNoticeLinkCreateRequest,
+    IpRelatedRightObligationCompleteRequest,
+    IpRelatedRightObligationCreateRequest,
     IpTitleInterestCreateRequest,
 )
 from caseops_api.services.ip_operations import (
@@ -24,13 +31,19 @@ from caseops_api.services.ip_operations import (
     add_ip_deadline_coverage,
     add_ip_deadline_incident,
     add_ip_notice_link,
+    add_ip_related_right_obligation,
     add_ip_title_interest,
     append_ip_docket_version,
+    bulk_reassign_ip_deadline_coverages,
+    complete_ip_related_right_obligation,
     create_ip_docket,
+    discover_ip_evidence_candidates,
     get_ip_docket,
     ip_docket_control_report,
     list_ip_dockets,
     reassign_ip_deadline_coverage,
+    reconcile_ip_cost_items,
+    review_ip_evidence_candidate,
     verify_ip_deadline_incident,
 )
 from caseops_api.services.session_context import SessionContext
@@ -90,6 +103,42 @@ async def post_ip_notice_link(
 
 
 @router.post(
+    "/dockets/{docket_id}/evidence/discover",
+    response_model=IpEvidenceDiscoveryResponse,
+)
+async def post_ip_evidence_discovery(
+    docket_id: str,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpEvidenceDiscoveryResponse:
+    return discover_ip_evidence_candidates(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/evidence/{candidate_id}/review",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_evidence_review(
+    docket_id: str,
+    candidate_id: str,
+    payload: IpEvidenceCandidateReviewRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return review_ip_evidence_candidate(
+        session,
+        context=context,
+        docket_id=docket_id,
+        candidate_id=candidate_id,
+        payload=payload,
+    )
+
+
+@router.post(
     "/dockets/{docket_id}/deadline-coverages",
     response_model=IpDocketRecordResponse,
 )
@@ -118,6 +167,22 @@ async def post_ip_deadline_coverage_reassignment(
         context=context,
         docket_id=docket_id,
         coverage_id=coverage_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/deadline-coverages/bulk-reassign",
+    response_model=IpCoverageBulkReassignResponse,
+)
+async def post_ip_deadline_coverage_bulk_reassignment(
+    payload: IpCoverageBulkReassignRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpCoverageBulkReassignResponse:
+    return bulk_reassign_ip_deadline_coverages(
+        session,
+        context=context,
         payload=payload,
     )
 
@@ -165,6 +230,44 @@ async def post_ip_title_interest(
     return add_ip_title_interest(session, context=context, docket_id=docket_id, payload=payload)
 
 
+@router.post(
+    "/dockets/{docket_id}/related-right-obligations",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_related_right_obligation(
+    docket_id: str,
+    payload: IpRelatedRightObligationCreateRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return add_ip_related_right_obligation(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/related-right-obligations/{obligation_id}/complete",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_related_right_obligation_completion(
+    docket_id: str,
+    obligation_id: str,
+    payload: IpRelatedRightObligationCompleteRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return complete_ip_related_right_obligation(
+        session,
+        context=context,
+        docket_id=docket_id,
+        obligation_id=obligation_id,
+        payload=payload,
+    )
+
+
 @router.post("/dockets/{docket_id}/cost-items", response_model=IpDocketRecordResponse)
 async def post_ip_cost_item(
     docket_id: str,
@@ -173,6 +276,22 @@ async def post_ip_cost_item(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return add_ip_cost_item(session, context=context, docket_id=docket_id, payload=payload)
+
+
+@router.post(
+    "/dockets/{docket_id}/cost-items/reconcile",
+    response_model=IpCostReconciliationReport,
+)
+async def post_ip_cost_reconciliation(
+    docket_id: str,
+    context: IpFinance,
+    session: DbSession,
+) -> IpCostReconciliationReport:
+    return reconcile_ip_cost_items(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
 
 
 @router.get("/reports/docket-control", response_model=IpDocketControlReport)
