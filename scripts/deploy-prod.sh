@@ -147,31 +147,15 @@ gcloud run jobs execute caseops-migrate-job \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
 
-# Step 3 - refresh recurring jobs. They all execute commands packaged in the API
-# image, so every production deploy must advance them with the service release.
-echo "--- 3/6 refresh recurring jobs ---"
-SCHEDULED_API_JOBS=(
-  caseops-legal-update-sync
-  caseops-case-tracking-poll
-  caseops-activity-report
-  caseops-reminders-job
-)
-for JOB_NAME in "${SCHEDULED_API_JOBS[@]}"; do
-  gcloud run jobs update "${JOB_NAME}" \
-    --image "${API_IMMUTABLE_IMAGE}" \
-    --region "${REGION}" \
-    --project "${PROJECT}" \
-    --quiet
-  LIVE_JOB_IMAGE=$(gcloud run jobs describe "${JOB_NAME}" \
-    --region "${REGION}" \
-    --project "${PROJECT}" \
-    --format='value(spec.template.spec.template.spec.containers[0].image)')
-  if [[ "${LIVE_JOB_IMAGE}" != "${API_IMMUTABLE_IMAGE}" ]]; then
-    echo "ERROR: ${JOB_NAME} image=${LIVE_JOB_IMAGE}; expected ${API_IMMUTABLE_IMAGE}."
-    exit 1
-  fi
-  echo "  ${JOB_NAME} pinned to ${API_DIGEST}."
-done
+# Step 3 - converge the complete recurring-job inventory. This repairs image,
+# target, cadence, time-zone, OAuth identity, and per-job invoker IAM drift from
+# one checked-in source, verifies the canonical configuration, and only then
+# pauses superseded scheduler names.
+echo "--- 3/6 reconcile recurring-job inventory ---"
+python scripts/scheduler_inventory.py reconcile \
+  --project "${PROJECT}" \
+  --region "${REGION}" \
+  --image "${API_IMMUTABLE_IMAGE}"
 
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "production_project": "perfect-period-305406",
+  "location": "asia-south1",
+  "invoker_service_account": "caseops-scheduler-invoker@perfect-period-305406.iam.gserviceaccount.com",
+  "jobs": [
+    {
+      "scheduler_name": "caseops-legal-update-sync-midnight",
+      "run_job_name": "caseops-legal-update-sync",
+      "schedule": "0 0 * * *",
+      "time_zone": "Asia/Kolkata",
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution"
+    },
+    {
+      "scheduler_name": "caseops-case-tracking-poll-1630-ist",
+      "run_job_name": "caseops-case-tracking-poll",
+      "schedule": "30 16 * * *",
+      "time_zone": "Asia/Kolkata",
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution"
+    },
+    {
+      "scheduler_name": "caseops-activity-report-0800-ist",
+      "run_job_name": "caseops-activity-report",
+      "schedule": "0 8 * * *",
+      "time_zone": "Asia/Kolkata",
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution"
+    },
+    {
+      "scheduler_name": "caseops-reminders-cadence",
+      "run_job_name": "caseops-reminders-job",
+      "schedule": "*/5 * * * *",
+      "time_zone": "Asia/Kolkata",
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution"
+    },
+    {
+      "scheduler_name": "caseops-extract-authority-metadata-daily",
+      "run_job_name": "caseops-extract-authority-metadata",
+      "schedule": "30 0 * * *",
+      "time_zone": "UTC",
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution"
+    },
+    {
+      "scheduler_name": "caseops-db-index-health-weekly",
+      "run_job_name": "caseops-db-index-health",
+      "schedule": "30 2 * * 0",
+      "time_zone": "UTC",
+      "image_policy": "release_digest",
+      "canary_policy": "manual_safe"
+    }
+  ],
+  "legacy_schedulers_to_pause": [
+    "caseops-case-tracking-poll-midnight"
+  ]
+}

@@ -18,7 +18,23 @@ def main(argv: list[str] | None = None) -> int:
     with get_session_factory()() as session:
         report = build_activity_report(session)
     status = "dry_run" if args.dry_run else send_activity_report(report)
-    print(json.dumps({"status": status, "report": report}, sort_keys=True))
+    segments = report.get("segments", {})
+    account_count = sum(
+        int(segment.get("company_count", 0)) for segment in segments.values()
+    )
+    # Cloud Run job logs are an operational surface, not a report delivery
+    # channel. Never emit the tenant names, IDs, activity, or financial values
+    # contained in ``report``. The bounded summary is sufficient for alerting.
+    print(
+        json.dumps(
+            {
+                "account_count": account_count,
+                "generated_at": report.get("generated_at"),
+                "status": status,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import fnmatch
 import os
 import shutil
 import subprocess
+import sys
 from functools import cache
 from pathlib import Path
 
@@ -229,6 +230,16 @@ case "${FAKE_CURL_MODE}" in
 esac
 """,
     )
+    _write_fake_executable(
+        fake_bin / "python",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "scripts/scheduler_inventory.py" ]]; then
+  exit 0
+fi
+exec "${FAKE_REAL_PYTHON}" "$@"
+""",
+    )
 
     env = os.environ.copy()
     env.update(
@@ -236,6 +247,7 @@ esac
             "FAKE_CURL_MODE": curl_mode,
             "FAKE_GCLOUD_LOG": _bash_path(gcloud_log),
             "FAKE_GIT_STATUS": git_status,
+            "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
         }
     )

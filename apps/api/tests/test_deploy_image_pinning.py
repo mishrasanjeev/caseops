@@ -18,23 +18,13 @@ def test_production_deploy_refreshes_recurring_jobs_with_immutable_image() -> No
 
     assert "API_IMMUTABLE_IMAGE=" in script
     assert "gcloud artifacts docker images describe" in script
-    assert "SCHEDULED_API_JOBS=(" in script
-    for job_name in (
-        "caseops-legal-update-sync",
-        "caseops-case-tracking-poll",
-        "caseops-activity-report",
-        "caseops-reminders-job",
-    ):
-        assert job_name in script
+    assert "python scripts/scheduler_inventory.py reconcile" in script
     assert '--image "${API_IMMUTABLE_IMAGE}"' in script
-    assert 'LIVE_JOB_IMAGE=$(gcloud run jobs describe "${JOB_NAME}"' in script
 
 
 def test_production_deploy_only_refreshes_jobs_provisioned_in_production() -> None:
     script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
 
-    # The document worker is an optional infrastructure component deployed by
-    # infra/cloudrun/deploy.ps1. It is not provisioned in the production project,
-    # so including it in this update-only loop would abort every release before
-    # the required activity-report job is repaired.
+    # The document worker is optional and intentionally absent from the
+    # production scheduler inventory.
     assert "caseops-document-worker" not in script

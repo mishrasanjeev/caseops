@@ -35,6 +35,12 @@ jobs:
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
+      - name: Validate IP program manifest and generated traceability
+        run: uv --directory apps/api run python ../../scripts/ip_program_manifest.py validate
+
+      - name: Validate production scheduler inventory
+        run: uv --directory apps/api run python ../../scripts/scheduler_inventory.py validate
+
       - name: Ruff
         working-directory: apps/api
         run: uv run ruff check src tests
