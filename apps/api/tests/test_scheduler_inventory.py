@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
 
 import pytest
-from scripts import scheduler_inventory
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPT_PATH = REPO_ROOT / "scripts" / "scheduler_inventory.py"
+SPEC = importlib.util.spec_from_file_location("scheduler_inventory", SCRIPT_PATH)
+assert SPEC is not None and SPEC.loader is not None
+scheduler_inventory = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(scheduler_inventory)
 INVENTORY_PATH = REPO_ROOT / "infra" / "cloudrun" / "scheduler-inventory.json"
 
 

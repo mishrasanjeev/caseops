@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-001B",
     "checkpoint": {
-      "recorded_at": "2026-08-01T14:18:00+05:30",
-      "repository_revision": "cadb46ddcbdb659f1e3032a26015f3eba635b4bd",
-      "environment": "local-pre-release-verification",
-      "completed_scope": "Implemented the IPLF-001B scheduler inventory/reconciler, release integration, CI validation, and tenant-safe activity-report logging; focused verification passed and production release is authorized.",
+      "recorded_at": "2026-08-01T14:37:00+05:30",
+      "repository_revision": "635d586a368a22a9434b68e2d5cc51f9ffc7ee9f",
+      "environment": "production-deployment-verified",
+      "completed_scope": "Deployed IPLF-001B from main, converged all six required scheduler/job contracts to one immutable release digest and dedicated invoker, paused the superseded case-tracking schedule, passed a scheduler-to-job canary, and verified tenant-safe activity-report logging.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-001B",
-      "next_action": "Commit the verified implementation, deploy that exact revision, run live drift verification and safe canary checks, then record deployed evidence.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md"
+      "next_slice": "IPLF-003A",
+      "next_action": "Monitor every natural scheduler window and retain seven consecutive days of health evidence while beginning the next non-conflicting M1 source-contract slice.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
     }
   },
   "milestones": [
@@ -1022,7 +1022,8 @@
         "apps/api/tests/test_deploy_image_pinning.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md"
+        "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
       ],
       "approvals": [],
       "blockers": [
@@ -1115,11 +1116,19 @@
           "approved_at": "2026-08-01"
         }
       ],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "M1-SCHEDULER-OBSERVATION",
+          "summary": "Configuration and safe canaries pass, but M1 still requires seven consecutive days covering every natural scheduler window.",
+          "owner": "Engineering/SRE",
+          "evidence_needed": "Dated attempt/execution evidence for all required jobs with no permission, stale-image, or duplicate-schedule regression.",
+          "affected_milestone": "M1"
+        }
+      ],
       "next_actions": [
-        "Deploy the exact committed revision and verify the live service/job image digest.",
-        "Verify all six schedulers, targets, identities, job-level bindings, schedules, time zones, and legacy pause state.",
-        "Collect seven consecutive days of required-job health before M1 exit."
+        "Collect seven consecutive days of required-job health before M1 exit.",
+        "Confirm the next natural legal-update, case-tracking, and authority-metadata windows clear their pre-repair status history.",
+        "Begin IPLF-003A without claiming M1 acceptance."
       ],
       "data_impact": [
         "No database schema or tenant record mutation is introduced by the implementation.",
@@ -1136,7 +1145,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "approved",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
