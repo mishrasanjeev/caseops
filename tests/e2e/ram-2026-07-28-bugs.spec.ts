@@ -9,8 +9,9 @@ import { expect, request, test, type APIRequestContext, type Page } from "@playw
 
 import { apiBaseUrl } from "./support/env";
 
-const COMPANY_SLUG = "legal";
-const OWNER_EMAIL = "hari.gupta@gmail.com";
+const TEST_RUN_SUFFIX = `${Date.now()}-${process.pid}`;
+const COMPANY_SLUG = `ram-0728-${TEST_RUN_SUFFIX}`;
+const OWNER_EMAIL = `ram-0728-${TEST_RUN_SUFFIX}@example.com`;
 const OWNER_PASSWORD =
   process.env.CASEOPS_RAM_LOCAL_PASSWORD ?? "RamLocalRegression0728!";
 
