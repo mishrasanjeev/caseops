@@ -48,11 +48,11 @@ jobs:
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
-      # The largest shard can exceed 45 minutes under coverage on hosted
-      # runners. Keep enough budget for pytest's final report plus coverage
-      # artifact preparation so a successful shard is not cancelled during
-      # teardown. This changes runtime capacity only; no test is skipped.
-      timeout-minutes: 60
+    # The largest shard can exceed 45 minutes under coverage on hosted
+    # runners. Keep enough budget for pytest's final report plus coverage
+    # artifact preparation so a successful shard is not cancelled during
+    # teardown. This changes runtime capacity only; no test is skipped.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
