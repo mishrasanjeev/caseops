@@ -417,7 +417,9 @@ def _case_tracking_record(row: TrackedCaseProviderOperation) -> ProviderOperatio
     if row.status == "quarantined":
         freshness = "blocked"
     open_action = row.status in {"failed", "quarantined", "pending", "replay_queued"}
-    replayable = row.status in {"failed", "quarantined"} and row.attempts < row.max_attempts
+    replayable = row.status in {"failed", "quarantined"} and (
+        row.status == "quarantined" or row.attempts < row.max_attempts
+    )
     return ProviderOperationRecord(
         id=_operation_id("case_tracking_record", row.id),
         job_kind="case_tracking_record",
@@ -1326,7 +1328,9 @@ def replay_provider_operation(
     if kind == "case_tracking_record":
         row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
         previous_status = row.status
-        changed = row.status in {"failed", "quarantined"} and row.attempts < row.max_attempts
+        changed = row.status in {"failed", "quarantined"} and (
+            row.status == "quarantined" or row.attempts < row.max_attempts
+        )
         if changed:
             replay = TrackedCaseProviderOperation(
                 company_id=row.company_id,
