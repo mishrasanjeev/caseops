@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-002A",
+    "active_slice": "IPLF-002B",
     "checkpoint": {
-      "recorded_at": "2026-08-02T11:00:00+05:30",
-      "repository_revision": "63cdfdb71f0bc5d89d7da4fd29c4560e1e363add",
-      "environment": "Production: caseops-api-00223-4cv and caseops-web-00203-f55; post-deploy run 30739751657",
-      "completed_scope": "Phase 0 trust repair is production verified: the Notices refresh regression is fixed, the false-completion validator is enforced, and previously delivered scope is mapped without inflating requirement completion.",
+      "recorded_at": "2026-08-02T21:10:00+05:30",
+      "repository_revision": "7b1f834288d3ebfa673eea602bd759bb79e0baf3",
+      "environment": "Production: caseops-api-00226-pc5 and caseops-web-00206-c4x; exact-main post-deploy run 30754848841",
+      "completed_scope": "IPLF-002A integration health/freshness and bounded-replay foundation is production verified with fail-closed health, redacted diagnostics, signed preview-confirm replay, cost disclosure, exact images, and dated desktop/mobile E2E. The administrative slice does not claim TRACK or UJ completion.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-002A",
-      "next_action": "Implement IPLF-002A integration health/freshness and bounded-replay foundation while the M0 human program-lock gate remains explicitly pending.",
-      "evidence_ref": "docs/ip-implementation/evidence/phase0/control-plane-and-notices-2026-08-02.md"
+      "next_slice": "IPLF-002B",
+      "next_action": "Implement IPLF-002B linked-record freshness, tracking operation correlation/quarantine, health-gated refresh, incident closure, credential-change exceptions, and dated production acceptance while the M0 human program-lock gate remains explicitly pending.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md"
     }
   },
   "milestones": [
@@ -2930,12 +2930,24 @@
         "tests/e2e/ram-2026-08-02-bugs.spec.ts",
         "tests/e2e/ram-2026-08-02-prod.spec.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md",
+          "revision": "7b1f834288d3ebfa673eea602bd759bb79e0baf3",
+          "environment": "production: caseops-api-00226-pc5 and caseops-web-00206-c4x",
+          "fixtures": "anonymized caseops-qa tenant, fail-closed connector-health seed, tenant-scoped replay records, and dated production browser records",
+          "assertions": "tenant isolation, redaction, fail-closed freshness, response classification, cost basis, preview bounds/signature/expiry/staleness, MFA step-up, atomic idempotent replay, desktop and 360px UI, protected API origin, full RAM batch, and Notice workflow",
+          "result": "passed",
+          "recorded_at": "2026-08-02T21:10:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Commit the validated implementation, pass exact-commit CI/security gates, merge to main, deploy API/web together, and run the dated production Playwright proof."
+        "Continue at IPLF-002B without treating this administrative foundation as TRACK-01 through TRACK-14 or UJ-25/UJ-68 completion."
       ],
       "data_impact": [
         "No schema change or backfill. Existing connector-health and provider-operation rows remain canonical; replay only reschedules existing idempotent rows."
@@ -2957,13 +2969,13 @@
           "artifact": "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md",
           "disposition": "created",
           "owner": "Engineering/SRE",
-          "evidence": "Implementation, test, compatibility, rollback, and pending immutable release record"
+          "evidence": "Implementation, test, compatibility, rollback, exact-main deployment, and dated production release record"
         }
       ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
