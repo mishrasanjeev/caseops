@@ -260,6 +260,7 @@ def _new_operation(
     operation_type: str,
     poll_run_id: str | None = None,
 ) -> TrackedCaseProviderOperation:
+    automatic_retry: TrackedCaseProviderOperation | None = None
     if operation_type == "scheduled":
         queued = session.scalar(
             select(TrackedCaseProviderOperation)
@@ -290,6 +291,20 @@ def _new_operation(
             tracked_case.next_provider_refresh_at = _next_refresh_at(queued.started_at)
             session.add(tracked_case)
             return queued
+        automatic_retry = session.scalar(
+            select(TrackedCaseProviderOperation)
+            .where(
+                TrackedCaseProviderOperation.company_id == context.company.id,
+                TrackedCaseProviderOperation.tracked_case_id == tracked_case.id,
+                TrackedCaseProviderOperation.status == "failed",
+                TrackedCaseProviderOperation.next_attempt_at.is_not(None),
+                TrackedCaseProviderOperation.next_attempt_at <= _now(),
+                TrackedCaseProviderOperation.attempts
+                < TrackedCaseProviderOperation.max_attempts,
+            )
+            .order_by(TrackedCaseProviderOperation.created_at.desc())
+            .limit(1)
+        )
     cost_minor, currency = _manual_refresh_cost(session, tracked_case)
     operation = TrackedCaseProviderOperation(
         company_id=context.company.id,
@@ -299,17 +314,33 @@ def _new_operation(
             context.membership.id if operation_type in {"manual", "replay", "canary"} else None
         ),
         provider=tracked_case.provider,
-        operation_type=operation_type,
+        operation_type="retry" if automatic_retry is not None else operation_type,
         correlation_id=uuid4().hex,
         status="running",
-        attempts=1,
+        attempts=(automatic_retry.attempts + 1 if automatic_retry is not None else 1),
+        max_attempts=(automatic_retry.max_attempts if automatic_retry is not None else 3),
         cost_minor=cost_minor,
         currency=currency,
         started_at=_now(),
-        metadata_json={"scope": "single_tracked_case", "cost_disclosed": True},
+        metadata_json={
+            "scope": "single_tracked_case",
+            "cost_disclosed": True,
+            **(
+                {"retry_of_operation_id": automatic_retry.id}
+                if automatic_retry is not None
+                else {}
+            ),
+        },
     )
     session.add(operation)
     session.flush()
+    if automatic_retry is not None:
+        automatic_retry.next_attempt_at = None
+        automatic_retry.metadata_json = {
+            **dict(automatic_retry.metadata_json or {}),
+            "automatic_retry_operation_id": operation.id,
+        }
+        session.add(automatic_retry)
     attempted_at = operation.started_at or _now()
     tracked_case.last_provider_attempted_at = attempted_at
     tracked_case.last_operation_id = operation.id
@@ -422,12 +453,24 @@ def _fail_operation(
     operation.response_class = response_class
     operation.error_redacted = error
     operation.completed_at = _now()
-    operation.next_attempt_at = operation.completed_at + timedelta(minutes=15)
+    exhausted = operation.attempts >= operation.max_attempts
+    operation.status = "quarantined" if exhausted else "failed"
+    operation.next_attempt_at = (
+        None if exhausted else operation.completed_at + timedelta(minutes=15)
+    )
     tracked_case.last_error = error
     tracked_case.last_response_class = response_class
-    tracked_case.provider_freshness_status = (
-        "stale" if tracked_case.last_provider_successful_at else "never_succeeded"
-    )
+    tracked_case.next_provider_refresh_at = operation.next_attempt_at
+    if exhausted:
+        tracked_case.quarantined_at = operation.completed_at
+        tracked_case.quarantine_reason_redacted = error
+        operation.quarantined_at = operation.completed_at
+        operation.quarantine_reason_redacted = error
+        tracked_case.provider_freshness_status = "blocked"
+    else:
+        tracked_case.provider_freshness_status = (
+            "stale" if tracked_case.last_provider_successful_at else "never_succeeded"
+        )
     session.add_all([operation, tracked_case])
     admins = list(
         session.scalars(
@@ -2081,6 +2124,10 @@ def poll_tracked_cases(
                     TrackedCase.company_id == context.company.id,
                     _eligible_tracked_case_predicate(company_id=context.company.id),
                     TrackedCase.quarantined_at.is_(None),
+                    or_(
+                        TrackedCase.next_provider_refresh_at.is_(None),
+                        TrackedCase.next_provider_refresh_at <= _now(),
+                    ),
                 )
                 .order_by(
                     TrackedCase.last_provider_checked_at.asc().nullsfirst(),

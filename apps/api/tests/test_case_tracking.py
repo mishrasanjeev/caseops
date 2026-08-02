@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from fastapi.testclient import TestClient
@@ -929,6 +929,84 @@ def test_case_tracking_poll_continues_after_provider_failure(
             assert incident is not None
             assert incident.metadata_json["incident_prevention"]
             assert incident.metadata_json["incident_canary_operation_id"]
+    finally:
+        get_settings.cache_clear()
+
+
+def test_case_tracking_automatic_retries_are_bounded_and_auto_quarantine(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    create = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010012342026",
+            "court_name": "Delhi High Court",
+            "case_title": "Example Petitioner v Example Respondent",
+        },
+    )
+    assert create.status_code == 201, create.text
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        provider = FakeCaseTrackingProvider(fail_refresh=True)
+        for attempt in range(1, 4):
+            if attempt > 1:
+                with get_session_factory()() as session:
+                    tracked = session.scalar(select(TrackedCase))
+                    retryable = session.scalar(
+                        select(TrackedCaseProviderOperation)
+                        .where(TrackedCaseProviderOperation.status == "failed")
+                        .order_by(TrackedCaseProviderOperation.created_at.desc())
+                    )
+                    assert tracked is not None
+                    assert retryable is not None
+                    due = datetime.now(UTC) - timedelta(minutes=1)
+                    tracked.next_provider_refresh_at = due
+                    retryable.next_attempt_at = due
+                    session.commit()
+            with get_session_factory()() as session:
+                run = poll_tracked_cases(session, provider=provider, force=True)[0]
+                assert run.error_count == 1
+
+        with get_session_factory()() as session:
+            operations = list(
+                session.scalars(
+                    select(TrackedCaseProviderOperation).order_by(
+                        TrackedCaseProviderOperation.created_at
+                    )
+                )
+            )
+            tracked = session.scalar(select(TrackedCase))
+            assert tracked is not None
+            assert [row.attempts for row in operations] == [1, 2, 3]
+            assert [row.status for row in operations] == ["failed", "failed", "quarantined"]
+            assert operations[1].metadata_json["retry_of_operation_id"] == operations[0].id
+            assert operations[2].metadata_json["retry_of_operation_id"] == operations[1].id
+            assert tracked.quarantined_at is not None
+            assert tracked.provider_freshness_status == "blocked"
+
+        jobs = client.get(
+            "/api/admin/provider-operations/jobs",
+            headers=auth_headers(token),
+        )
+        assert jobs.status_code == 200, jobs.text
+        quarantined_record = next(
+            row
+            for row in jobs.json()["operations"]
+            if row["job_kind"] == "case_tracking_record" and row["status"] == "quarantined"
+        )
+        assert quarantined_record["replay_available"] is True
+
+        poison_probe = FakeCaseTrackingProvider(fail_refresh=True)
+        with get_session_factory()() as session:
+            run = poll_tracked_cases(session, provider=poison_probe, force=True)[0]
+            assert run.checked_count == 0
+            assert run.provider_call_count == 0
+            assert poison_probe.bulk_refresh_calls == []
     finally:
         get_settings.cache_clear()
 
