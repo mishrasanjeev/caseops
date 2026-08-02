@@ -3500,7 +3500,7 @@ export type TrackedCaseRecord = {
   freshness_status: "fresh" | "stale" | "never_succeeded" | "disabled" | "quarantined";
   response_class: string | null;
   last_operation_id: string | null;
-  provider_health: "healthy" | "unhealthy" | "disabled" | "quarantined";
+  provider_health: "healthy" | "degraded" | "unhealthy" | "disabled" | "quarantined";
   manual_refresh_allowed: boolean;
   manual_refresh_disabled_reason: string | null;
   refresh_cost_minor: number;
