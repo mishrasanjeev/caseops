@@ -12,10 +12,10 @@ Generated; do not edit.
 | IPLF-006A | M1 |  |  | implemented | passed | deployment_verified | pending |
 | IPLF-006B | M1 |  |  | implemented | passed | deployment_verified | pending |
 | IPLF-007A | M1 |  |  | implemented | passed | deployment_verified | pending |
-| IPLF-007B | M1 |  |  | implemented | passed | ready_for_review | pending |
+| IPLF-007B | M1 |  |  | implemented | passed | deployment_verified | pending |
 | IPLF-039A | M3 |  |  | implemented | passed | deployment_verified | pending |
-| IPLF-039B | M3 |  |  | implemented | passed | ready_for_review | pending |
-| IPLF-039C | M3 |  |  | implemented | passed | ready_for_review | pending |
+| IPLF-039B | M3 |  |  | implemented | passed | deployment_verified | pending |
+| IPLF-039C | M3 |  |  | implemented | passed | deployment_verified | pending |
 | IPLF-039D | M3 |  |  | implemented | passed | deployment_verified | pending |
-| IPLF-039E | M3 |  |  | implemented | passed | ready_for_review | pending |
-| IPLF-039F | M3 |  |  | implemented | passed | ready_for_review | pending |
+| IPLF-039E | M3 |  |  | implemented | passed | deployment_verified | pending |
+| IPLF-039F | M3 |  |  | implemented | passed | deployment_verified | pending |

@@ -151,17 +151,28 @@ npx playwright test --config playwright.app.config.ts tests/e2e/ram-2026-08-01-b
 
 The second dated journey bootstraps a clean tenant, creates an existing Matter, Communication and Matter deadline, creates a linked IP docket and coverage through public APIs, signs in through the browser, and at 360px discovers/accepts evidence, creates a related-right obligation, creates/reconciles a cost item, and checks every grouped action remains inside the viewport.
 
-### Release evidence
+### Exact release evidence
 
-The release section is completed only after:
+The release gates completed on 2 August 2026:
 
-1. full CI, Security, CodeQL and PostgreSQL/migration checks pass on the exact `main` commit;
-2. API and web images are built from that commit and 100% traffic serves those revisions;
-3. schema head `20260801_0006` is applied;
-4. health/readiness checks pass;
-5. the dated production IP spec is rerun against the exact deployed revision.
+| Gate | Exact evidence | Result |
+| --- | --- | --- |
+| Canonical application commit | `686256796422507ccbc195428faf5d02f0e190d2` on `main` | Passed |
+| Full CI and staging | GitHub Actions run `30712004305`: four API coverage shards, aggregate per-area coverage, Ruff, PostgreSQL/pgvector, web typecheck/Vitest/build, Playwright app suite, and staging deploy | Passed |
+| Security | GitHub Actions run `30712004299` | Passed |
+| CodeQL | GitHub Actions run `30712004306` | Passed |
+| API image build | Cloud Build `66799663-55d5-456e-9bf8-a61fb4b16dce`; tag `6862567`; immutable digest `sha256:d49d8891b5b40a3fda0114fe8845937223e929ab6c2f5c52ee5077e986c6fb8e` | Passed |
+| Web image build | Cloud Build `8af65037-9ff9-43ba-b3d6-a329fbdbfa1f`; tag `6862567` | Passed |
+| Migration | Execution `caseops-migrate-job-svl9h`; Alembic head `20260801_0006` | Passed |
+| Scheduler/job convergence | Six required jobs pinned to the immutable API digest; targets, cadence, time zones, OAuth identity, enabled state, and invoker configuration verified; superseded midnight poll paused | Passed |
+| API production | Revision `caseops-api-00221-sf6`, 100% traffic | Passed |
+| Web production | Revision `caseops-web-00201-n5x`, 100% traffic | Passed |
+| Health and malware guard | `https://api.caseops.ai/api/health` returned `{"status":"ok"}`; ClamAV sidecar present | Passed |
+| Authenticated production E2E | GitHub Actions run `30725589982` from acceptance-spec commit `0b8f9aa61eef0b0c5ee6de0806ae81f1b13e4f5b`: 55-test ram batch, dated IP desktop/360px journey, and notice-module suite | Passed |
 
-Until those checks complete, the five slice release states are `ready_for_review`, not `deployment_verified`.
+The first hosted CI attempt correctly found two conflicting disabled-provider fallback expectations. The implementation was reconciled so blocked external rows stay content-free, rule-owned external-only fallbacks remain generic, and direct durable IP fallbacks retain caller-supplied in-app copy. All three paths pass together. The first post-deploy IP proof also correctly found that the dedicated QA tenant had no IP docket; the dated spec now creates one through the real UI only when empty and then validates the operational workspace. Neither failure was waived or converted into a skip.
+
+With these gates complete, `IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F` are `deployment_verified`. Their independent human acceptance remains `pending`.
 
 ## Rollback
 
@@ -173,6 +184,6 @@ Until those checks complete, the five slice release states are `ready_for_review
 
 ## Completion boundary
 
-There are no deferred repository TODOs for the five implementation tails named in this record. External-provider production activation is deliberately disabled until the separately authorized real-message switch, and human acceptance remains pending because Codex cannot approve pilot/legal/UAT evidence.
+There are no deferred repository TODOs for the five implementation tails named in this record. External-provider production activation is deliberately disabled until the separately authorized real-message switch, and human acceptance remains pending because Codex cannot approve pilot/legal/UAT evidence. The final documentation commit is released through the same exact-revision pipeline; it does not alter the application behavior proven above.
 
 The rest of the master PRD is not silently waived. The manifest remains the truthful source for the undecomposed M0/M2-M10 epics and all 436 atomic requirement rows. A future program claim must map those rows and journeys to verified evidence; this release does not inflate five completed slices into a claim that the multi-year full-IP platform is complete.
