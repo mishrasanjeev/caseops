@@ -79,6 +79,13 @@ from caseops_api.services.notification_delivery import (
 from caseops_api.services.session_context import SessionContext
 
 _MAX_BODY_LENGTH = 500
+_RED_PROVIDER_RESPONSE_CLASSES = {
+    "authentication",
+    "parse_error",
+    "provider_error",
+    "rate_limit",
+    "timeout",
+}
 _TENANT_METADATA_BLOCKLIST = (
     "secret",
     "token",
@@ -688,10 +695,18 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
         freshness = "quarantined"
     elif not enabled or not configured:
         freshness = "disabled"
-    manual_allowed = bool(enabled and configured and case.quarantined_at is None)
+    provider_health_red = case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES
+    manual_allowed = bool(
+        enabled and configured and case.quarantined_at is None and not provider_health_red
+    )
     disabled_reason = None
     if case.quarantined_at is not None:
         disabled_reason = "Provider work is quarantined; an administrator must review it."
+    elif provider_health_red:
+        disabled_reason = (
+            "Provider health is red after the latest failed operation; "
+            "an administrator must review or replay it."
+        )
     elif not enabled or not configured:
         disabled_reason = provider_reason or "Case tracking provider health is red."
     return TrackedCaseRecord(
@@ -718,9 +733,11 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
             if case.quarantined_at is not None
             else "disabled"
             if not enabled or not configured
+            else "unhealthy"
+            if provider_health_red
             else "healthy"
             if freshness == "fresh"
-            else "unhealthy"
+            else "degraded"
         ),
         manual_refresh_allowed=manual_allowed,
         manual_refresh_disabled_reason=disabled_reason,
@@ -1610,6 +1627,14 @@ def refresh_bookmark(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Case tracking provider work is quarantined pending administrator review.",
+        )
+    if tracked_case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Case tracking provider health is red after the latest failed operation; "
+                "an administrator must review or replay it."
+            ),
         )
     if bookmark.matter_id:
         linked_matter = _matter_or_none(

@@ -837,6 +837,14 @@ def test_case_tracking_poll_continues_after_provider_failure(
             assert page is not None
             assert page.channel == "in_app"
 
+        provider_calls_before_manual = len(provider.refresh_calls)
+        blocked_manual = client.post(
+            f"/api/case-tracking/bookmarks/{create.json()['id']}/refresh",
+            headers=auth_headers(token),
+        )
+        assert blocked_manual.status_code == 409, blocked_manual.text
+        assert len(provider.refresh_calls) == provider_calls_before_manual
+
         jobs = client.get(
             "/api/admin/provider-operations/jobs",
             headers=auth_headers(token),
