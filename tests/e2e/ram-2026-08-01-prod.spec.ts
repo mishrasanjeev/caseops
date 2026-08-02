@@ -36,6 +36,20 @@ test.describe("Ram 2026-08-01 deployed IP slices", () => {
     await expect(page.getByRole("heading", { name: "Trademark docket" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New trademark" })).toBeVisible();
 
+    const workspace = page.getByTestId("ip-docket-workspace");
+    const emptyState = page.getByText("No IP records yet", { exact: true });
+    await expect(workspace.or(emptyState)).toBeVisible({ timeout: 30_000 });
+    if (await emptyState.isVisible()) {
+      await page.getByRole("button", { name: "New trademark" }).click();
+      await page.getByLabel("Docket title").fill("Production E2E trademark");
+      await page.getByLabel("Word mark").fill("CASEOPS QA");
+      await page.getByLabel("Goods / services specification").fill("Quality-assurance software services");
+      await page.getByLabel("Applicant").fill("CaseOps QA Bot");
+      await page.getByLabel("Representation evidence reference").fill("qa:prod-e2e-2026-08-01");
+      await page.getByRole("button", { name: "Validate and create" }).click();
+      await expect(workspace).toBeVisible({ timeout: 30_000 });
+    }
+
     await page.setViewportSize({ width: 360, height: 800 });
     await page.reload();
     const create = page.getByRole("button", { name: "New trademark" });
