@@ -543,10 +543,34 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
     expect(statusResponse.status(), await statusResponse.text()).toBe(200);
     expect(receivedNotice.status).toBe("Under Review");
 
+    const filteredRegisterPromise = page.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === "/api/notices/" &&
+          response.request().method() === "GET" &&
+          url.searchParams.get("query") === receivedSubject &&
+          url.searchParams.get("status") === "Under Review" &&
+          url.searchParams.get("owner_membership_id") === tester.membership.id
+        );
+      },
+      { timeout: 30_000 },
+    );
     await page.locator("#notice-search").fill(receivedSubject);
     await page.getByLabel("Filter by status").fill("Under Review");
     await page.getByLabel("Filter by owner").selectOption(tester.membership.id);
-    await expect(receivedRow).toBeVisible();
+    const filteredRegisterResponse = await filteredRegisterPromise;
+    expect(
+      filteredRegisterResponse.status(),
+      await filteredRegisterResponse.text(),
+    ).toBe(200);
+    const filteredRegister = (await filteredRegisterResponse.json()) as {
+      notices: NoticeRecord[];
+    };
+    expect(filteredRegister.notices.map((notice) => notice.id)).toContain(
+      receivedNotice.id,
+    );
+    await expect(receivedRow).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "Reset" }).click();
 
     const sentSubject = `RAM715 sent multi ${RUN_ID}`;
