@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -14,6 +15,8 @@ from caseops_api.db.models import (
     CalendarEventSyncStatus,
     CalendarProvider,
     CalendarSyncSourceType,
+    ConnectorHealthRecord,
+    ConnectorHealthStatus,
     NotificationDeliveryChannel,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
@@ -121,6 +124,19 @@ def _notification_intent_fixture(
         return intent.id
 
 
+def _replay_preview(
+    client: TestClient,
+    *,
+    token: str,
+    operation_ids: list[str],
+):
+    return client.post(
+        "/api/admin/provider-operations/jobs/replay-preview",
+        headers=auth_headers(token),
+        json={"operation_ids": operation_ids},
+    )
+
+
 def test_provider_operations_are_admin_only_redacted_and_tenant_scoped(
     client: TestClient,
 ) -> None:
@@ -217,10 +233,20 @@ def test_provider_operation_replay_is_idempotent_and_audited(
     )
     operation_id = f"notification_delivery:{intent_id}"
 
+    preview = _replay_preview(client, token=token, operation_ids=[operation_id])
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["operation_count"] == 1
+    assert preview.json()["estimated_total_cost_minor"] == 0
+    assert preview.json()["items"][0]["cost_basis"] == "internal_idempotent_delivery"
+    preview_token = preview.json()["preview_token"]
+
     first = client.post(
         f"/api/admin/provider-operations/jobs/{operation_id}/replay",
         headers=auth_headers(token),
-        json={"reason": "Manual retry after provider review."},
+        json={
+            "reason": "Manual retry after provider review.",
+            "preview_token": preview_token,
+        },
     )
     assert first.status_code == 200, first.text
     assert first.json()["changed"] is True
@@ -229,7 +255,7 @@ def test_provider_operation_replay_is_idempotent_and_audited(
     second = client.post(
         f"/api/admin/provider-operations/jobs/{operation_id}/replay",
         headers=auth_headers(token),
-        json={"reason": "Duplicate click."},
+        json={"reason": "Duplicate click.", "preview_token": preview_token},
     )
     assert second.status_code == 200, second.text
     assert second.json()["changed"] is False
@@ -315,15 +341,11 @@ def test_external_delivery_replay_stays_blocked_fail_closed(
     )
 
     response = client.post(
-        f"/api/admin/provider-operations/jobs/notification_delivery:{intent_id}/replay",
+        "/api/admin/provider-operations/jobs/replay-preview",
         headers=auth_headers(token),
-        json={"reason": "Try email replay."},
+        json={"operation_ids": [f"notification_delivery:{intent_id}"]},
     )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["changed"] is False
-    assert body["operation"]["status"] == "blocked"
-    assert "blocked" in body["message"].lower()
+    assert response.status_code == 409, response.text
 
     factory = get_session_factory()
     with factory() as session:
@@ -333,7 +355,7 @@ def test_external_delivery_replay_stays_blocked_fail_closed(
         audit = session.scalar(
             select(AuditEvent).where(
                 AuditEvent.company_id == company_id,
-                AuditEvent.action == "provider_operation.replay",
+                AuditEvent.action == "provider_operation.replay_preview_denied",
                 AuditEvent.result == "denied",
             )
         )
@@ -492,3 +514,244 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert "GOOGLE_DRIVE_CLIENT_SECRET" in providers["google_drive"][
         "required_config_names"
     ]
+
+
+def test_bounded_batch_replay_rejects_cross_tenant_and_stale_scope(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    membership_id = str(boot["membership"]["id"])
+    operation_ids = [
+        "notification_delivery:"
+        + _notification_intent_fixture(
+            company_id=company_id,
+            membership_id=membership_id,
+        )
+        for _ in range(2)
+    ]
+
+    preview = _replay_preview(client, token=token, operation_ids=operation_ids)
+    assert preview.status_code == 200, preview.text
+    confirmed = client.post(
+        "/api/admin/provider-operations/jobs/replay",
+        headers=auth_headers(token),
+        json={
+            "reason": "Bounded retry after reviewing both poison rows.",
+            "preview_token": preview.json()["preview_token"],
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["changed_count"] == 2
+    assert len(confirmed.json()["operations"]) == 2
+
+    other = _bootstrap_named_company(
+        client,
+        slug="provider-preview-other",
+        email="owner@provider-preview-other.example",
+    )
+    client.cookies.clear()
+    cross_tenant = client.post(
+        "/api/admin/provider-operations/jobs/replay",
+        headers=auth_headers(str(other["access_token"])),
+        json={
+            "reason": "Attempt to reuse another tenant preview.",
+            "preview_token": preview.json()["preview_token"],
+        },
+    )
+    assert cross_tenant.status_code == 422, cross_tenant.text
+
+    third_id = _notification_intent_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
+    )
+    third_operation_id = f"notification_delivery:{third_id}"
+    stale_preview = _replay_preview(
+        client,
+        token=token,
+        operation_ids=[third_operation_id],
+    )
+    assert stale_preview.status_code == 200, stale_preview.text
+    factory = get_session_factory()
+    with factory() as session:
+        intent = session.get(NotificationDeliveryIntent, third_id)
+        assert intent is not None
+        intent.status = NotificationDeliveryStatus.DELIVERED
+        intent.delivered_at = datetime.now(UTC)
+        intent.updated_at = datetime.now(UTC) + timedelta(seconds=1)
+        session.commit()
+
+    stale = client.post(
+        f"/api/admin/provider-operations/jobs/{third_operation_id}/replay",
+        headers=auth_headers(token),
+        json={
+            "reason": "This preview is now stale and must fail.",
+            "preview_token": stale_preview.json()["preview_token"],
+        },
+    )
+    assert stale.status_code == 409, stale.text
+
+
+def test_replay_preview_is_bounded_unique_and_invokes_step_up(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    membership_id = str(boot["membership"]["id"])
+    operation_id = (
+        "notification_delivery:"
+        + _notification_intent_fixture(
+            company_id=company_id,
+            membership_id=membership_id,
+        )
+    )
+    duplicate = _replay_preview(
+        client,
+        token=token,
+        operation_ids=[operation_id, operation_id],
+    )
+    assert duplicate.status_code == 422, duplicate.text
+    over_limit = _replay_preview(
+        client,
+        token=token,
+        operation_ids=[f"notification_delivery:{uuid4()}" for _ in range(26)],
+    )
+    assert over_limit.status_code == 422, over_limit.text
+
+    preview = _replay_preview(client, token=token, operation_ids=[operation_id])
+    assert preview.status_code == 200, preview.text
+    purposes: list[str] = []
+
+    def capture_step_up(*args, **kwargs) -> None:
+        purposes.append(str(kwargs["purpose"]))
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.provider_operations.require_recent_step_up",
+        capture_step_up,
+    )
+    confirmed = client.post(
+        f"/api/admin/provider-operations/jobs/{operation_id}/replay",
+        headers=auth_headers(token),
+        json={
+            "reason": "Replay after bounded preview and step-up check.",
+            "preview_token": preview.json()["preview_token"],
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert purposes == ["provider_operation_replay"]
+
+
+def test_replay_preview_rejects_tampered_and_expired_tokens(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    membership_id = str(boot["membership"]["id"])
+    intent_id = _notification_intent_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
+    )
+    operation_id = f"notification_delivery:{intent_id}"
+    preview = _replay_preview(client, token=token, operation_ids=[operation_id])
+    assert preview.status_code == 200, preview.text
+    preview_token = str(preview.json()["preview_token"])
+
+    tampered = client.post(
+        f"/api/admin/provider-operations/jobs/{operation_id}/replay",
+        headers=auth_headers(token),
+        json={
+            "reason": "A changed signature must never authorize replay.",
+            "preview_token": preview_token[:-1] + ("A" if preview_token[-1] != "A" else "B"),
+        },
+    )
+    assert tampered.status_code == 422, tampered.text
+
+    future = datetime.now(UTC) + timedelta(minutes=6)
+    monkeypatch.setattr(
+        "caseops_api.services.provider_operations._now",
+        lambda: future,
+    )
+    expired = client.post(
+        f"/api/admin/provider-operations/jobs/{operation_id}/replay",
+        headers=auth_headers(token),
+        json={
+            "reason": "An expired preview must never authorize replay.",
+            "preview_token": preview_token,
+        },
+    )
+    assert expired.status_code == 409, expired.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+        assert intent is not None
+        assert intent.status == NotificationDeliveryStatus.DEAD_LETTER
+
+
+def test_connector_health_fails_closed_without_recent_success_and_serializes_kind(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    now = datetime.now(UTC)
+    factory = get_session_factory()
+    with factory() as session:
+        session.add_all(
+            [
+                ConnectorHealthRecord(
+                    company_id=company_id,
+                    provider="stale_provider",
+                    account_ref_hash="stale",
+                    configured_state=ConnectorHealthStatus.CONFIGURED,
+                    connected_state=ConnectorHealthStatus.CONNECTED,
+                    last_success_at=now - timedelta(days=2),
+                    last_checked_at=now,
+                ),
+                ConnectorHealthRecord(
+                    company_id=company_id,
+                    provider="never_provider",
+                    account_ref_hash="never",
+                    configured_state=ConnectorHealthStatus.CONFIGURED,
+                    connected_state=ConnectorHealthStatus.DEGRADED,
+                    error_category="timeout with hidden@example.test",
+                    last_failure_at=now,
+                    last_checked_at=now,
+                ),
+            ]
+        )
+        session.commit()
+
+    monkeypatch.setattr(
+        "caseops_api.services.connector_health.refresh_connector_health_records",
+        lambda session, context: [],
+    )
+    health = client.get(
+        "/api/admin/integrations/health",
+        headers=auth_headers(token),
+    )
+    assert health.status_code == 200, health.text
+    rows = {row["provider"]: row for row in health.json()["health"]}
+    assert rows["stale_provider"]["freshness_state"] == "stale"
+    assert rows["stale_provider"]["operational_state"] == "unhealthy"
+    assert rows["never_provider"]["freshness_state"] == "never_succeeded"
+    assert rows["never_provider"]["response_class"] == "timeout"
+    assert rows["never_provider"]["operator_attention_required"] is True
+    assert "hidden@example.test" not in health.text
+
+    operations = client.get(
+        "/api/admin/provider-operations/jobs",
+        headers=auth_headers(token),
+    )
+    assert operations.status_code == 200, operations.text
+    connector = next(
+        row for row in operations.json()["operations"] if row["job_kind"] == "connector_health"
+    )
+    assert connector["response_class"] == "timeout"
+    assert connector["correlation_ref"].startswith("id:")

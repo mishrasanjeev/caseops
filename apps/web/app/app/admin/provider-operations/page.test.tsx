@@ -9,6 +9,7 @@ const {
   ignoreProviderOperationMock,
   listProviderOperationsMock,
   markProviderOperationResolvedMock,
+  previewProviderOperationReplayMock,
   replayProviderOperationMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const {
   ignoreProviderOperationMock: vi.fn(),
   listProviderOperationsMock: vi.fn(),
   markProviderOperationResolvedMock: vi.fn(),
+  previewProviderOperationReplayMock: vi.fn(),
   replayProviderOperationMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
@@ -25,6 +27,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   ignoreProviderOperation: ignoreProviderOperationMock,
   listProviderOperations: listProviderOperationsMock,
   markProviderOperationResolved: markProviderOperationResolvedMock,
+  previewProviderOperationReplay: previewProviderOperationReplayMock,
   replayProviderOperation: replayProviderOperationMock,
 }));
 
@@ -63,6 +66,19 @@ const operation = {
   next_attempt_at: null,
   created_at: "2026-06-02T00:00:00Z",
   updated_at: "2026-06-02T00:00:00Z",
+  correlation_ref: "id:correlation",
+  response_class: "provider_outage",
+  last_attempted_at: "2026-06-02T00:00:00Z",
+  last_successful_at: null,
+  last_good_at: null,
+  next_scheduled_at: null,
+  freshness_state: "never_succeeded",
+  records_affected: null,
+  estimated_cost_minor: 0,
+  estimated_cost_currency: "INR",
+  estimated_cost_basis: "internal_idempotent_delivery",
+  retryable: true,
+  quarantined: true,
   replay_available: true,
   ignore_available: true,
   mark_resolved_available: true,
@@ -100,6 +116,7 @@ describe("ProviderOperationsPage", () => {
     ignoreProviderOperationMock.mockReset();
     listProviderOperationsMock.mockReset();
     markProviderOperationResolvedMock.mockReset();
+    previewProviderOperationReplayMock.mockReset();
     replayProviderOperationMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
@@ -111,6 +128,23 @@ describe("ProviderOperationsPage", () => {
       replayable_count: 1,
     });
     fetchProviderReadinessMock.mockResolvedValue(readiness);
+    previewProviderOperationReplayMock.mockResolvedValue({
+      preview_token: "signed-preview-token-value",
+      expires_at: "2026-06-02T00:05:00Z",
+      operation_count: 1,
+      estimated_total_cost_minor: 0,
+      currency: "INR",
+      items: [
+        {
+          operation,
+          expected_updated_at: operation.updated_at,
+          estimated_cost_minor: 0,
+          currency: "INR",
+          cost_basis: "internal_idempotent_delivery",
+        },
+      ],
+      warnings: [],
+    });
     replayProviderOperationMock.mockResolvedValue({
       action: "replay",
       changed: true,
@@ -141,6 +175,10 @@ describe("ProviderOperationsPage", () => {
     await user.click(await screen.findByTestId(`provider-operation-replay-${operation.id}`));
     expect(replayProviderOperationMock).not.toHaveBeenCalled();
     expect(screen.getByText("Replay provider operation")).toBeInTheDocument();
+    expect(await screen.findByText(/Scope: 1 operation/i)).toBeInTheDocument();
+    expect(previewProviderOperationReplayMock.mock.calls[0][0]).toEqual({
+      operationIds: [operation.id],
+    });
     const confirm = screen.getByTestId("provider-operation-confirm-action");
     expect(confirm).toBeDisabled();
     await user.type(
@@ -154,6 +192,7 @@ describe("ProviderOperationsPage", () => {
     );
     expect(replayProviderOperationMock.mock.calls[0][0]).toEqual({
       operationId: operation.id,
+      previewToken: "signed-preview-token-value",
       reason: "Reviewed provider failure and approved replay.",
     });
   });

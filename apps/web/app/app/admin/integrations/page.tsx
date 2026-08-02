@@ -194,15 +194,24 @@ function ConnectorTile({ connector }: { connector: TenantConnectorRecord }) {
 }
 
 function HealthRow({ row }: { row: ConnectorHealthRecord }) {
+  const operationalTone = row.operational_state === "healthy" ? "success" :
+    row.operational_state === "disabled" ? "neutral" : "warning";
   return (
-    <div className="grid gap-2 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 md:grid-cols-[1fr_1fr_auto]">
-      <div>
+    <div className="grid min-w-0 gap-2 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 md:grid-cols-[1fr_1fr_auto]">
+      <div className="min-w-0">
         <div className="font-medium text-[var(--color-ink)]">{row.provider}</div>
         <div className="text-xs text-[var(--color-mute)]">
-          checked {formatWhen(row.last_checked_at)}
+          attempted {formatWhen(row.last_attempted_at)} - last good{" "}
+          {formatWhen(row.last_good_at)}
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
+        <Badge tone={operationalTone}>
+          {row.operational_state}
+        </Badge>
+        <Badge tone={row.freshness_state === "fresh" ? "success" : "warning"}>
+          {row.freshness_state.replaceAll("_", " ")}
+        </Badge>
         <Badge tone={toneForStatus(row.configured_state)}>
           {row.configured_state.replaceAll("_", " ")}
         </Badge>
@@ -211,7 +220,9 @@ function HealthRow({ row }: { row: ConnectorHealthRecord }) {
         </Badge>
       </div>
       <div className="text-xs text-[var(--color-mute)] md:text-right">
-        {row.error_category ?? row.disabled_reason ?? "No alert"}
+        {row.current_error_redacted ?? row.disabled_reason ?? "No alert"}
+        <div>outcome {row.response_class.replaceAll("_", " ")}</div>
+        <div>next {formatWhen(row.next_scheduled_at)}</div>
       </div>
     </div>
   );
@@ -1071,6 +1082,15 @@ export default function TenantIntegrationsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
+            <div
+              className="grid grid-cols-2 gap-2 border-b border-[var(--color-line)] px-4 py-3 text-sm sm:grid-cols-4"
+              data-testid="connector-health-summary"
+            >
+              <span>Healthy {healthQuery.data.healthy_count}</span>
+              <span>Unhealthy {healthQuery.data.unhealthy_count}</span>
+              <span>Stale {healthQuery.data.stale_count}</span>
+              <span>Disabled {healthQuery.data.disabled_count}</span>
+            </div>
             {healthQuery.data.health.slice(0, 12).map((row) => (
               <HealthRow key={row.id} row={row} />
             ))}

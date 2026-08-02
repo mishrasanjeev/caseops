@@ -495,6 +495,16 @@ export const tenantIntegrationHealth = {
       next_retry_at: null,
       disabled_reason: null,
       last_checked_at: "2026-06-10T00:00:00Z",
+      last_attempted_at: "2026-06-10T00:00:00Z",
+      last_good_at: null,
+      next_scheduled_at: null,
+      freshness_state: "never_succeeded",
+      operational_state: "blocked",
+      freshness_threshold_minutes: 1440,
+      freshness_age_minutes: null,
+      response_class: "configuration",
+      operator_attention_required: true,
+      current_error_redacted: "missing_config",
       operational_alerts: ["missing_config"],
       setup_actions: ["Configure Gmail OAuth"],
       provider_operations_link: "/app/admin/provider-operations",
@@ -521,6 +531,16 @@ export const tenantIntegrationHealth = {
       next_retry_at: null,
       disabled_reason: null,
       last_checked_at: "2026-06-10T00:00:00Z",
+      last_attempted_at: "2026-06-10T00:00:00Z",
+      last_good_at: "2026-06-10T00:00:00Z",
+      next_scheduled_at: null,
+      freshness_state: "fresh",
+      operational_state: "healthy",
+      freshness_threshold_minutes: 1440,
+      freshness_age_minutes: 0,
+      response_class: "success",
+      operator_attention_required: false,
+      current_error_redacted: null,
       operational_alerts: [],
       setup_actions: [],
       provider_operations_link: "/app/admin/provider-operations",
@@ -528,6 +548,10 @@ export const tenantIntegrationHealth = {
       updated_at: "2026-06-10T00:00:00Z",
     },
   ],
+  healthy_count: 1,
+  unhealthy_count: 0,
+  stale_count: 0,
+  disabled_count: 0,
 };
 
 export const platformIntegrations = {
@@ -546,6 +570,10 @@ export const platformIntegrations = {
 
 export const platformIntegrationHealth = {
   health: tenantIntegrationHealth.health,
+  healthy_count: 1,
+  unhealthy_count: 0,
+  stale_count: 0,
+  disabled_count: 0,
 };
 
 export const googleDriveStatus = {
@@ -1003,6 +1031,10 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
       return jsonResponse({
         checked_at: "2026-06-10T00:00:00Z",
         health: tenantIntegrationHealth.health,
+        healthy_count: tenantIntegrationHealth.healthy_count,
+        unhealthy_count: tenantIntegrationHealth.unhealthy_count,
+        stale_count: tenantIntegrationHealth.stale_count,
+        disabled_count: tenantIntegrationHealth.disabled_count,
       });
     }
     if (url.includes("/api/admin/integrations/health")) {

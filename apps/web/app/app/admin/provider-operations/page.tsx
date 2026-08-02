@@ -33,6 +33,7 @@ import {
   ignoreProviderOperation,
   listProviderOperations,
   markProviderOperationResolved,
+  previewProviderOperationReplay,
   replayProviderOperation,
 } from "@/lib/api/endpoints";
 import type {
@@ -105,9 +106,15 @@ export default function ProviderOperationsPage() {
       queryKey: ["admin", "provider-operations", "jobs"],
     });
   };
+  const previewMutation = useMutation({
+    mutationFn: previewProviderOperationReplay,
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not preview provider replay.")),
+  });
   const closeActionDialog = () => {
     setPendingAction(null);
     setActionReason("");
+    previewMutation.reset();
   };
   const replayMutation = useMutation({
     mutationFn: replayProviderOperation,
@@ -140,13 +147,20 @@ export default function ProviderOperationsPage() {
       toast.error(apiErrorMessage(error, "Could not resolve provider operation.")),
   });
   const actionBusy =
-    replayMutation.isPending || ignoreMutation.isPending || resolveMutation.isPending;
+    previewMutation.isPending ||
+    replayMutation.isPending ||
+    ignoreMutation.isPending ||
+    resolveMutation.isPending;
   const openActionDialog = (
     action: PendingAction["action"],
     operation: ProviderOperationRecord,
   ) => {
     setPendingAction({ action, operation });
     setActionReason("");
+    previewMutation.reset();
+    if (action === "replay") {
+      previewMutation.mutate({ operationIds: [operation.id] });
+    }
   };
   const submitAction = () => {
     if (!pendingAction) return;
@@ -154,7 +168,9 @@ export default function ProviderOperationsPage() {
     if (reason.length < 8) return;
     const input = { operationId: pendingAction.operation.id, reason };
     if (pendingAction.action === "replay") {
-      replayMutation.mutate(input);
+      const previewToken = previewMutation.data?.preview_token;
+      if (!previewToken) return;
+      replayMutation.mutate({ ...input, previewToken });
     } else if (pendingAction.action === "ignore") {
       ignoreMutation.mutate(input);
     } else {
@@ -268,6 +284,35 @@ export default function ProviderOperationsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
+            {pendingAction?.action === "replay" ? (
+              <div
+                className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-sm"
+                data-testid="provider-operation-replay-preview"
+              >
+                {previewMutation.isPending ? (
+                  <span>Calculating bounded replay scope and provider cost...</span>
+                ) : previewMutation.isError ? (
+                  <span className="text-[var(--color-warn-700,#a55400)]">
+                    Replay preview is unavailable. Close and retry after refreshing.
+                  </span>
+                ) : previewMutation.data ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium text-[var(--color-ink)]">
+                      Scope: {previewMutation.data.operation_count} operation
+                    </span>
+                    <span className="text-[var(--color-mute)]">
+                      Estimated provider cost: {previewMutation.data.currency}{" "}
+                      {(previewMutation.data.estimated_total_cost_minor / 100).toFixed(2)}
+                    </span>
+                    {previewMutation.data.warnings.map((warning) => (
+                      <span key={warning} className="text-xs text-[var(--color-mute)]">
+                        {warning}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <label
               htmlFor="provider-operation-reason"
               className="text-sm font-medium text-[var(--color-ink)]"
@@ -298,7 +343,11 @@ export default function ProviderOperationsPage() {
             <Button
               type="button"
               onClick={submitAction}
-              disabled={actionBusy || actionReason.trim().length < 8}
+              disabled={
+                actionBusy ||
+                actionReason.trim().length < 8 ||
+                (pendingAction?.action === "replay" && !previewMutation.data)
+              }
               data-testid="provider-operation-confirm-action"
             >
               {pendingAction ? actionLabel(pendingAction.action) : "Confirm"}
@@ -383,7 +432,7 @@ function OperationRow({
 }) {
   return (
     <li className="flex flex-col gap-3 py-3" data-testid={`provider-operation-${operation.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={toneForStatus(operation.status)}>
@@ -391,6 +440,12 @@ function OperationRow({
             </Badge>
             <Badge tone={operation.operator_state === "open" ? "brand" : "neutral"}>
               {operation.operator_state}
+            </Badge>
+            <Badge tone={operation.freshness_state === "fresh" ? "success" : "warning"}>
+              {operation.freshness_state.replaceAll("_", " ")}
+            </Badge>
+            <Badge tone={operation.response_class === "success" ? "success" : "neutral"}>
+              {operation.response_class.replaceAll("_", " ")}
             </Badge>
             <span className="text-sm font-medium text-[var(--color-ink)]">
               {operation.job_kind.replaceAll("_", " ")}
@@ -405,13 +460,21 @@ function OperationRow({
             {" - "}
             next retry {formatWhen(operation.next_attempt_at)}
           </div>
+          <div className="mt-1 text-xs text-[var(--color-mute)]">
+            last attempted {formatWhen(operation.last_attempted_at)}
+            {" - "}last good {formatWhen(operation.last_good_at)}
+            {operation.records_affected === null
+              ? ""
+              : ` - records affected ${operation.records_affected}`}
+            {operation.correlation_ref ? ` - correlation ${operation.correlation_ref}` : ""}
+          </div>
           {operation.error_redacted ? (
             <div className="mt-1 text-xs text-[var(--color-warn-700,#a55400)]">
               {operation.error_redacted}
             </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto">
           <Button
             type="button"
             size="sm"

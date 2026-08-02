@@ -11,6 +11,10 @@ ProviderOperationKind = Literal[
     "case_tracking_poll",
     "mailbox_message_import",
     "mailbox_webhook",
+    "drive_file_candidate",
+    "calendar_event_candidate",
+    "inbound_email_event",
+    "connector_health",
 ]
 ProviderOperatorState = Literal["open", "ignored", "resolved"]
 ProviderOperationAction = Literal["replay", "ignore", "mark_resolved"]
@@ -40,6 +44,37 @@ class ProviderOperationRecord(BaseModel):
     next_attempt_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    correlation_ref: str | None = None
+    response_class: Literal[
+        "success",
+        "no_change",
+        "timeout",
+        "authentication",
+        "rate_limit",
+        "parse_error",
+        "provider_outage",
+        "configuration",
+        "policy",
+        "unknown",
+    ] = "unknown"
+    last_attempted_at: datetime | None = None
+    last_successful_at: datetime | None = None
+    last_good_at: datetime | None = None
+    next_scheduled_at: datetime | None = None
+    freshness_state: Literal[
+        "fresh",
+        "stale",
+        "never_succeeded",
+        "disabled",
+        "blocked",
+        "unknown",
+    ] = "unknown"
+    records_affected: int | None = Field(default=None, ge=0)
+    estimated_cost_minor: int = Field(default=0, ge=0)
+    estimated_cost_currency: str = "INR"
+    estimated_cost_basis: str = "no_external_call"
+    retryable: bool = False
+    quarantined: bool = False
     replay_available: bool
     ignore_available: bool
     mark_resolved_available: bool
@@ -65,11 +100,53 @@ class ProviderOperationActionRequest(BaseModel):
         return value
 
 
+class ProviderOperationReplayPreviewRequest(BaseModel):
+    operation_ids: list[str] = Field(min_length=1, max_length=25)
+
+    @field_validator("operation_ids")
+    @classmethod
+    def unique_operation_ids(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item for item in normalized) or len(set(normalized)) != len(normalized):
+            raise ValueError("operation_ids must be non-empty and unique")
+        return normalized
+
+
+class ProviderOperationReplayPreviewItem(BaseModel):
+    operation: ProviderOperationRecord
+    expected_updated_at: datetime
+    estimated_cost_minor: int = Field(ge=0)
+    currency: str = "INR"
+    cost_basis: str
+
+
+class ProviderOperationReplayPreviewResponse(BaseModel):
+    preview_token: str
+    expires_at: datetime
+    operation_count: int = Field(ge=1, le=25)
+    estimated_total_cost_minor: int = Field(ge=0)
+    currency: str = "INR"
+    items: list[ProviderOperationReplayPreviewItem]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ProviderOperationReplayConfirmRequest(ProviderOperationActionRequest):
+    preview_token: str = Field(min_length=20, max_length=8192)
+
+
 class ProviderOperationActionResponse(BaseModel):
     action: ProviderOperationAction
     changed: bool
     message: str
     operation: ProviderOperationRecord
+
+
+class ProviderOperationReplayBatchResponse(BaseModel):
+    changed_count: int = Field(ge=0)
+    unchanged_count: int = Field(ge=0)
+    estimated_total_cost_minor: int = Field(ge=0)
+    currency: str = "INR"
+    operations: list[ProviderOperationActionResponse]
 
 
 class ProviderReadinessRecord(BaseModel):

@@ -114,6 +114,19 @@ Public product claims use these labels: `live`, `review-first`, `provider-gated`
 - Added a read-only Playwright public-content gate that can run against both a local production
   build and the deployed site without submitting forms or mutating application data.
 
+## Documentation changelog - 2026-08-02
+
+- Extended the existing integration-health records with fail-closed freshness,
+  last-attempt/last-good/next-scheduled timestamps, bounded outcome classes,
+  operator-attention state, and redaction at the response boundary.
+- Added signed, five-minute provider-operation replay previews for at most 25
+  unique tenant-scoped rows, including explicit cost basis/warnings, stale-scope
+  rejection, atomic batch confirmation, idempotent repeat confirmation, audit
+  evidence, and the existing MFA step-up control.
+- Added dated local and production Playwright coverage for the admin integration
+  and provider-operation surfaces at a 360px viewport. No database migration is
+  required for this additive API/UI release.
+
 ## Documentation changelog - 2026-06-13
 
 - Added founder-only production readiness gates for billing, Pine Labs, provider operations,

@@ -88,6 +88,36 @@ class ConnectorHealthRecord(BaseModel):
     next_retry_at: datetime | None = None
     disabled_reason: str | None = None
     last_checked_at: datetime | None = None
+    last_attempted_at: datetime | None = None
+    last_good_at: datetime | None = None
+    next_scheduled_at: datetime | None = None
+    freshness_state: Literal[
+        "fresh",
+        "stale",
+        "never_succeeded",
+        "disabled",
+        "blocked",
+        "unknown",
+    ] = "unknown"
+    operational_state: Literal["healthy", "unhealthy", "disabled", "blocked"] = (
+        "unhealthy"
+    )
+    freshness_threshold_minutes: int = Field(default=1440, ge=1)
+    freshness_age_minutes: int | None = Field(default=None, ge=0)
+    response_class: Literal[
+        "success",
+        "no_change",
+        "timeout",
+        "authentication",
+        "rate_limit",
+        "parse_error",
+        "provider_outage",
+        "configuration",
+        "policy",
+        "unknown",
+    ] = "unknown"
+    operator_attention_required: bool = False
+    current_error_redacted: str | None = None
     operational_alerts: list[str] = Field(default_factory=list)
     setup_actions: list[str] = Field(default_factory=list)
     provider_operations_link: str | None = None
@@ -97,8 +127,16 @@ class ConnectorHealthRecord(BaseModel):
 
 class ConnectorHealthListResponse(BaseModel):
     health: list[ConnectorHealthRecord]
+    healthy_count: int = Field(default=0, ge=0)
+    unhealthy_count: int = Field(default=0, ge=0)
+    stale_count: int = Field(default=0, ge=0)
+    disabled_count: int = Field(default=0, ge=0)
 
 
 class ConnectorHealthCheckResponse(BaseModel):
     checked_at: datetime
     health: list[ConnectorHealthRecord]
+    healthy_count: int = Field(default=0, ge=0)
+    unhealthy_count: int = Field(default=0, ge=0)
+    stale_count: int = Field(default=0, ge=0)
+    disabled_count: int = Field(default=0, ge=0)

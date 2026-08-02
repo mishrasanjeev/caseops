@@ -90,6 +90,8 @@ import {
   type InvoiceNumberPreviewResponse,
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
+  type ProviderOperationReplayBatchResponse,
+  type ProviderOperationReplayPreviewResponse,
   type ProviderCostProfileListResponse,
   type ProviderCostProfileRecord,
   type ProviderReadinessListResponse,
@@ -201,6 +203,8 @@ import {
   invoiceNumberPreviewResponse,
   providerOperationActionResponse,
   providerOperationListResponse,
+  providerOperationReplayBatchResponse,
+  providerOperationReplayPreviewResponse,
   providerCostProfileListResponse,
   providerCostProfileRecord,
   providerReadinessListResponse,
@@ -6474,7 +6478,7 @@ export async function checkTenantConnectorHealth(): Promise<ConnectorHealthListR
     method: "POST",
     body: {},
   });
-  return connectorHealthListResponse.parse({ health: (data as { health?: unknown }).health });
+  return connectorHealthListResponse.parse(data);
 }
 
 export async function fetchInboundEmailAliases(): Promise<InboundEmailAliasListResponse> {
@@ -6583,7 +6587,7 @@ export async function updateTenantNotificationPreferences(input: {
 
 async function mutateProviderOperation(
   operationId: string,
-  action: "replay" | "ignore" | "mark-resolved",
+  action: "ignore" | "mark-resolved",
   reason: string,
 ): Promise<ProviderOperationActionResponse> {
   const data = await apiRequest<unknown>(
@@ -6599,8 +6603,43 @@ async function mutateProviderOperation(
 export async function replayProviderOperation(input: {
   operationId: string;
   reason: string;
+  previewToken: string;
 }): Promise<ProviderOperationActionResponse> {
-  return mutateProviderOperation(input.operationId, "replay", input.reason);
+  const data = await apiRequest<unknown>(
+    `/api/admin/provider-operations/jobs/${encodeURIComponent(input.operationId)}/replay`,
+    {
+      method: "POST",
+      body: { reason: input.reason, preview_token: input.previewToken },
+    },
+  );
+  return providerOperationActionResponse.parse(data);
+}
+
+export async function previewProviderOperationReplay(input: {
+  operationIds: string[];
+}): Promise<ProviderOperationReplayPreviewResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/admin/provider-operations/jobs/replay-preview",
+    {
+      method: "POST",
+      body: { operation_ids: input.operationIds },
+    },
+  );
+  return providerOperationReplayPreviewResponse.parse(data);
+}
+
+export async function replayProviderOperationBatch(input: {
+  reason: string;
+  previewToken: string;
+}): Promise<ProviderOperationReplayBatchResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/admin/provider-operations/jobs/replay",
+    {
+      method: "POST",
+      body: { reason: input.reason, preview_token: input.previewToken },
+    },
+  );
+  return providerOperationReplayBatchResponse.parse(data);
 }
 
 export async function ignoreProviderOperation(input: {

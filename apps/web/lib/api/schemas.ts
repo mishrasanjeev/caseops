@@ -2318,6 +2318,10 @@ export const providerOperationRecord = z.object({
     "case_tracking_poll",
     "mailbox_message_import",
     "mailbox_webhook",
+    "drive_file_candidate",
+    "calendar_event_candidate",
+    "inbound_email_event",
+    "connector_health",
   ]),
   provider: z.string(),
   company_id: z.string(),
@@ -2334,6 +2338,37 @@ export const providerOperationRecord = z.object({
   next_attempt_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+  correlation_ref: z.string().nullable(),
+  response_class: z.enum([
+    "success",
+    "no_change",
+    "timeout",
+    "authentication",
+    "rate_limit",
+    "parse_error",
+    "provider_outage",
+    "configuration",
+    "policy",
+    "unknown",
+  ]),
+  last_attempted_at: z.string().nullable(),
+  last_successful_at: z.string().nullable(),
+  last_good_at: z.string().nullable(),
+  next_scheduled_at: z.string().nullable(),
+  freshness_state: z.enum([
+    "fresh",
+    "stale",
+    "never_succeeded",
+    "disabled",
+    "blocked",
+    "unknown",
+  ]),
+  records_affected: z.number().int().min(0).nullable(),
+  estimated_cost_minor: z.number().int().min(0),
+  estimated_cost_currency: z.string(),
+  estimated_cost_basis: z.string(),
+  retryable: z.boolean(),
+  quarantined: z.boolean(),
   replay_available: z.boolean(),
   ignore_available: z.boolean(),
   mark_resolved_available: z.boolean(),
@@ -2353,6 +2388,32 @@ export const providerOperationActionResponse = z.object({
   changed: z.boolean(),
   message: z.string(),
   operation: providerOperationRecord,
+});
+
+export const providerOperationReplayPreviewResponse = z.object({
+  preview_token: z.string(),
+  expires_at: z.string(),
+  operation_count: z.number().int().min(1).max(25),
+  estimated_total_cost_minor: z.number().int().min(0),
+  currency: z.string(),
+  items: z.array(
+    z.object({
+      operation: providerOperationRecord,
+      expected_updated_at: z.string(),
+      estimated_cost_minor: z.number().int().min(0),
+      currency: z.string(),
+      cost_basis: z.string(),
+    }),
+  ),
+  warnings: z.array(z.string()).default([]),
+});
+
+export const providerOperationReplayBatchResponse = z.object({
+  changed_count: z.number().int().min(0),
+  unchanged_count: z.number().int().min(0),
+  estimated_total_cost_minor: z.number().int().min(0),
+  currency: z.string(),
+  operations: z.array(providerOperationActionResponse),
 });
 
 export const providerReadinessRecord = z.object({
@@ -2693,6 +2754,34 @@ export const connectorHealthRecord = z.object({
   next_retry_at: z.string().nullable(),
   disabled_reason: z.string().nullable(),
   last_checked_at: z.string().nullable(),
+  last_attempted_at: z.string().nullable(),
+  last_good_at: z.string().nullable(),
+  next_scheduled_at: z.string().nullable(),
+  freshness_state: z.enum([
+    "fresh",
+    "stale",
+    "never_succeeded",
+    "disabled",
+    "blocked",
+    "unknown",
+  ]),
+  operational_state: z.enum(["healthy", "unhealthy", "disabled", "blocked"]),
+  freshness_threshold_minutes: z.number().int().positive(),
+  freshness_age_minutes: z.number().int().min(0).nullable(),
+  response_class: z.enum([
+    "success",
+    "no_change",
+    "timeout",
+    "authentication",
+    "rate_limit",
+    "parse_error",
+    "provider_outage",
+    "configuration",
+    "policy",
+    "unknown",
+  ]),
+  operator_attention_required: z.boolean(),
+  current_error_redacted: z.string().nullable(),
   operational_alerts: z.array(z.string()).default([]),
   setup_actions: z.array(z.string()).default([]),
   provider_operations_link: z.string().nullable(),
@@ -2702,6 +2791,10 @@ export const connectorHealthRecord = z.object({
 
 export const connectorHealthListResponse = z.object({
   health: z.array(connectorHealthRecord),
+  healthy_count: z.number().int().min(0),
+  unhealthy_count: z.number().int().min(0),
+  stale_count: z.number().int().min(0),
+  disabled_count: z.number().int().min(0),
 });
 
 export const calendarProviderEventCandidateRecord = z.object({
@@ -3213,6 +3306,10 @@ export type ProviderOperationListResponse =
   z.infer<typeof providerOperationListResponse>;
 export type ProviderOperationActionResponse =
   z.infer<typeof providerOperationActionResponse>;
+export type ProviderOperationReplayPreviewResponse =
+  z.infer<typeof providerOperationReplayPreviewResponse>;
+export type ProviderOperationReplayBatchResponse =
+  z.infer<typeof providerOperationReplayBatchResponse>;
 export type ProviderReadinessRecord = z.infer<typeof providerReadinessRecord>;
 export type ProviderReadinessListResponse =
   z.infer<typeof providerReadinessListResponse>;

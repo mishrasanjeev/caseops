@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Literal
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -24,6 +29,7 @@ from caseops_api.db.models import (
     NotificationDeliveryChannel,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
+    ProviderCostCategory,
     TrackedCasePollRun,
     UserCalendarConnection,
 )
@@ -32,6 +38,9 @@ from caseops_api.schemas.provider_operations import (
     ProviderOperationActionResponse,
     ProviderOperationListResponse,
     ProviderOperationRecord,
+    ProviderOperationReplayBatchResponse,
+    ProviderOperationReplayPreviewItem,
+    ProviderOperationReplayPreviewResponse,
     ProviderReadinessListResponse,
     ProviderReadinessRecord,
 )
@@ -49,6 +58,7 @@ from caseops_api.services.google_workspace import (
     google_workspace_oauth_config,
 )
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.provider_costs import effective_cost_minor
 from caseops_api.services.session_context import SessionContext
 
 _CALENDAR_OPEN_STATUSES = {
@@ -72,6 +82,8 @@ _MAILBOX_WEBHOOK_OPEN_STATUSES = {
 }
 _OPERATOR_IGNORE_REASON = "operator_ignored"
 _OPERATOR_RESOLVE_REASON = "operator_resolved"
+_REPLAY_PREVIEW_TTL_MINUTES = 5
+_MAX_REPLAY_BATCH_SIZE = 25
 
 
 def _now() -> datetime:
@@ -105,6 +117,118 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
             detail="Provider operation not found.",
         )
     return kind, row_id
+
+
+def _as_aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _classify_response(record: ProviderOperationRecord) -> str:
+    value = " ".join(
+        part
+        for part in (record.status, record.error_redacted, record.dead_letter_reason)
+        if part
+    ).lower()
+    if record.status in {"synced", "delivered", "processed", "completed", "imported"}:
+        return "success"
+    if record.status in {"no_change", "duplicate"}:
+        return "no_change"
+    if "timeout" in value:
+        return "timeout"
+    if any(item in value for item in ("auth", "token", "scope")):
+        return "authentication"
+    if "rate" in value or "quota" in value:
+        return "rate_limit"
+    if any(item in value for item in ("parse", "schema", "malformed")):
+        return "parse_error"
+    if "outage" in value or "unavailable" in value:
+        return "provider_outage"
+    if "config" in value or "disabled" in value:
+        return "configuration"
+    if "policy" in value or "suppression" in value:
+        return "policy"
+    return "unknown"
+
+
+def _enrich_operation(record: ProviderOperationRecord) -> ProviderOperationRecord:
+    response_class = (
+        record.response_class
+        if record.response_class != "unknown"
+        else _classify_response(record)
+    )
+    successful = response_class in {"success", "no_change"}
+    freshness_state = (
+        record.freshness_state
+        if record.freshness_state != "unknown"
+        else ("fresh" if successful else "never_succeeded")
+    )
+    if record.status in {"disabled"}:
+        freshness_state = "disabled"
+    elif record.status in {"blocked", "blocked_by_policy", "missing_config"}:
+        freshness_state = "blocked"
+    return record.model_copy(
+        update={
+            "correlation_ref": redact_identifier(record.id),
+            "response_class": response_class,
+            "last_attempted_at": record.last_attempted_at or record.updated_at,
+            "last_successful_at": record.last_successful_at
+            or (record.updated_at if successful else None),
+            "last_good_at": record.last_good_at
+            or (record.updated_at if successful else None),
+            "next_scheduled_at": record.next_scheduled_at or record.next_attempt_at,
+            "freshness_state": freshness_state,
+            "retryable": record.replay_available,
+            "quarantined": record.status == "dead_letter",
+        }
+    )
+
+
+def _encode_preview(payload: dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=")
+    signature = hmac.new(
+        get_settings().auth_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).digest()
+    return body.decode("ascii") + "." + base64.urlsafe_b64encode(signature).decode("ascii")
+
+
+def _decode_preview(token: str, *, company_id: str) -> dict[str, Any]:
+    try:
+        body_text, signature_text = token.split(".", 1)
+        body = body_text.encode("ascii")
+        signature = base64.urlsafe_b64decode(signature_text.encode("ascii"))
+        expected = hmac.new(
+            get_settings().auth_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(signature, expected):
+            raise ValueError("signature")
+        padded = body + b"=" * (-len(body) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+        if payload.get("version") != 1 or payload.get("company_id") != company_id:
+            raise ValueError("scope")
+        expires_at = datetime.fromtimestamp(int(payload["expires_at"]), tz=UTC)
+        if expires_at <= _now():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Replay preview expired. Generate a new preview.",
+            )
+        operations = payload.get("operations")
+        if not isinstance(operations, list) or not 1 <= len(operations) <= _MAX_REPLAY_BATCH_SIZE:
+            raise ValueError("operations")
+        return payload
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Replay preview token is invalid.",
+        ) from None
 
 
 def _operator_state(
@@ -251,6 +375,15 @@ def _case_tracking_poll_record(row: TrackedCasePollRun) -> ProviderOperationReco
         next_attempt_at=None,
         created_at=row.started_at,
         updated_at=row.completed_at or row.started_at,
+        response_class=(
+            "no_change"
+            if row.status == "completed" and row.update_count == 0
+            else "success" if row.status == "completed" else "unknown"
+        ),
+        last_attempted_at=row.started_at,
+        last_successful_at=(row.completed_at if row.status == "completed" else None),
+        last_good_at=(row.completed_at if row.status == "completed" else None),
+        records_affected=row.update_count,
         replay_available=False,
         ignore_available=False,
         mark_resolved_available=False,
@@ -423,6 +556,16 @@ def _inbound_email_event_record(row: InboundEmailEvent) -> ProviderOperationReco
 
 
 def _connector_health_record(row: ConnectorHealthRecord) -> ProviderOperationRecord:
+    last_success = _as_aware(row.last_success_at) if row.last_success_at else None
+    freshness_state = "never_succeeded"
+    if str(row.connected_state) == "disabled":
+        freshness_state = "disabled"
+    elif str(row.connected_state) in {"blocked_by_policy", "missing_config"}:
+        freshness_state = "blocked"
+    elif last_success is not None:
+        freshness_state = (
+            "fresh" if _now() - last_success <= timedelta(days=1) else "stale"
+        )
     return ProviderOperationRecord(
         id=_operation_id("connector_health", row.id),
         job_kind="connector_health",
@@ -443,6 +586,26 @@ def _connector_health_record(row: ConnectorHealthRecord) -> ProviderOperationRec
         next_attempt_at=row.next_retry_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        response_class=(
+            "authentication"
+            if str(row.connected_state) in {"token_expired", "scope_missing"}
+            else "rate_limit"
+            if str(row.connected_state) == "rate_limited"
+            else "provider_outage"
+            if str(row.connected_state) == "provider_outage"
+            else "policy"
+            if str(row.connected_state) == "blocked_by_policy"
+            else "configuration"
+            if str(row.connected_state) == "missing_config"
+            else "success"
+            if last_success is not None
+            else "unknown"
+        ),
+        last_attempted_at=row.last_checked_at,
+        last_successful_at=row.last_success_at,
+        last_good_at=row.last_success_at,
+        next_scheduled_at=row.next_retry_at,
+        freshness_state=freshness_state,  # type: ignore[arg-type]
         replay_available=False,
         ignore_available=False,
         mark_resolved_available=False,
@@ -599,7 +762,7 @@ def list_provider_operations(
     if not include_resolved:
         records = [row for row in records if row.operator_state == "open"]
     records.sort(key=lambda row: row.updated_at, reverse=True)
-    records = records[:limit]
+    records = [_enrich_operation(row) for row in records[:limit]]
     return ProviderOperationListResponse(
         operations=records,
         open_count=sum(1 for row in records if row.operator_state == "open"),
@@ -714,6 +877,216 @@ def _load_mailbox_webhook_operation(
     return row
 
 
+def _load_operation_record(
+    session: Session,
+    *,
+    context: SessionContext,
+    operation_id: str,
+) -> ProviderOperationRecord:
+    kind, row_id = _split_operation_id(operation_id)
+    if kind == "calendar_sync":
+        return _enrich_operation(
+            _calendar_record(
+                _load_calendar_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "notification_delivery":
+        return _enrich_operation(
+            _notification_record(
+                _load_notification_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "case_tracking_poll":
+        return _enrich_operation(
+            _case_tracking_poll_record(
+                _load_case_tracking_poll_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "mailbox_message_import":
+        return _enrich_operation(
+            _mailbox_import_record(
+                _load_mailbox_import_operation(session, context=context, row_id=row_id)
+            )
+        )
+    return _enrich_operation(
+        _mailbox_webhook_record(
+            _load_mailbox_webhook_operation(session, context=context, row_id=row_id)
+        )
+    )
+
+
+def _replay_cost(
+    session: Session,
+    *,
+    record: ProviderOperationRecord,
+) -> tuple[int, str, str | None]:
+    if record.job_kind == "notification_delivery" and record.provider == str(
+        NotificationDeliveryChannel.IN_APP
+    ):
+        return 0, "internal_idempotent_delivery", None
+    if record.job_kind == "case_tracking_poll":
+        cost, source = effective_cost_minor(
+            session,
+            category=ProviderCostCategory.BULK_CASE_REFRESH,
+            provider="case_tracking",
+        )
+        return cost, source, None
+    return (
+        0,
+        "unpriced_provider_call",
+        "Provider pricing is not configured for this operation; the preview cost is "
+        "therefore zero-recorded-cost, not a representation that the provider is free.",
+    )
+
+
+def preview_provider_operation_replay(
+    session: Session,
+    *,
+    context: SessionContext,
+    operation_ids: list[str],
+) -> ProviderOperationReplayPreviewResponse:
+    if not 1 <= len(operation_ids) <= _MAX_REPLAY_BATCH_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Replay scope must contain 1 to {_MAX_REPLAY_BATCH_SIZE} operations.",
+        )
+
+    items: list[ProviderOperationReplayPreviewItem] = []
+    token_operations: list[dict[str, str]] = []
+    warnings: list[str] = []
+    total_cost = 0
+    for operation_id in operation_ids:
+        record = _load_operation_record(
+            session,
+            context=context,
+            operation_id=operation_id,
+        )
+        if not record.replay_available:
+            record_from_context(
+                session,
+                context,
+                action="provider_operation.replay_preview_denied",
+                target_type="provider_operation",
+                target_id=redact_identifier(operation_id),
+                result=AuditResult.DENIED,
+                metadata={
+                    "job_kind": record.job_kind,
+                    "provider": record.provider,
+                    "reason": "operation_not_replayable",
+                },
+            )
+            session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Provider operation {operation_id} is not replayable.",
+            )
+        cost, cost_basis, warning = _replay_cost(session, record=record)
+        total_cost += cost
+        if warning and warning not in warnings:
+            warnings.append(warning)
+        record = record.model_copy(
+            update={
+                "estimated_cost_minor": cost,
+                "estimated_cost_basis": cost_basis,
+            }
+        )
+        expected_updated_at = _as_aware(record.updated_at)
+        items.append(
+            ProviderOperationReplayPreviewItem(
+                operation=record,
+                expected_updated_at=expected_updated_at,
+                estimated_cost_minor=cost,
+                cost_basis=cost_basis,
+            )
+        )
+        token_operations.append(
+            {
+                "id": operation_id,
+                "status": record.status,
+                "updated_at": expected_updated_at.isoformat(),
+            }
+        )
+
+    expires_at = _now() + timedelta(minutes=_REPLAY_PREVIEW_TTL_MINUTES)
+    preview_token = _encode_preview(
+        {
+            "version": 1,
+            "company_id": context.company.id,
+            "expires_at": int(expires_at.timestamp()),
+            "nonce": secrets.token_urlsafe(12),
+            "operations": token_operations,
+            "estimated_total_cost_minor": total_cost,
+            "currency": "INR",
+        }
+    )
+    record_from_context(
+        session,
+        context,
+        action="provider_operation.replay_previewed",
+        target_type="provider_operation_batch",
+        metadata={
+            "operation_count": len(items),
+            "estimated_total_cost_minor": total_cost,
+            "currency": "INR",
+            "expires_at": expires_at.isoformat(),
+        },
+    )
+    session.commit()
+    return ProviderOperationReplayPreviewResponse(
+        preview_token=preview_token,
+        expires_at=expires_at,
+        operation_count=len(items),
+        estimated_total_cost_minor=total_cost,
+        items=items,
+        warnings=warnings,
+    )
+
+
+def _validated_preview_operations(
+    session: Session,
+    *,
+    context: SessionContext,
+    preview_token: str,
+    expected_operation_ids: list[str] | None = None,
+) -> tuple[list[str], int]:
+    payload = _decode_preview(preview_token, company_id=context.company.id)
+    raw_operations = payload["operations"]
+    operation_ids = [str(item.get("id") or "") for item in raw_operations]
+    if expected_operation_ids is not None and operation_ids != expected_operation_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Replay preview scope does not match the requested operation.",
+        )
+
+    replay_targets = {
+        "calendar_sync": "pending",
+        "notification_delivery": "queued",
+        "mailbox_message_import": "queued",
+        "mailbox_webhook": "queued",
+    }
+    for expected in raw_operations:
+        operation_id = str(expected.get("id") or "")
+        current = _load_operation_record(
+            session,
+            context=context,
+            operation_id=operation_id,
+        )
+        already_replayed = current.status == replay_targets.get(current.job_kind)
+        if not already_replayed and (
+            current.status != expected.get("status")
+            or _as_aware(current.updated_at).isoformat() != expected.get("updated_at")
+            or not current.replay_available
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Replay scope changed after preview. Refresh the operation list and "
+                    "generate a new preview."
+                ),
+            )
+    return operation_ids, int(payload.get("estimated_total_cost_minor") or 0)
+
+
 def _audit_operation_action(
     session: Session,
     *,
@@ -752,6 +1125,7 @@ def replay_provider_operation(
     context: SessionContext,
     operation_id: str,
     reason: str | None = None,
+    commit: bool = True,
 ) -> ProviderOperationActionResponse:
     kind, row_id = _split_operation_id(operation_id)
     current_time = _now()
@@ -779,7 +1153,7 @@ def replay_provider_operation(
             changed=changed,
             reason=reason,
         )
-        session.commit()
+        session.commit() if commit else session.flush()
         return ProviderOperationActionResponse(
             action="replay",
             changed=changed,
@@ -807,7 +1181,7 @@ def replay_provider_operation(
             result=AuditResult.DENIED,
             reason=reason,
         )
-        session.commit()
+        session.commit() if commit else session.flush()
         return ProviderOperationActionResponse(
             action="replay",
             changed=False,
@@ -847,7 +1221,7 @@ def replay_provider_operation(
             changed=changed,
             reason=reason,
         )
-        session.commit()
+        session.commit() if commit else session.flush()
         return ProviderOperationActionResponse(
             action="replay",
             changed=changed,
@@ -882,7 +1256,7 @@ def replay_provider_operation(
             changed=changed,
             reason=reason,
         )
-        session.commit()
+        session.commit() if commit else session.flush()
         return ProviderOperationActionResponse(
             action="replay",
             changed=changed,
@@ -910,7 +1284,7 @@ def replay_provider_operation(
             result=AuditResult.DENIED,
             reason=reason,
         )
-        session.commit()
+        session.commit() if commit else session.flush()
         return ProviderOperationActionResponse(
             action="replay",
             changed=False,
@@ -943,7 +1317,7 @@ def replay_provider_operation(
         changed=changed,
         reason=reason,
     )
-    session.commit()
+    session.commit() if commit else session.flush()
     return ProviderOperationActionResponse(
         action="replay",
         changed=changed,
@@ -953,6 +1327,60 @@ def replay_provider_operation(
         if changed
         else "Notification intent was already outside a replayable state.",
         operation=_notification_record(row),
+    )
+
+
+def confirm_provider_operation_replay(
+    session: Session,
+    *,
+    context: SessionContext,
+    preview_token: str,
+    reason: str,
+    expected_operation_ids: list[str] | None = None,
+) -> ProviderOperationReplayBatchResponse:
+    operation_ids, estimated_total_cost_minor = _validated_preview_operations(
+        session,
+        context=context,
+        preview_token=preview_token,
+        expected_operation_ids=expected_operation_ids,
+    )
+    responses: list[ProviderOperationActionResponse] = []
+    try:
+        for operation_id in operation_ids:
+            response = replay_provider_operation(
+                session,
+                context=context,
+                operation_id=operation_id,
+                reason=reason,
+                commit=False,
+            )
+            responses.append(
+                response.model_copy(
+                    update={"operation": _enrich_operation(response.operation)}
+                )
+            )
+        record_from_context(
+            session,
+            context,
+            action="provider_operation.replay_batch_confirmed",
+            target_type="provider_operation_batch",
+            metadata={
+                "operation_count": len(responses),
+                "changed_count": sum(response.changed for response in responses),
+                "estimated_total_cost_minor": estimated_total_cost_minor,
+                "currency": "INR",
+                "reason_present": bool(reason.strip()),
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return ProviderOperationReplayBatchResponse(
+        changed_count=sum(response.changed for response in responses),
+        unchanged_count=sum(not response.changed for response in responses),
+        estimated_total_cost_minor=estimated_total_cost_minor,
+        operations=responses,
     )
 
 
