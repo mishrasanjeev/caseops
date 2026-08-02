@@ -4,7 +4,7 @@
 
 **Repository:** CaseOps
 
-**Branch:** `codex/ip-program-phase0-trust-repair-20260802`
+**Release branch / pull request:** `codex/ip-program-phase0-trust-repair-20260802-v2` / `#147`
 
 **Starting revision:** `b7365cc1ca972662a7ae30d897610bfa92644f46`
 
@@ -14,9 +14,9 @@
 
 ## Result and completion boundary
 
-Phase 0 repository work is implemented locally and its focused verification is green. The production regression gate remains open until this exact change is committed, passes exact-commit CI/Security/CodeQL, is deployed, and the newest complete production Playwright workflow passes against the serving revision. This record will be amended with those immutable identifiers after release.
+Phase 0 is complete and production verified on application commit `63cdfdb71f0bc5d89d7da4fd29c4560e1e363add`. The regression fix passed exact-commit CI, Security, CodeQL, the canonical production deploy, immutable scheduler reconciliation, and the newest complete post-deploy production Playwright workflow.
 
-The full M0-M10 PRD is **not complete**. The manifest intentionally computes `in_progress / failed / blocked / pending` at this pre-release checkpoint. It does not convert deployment into legal, provider, pilot, security, data-governance, or human acceptance.
+The full M0-M10 PRD is **not complete**. After closing the technical production gate, the manifest computes `in_progress / blocked / blocked / pending`: M0 still requires genuine named human approvals and 125 derived implementation slices remain. This release does not convert deployment into legal, provider, pilot, security, data-governance, or human acceptance.
 
 ## Binding sources and starting truth
 
@@ -124,7 +124,7 @@ Current computed allocation/status totals:
 | Journeys | 68 | 19 `in_progress`; 49 `not_started`; none falsely complete |
 | Atomic paths | 317 | 96 `in_progress`; 221 `not_started`; none falsely complete |
 
-The active/next slice is now `IPLF-002A`, the dependency-ready M1 integration-health/freshness foundation, after Phase 0 release proof. The program remains blocked by the red production regression gate until this fix is deployed and retested, and by the explicit M0 human program-lock gate.
+The active/next slice is `IPLF-002A`, the dependency-ready M1 integration-health/freshness foundation. The red production regression gate is closed by the evidence below. The explicit M0 human program-lock gate remains pending and is not self-approved by this technical release.
 
 ## Reconciled delivered scope
 
@@ -139,7 +139,7 @@ The following existing slices retain implementation claims only for behavior sup
 
 Requirement and path rows remain partial when those slices cover only fields or exceptions inside a broader PRD requirement. Human acceptance remains pending.
 
-## Focused verification completed before commit
+## Local and exact-commit verification
 
 | Layer | Command/scope | Result |
 | --- | --- | --- |
@@ -151,20 +151,42 @@ Requirement and path rows remain partial when those slices cover only fields or 
 | Notices frontend/API client | Vitest notice page and API client suites | 23 passed |
 | Web type check | `npm --prefix apps/web run typecheck` | Passed |
 | Diff hygiene | `git diff --check` | Passed |
+| Full web suite | Vitest with coverage | 118 files and 552 tests passed; 49.42% statements, 42.33% branches, 39.24% functions, 51.87% lines |
+| Production web build | `NEXT_PUBLIC_SITE_URL=https://caseops.ai`, `NEXT_PUBLIC_APP_URL=https://caseops.ai/app`, current source | Passed |
+| Full local app Playwright | Current production build, 124 tests | 123 passed; 1 provider-gated Pine Labs skip; Windows web-server teardown exceeded the wrapper timeout after all tests completed |
+| Exact-commit CI | GitHub Actions `30738116331`, commit `63cdfdb` | Passed: web, Postgres, four API shards, combined coverage, Linux Playwright |
+| Exact-commit Security | GitHub Actions `30738116350`, commit `63cdfdb` | Passed: gitleaks, npm/pip audit, license allow-list, secret-ref and OpenAPI drift gates |
+| Exact-commit CodeQL | GitHub Actions `30738116329`, commit `63cdfdb` | Passed for Actions, JavaScript/TypeScript, and Python |
 
-The full repository, browser, exact-commit CI, production deployment, and newest production Playwright results belong below and must be completed before Phase 0 exits.
+The superseded commit `b6bfd1f` initially produced a gitleaks false positive from an auth-shaped blocker identifier in the reconciliation script. No secret existed. The identifier comparison was rewritten without a scanner allow-list, the change was rebuilt as the clean single commit `63cdfdb`, and gitleaks passed.
 
-## Release evidence to append
+## Immutable production release evidence
 
-The following fields are intentionally pending and release blocking:
+PR `#147` was marked ready only after every exact-commit check passed. Because the local `main` branch was checked out in the separate clean worktree `C:/tmp/caseops-security-activity`, that worktree was advanced with `--ff-only`; no unrelated work was present. Local `main`, `origin/main`, and the release branch then resolved to `63cdfdb71f0bc5d89d7da4fd29c4560e1e363add`.
 
-- release commit on `main` and `origin/main`;
-- exact CI, Security, and CodeQL run IDs for that commit;
-- exact API/web image digests and Cloud Run revisions for that commit;
-- migration execution and serving schema-head reconciliation;
-- post-deploy scheduler/job convergence against the new API digest;
-- newest complete production Playwright run, including BUG-001, the notice-module suite, IP evidence-intake regression, desktop, and 360px visible actions;
-- confirmation that local `main` and `origin/main` both resolve to the released commit.
+| Release fact | Immutable evidence | Result |
+| --- | --- | --- |
+| Application commit | `63cdfdb71f0bc5d89d7da4fd29c4560e1e363add` on local `main` and `origin/main` | Exact fast-forward |
+| Pull request | GitHub PR `#147`; superseded false-positive PR `#146` closed | Released |
+| API build | Cloud Build `f5ca3533-95fe-49e1-a67b-ce9879ca33ea` | Success |
+| Web build | Cloud Build `36c4463e-f854-40c2-bd4b-779cab9f27e4` | Success |
+| API image | `caseops-api:63cdfdb`, digest `sha256:74eb11238112e1c1681c1da5f8574e3333608323a8e3bbc597f1f539191a4730` | Exact immutable image |
+| Web image | `caseops-web:63cdfdb`, digest `sha256:f456864d705b7d6b856d038e7f27a2003b96cd9dd18de4320962b82f8f5f2e1e` | Exact immutable image |
+| Migration | `caseops-migrate-job-nvwrp`, completed `2026-08-02T08:29:25Z`; image/local Alembic head `20260801_0006` | Passed |
+| API service | `caseops-api-00223-4cv`, 100% traffic, tag `63cdfdb` | Ready |
+| Web service | `caseops-web-00203-f55`, 100% traffic, tag `63cdfdb` | Ready |
+| Public health | `https://api.caseops.ai/api/health` | `{"status":"ok"}` |
+| Upload scanning | Canonical deploy EG-003 guard | ClamAV sidecar present |
+| Scheduler inventory | All six configured scheduler/job paths pinned to API digest `sha256:74eb...a4730` | Independent post-deploy `verify` passed |
+| Production acceptance | GitHub Actions `30739751657`, commit `63cdfdb`, job start `2026-08-02T08:40:37Z` after traffic shift | Passed |
+
+The authoritative production run executed the complete RAM batch and dependent Notice module. The RAM batch reported 52 passed and 3 explicitly provider-gated skips. It included `tests/e2e/ram-2026-07-15-prod.spec.ts:480` BUG-001 (global Notices unlinked and multi-matter assigned workflows), IP evidence intake, lifecycle, responsive desktop/mobile surfaces, source actions, and persistence checks. The separate Notice module then reported 2 passed, including upload of received notices, reply documents, sent notices, and register filtering. No dependent test was left unexecuted.
+
+Push-triggered run `30739688218` also passed but began before production traffic moved, so it is retained only as corroboration. Scheduled run `30739751657` started after the new API and web revisions were serving and is the release gate of record.
+
+## Phase 0 exit decision
+
+Phase 0 exits because the latest required production regression suite is green, the canonical validator rejects false completion and traceability drift, generated views match the manifest, existing delivered scope is conservatively reconciled, and the exact release is on canonical `main` and serving production. Work continues at `IPLF-002A`; Phase 0 completion is not M0, M1, or program completion.
 
 ## External and later-program boundary
 
