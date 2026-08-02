@@ -4,4 +4,4 @@ Generated; do not edit.
 
 | Slice | Data impact |
 | --- | --- |
-| IPLF-039F | None declared |
+| IPLF-002A | Pending slice design; no data mutation is authorized by this allocation row. |

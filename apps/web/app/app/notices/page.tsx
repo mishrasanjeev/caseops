@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type InfiniteData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -58,6 +59,7 @@ import {
   listNoticeOwners,
   type NoticeDirection,
   type NoticeListParams,
+  type NoticeListResponse,
   type NoticeRecord,
   type UpdateNoticeInput,
   updateNotice,
@@ -705,15 +707,58 @@ export default function NoticesPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async ({ payload, file }: { payload: CreateNoticeInput; file: File | null }): Promise<{ fileError: unknown | null }> => {
-      const created = await createNotice(payload);
-      if (!file) return { fileError: null };
-      try { await uploadNoticeFile(created.id, file, created.updated_at); return { fileError: null }; }
-      catch (fileError) { return { fileError }; }
+    mutationFn: async ({ payload, file }: { payload: CreateNoticeInput; file: File | null }): Promise<{ notice: NoticeRecord; fileError: unknown | null }> => {
+      let savedNotice = await createNotice(payload);
+      if (!file) return { notice: savedNotice, fileError: null };
+      try {
+        savedNotice = await uploadNoticeFile(
+          savedNotice.id,
+          file,
+          savedNotice.updated_at,
+        );
+        return { notice: savedNotice, fileError: null };
+      }
+      catch (fileError) { return { notice: savedNotice, fileError }; }
     },
-    onSuccess: async ({ fileError }) => {
-      await queryClient.invalidateQueries({ queryKey: ["notices"] });
+    onSuccess: ({ notice, fileError }) => {
+      // The create response is already the server-authoritative record. Put it
+      // into an unfiltered active register immediately so a slow production
+      // count/list refresh cannot leave the dialog stuck on "Saving..." or
+      // hide a successfully committed notice. The background invalidation
+      // still reconciles ordering, access policy, totals, and every filter.
+      const unfilteredRegister =
+        !registerParams.query &&
+        !registerParams.status &&
+        !registerParams.matter_id &&
+        !registerParams.owner_membership_id &&
+        !registerParams.due_from &&
+        !registerParams.due_to;
+      if (unfilteredRegister && notice.direction === registerParams.direction) {
+        queryClient.setQueryData<InfiniteData<NoticeListResponse>>(
+          ["notices", "register", registerParams],
+          (current) => {
+            if (!current) {
+              return {
+                pages: [{ notices: [notice], total: 1, next_cursor: null }],
+                pageParams: [null],
+              };
+            }
+            if (current.pages.some((page) => page.notices.some((row) => row.id === notice.id))) {
+              return current;
+            }
+            return {
+              ...current,
+              pages: current.pages.map((page, index) => ({
+                ...page,
+                notices: index === 0 ? [notice, ...page.notices] : page.notices,
+                total: page.total + 1,
+              })),
+            };
+          },
+        );
+      }
       setCreateOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["notices"] });
       if (fileError) toast.error(`Notice saved, but its document was not attached. ${apiErrorMessage(fileError, "Use Attach document on the saved notice to retry.")}`);
       else toast.success("Notice created.");
     },

@@ -83,3 +83,90 @@ def test_validator_rejects_broken_evidence_and_closed_incomplete_milestone() -> 
 
     assert any("broken/empty evidence path" in error for error in errors)
     assert any("closed with incomplete slices" in error for error in errors)
+
+
+def test_validator_rejects_orphan_and_nonreciprocal_coverage() -> None:
+    manifest = _manifest()
+    requirement = manifest["requirements"][0]
+    requirement["slice_ids"] = []
+    path = manifest["journey_paths"][0]
+    owner = path["slice_ids"][0]
+    slice_row = next(row for row in manifest["slices"] if row["id"] == owner)
+    slice_row["journey_path_ids"].remove(path["id"])
+    path["test_refs"] = []
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("orphan requirement has no slice" in error for error in errors)
+    assert any("reverse mapping missing" in error for error in errors)
+    assert any("stable test ID is not referenced" in error for error in errors)
+
+
+def test_validator_rejects_bad_derived_slice_and_empty_unapproved_coverage() -> None:
+    manifest = _manifest()
+    derived = next(row for row in manifest["slices"] if row["source_kind"] == "derived")
+    derived["scope_source"] = "IPLF-999"
+    derived["ownership"] = []
+    derived["requirement_ids"] = []
+    derived["journey_path_ids"] = []
+    derived.pop("administrative_exception", None)
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("derived scope_source must equal parent epic" in error for error in errors)
+    assert any("missing ownership decision" in error for error in errors)
+    assert any(
+        "empty coverage lacks approved administrative exception" in error
+        for error in errors
+    )
+
+
+def test_validator_rejects_status_drift_stale_blocker_and_completed_active_slice() -> None:
+    manifest = _manifest()
+    requirement = manifest["requirements"][0]
+    requirement["implementation_status"] = "implemented"
+    active = next(
+        row
+        for row in manifest["slices"]
+        if row["id"] == manifest["program"]["active_slice"]
+    )
+    active.update(
+        {
+            "implementation_status": "implemented",
+            "verification_status": "passed",
+            "release_status": "deployment_verified",
+            "acceptance_status": "approved",
+            "implementation_refs": ["scripts/ip_program_manifest.py"],
+            "test_refs": ["apps/api/tests/test_ip_program_manifest.py"],
+            "evidence_refs": [
+                "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md"
+            ],
+            "evidence_metadata": [],
+            "blockers": [
+                {
+                    "id": "RESOLVED",
+                    "summary": "Resolved by current production evidence.",
+                }
+            ],
+        }
+    )
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("must be derived" in error for error in errors)
+    assert any("stale resolved blocker" in error for error in errors)
+    assert any("lacks evidence_metadata" in error for error in errors)
+    assert any("active_slice is already implemented" in error for error in errors)
+
+
+def test_validator_rejects_missing_epic_decomposition_and_changed_prd_slice() -> None:
+    manifest = _manifest()
+    explicit = next(row for row in manifest["slices"] if row["source_kind"] == "prd_explicit")
+    explicit["title"] = "Changed scope"
+    epic = manifest["epics"][0]
+    epic["slice_ids"] = []
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("changed PRD-explicit title" in error for error in errors)
+    assert any("slice_ids are not reciprocal" in error for error in errors)

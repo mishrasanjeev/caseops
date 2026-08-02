@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -333,6 +333,51 @@ def compute_verified(row: dict[str, Any]) -> bool:
     )
 
 
+def aggregate_status(rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Compute truthful parent status from child rows and explicit gates."""
+    implementations = {row.get("implementation_status") for row in rows}
+    if rows and implementations == {"implemented"}:
+        implementation = "implemented"
+    elif "in_progress" in implementations or "implemented" in implementations:
+        implementation = "in_progress"
+    elif "blocked" in implementations:
+        implementation = "blocked"
+    else:
+        implementation = "not_started"
+
+    verifications = {row.get("verification_status") for row in rows}
+    if "failed" in verifications:
+        verification = "failed"
+    elif rows and verifications == {"passed"}:
+        verification = "passed"
+    elif "blocked" in verifications:
+        verification = "blocked"
+    else:
+        verification = "not_run"
+
+    releases = {row.get("release_status") for row in rows}
+    if rows and releases <= {"deployment_verified", "not_required"}:
+        release = "deployment_verified" if "deployment_verified" in releases else "not_required"
+    else:
+        release = "blocked"
+
+    acceptances = {row.get("acceptance_status") for row in rows}
+    if "rejected" in acceptances:
+        acceptance = "rejected"
+    elif rows and acceptances <= {"approved", "not_required"}:
+        acceptance = "approved" if "approved" in acceptances else "not_required"
+    elif "blocked" in acceptances:
+        acceptance = "blocked"
+    else:
+        acceptance = "pending"
+    return {
+        "implementation_status": implementation,
+        "verification_status": verification,
+        "release_status": release,
+        "acceptance_status": acceptance,
+    }
+
+
 def _table(headers: list[str], rows: list[list[str]]) -> str:
     output = ["| " + " | ".join(headers) + " |", "| " + " | ".join("---" for _ in headers) + " |"]
     output.extend("| " + " | ".join(cell.replace("|", "\\|") for cell in row) + " |" for row in rows)
@@ -345,6 +390,7 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
     journeys = manifest["journeys"]
     paths = manifest["journey_paths"]
     slices = manifest["slices"]
+    gates = manifest.get("gates", [])
     active = [row for row in slices if row["id"] == program.get("active_slice")]
 
     summary = (
@@ -353,27 +399,32 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
         f"- Active slice: `{program.get('active_slice')}`\n"
         f"- Requirements: {len(requirements)} across {len({row['family'] for row in requirements})} families\n"
         f"- Journeys: {len(journeys)} with {len(paths)} atomic normal/exception paths\n"
+        f"- Implementation slices: {len(slices)} ({sum(row.get('source_kind') == 'prd_explicit' for row in slices)} PRD-explicit; "
+        f"{sum(row.get('source_kind') == 'derived' for row in slices)} derived decompositions)\n"
+        f"- Coverage: {sum(bool(row.get('slice_ids')) for row in requirements)}/{len(requirements)} requirements; "
+        f"{sum(bool(row.get('slice_ids')) for row in paths)}/{len(paths)} atomic paths\n"
+        f"- Open/failed gates: {sum(not compute_verified(row) for row in gates)}/{len(gates)}\n"
         f"- Program status: `{program['implementation_status']}` / `{program['verification_status']}` / "
         f"`{program['release_status']}` / `{program['acceptance_status']}`\n"
     )
     requirement_view = "# Requirement traceability\n\nGenerated; do not edit.\n\n" + _table(
-        ["Requirement", "Family", "Implementation", "Verification", "Release", "Verified"],
+        ["Requirement", "Family", "Slices", "Tests", "Evidence", "Implementation", "Verification", "Release", "Verified"],
         [
-            [row["id"], row["family"], row["implementation_status"], row["verification_status"], row["release_status"], str(compute_verified(row)).lower()]
+            [row["id"], row["family"], ", ".join(row.get("slice_ids", [])), str(len(row.get("test_refs", []))), str(len(row.get("evidence_refs", []))), row["implementation_status"], row["verification_status"], row["release_status"], str(compute_verified(row)).lower()]
             for row in requirements
         ],
     )
     journey_view = "# Journey traceability\n\nGenerated; do not edit.\n\n" + _table(
-        ["Journey", "Title", "Atomic paths", "Implementation", "Verification", "Verified"],
+        ["Journey", "Title", "Atomic paths", "Slices", "Tests", "Evidence", "Implementation", "Verification", "Verified"],
         [
-            [row["id"], row["title"], str(len(row["path_ids"])), row["implementation_status"], row["verification_status"], str(compute_verified(row)).lower()]
+            [row["id"], row["title"], str(len(row["path_ids"])), ", ".join(row.get("slice_ids", [])), str(len(row.get("test_refs", []))), str(len(row.get("evidence_refs", []))), row["implementation_status"], row["verification_status"], str(compute_verified(row)).lower()]
             for row in journeys
         ],
     )
     implementation_view = "# Implementation view\n\nGenerated; do not edit.\n\n" + _table(
-        ["Slice", "Milestone", "Requirements", "Journey paths", "Implementation", "Verification", "Release", "Acceptance"],
+        ["Slice", "Source", "Parent", "Milestone", "Requirements", "Journey paths", "Implementation", "Verification", "Release", "Acceptance"],
         [
-            [row["id"], row["milestone_id"], ", ".join(row["requirement_ids"]), ", ".join(row["journey_path_ids"]), row["implementation_status"], row["verification_status"], row["release_status"], row["acceptance_status"]]
+            [row["id"], row.get("source_kind", ""), row.get("epic_id", ""), row["milestone_id"], ", ".join(row["requirement_ids"]), ", ".join(row["journey_path_ids"]), row["implementation_status"], row["verification_status"], row["release_status"], row["acceptance_status"]]
             for row in slices
         ],
     )
@@ -429,6 +480,9 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     parsed_epics, parsed_slices = parse_backlog(prd)
     parsed_milestones = parse_milestones(prd)
 
+    if manifest.get("schema_version") != 2:
+        errors.append("manifest schema_version must be 2 after Phase 0 reconciliation")
+
     requirement_ids = [row.get("id") for row in manifest.get("requirements", [])]
     parsed_requirement_ids = [row["id"] for row in parsed_requirements]
     duplicate_requirements = sorted(key for key, count in Counter(requirement_ids).items() if count > 1)
@@ -457,10 +511,28 @@ def validate(manifest: dict[str, Any]) -> list[str]:
         row["id"] for row in parsed_epics
     ]:
         errors.append("manifest epic IDs/order do not exactly match the PRD backlog")
-    if [row.get("id") for row in manifest.get("slices", [])] != [
-        row["id"] for row in parsed_slices
-    ]:
-        errors.append("manifest slice IDs/order do not exactly match the PRD backlog")
+    manifest_slices = manifest.get("slices", [])
+    slices_by_id = {row.get("id"): row for row in manifest_slices}
+    for parsed_slice in parsed_slices:
+        row = slices_by_id.get(parsed_slice["id"])
+        if row is None:
+            errors.append(f"missing PRD-explicit slice {parsed_slice['id']}")
+            continue
+        for field in ("title", "milestone_id", "epic_id"):
+            if row.get(field) != parsed_slice.get(field):
+                errors.append(f"slice/{row['id']}: changed PRD-explicit {field}")
+        if row.get("source_kind") != "prd_explicit":
+            errors.append(f"slice/{row['id']}: PRD-explicit slice has wrong source_kind")
+    parsed_slice_ids = {row["id"] for row in parsed_slices}
+    for row in manifest_slices:
+        row_id = row.get("id", "")
+        if row_id not in parsed_slice_ids:
+            if row.get("source_kind") != "derived":
+                errors.append(f"slice/{row_id}: non-PRD slice must declare source_kind derived")
+            if not re.fullmatch(r"IPLF-\d{3}[A-Z]", row_id):
+                errors.append(f"slice/{row_id}: invalid derived slice ID")
+            if row.get("scope_source") != row.get("epic_id"):
+                errors.append(f"slice/{row_id}: derived scope_source must equal parent epic")
 
     def comparable_path(row: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
         return row.get("id"), row.get("journey_id"), row.get("kind"), row.get("source_text")
@@ -479,7 +551,15 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     }:
         errors.append("manifest baseline counts were changed")
 
-    collections = ("milestones", "epics", "slices", "requirements", "journeys", "journey_paths")
+    collections = (
+        "gates",
+        "milestones",
+        "epics",
+        "slices",
+        "requirements",
+        "journeys",
+        "journey_paths",
+    )
     all_rows: list[tuple[str, dict[str, Any]]] = []
     for collection in collections:
         rows = manifest.get(collection, [])
@@ -506,6 +586,8 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             errors.append(f"{collection}/{row_id}: invalid acceptance_status")
         if row.get("implementation_status") == "not_started" and row.get("verification_status") != "not_run":
             errors.append(f"{collection}/{row_id}: not_started rows must have verification not_run")
+        if row.get("verification_status") == "passed" and row.get("implementation_status") != "implemented":
+            errors.append(f"{collection}/{row_id}: passed verification requires implemented status")
         if row.get("release_status") == "deployment_verified" and not (
             row.get("implementation_status") == "implemented"
             and row.get("verification_status") == "passed"
@@ -518,10 +600,35 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             required = {"prd_citation", "reviewer", "reason", "date", "milestone"}
             if not required.issubset(approval):
                 errors.append(f"{collection}/{row_id}: unapproved not_required status")
+        if row.get("acceptance_status") == "approved" and row.get("verification_status") != "passed":
+            errors.append(f"{collection}/{row_id}: approved acceptance requires passed verification")
         for evidence_ref in row.get("evidence_refs", []):
             evidence_path = REPO_ROOT / evidence_ref
             if not evidence_path.is_file() or evidence_path.stat().st_size < 32:
                 errors.append(f"{collection}/{row_id}: broken/empty evidence path {evidence_ref}")
+        blockers = row.get("blockers", [])
+        for blocker in blockers:
+            if blocker.get("state") == "resolved" or blocker.get("resolved_at") or str(blocker.get("summary", "")).lower().startswith("resolved"):
+                errors.append(f"{collection}/{row_id}: stale resolved blocker {blocker.get('id')}")
+        if compute_verified(row) and blockers:
+            errors.append(f"{collection}/{row_id}: verified row retains contradictory blockers")
+        if row.get("verification_status") == "passed" or row.get("release_status") == "deployment_verified":
+            metadata = row.get("evidence_metadata", [])
+            if collection == "slices" and not metadata:
+                errors.append(f"{collection}/{row_id}: passed/released slice lacks evidence_metadata")
+            for claim in metadata:
+                required_claim = {
+                    "ref", "revision", "environment", "fixtures", "assertions", "result", "recorded_at"
+                }
+                if not required_claim.issubset(claim) or any(not str(claim.get(key, "")).strip() for key in required_claim):
+                    errors.append(f"{collection}/{row_id}: incomplete evidence metadata")
+                    continue
+                if claim["ref"] not in row.get("evidence_refs", []):
+                    errors.append(f"{collection}/{row_id}: evidence metadata ref is not attached")
+                if not re.fullmatch(r"[0-9a-f]{40}", str(claim["revision"])):
+                    errors.append(f"{collection}/{row_id}: evidence revision is not an exact commit")
+                if claim["result"] != "passed":
+                    errors.append(f"{collection}/{row_id}: passing claim has non-passing evidence result")
 
     valid_milestones = {row.get("id") for row in manifest.get("milestones", [])}
     ownership_writers: dict[str, tuple[str, str]] = {}
@@ -538,6 +645,32 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             errors.append(f"slice/{row_id}: unknown requirements {unknown_requirements}")
         if unknown_paths:
             errors.append(f"slice/{row_id}: unknown journey paths {unknown_paths}")
+        for required_field in (
+            "primary_behavior",
+            "migration_boundary",
+            "release_boundary",
+            "allocation_review",
+        ):
+            if not str(row.get(required_field, "")).strip():
+                errors.append(f"slice/{row_id}: missing {required_field}")
+        if not row.get("ownership"):
+            errors.append(f"slice/{row_id}: missing ownership decision")
+        if not row.get("requirement_ids") or not row.get("journey_path_ids"):
+            approval = row.get("administrative_exception") or {}
+            required = {"prd_citation", "reviewer", "reason", "date", "milestone"}
+            if not required.issubset(approval):
+                errors.append(f"slice/{row_id}: empty coverage lacks approved administrative exception")
+        if row.get("implementation_status") == "implemented":
+            if not row.get("implementation_refs"):
+                errors.append(f"slice/{row_id}: implemented slice lacks implementation refs")
+            if not row.get("requirement_ids") or not row.get("journey_path_ids"):
+                if not row.get("administrative_exception"):
+                    errors.append(f"slice/{row_id}: implemented slice has empty coverage")
+        if row.get("verification_status") == "passed":
+            if not row.get("test_refs"):
+                errors.append(f"slice/{row_id}: passed slice lacks test refs")
+            if not row.get("evidence_refs"):
+                errors.append(f"slice/{row_id}: passed slice lacks evidence refs")
         for owner in row.get("ownership", []):
             component = owner.get("component", "").lower()
             if owner.get("classification") not in {"NEW", "EXTEND", "LINK", "REPLACE"}:
@@ -557,17 +690,137 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             elif component:
                 ownership_writers[component] = (row_id, writer)
 
+    slices_for_epic: dict[str, list[str]] = defaultdict(list)
+    for row in manifest.get("slices", []):
+        slices_for_epic[row.get("epic_id")].append(row["id"])
+    for epic in manifest.get("epics", []):
+        expected = sorted(slices_for_epic.get(epic["id"], []))
+        if not expected:
+            errors.append(f"epic/{epic['id']}: has no decomposed suffix slices")
+        if epic.get("slice_ids") != expected:
+            errors.append(f"epic/{epic['id']}: slice_ids are not reciprocal")
+
     for row in manifest.get("requirements", []):
         unknown = sorted(set(row.get("journey_ids", [])) - valid_journeys)
         if unknown:
             errors.append(f"requirement/{row['id']}: unknown journeys {unknown}")
+        slice_ids = row.get("slice_ids", [])
+        unknown_slices = sorted(set(slice_ids) - valid_slices)
+        if unknown_slices:
+            errors.append(f"requirement/{row['id']}: unknown slices {unknown_slices}")
+        if not slice_ids:
+            errors.append(f"requirement/{row['id']}: orphan requirement has no slice")
+        if len(slice_ids) > 1 and not row.get("allocation_rationale"):
+            errors.append(f"requirement/{row['id']}: many-to-many allocation lacks rationale")
+        if not row.get("test_refs"):
+            errors.append(f"requirement/{row['id']}: no stable test reference")
+        for slice_id in slice_ids:
+            if row["id"] not in slices_by_id.get(slice_id, {}).get("requirement_ids", []):
+                errors.append(f"requirement/{row['id']}: reverse mapping missing from {slice_id}")
     for row in manifest.get("journeys", []):
         unknown = sorted(set(row.get("path_ids", [])) - valid_paths)
         if unknown:
             errors.append(f"journey/{row['id']}: unknown paths {unknown}")
+        if not row.get("slice_ids"):
+            errors.append(f"journey/{row['id']}: no implementing slices")
+        if not row.get("test_refs"):
+            errors.append(f"journey/{row['id']}: no stable test references")
+
+    requirements_by_id = {row["id"]: row for row in manifest.get("requirements", [])}
+    paths_by_id = {row["id"]: row for row in manifest.get("journey_paths", [])}
+    for row in manifest.get("journey_paths", []):
+        slice_ids = row.get("slice_ids", [])
+        unknown_slices = sorted(set(slice_ids) - valid_slices)
+        if unknown_slices:
+            errors.append(f"journey_path/{row['id']}: unknown slices {unknown_slices}")
+        if not slice_ids:
+            errors.append(f"journey_path/{row['id']}: orphan path has no slice")
+        if len(slice_ids) > 1 and not row.get("allocation_rationale"):
+            errors.append(f"journey_path/{row['id']}: many-to-many allocation lacks rationale")
+        if row.get("test_id") not in " ".join(row.get("test_refs", [])):
+            errors.append(f"journey_path/{row['id']}: stable test ID is not referenced")
+        for slice_id in slice_ids:
+            if row["id"] not in slices_by_id.get(slice_id, {}).get("journey_path_ids", []):
+                errors.append(f"journey_path/{row['id']}: reverse mapping missing from {slice_id}")
+        unknown_requirements = sorted(set(row.get("requirement_ids", [])) - set(requirements_by_id))
+        if unknown_requirements:
+            errors.append(f"journey_path/{row['id']}: unknown requirements {unknown_requirements}")
+
+    for row in manifest.get("slices", []):
+        for requirement_id in row.get("requirement_ids", []):
+            if row["id"] not in requirements_by_id.get(requirement_id, {}).get("slice_ids", []):
+                errors.append(f"slice/{row['id']}: requirement reverse mapping missing for {requirement_id}")
+        for path_id in row.get("journey_path_ids", []):
+            if row["id"] not in paths_by_id.get(path_id, {}).get("slice_ids", []):
+                errors.append(f"slice/{row['id']}: journey path reverse mapping missing for {path_id}")
+
+    for gate in manifest.get("gates", []):
+        if gate.get("milestone_id") not in valid_milestones:
+            errors.append(f"gate/{gate.get('id')}: unknown milestone {gate.get('milestone_id')}")
+
+    status_fields = (
+        "implementation_status",
+        "verification_status",
+        "release_status",
+        "acceptance_status",
+    )
+
+    def require_derived_status(label: str, row: dict[str, Any], children: list[dict[str, Any]]) -> None:
+        expected = aggregate_status(children)
+        for field in status_fields:
+            if row.get(field) != expected[field]:
+                errors.append(
+                    f"{label}: {field} must be derived as {expected[field]}, found {row.get(field)}"
+                )
+
+    for requirement in manifest.get("requirements", []):
+        require_derived_status(
+            f"requirement/{requirement['id']}",
+            requirement,
+            [slices_by_id[slice_id] for slice_id in requirement.get("slice_ids", []) if slice_id in slices_by_id],
+        )
+    for path in manifest.get("journey_paths", []):
+        require_derived_status(
+            f"journey_path/{path['id']}",
+            path,
+            [slices_by_id[slice_id] for slice_id in path.get("slice_ids", []) if slice_id in slices_by_id],
+        )
+    for journey in manifest.get("journeys", []):
+        require_derived_status(
+            f"journey/{journey['id']}",
+            journey,
+            [paths_by_id[path_id] for path_id in journey.get("path_ids", []) if path_id in paths_by_id],
+        )
+    epics_by_id = {row["id"]: row for row in manifest.get("epics", [])}
+    for epic in manifest.get("epics", []):
+        require_derived_status(
+            f"epic/{epic['id']}",
+            epic,
+            [slices_by_id[slice_id] for slice_id in epic.get("slice_ids", []) if slice_id in slices_by_id],
+        )
+    gates_by_id = {row["id"]: row for row in manifest.get("gates", [])}
+    for milestone in manifest.get("milestones", []):
+        children = [
+            epics_by_id[epic_id]
+            for epic_id in milestone.get("epic_ids", [])
+            if epic_id in epics_by_id
+        ] + [
+            gates_by_id[gate_id]
+            for gate_id in milestone.get("gate_ids", [])
+            if gate_id in gates_by_id
+        ]
+        require_derived_status(f"milestone/{milestone['id']}", milestone, children)
+    require_derived_status("program", program, manifest.get("milestones", []))
 
     if program.get("active_slice") not in valid_slices:
         errors.append(f"program active_slice is unknown: {program.get('active_slice')}")
+    elif slices_by_id[program["active_slice"]].get("implementation_status") == "implemented":
+        errors.append("program active_slice is already implemented")
+    next_slice = program.get("checkpoint", {}).get("next_slice")
+    if next_slice not in valid_slices:
+        errors.append(f"program checkpoint next_slice is unknown: {next_slice}")
+    elif slices_by_id[next_slice].get("implementation_status") == "implemented":
+        errors.append("program checkpoint next_slice is already implemented")
 
     for milestone in manifest.get("milestones", []):
         if compute_verified(milestone):

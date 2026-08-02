@@ -250,6 +250,35 @@ describe("centralized notice management", () => {
     expect(uploadNoticeFileMock).not.toHaveBeenCalled();
   });
 
+  it("shows a committed notice and closes the dialog while register reconciliation is slow", async () => {
+    const created = notice({
+      id: "committed-notice",
+      subject: "Committed production notice",
+      created_at: "2026-08-02T09:00:00Z",
+      updated_at: "2026-08-02T09:00:00Z",
+    });
+    createNoticeMock.mockResolvedValue(created);
+    render(withClient(<NoticesPage />));
+
+    await screen.findByText("No received notices");
+    fireEvent.click(screen.getByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Subject"), {
+      target: { value: created.subject },
+    });
+
+    // Reconciliation can be materially slower than the successful mutation in
+    // a production-shaped register. A committed record must still be visible.
+    listNoticesMock.mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    expect(await screen.findByText(created.subject)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("create-notice-dialog")).not.toBeInTheDocument(),
+    );
+    expect(toastSuccessMock).toHaveBeenCalledWith("Notice created.");
+  });
+
   it("creates a sent notice linked to multiple matters with an optional owner", async () => {
     render(withClient(<NoticesPage />));
 
