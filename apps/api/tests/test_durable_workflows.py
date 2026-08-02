@@ -420,6 +420,23 @@ def test_notification_delivery_retry_and_dead_letter_are_bounded_redacted(
         assert "lawyer@example.test" not in (intent.last_error_redacted or "")
 
 
+def test_provider_error_redaction_is_bounded_for_adversarial_tokens() -> None:
+    secret = "provider-secret-value-that-must-not-survive"
+    adversarial_email = f"{'+' * 1_000}@example.test"
+    raw = (
+        f"authorization {secret} {adversarial_email} "
+        f"client_secret={secret} {' ' * 50_000}tail"
+    )
+
+    redacted = redact_provider_error(raw)
+
+    assert len(redacted) <= 200
+    assert secret not in redacted
+    assert "example.test" not in redacted
+    assert "[redacted]" in redacted
+    assert "[email-redacted]" in redacted
+
+
 def test_disposed_matter_blocks_new_and_preloaded_notification_delivery(
     client: TestClient,
 ) -> None:
