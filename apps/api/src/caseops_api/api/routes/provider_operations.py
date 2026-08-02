@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.provider_operations import (
+    ProviderIncidentResolutionRequest,
     ProviderOperationActionRequest,
     ProviderOperationActionResponse,
     ProviderOperationListResponse,
@@ -20,15 +21,14 @@ from caseops_api.services.provider_operations import (
     list_provider_operations,
     preview_provider_operation_replay,
     provider_readiness_status,
+    resolve_case_tracking_incident,
     update_provider_operation_state,
 )
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
-WorkspaceAdmin = Annotated[
-    SessionContext, Depends(require_capability("workspace:admin"))
-]
+WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
 
 
 @router.get(
@@ -165,4 +165,30 @@ def post_provider_operation_mark_resolved(
         operation_id=operation_id,
         action="mark_resolved",
         reason=payload.reason,
+    )
+
+
+@router.post(
+    "/jobs/{operation_id}/resolve-incident",
+    response_model=ProviderOperationActionResponse,
+    summary="Close a replayed case-tracking incident with root cause and prevention evidence.",
+)
+def post_case_tracking_incident_resolution(
+    operation_id: str,
+    payload: ProviderIncidentResolutionRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> ProviderOperationActionResponse:
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="provider_incident_resolution",
+    )
+    return resolve_case_tracking_incident(
+        session,
+        context=context,
+        operation_id=operation_id,
+        root_cause=payload.root_cause,
+        prevention=payload.prevention,
+        canary_evidence=payload.canary_evidence,
     )

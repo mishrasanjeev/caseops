@@ -31,6 +31,7 @@ from caseops_api.db.models import (
     NotificationDeliveryStatus,
     ProviderCostCategory,
     TrackedCasePollRun,
+    TrackedCaseProviderOperation,
     UserCalendarConnection,
 )
 from caseops_api.schemas.provider_operations import (
@@ -107,6 +108,7 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
             "calendar_sync",
             "notification_delivery",
             "case_tracking_poll",
+            "case_tracking_record",
             "mailbox_message_import",
             "mailbox_webhook",
         }
@@ -127,9 +129,7 @@ def _as_aware(value: datetime) -> datetime:
 
 def _classify_response(record: ProviderOperationRecord) -> str:
     value = " ".join(
-        part
-        for part in (record.status, record.error_redacted, record.dead_letter_reason)
-        if part
+        part for part in (record.status, record.error_redacted, record.dead_letter_reason) if part
     ).lower()
     if record.status in {"synced", "delivered", "processed", "completed", "imported"}:
         return "success"
@@ -154,9 +154,7 @@ def _classify_response(record: ProviderOperationRecord) -> str:
 
 def _enrich_operation(record: ProviderOperationRecord) -> ProviderOperationRecord:
     response_class = (
-        record.response_class
-        if record.response_class != "unknown"
-        else _classify_response(record)
+        record.response_class if record.response_class != "unknown" else _classify_response(record)
     )
     successful = response_class in {"success", "no_change"}
     freshness_state = (
@@ -175,8 +173,7 @@ def _enrich_operation(record: ProviderOperationRecord) -> ProviderOperationRecor
             "last_attempted_at": record.last_attempted_at or record.updated_at,
             "last_successful_at": record.last_successful_at
             or (record.updated_at if successful else None),
-            "last_good_at": record.last_good_at
-            or (record.updated_at if successful else None),
+            "last_good_at": record.last_good_at or (record.updated_at if successful else None),
             "next_scheduled_at": record.next_scheduled_at or record.next_attempt_at,
             "freshness_state": freshness_state,
             "retryable": record.replay_available,
@@ -378,7 +375,9 @@ def _case_tracking_poll_record(row: TrackedCasePollRun) -> ProviderOperationReco
         response_class=(
             "no_change"
             if row.status == "completed" and row.update_count == 0
-            else "success" if row.status == "completed" else "unknown"
+            else "success"
+            if row.status == "completed"
+            else "unknown"
         ),
         last_attempted_at=row.started_at,
         last_successful_at=(row.completed_at if row.status == "completed" else None),
@@ -388,6 +387,80 @@ def _case_tracking_poll_record(row: TrackedCasePollRun) -> ProviderOperationReco
         ignore_available=False,
         mark_resolved_available=False,
         notes=notes,
+    )
+
+
+def _case_tracking_record(row: TrackedCaseProviderOperation) -> ProviderOperationRecord:
+    metadata = dict(row.metadata_json or {})
+    operator_state = str(metadata.get("operator_state") or "open")
+    response_classes = {
+        "success",
+        "no_change",
+        "timeout",
+        "authentication",
+        "rate_limit",
+        "parse_error",
+        "provider_outage",
+        "configuration",
+        "policy",
+        "unknown",
+    }
+    response_class = row.response_class or "unknown"
+    if response_class not in response_classes:
+        response_class = "unknown"
+    last_successful_at = row.completed_at if row.status in {"succeeded", "no_change"} else None
+    freshness = "never_succeeded"
+    if row.tracked_case.last_provider_successful_at:
+        freshness = str(row.tracked_case.provider_freshness_status or "fresh")
+        if freshness not in {"fresh", "stale", "never_succeeded", "disabled", "blocked"}:
+            freshness = "stale"
+    if row.status == "quarantined":
+        freshness = "blocked"
+    open_action = row.status in {"failed", "quarantined", "pending", "replay_queued"}
+    replayable = row.status in {"failed", "quarantined"} and row.attempts < row.max_attempts
+    return ProviderOperationRecord(
+        id=_operation_id("case_tracking_record", row.id),
+        job_kind="case_tracking_record",
+        provider=row.provider,
+        company_id=row.company_id,
+        matter_id=None,
+        source_type="tracked_case_provider_operation",
+        source_ref=redact_identifier(row.tracked_case_id),
+        provider_item_ref=None,
+        status=row.status,
+        operator_state=operator_state,
+        error_redacted=redact_provider_error(row.error_redacted) if row.error_redacted else None,
+        dead_letter_reason=(
+            redact_provider_error(row.quarantine_reason_redacted)
+            if row.quarantine_reason_redacted
+            else None
+        ),
+        attempts=row.attempts,
+        max_attempts=max(1, row.max_attempts),
+        next_attempt_at=row.next_attempt_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        correlation_ref=redact_identifier(row.correlation_id),
+        response_class=response_class,
+        last_attempted_at=row.started_at,
+        last_successful_at=last_successful_at,
+        last_good_at=row.tracked_case.last_provider_successful_at,
+        next_scheduled_at=row.tracked_case.next_provider_refresh_at,
+        freshness_state=freshness,
+        records_affected=int(metadata.get("created_update_count") or 0),
+        estimated_cost_minor=max(0, row.cost_minor),
+        estimated_cost_currency=row.currency,
+        estimated_cost_basis="recorded_case_tracking_operation",
+        retryable=replayable,
+        quarantined=row.status == "quarantined",
+        replay_available=replayable and operator_state == "open",
+        ignore_available=open_action and operator_state == "open",
+        mark_resolved_available=open_action and operator_state == "open",
+        notes=[
+            f"operation_type={row.operation_type}",
+            "Raw provider evidence and the normalized diff are retained append-only.",
+            "Replay executes in the next bounded poll and remains tenant scoped.",
+        ],
     )
 
 
@@ -563,9 +636,7 @@ def _connector_health_record(row: ConnectorHealthRecord) -> ProviderOperationRec
     elif str(row.connected_state) in {"blocked_by_policy", "missing_config"}:
         freshness_state = "blocked"
     elif last_success is not None:
-        freshness_state = (
-            "fresh" if _now() - last_success <= timedelta(days=1) else "stale"
-        )
+        freshness_state = "fresh" if _now() - last_success <= timedelta(days=1) else "stale"
     return ProviderOperationRecord(
         id=_operation_id("connector_health", row.id),
         job_kind="connector_health",
@@ -668,6 +739,32 @@ def list_provider_operations(
             .limit(limit)
         )
     )
+    tracking_operation_statuses = (
+        ("failed", "quarantined", "pending", "replay_queued")
+        if not include_resolved
+        else (
+            "failed",
+            "quarantined",
+            "pending",
+            "replay_queued",
+            "running",
+            "succeeded",
+            "no_change",
+            "resolved",
+            "ignored",
+        )
+    )
+    tracking_operation_rows = list(
+        session.scalars(
+            select(TrackedCaseProviderOperation)
+            .where(
+                TrackedCaseProviderOperation.company_id == context.company.id,
+                TrackedCaseProviderOperation.status.in_(tracking_operation_statuses),
+            )
+            .order_by(TrackedCaseProviderOperation.updated_at.desc())
+            .limit(limit)
+        )
+    )
     mailbox_import_rows = list(
         session.scalars(
             select(MailboxMessageImport)
@@ -752,6 +849,7 @@ def list_provider_operations(
         *(_calendar_record(row) for row in calendar_rows),
         *(_notification_record(row) for row in notification_rows),
         *(_case_tracking_poll_record(row) for row in case_tracking_rows),
+        *(_case_tracking_record(row) for row in tracking_operation_rows),
         *(_mailbox_import_record(row) for row in mailbox_import_rows),
         *(_mailbox_webhook_record(row) for row in mailbox_webhook_rows),
         *(_drive_candidate_record(row) for row in drive_candidate_rows),
@@ -837,6 +935,26 @@ def _load_case_tracking_poll_operation(
     return row
 
 
+def _load_case_tracking_record_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> TrackedCaseProviderOperation:
+    row = session.scalar(
+        select(TrackedCaseProviderOperation).where(
+            TrackedCaseProviderOperation.id == row_id,
+            TrackedCaseProviderOperation.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
 def _load_mailbox_import_operation(
     session: Session,
     *,
@@ -886,9 +1004,7 @@ def _load_operation_record(
     kind, row_id = _split_operation_id(operation_id)
     if kind == "calendar_sync":
         return _enrich_operation(
-            _calendar_record(
-                _load_calendar_operation(session, context=context, row_id=row_id)
-            )
+            _calendar_record(_load_calendar_operation(session, context=context, row_id=row_id))
         )
     if kind == "notification_delivery":
         return _enrich_operation(
@@ -900,6 +1016,12 @@ def _load_operation_record(
         return _enrich_operation(
             _case_tracking_poll_record(
                 _load_case_tracking_poll_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "case_tracking_record":
+        return _enrich_operation(
+            _case_tracking_record(
+                _load_case_tracking_record_operation(session, context=context, row_id=row_id)
             )
         )
     if kind == "mailbox_message_import":
@@ -931,6 +1053,12 @@ def _replay_cost(
             provider="case_tracking",
         )
         return cost, source, None
+    if record.job_kind == "case_tracking_record":
+        return (
+            record.estimated_cost_minor,
+            "recorded_case_tracking_operation",
+            None,
+        )
     return (
         0,
         "unpriced_provider_call",
@@ -1063,6 +1191,7 @@ def _validated_preview_operations(
         "notification_delivery": "queued",
         "mailbox_message_import": "queued",
         "mailbox_webhook": "queued",
+        "case_tracking_record": "replay_queued",
     }
     for expected in raw_operations:
         operation_id = str(expected.get("id") or "")
@@ -1192,6 +1321,69 @@ def replay_provider_operation(
                 "override for operator break-glass."
             ),
             operation=_case_tracking_poll_record(row),
+        )
+
+    if kind == "case_tracking_record":
+        row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
+        previous_status = row.status
+        changed = row.status in {"failed", "quarantined"} and row.attempts < row.max_attempts
+        if changed:
+            replay = TrackedCaseProviderOperation(
+                company_id=row.company_id,
+                tracked_case_id=row.tracked_case_id,
+                requested_by_membership_id=context.membership.id,
+                provider=row.provider,
+                operation_type="replay",
+                correlation_id=secrets.token_hex(16),
+                status="pending",
+                cost_minor=row.cost_minor,
+                currency=row.currency,
+                attempts=0,
+                max_attempts=row.max_attempts,
+                next_attempt_at=current_time,
+                metadata_json={
+                    "scope": "single_tracked_case",
+                    "cost_disclosed": True,
+                    "replay_of_operation_id": row.id,
+                },
+            )
+            session.add(replay)
+            session.flush()
+            row.status = "replay_queued"
+            row.next_attempt_at = None
+            row.metadata_json = {
+                **dict(row.metadata_json or {}),
+                "replay_requested_at": current_time.isoformat(),
+                "replay_reason_present": bool(reason and reason.strip()),
+                "replay_operation_id": replay.id,
+                "operator_state": "open",
+            }
+            row.tracked_case.quarantined_at = None
+            row.tracked_case.quarantine_reason_redacted = None
+            row.tracked_case.next_provider_refresh_at = current_time
+            session.add_all([row, replay, row.tracked_case])
+        _audit_operation_action(
+            session,
+            context=context,
+            action="replay",
+            target_type="tracked_case_provider_operation",
+            target_id=row.id,
+            provider=row.provider,
+            previous_status=previous_status,
+            next_status=row.status,
+            changed=changed,
+            reason=reason,
+        )
+        session.commit() if commit else session.flush()
+        return ProviderOperationActionResponse(
+            action="replay",
+            changed=changed,
+            message=(
+                "A new tracked-case provider operation was queued for the next bounded poll."
+                if changed
+                else "Tracked-case provider work was not replayable."
+            ),
+            operation=_case_tracking_record(row),
         )
 
     if kind == "mailbox_message_import":
@@ -1355,9 +1547,7 @@ def confirm_provider_operation_replay(
                 commit=False,
             )
             responses.append(
-                response.model_copy(
-                    update={"operation": _enrich_operation(response.operation)}
-                )
+                response.model_copy(update={"operation": _enrich_operation(response.operation)})
             )
         record_from_context(
             session,
@@ -1381,6 +1571,90 @@ def confirm_provider_operation_replay(
         unchanged_count=sum(not response.changed for response in responses),
         estimated_total_cost_minor=estimated_total_cost_minor,
         operations=responses,
+    )
+
+
+def resolve_case_tracking_incident(
+    session: Session,
+    *,
+    context: SessionContext,
+    operation_id: str,
+    root_cause: str,
+    prevention: str,
+    canary_evidence: str,
+) -> ProviderOperationActionResponse:
+    kind, row_id = _split_operation_id(operation_id)
+    if kind != "case_tracking_record":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Structured incident closure applies only to tracked-case record operations.",
+        )
+    row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
+    metadata = dict(row.metadata_json or {})
+    replay_id = str(metadata.get("replay_operation_id") or "")
+    replay = (
+        _load_case_tracking_record_operation(session, context=context, row_id=replay_id)
+        if replay_id
+        else None
+    )
+    if replay is None or replay.status not in {"succeeded", "no_change"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Run and monitor a successful bounded canary replay before closing this incident."
+            ),
+        )
+    previous_status = row.status
+    changed = row.status != "resolved"
+    if changed:
+        row.status = "resolved"
+        row.next_attempt_at = None
+        row.metadata_json = {
+            **metadata,
+            "operator_state": "resolved",
+            "incident_closed_at": _now().isoformat(),
+            "incident_root_cause": redact_provider_error(root_cause),
+            "incident_prevention": redact_provider_error(prevention),
+            "incident_canary_evidence": redact_provider_error(canary_evidence),
+            "incident_canary_operation_id": replay.id,
+        }
+        session.add(row)
+    _audit_operation_action(
+        session,
+        context=context,
+        action="mark_resolved",
+        target_type="tracked_case_provider_operation",
+        target_id=row.id,
+        provider=row.provider,
+        previous_status=previous_status,
+        next_status=row.status,
+        changed=changed,
+        reason=root_cause,
+    )
+    record_from_context(
+        session,
+        context,
+        action="provider_operation.incident_closed",
+        target_type="tracked_case_provider_operation",
+        target_id=row.id,
+        metadata={
+            "provider": row.provider,
+            "canary_operation_ref": redact_identifier(replay.id),
+            "root_cause_present": True,
+            "prevention_present": True,
+            "canary_evidence_present": True,
+        },
+    )
+    session.commit()
+    return ProviderOperationActionResponse(
+        action="mark_resolved",
+        changed=changed,
+        message=(
+            "Tracked-case provider incident closed with successful canary evidence."
+            if changed
+            else "Tracked-case provider incident was already closed."
+        ),
+        operation=_case_tracking_record(row),
     )
 
 
@@ -1462,6 +1736,64 @@ def update_provider_operation_state(
                 "eligible backlog."
             ),
             operation=_case_tracking_poll_record(row),
+        )
+
+    if kind == "case_tracking_record":
+        row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
+        if action == "mark_resolved":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Tracked-case incidents require root cause, prevention, and a successful "
+                    "canary through the resolve-incident endpoint."
+                ),
+            )
+        previous_status = row.status
+        changed = row.status not in {"succeeded", "no_change", "resolved", "ignored"}
+        if changed:
+            if action == "ignore":
+                row.status = "quarantined"
+                row.quarantined_at = current_time
+                row.quarantine_reason_redacted = redact_provider_error(reason or marker)
+                row.tracked_case.quarantined_at = current_time
+                row.tracked_case.quarantine_reason_redacted = row.quarantine_reason_redacted
+                row.tracked_case.provider_freshness_status = "quarantined"
+                operator_state = "open"
+            else:
+                row.status = "resolved"
+                row.next_attempt_at = None
+                operator_state = "resolved"
+            row.metadata_json = {
+                **dict(row.metadata_json or {}),
+                "operator_state": operator_state,
+                "operator_action_at": current_time.isoformat(),
+                "incident_root_cause_present": bool(reason and reason.strip()),
+            }
+            session.add_all([row, row.tracked_case])
+        _audit_operation_action(
+            session,
+            context=context,
+            action=action,
+            target_type="tracked_case_provider_operation",
+            target_id=row.id,
+            provider=row.provider,
+            previous_status=previous_status,
+            next_status=row.status,
+            changed=changed,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action=action,
+            changed=changed,
+            message=(
+                "Tracked-case provider work was quarantined; other records may continue."
+                if action == "ignore" and changed
+                else "Tracked-case provider incident was marked resolved."
+                if changed
+                else "Tracked-case provider operation was already terminal."
+            ),
+            operation=_case_tracking_record(row),
         )
 
     if kind == "mailbox_message_import":
@@ -1708,10 +2040,10 @@ def provider_readiness_status(
                     "persisted provider jobs; Drive durable jobs remain gated."
                 ),
                 limitations=[
-                    "Manual bounded dry-run only; no OAuth tokens or Drive file " +
-                    "contents are stored.",
-                    "Durable sync must remain disabled until tenant approval and " +
-                    "provider credentials are supplied.",
+                    "Manual bounded dry-run only; no OAuth tokens or Drive file "
+                    + "contents are stored.",
+                    "Durable sync must remain disabled until tenant approval and "
+                    + "provider credentials are supplied.",
                 ],
             ),
             ProviderReadinessRecord(
@@ -1752,8 +2084,8 @@ def provider_readiness_status(
                     "intents; inbound mailbox provider jobs remain gated."
                 ),
                 limitations=[
-                    "Gmail imports store metadata/snippets only; raw provider payloads " +
-                    "and OAuth tokens are never returned by APIs.",
+                    "Gmail imports store metadata/snippets only; raw provider payloads "
+                    + "and OAuth tokens are never returned by APIs.",
                     "Attachment bytes are fetched only after explicit tenant review.",
                     "Matter association remains matter-code/review-first.",
                 ],
@@ -1799,10 +2131,10 @@ def provider_readiness_status(
                     "dead-letter handling; external digest delivery is blocked."
                 ),
                 limitations=[
-                    "In-app previews are available; email/SMS/WhatsApp delivery " +
-                    "requires provider approval.",
-                    "Tenant email suppression exists for SendGrid-backed sends, " +
-                    "but digest sending is not enabled.",
+                    "In-app previews are available; email/SMS/WhatsApp delivery "
+                    + "requires provider approval.",
+                    "Tenant email suppression exists for SendGrid-backed sends, "
+                    + "but digest sending is not enabled.",
                 ],
             ),
         ]

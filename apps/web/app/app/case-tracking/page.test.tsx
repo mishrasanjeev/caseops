@@ -75,6 +75,17 @@ const bookmark = {
     current_stage: "Arguments",
     next_hearing_on: "2026-06-15",
     last_provider_checked_at: "2026-05-26T00:00:00Z",
+    last_provider_attempted_at: "2026-05-26T00:00:00Z",
+    last_provider_successful_at: "2026-05-26T00:00:00Z",
+    next_provider_refresh_at: "2026-05-27T10:30:00Z",
+    freshness_status: "fresh" as const,
+    response_class: "no_change",
+    last_operation_id: "operation-1",
+    provider_health: "healthy" as const,
+    manual_refresh_allowed: true,
+    manual_refresh_disabled_reason: null,
+    refresh_cost_minor: 10,
+    refresh_currency: "INR",
     last_error: null,
     metadata: {},
   },
@@ -218,6 +229,14 @@ describe("CaseTrackingPage", () => {
       "href",
       "http://localhost:8000/api/case-tracking/bookmarks/bm-1/updates/upd-1/source",
     );
+    expect(screen.getByText(/ecourtsindia · healthy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Refresh cost INR 0.10/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last good/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (content) => content.startsWith("Next ") && !content.startsWith("Next hearing"),
+      ),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Refresh/i }));
     expect(refreshCaseTrackingBookmarkMock.mock.calls[0][0]).toBe("bm-1");
@@ -225,6 +244,31 @@ describe("CaseTrackingPage", () => {
     expect(updateCaseTrackingBookmarkMock.mock.calls[0][1]).toEqual({
       notification_enabled: false,
     });
+  });
+
+  it("disables manual refresh when provider health is red and preserves fallback guidance", async () => {
+    listCaseTrackingBookmarksMock.mockResolvedValue({
+      bookmarks: [
+        {
+          ...bookmark,
+          tracked_case: {
+            ...bookmark.tracked_case,
+            freshness_status: "stale",
+            provider_health: "unhealthy",
+            manual_refresh_allowed: false,
+            manual_refresh_disabled_reason: "Case tracking provider health is red.",
+            last_error: "Provider authentication failed.",
+          },
+        },
+      ],
+    });
+
+    render(withClient(<CaseTrackingPage />));
+
+    const refresh = await screen.findByRole("button", { name: /Refresh/i });
+    expect(refresh).toBeDisabled();
+    expect(screen.getByText(/Provider authentication failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/manual docketing/i)).toBeInTheDocument();
   });
 
   it("BUG-042: shows an explicit empty-results message instead of nothing", async () => {

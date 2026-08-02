@@ -837,6 +837,32 @@ export default function GuidePage() {
                       refreshed, changed, skipped, blocked, provider-call, error, window,
                       started, ended, partial, and backlog counts in provider operations.
                     </li>
+                    <li>
+                      <strong>Freshness and cost.</strong> Each bookmarked case shows its
+                      provider, last attempt, last good result, next scheduled refresh,
+                      freshness, response class, redacted current error, and recorded
+                      refresh cost. Stale data remains visible and is labelled stale for
+                      lawyer and AI review.
+                    </li>
+                    <li>
+                      <strong>Manual fallback.</strong> Manual refresh is rate-limited,
+                      cost-attributed, and disabled when provider health is red or the row
+                      is quarantined. Existing evidence remains available and the page
+                      directs the user to manual docketing while the connector is degraded.
+                    </li>
+                    <li>
+                      <strong>Replay and quarantine.</strong> Admin replay is previewed,
+                      tenant-scoped, limited to 25 rows, step-up protected where MFA policy
+                      applies, and executed by the next bounded poll. A poison record can be
+                      quarantined without stopping other cases. Incident closure requires a
+                      successful canary plus root-cause and prevention evidence.
+                    </li>
+                    <li>
+                      <strong>Disconnect.</strong> Calendar, Gmail, and Drive disconnects
+                      use recent security step-up where required, revoke stored access,
+                      recompute health immediately, stop future connector work, and preserve
+                      prior evidence for audit and manual fallback.
+                    </li>
                   </ul>
                 </Section>
 

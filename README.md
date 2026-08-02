@@ -340,6 +340,14 @@ Production scheduled runs should stay inside the 4 PM-6 PM IST window unless an
 operator uses an explicit force/local override. Disabled or misconfigured court
 providers must record skipped/blocked state and make no external calls.
 
+Tracked-case refreshes have durable per-record operations and append-only provider
+snapshots. Tenant views disclose last attempt, last good result, next run, freshness,
+response class, redacted error, and cost. Admin replay is previewed and bounded to 25
+tenant-scoped operations; poison records are quarantined before bulk provider calls.
+Closing a tracking incident requires a successful canary plus root-cause and prevention
+evidence. Gmail, Drive, and Calendar disconnects invoke the existing recent-step-up policy
+and recompute connector health immediately.
+
 > **Security note.** The default `CASEOPS_AUTH_SECRET` is a placeholder and is rejected at
 > startup whenever `CASEOPS_ENV` is `staging`, `production`, or `prod`. See
 > [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) §2.2.

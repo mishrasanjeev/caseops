@@ -560,6 +560,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/provider-operations/jobs/{operation_id}/resolve-incident": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a replayed case-tracking incident with root cause and prevention evidence. */
+        post: operations["post_case_tracking_incident_resolution_api_admin_provider_operations_jobs__operation_id__resolve_incident_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/provider-operations/jobs/replay": {
         parameters: {
             query?: never;
@@ -23835,6 +23852,15 @@ export interface components {
             /** Unit Label */
             unit_label?: string | null;
         };
+        /** ProviderIncidentResolutionRequest */
+        ProviderIncidentResolutionRequest: {
+            /** Canary Evidence */
+            canary_evidence: string;
+            /** Prevention */
+            prevention: string;
+            /** Root Cause */
+            root_cause: string;
+        };
         /** ProviderOperationActionRequest */
         ProviderOperationActionRequest: {
             /** Reason */
@@ -23912,7 +23938,7 @@ export interface components {
              * Job Kind
              * @enum {string}
              */
-            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "mailbox_message_import" | "mailbox_webhook" | "drive_file_candidate" | "calendar_event_candidate" | "inbound_email_event" | "connector_health";
+            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "case_tracking_record" | "mailbox_message_import" | "mailbox_webhook" | "drive_file_candidate" | "calendar_event_candidate" | "inbound_email_event" | "connector_health";
             /** Last Attempted At */
             last_attempted_at?: string | null;
             /** Last Good At */
@@ -25595,22 +25621,61 @@ export interface components {
             current_stage: string | null;
             /** Current Status */
             current_status: string | null;
+            /**
+             * Freshness Status
+             * @default never_succeeded
+             * @enum {string}
+             */
+            freshness_status: "fresh" | "stale" | "never_succeeded" | "disabled" | "quarantined";
             /** Id */
             id: string;
             /** Last Error */
             last_error: string | null;
+            /** Last Operation Id */
+            last_operation_id?: string | null;
+            /** Last Provider Attempted At */
+            last_provider_attempted_at?: string | null;
             /** Last Provider Checked At */
             last_provider_checked_at: string | null;
+            /** Last Provider Successful At */
+            last_provider_successful_at?: string | null;
+            /**
+             * Manual Refresh Allowed
+             * @default false
+             */
+            manual_refresh_allowed: boolean;
+            /** Manual Refresh Disabled Reason */
+            manual_refresh_disabled_reason?: string | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
             };
             /** Next Hearing On */
             next_hearing_on: string | null;
+            /** Next Provider Refresh At */
+            next_provider_refresh_at?: string | null;
             /** Party Names */
             party_names: string[];
             /** Provider */
             provider: string;
+            /**
+             * Provider Health
+             * @default unhealthy
+             * @enum {string}
+             */
+            provider_health: "healthy" | "unhealthy" | "disabled" | "quarantined";
+            /**
+             * Refresh Cost Minor
+             * @default 0
+             */
+            refresh_cost_minor: number;
+            /**
+             * Refresh Currency
+             * @default INR
+             */
+            refresh_currency: string;
+            /** Response Class */
+            response_class?: string | null;
         };
         /** TrademarkClassScope */
         TrademarkClassScope: {
@@ -26964,6 +27029,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProviderOperationReplayConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_case_tracking_incident_resolution_api_admin_provider_operations_jobs__operation_id__resolve_incident_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderIncidentResolutionRequest"];
             };
         };
         responses: {

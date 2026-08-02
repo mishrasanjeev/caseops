@@ -3494,6 +3494,17 @@ export type TrackedCaseRecord = {
   current_stage: string | null;
   next_hearing_on: string | null;
   last_provider_checked_at: string | null;
+  last_provider_attempted_at: string | null;
+  last_provider_successful_at: string | null;
+  next_provider_refresh_at: string | null;
+  freshness_status: "fresh" | "stale" | "never_succeeded" | "disabled" | "quarantined";
+  response_class: string | null;
+  last_operation_id: string | null;
+  provider_health: "healthy" | "unhealthy" | "disabled" | "quarantined";
+  manual_refresh_allowed: boolean;
+  manual_refresh_disabled_reason: string | null;
+  refresh_cost_minor: number;
+  refresh_currency: string;
   last_error: string | null;
   metadata: Record<string, unknown>;
 };
@@ -6654,6 +6665,26 @@ export async function markProviderOperationResolved(input: {
   reason: string;
 }): Promise<ProviderOperationActionResponse> {
   return mutateProviderOperation(input.operationId, "mark-resolved", input.reason);
+}
+
+export async function resolveCaseTrackingProviderIncident(input: {
+  operationId: string;
+  rootCause: string;
+  prevention: string;
+  canaryEvidence: string;
+}): Promise<ProviderOperationActionResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/provider-operations/jobs/${encodeURIComponent(input.operationId)}/resolve-incident`,
+    {
+      method: "POST",
+      body: {
+        root_cause: input.rootCause,
+        prevention: input.prevention,
+        canary_evidence: input.canaryEvidence,
+      },
+    },
+  );
+  return providerOperationActionResponse.parse(data);
 }
 
 export async function syncOutlookVisibleRange(input: {

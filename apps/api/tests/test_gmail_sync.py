@@ -4,6 +4,7 @@ The tests use a local provider double only. They never call Google APIs and
 assert that Gmail metadata import stays token-safe, tenant-scoped,
 matter-access-aware, and review-first for attachments.
 """
+
 from __future__ import annotations
 
 import base64
@@ -128,9 +129,7 @@ class StubGmailProvider:
         attachment_id: str,
     ) -> bytes:
         assert token_payload["access_token"] == "gmail-access-credential"
-        self.fetch_calls.append(
-            {"message_id": message_id, "attachment_id": attachment_id}
-        )
+        self.fetch_calls.append({"message_id": message_id, "attachment_id": attachment_id})
         return b"safe attachment bytes"
 
 
@@ -348,9 +347,7 @@ def test_gmail_import_is_metadata_only_review_first_and_token_safe(
             assert candidate is not None
             assert candidate.status == MailboxAttachmentCandidateStatus.REJECTED
             assert candidate.encrypted_provider_attachment_ref is not None
-            assert "provider-attachment-secret" not in (
-                candidate.encrypted_provider_attachment_ref
-            )
+            assert "provider-attachment-secret" not in (candidate.encrypted_provider_attachment_ref)
     finally:
         set_gmail_provider_for_tests(None)
 
@@ -424,8 +421,13 @@ def test_disposed_matter_blocks_gmail_attachment_fetch_and_persistence(
         set_gmail_provider_for_tests(None)
 
 
-def test_gmail_connection_revoke_is_token_safe(client: TestClient) -> None:
+def test_gmail_connection_revoke_is_token_safe(client: TestClient, monkeypatch) -> None:
     provider = StubGmailProvider()
+    purposes: list[str] = []
+    monkeypatch.setattr(
+        "caseops_api.api.routes.mailbox.require_recent_step_up",
+        lambda *args, **kwargs: purposes.append(kwargs["purpose"]),
+    )
     try:
         bootstrap = _bootstrap_company(
             client,
@@ -445,6 +447,7 @@ def test_gmail_connection_revoke_is_token_safe(client: TestClient) -> None:
         assert revoked.json()["status"] == "revoked"
         assert "gmail-access-credential" not in revoked.text
         assert "gmail-refresh-credential" not in revoked.text
+        assert purposes == ["connector_disconnect"]
 
         factory = get_session_factory()
         with factory() as session:
@@ -614,4 +617,3 @@ def test_google_gmail_provider_retries_transient_message_listing(
 
     assert messages == []
     assert calls == 2
-

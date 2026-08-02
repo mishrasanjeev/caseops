@@ -2316,6 +2316,7 @@ export const providerOperationRecord = z.object({
     "calendar_sync",
     "notification_delivery",
     "case_tracking_poll",
+    "case_tracking_record",
     "mailbox_message_import",
     "mailbox_webhook",
     "drive_file_candidate",

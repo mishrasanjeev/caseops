@@ -153,6 +153,11 @@ def test_google_drive_connect_list_revoke_is_token_safe(
 ) -> None:
     _configure_drive_env(monkeypatch)
     provider = StubDriveProvider()
+    purposes: list[str] = []
+    monkeypatch.setattr(
+        "caseops_api.api.routes.drive.require_recent_step_up",
+        lambda *args, **kwargs: purposes.append(kwargs["purpose"]),
+    )
     try:
         bootstrap = _bootstrap_company(
             client,
@@ -184,6 +189,7 @@ def test_google_drive_connect_list_revoke_is_token_safe(
         assert revoked.status_code == 200, revoked.text
         assert revoked.json()["status"] == "revoked"
         assert "drive-access-credential" not in revoked.text
+        assert purposes == ["connector_disconnect"]
     finally:
         set_google_drive_provider_for_tests(None)
         get_settings.cache_clear()

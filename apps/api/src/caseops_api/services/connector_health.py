@@ -21,6 +21,8 @@ from caseops_api.db.models import (
     MailboxMessageImport,
     MailboxProvider,
     TenantMicrosoft365Configuration,
+    TrackedCase,
+    TrackedCaseProviderOperation,
     UserCalendarConnection,
     UserDriveConnection,
     UserMailboxConnection,
@@ -103,9 +105,7 @@ def _response_class(row: ConnectorHealthRecord) -> str:
         return "policy"
     last_success = _as_aware(row.last_success_at)
     last_failure = _as_aware(row.last_failure_at)
-    if last_success is not None and (
-        last_failure is None or last_success >= last_failure
-    ):
+    if last_success is not None and (last_failure is None or last_success >= last_failure):
         return "success"
     return "unknown"
 
@@ -418,6 +418,104 @@ def refresh_connector_health_records(
     company_id = context.company.id
     settings = get_settings()
     rows: list[ConnectorHealthRecord] = []
+
+    from caseops_api.services.case_tracking_providers import (
+        provider_status as case_tracking_provider_status,
+    )
+
+    tracking_enabled, tracking_provider, tracking_configured, tracking_reason = (
+        case_tracking_provider_status()
+    )
+    tracking_operations = list(
+        session.scalars(
+            select(TrackedCaseProviderOperation)
+            .where(TrackedCaseProviderOperation.company_id == company_id)
+            .order_by(TrackedCaseProviderOperation.updated_at.desc())
+            .limit(200)
+        )
+    )
+    tracking_success = max(
+        (
+            row.completed_at
+            for row in tracking_operations
+            if row.status in {"succeeded", "no_change"} and row.completed_at
+        ),
+        default=None,
+    )
+    tracking_failures = [row for row in tracking_operations if row.status == "failed"]
+    tracking_failure = max(
+        (row.completed_at for row in tracking_failures if row.completed_at), default=None
+    )
+    tracking_success_aware = _as_aware(tracking_success)
+    tracking_failure_aware = _as_aware(tracking_failure)
+    latest_tracking = tracking_operations[0] if tracking_operations else None
+    tracked_count = len(
+        list(
+            session.scalars(
+                select(TrackedCase.id).where(TrackedCase.company_id == company_id).limit(1001)
+            )
+        )
+    )
+    tracking_recent = bool(
+        tracking_success_aware
+        and (_now() - tracking_success_aware).total_seconds()
+        <= _DEFAULT_FRESHNESS_THRESHOLD_MINUTES * 60
+    )
+    tracking_degraded = bool(
+        tracking_enabled
+        and tracking_configured
+        and tracked_count
+        and (
+            not tracking_recent
+            or (
+                tracking_failure_aware
+                and tracking_failure_aware
+                > (tracking_success_aware or datetime.min.replace(tzinfo=UTC))
+            )
+        )
+    )
+    tracking_state = _connection_state(
+        configured=tracking_configured,
+        connected=tracking_recent,
+        disabled=not tracking_enabled,
+        degraded=tracking_degraded,
+    )
+    tracking_alerts: list[str] = []
+    if tracking_degraded:
+        tracking_alerts.append(
+            "Enabled case tracking has no recent successful provider operation; "
+            "inspect correlated operations."
+        )
+    if any(row.status == "quarantined" for row in tracking_operations):
+        tracking_alerts.append("One or more tracked-case provider operations are quarantined.")
+    rows.append(
+        _update_health(
+            _get_or_create_health(
+                session,
+                company_id=company_id,
+                provider=ConnectorHealthProvider.CASE_TRACKING,
+            ),
+            configured_state=_configured_state(
+                configured=tracking_configured,
+                disabled=not tracking_enabled,
+            ),
+            connected_state=tracking_state,
+            last_success_at=tracking_success,
+            last_failure_at=tracking_failure,
+            error_category=(latest_tracking.error_redacted if latest_tracking else tracking_reason),
+            polling_status=(latest_tracking.status if latest_tracking else "never_run"),
+            next_retry_at=min(
+                (row.next_attempt_at for row in tracking_failures if row.next_attempt_at),
+                default=None,
+            ),
+            disabled_reason=(
+                tracking_reason if not tracking_enabled or not tracking_configured else None
+            ),
+            account_label=f"{tracking_provider} · {tracked_count} tracked",
+            operational_alerts=tracking_alerts,
+            setup_actions=[] if tracking_configured else ["CASE_TRACKING_PROVIDER_CONFIGURATION"],
+        )
+    )
 
     google_missing = sorted(
         {
@@ -923,9 +1021,7 @@ def _record(row: ConnectorHealthRecord) -> ConnectorHealthSchema:
         connected_state=row.connected_state,  # type: ignore[arg-type]
         last_success_at=row.last_success_at,
         last_failure_at=row.last_failure_at,
-        error_category=(
-            redact_provider_error(row.error_category) if row.error_category else None
-        ),
+        error_category=(redact_provider_error(row.error_category) if row.error_category else None),
         required_scopes=required_scopes,
         granted_scopes=granted_scopes,
         missing_scopes=_missing_scopes(required_scopes, granted_scopes),

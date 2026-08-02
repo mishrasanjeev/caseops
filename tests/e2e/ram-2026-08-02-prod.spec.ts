@@ -73,4 +73,44 @@ test.describe("Ram 2026-08-02 deployed provider health foundation", () => {
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(360);
   });
+
+  test("IPLF-002B deployed tracking record exposes freshness, cost, and mobile controls", async ({
+    page,
+  }) => {
+    await signIn(page);
+    const suffix = Date.now().toString(36).toUpperCase();
+    const title = `IPLF-002B synthetic ${suffix}`;
+    const created = await page.request.post(`${PROD_API_BASE_URL}/api/case-tracking/bookmarks`, {
+      data: {
+        provider: "ecourtsindia",
+        cnr_number: `E2E002B${suffix}`.slice(0, 32),
+        case_number: `E2E/002B/${suffix}`,
+        court_code: "E2E",
+        court_name: "Synthetic Test Court",
+        case_title: title,
+        notification_enabled: false,
+      },
+    });
+    expect(created.status()).toBe(201);
+    const bookmark = await created.json();
+    expect(bookmark.tracked_case.freshness_status).toBeTruthy();
+    expect(typeof bookmark.tracked_case.refresh_cost_minor).toBe("number");
+
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(`${PROD_BASE_URL}/app/case-tracking`);
+    await expect(page.getByText(title)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Refresh cost INR/i).last()).toBeVisible();
+    await expect(page.getByText(/Attempted/i).last()).toBeVisible();
+    await expect(page.getByText(/Last good/i).last()).toBeVisible();
+    await expect(page.getByText(/Next/i).last()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      360,
+    );
+
+    const archived = await page.request.patch(
+      `${PROD_API_BASE_URL}/api/case-tracking/bookmarks/${bookmark.id}`,
+      { data: { is_archived: true } },
+    );
+    expect(archived.status()).toBe(200);
+  });
 });
