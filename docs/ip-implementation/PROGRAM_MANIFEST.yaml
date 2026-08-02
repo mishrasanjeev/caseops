@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-002B",
+    "active_slice": "IPLF-003C",
     "checkpoint": {
-      "recorded_at": "2026-08-02T21:10:00+05:30",
-      "repository_revision": "7b1f834288d3ebfa673eea602bd759bb79e0baf3",
-      "environment": "Production: caseops-api-00226-pc5 and caseops-web-00206-c4x; exact-main post-deploy run 30754848841",
-      "completed_scope": "IPLF-002A integration health/freshness and bounded-replay foundation is production verified with fail-closed health, redacted diagnostics, signed preview-confirm replay, cost disclosure, exact images, and dated desktop/mobile E2E. The administrative slice does not claim TRACK or UJ completion.",
+      "recorded_at": "2026-08-02T22:35:00+05:30",
+      "repository_revision": "188c3aea19d6c90979059f496fc07c3ad6f7a1bb",
+      "environment": "IPLF-002B exact-commit CI and production deployment pending",
+      "completed_scope": "IPLF-002A is production verified. IPLF-002B tracking operations, health-gated refresh, bounded quarantine/replay, canary-only incident closure, connector disconnect step-up, documentation, and local dated E2E are implemented and locally verified; exact-main production release proof remains pending.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-002B",
-      "next_action": "Implement IPLF-002B linked-record freshness, tracking operation correlation/quarantine, health-gated refresh, incident closure, credential-change exceptions, and dated production acceptance while the M0 human program-lock gate remains explicitly pending.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md"
+      "next_slice": "IPLF-003C",
+      "next_action": "Complete exact-commit CI and production release proof for IPLF-002B, then implement IPLF-003C remaining source-action behavior and exceptions while the M0 human program-lock gate remains pending.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md"
     }
   },
   "milestones": [
@@ -374,11 +374,14 @@
         "IPLF-002A",
         "IPLF-002B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md",
+        "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md"
+      ]
     },
     {
       "id": "IPLF-003",
@@ -3035,33 +3038,67 @@
       "dependencies": [
         "IPLF-002A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260802_0001_case_tracking_operations.py",
+        "apps/api/src/caseops_api/services/case_tracking.py",
+        "apps/api/src/caseops_api/services/connector_health.py",
+        "apps/api/src/caseops_api/services/provider_operations.py",
+        "apps/api/src/caseops_api/api/routes/provider_operations.py",
+        "apps/api/src/caseops_api/api/routes/calendar.py",
+        "apps/api/src/caseops_api/api/routes/mailbox.py",
+        "apps/api/src/caseops_api/api/routes/drive.py",
+        "apps/web/app/app/case-tracking/page.tsx",
+        "apps/web/app/app/admin/provider-operations/page.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md",
+          "revision": "188c3aea19d6c90979059f496fc07c3ad6f7a1bb",
+          "environment": "local production-mode candidate; exact-main production deployment pending",
+          "fixtures": "anonymized case-tracking records, forced provider authentication failure, quarantined poison record, bounded replay child, successful canary, and disconnected OAuth connectors",
+          "assertions": "correlation and redaction, immutable snapshots/diffs, response classes, retry/quarantine exclusion, health-gated refresh, stale/manual fallback, cost disclosure, step-up disconnect, replay preservation, canary-only structured incident closure, and 360px visible controls",
+          "result": "passed",
+          "recorded_at": "2026-08-02T22:30:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Run exact-commit CI, migrate and deploy the validated main revision, verify scheduler IAM/image/canary state, and execute the dated production Playwright batch."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive tracked-case health fields plus tenant-scoped provider operation and append-only provider snapshot tables; no destructive rewrite or backfill."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "apps/web/app/guide/page.tsx and README.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "Tracking health, stale/manual fallback, quarantine/replay, incident closure, and disconnect guidance"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Implementation, verification, security, migration, rollback, and pending exact-production record"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -14507,7 +14544,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14543,7 +14580,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14632,7 +14669,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14668,7 +14705,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14704,7 +14741,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14740,7 +14777,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14776,7 +14813,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14812,7 +14849,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14848,7 +14885,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14884,7 +14921,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
