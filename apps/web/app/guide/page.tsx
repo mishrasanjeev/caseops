@@ -1236,8 +1236,11 @@ export default function GuidePage() {
                     </li>
                     <li>
                       <strong>Provider operations.</strong> Review scheduled case-tracking
-                      runs, blocked/skipped reasons, provider-disabled states, partial
-                      backlog, refresh window, and per-tenant batching metrics.
+                      runs, blocked/skipped reasons, provider-disabled states, last attempt,
+                      last good state, response class, freshness, partial backlog, refresh
+                      window, and per-tenant batching metrics. Replayable rows require a
+                      short-lived scope-and-cost preview before an audited confirmation;
+                      enrolled MFA also requires recent step-up.
                     </li>
                     <li>
                       <strong>Matter billing.</strong> Manage billing profiles, rate cards,
@@ -1356,7 +1359,10 @@ export default function GuidePage() {
                     Open provider operations. Skipped and blocked runs show the reason:
                     outside the 4 PM-6 PM IST window, provider disabled, missing
                     configuration, source blocked, tenant batch limit, or backlog carried
-                    forward. Disabled providers make no external calls.
+                    forward. Disabled providers make no external calls. A configured
+                    connector with no recent successful check is shown as unhealthy, never
+                    as healthy merely because it is enabled. Preview any replay, review its
+                    bounded scope and cost basis, then confirm and monitor the durable job.
                   </p>
                   <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
                     A compliance due date is missing

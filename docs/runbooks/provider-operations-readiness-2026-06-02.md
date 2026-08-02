@@ -27,6 +27,8 @@ Backend endpoints:
 ```text
 GET /api/admin/provider-operations/readiness
 GET /api/admin/provider-operations/jobs
+POST /api/admin/provider-operations/jobs/replay-preview
+POST /api/admin/provider-operations/jobs/replay
 POST /api/admin/provider-operations/jobs/{operation_id}/replay
 POST /api/admin/provider-operations/jobs/{operation_id}/ignore
 POST /api/admin/provider-operations/jobs/{operation_id}/mark-resolved
@@ -82,6 +84,59 @@ GET /api/platform-admin/production-readiness
 GET /api/platform-admin/production-readiness/evidence
 POST /api/platform-admin/production-readiness/evidence
 ```
+
+## IPLF-002A health and bounded-replay contract - 2026-08-02
+
+IPLF-002A extends the existing connector-health and provider-operations owners;
+it does not add another dashboard, queue, support matrix, cost catalogue, or
+provider writer. The change is API/UI-only and requires no migration or
+backfill.
+
+Connector health is fail-closed:
+
+- `last_attempted_at`, `last_good_at`, `next_scheduled_at`, outcome class, and
+  freshness are returned with each durable connector-health record.
+- The current default freshness objective is 1,440 minutes. A configured or
+  connected provider with no successful check is `never_succeeded` and
+  `unhealthy`; an old success is `stale` and `unhealthy`.
+- Disabled and policy/configuration-blocked connectors are reported separately.
+  Neither is counted healthy. A recent readiness check is an attempt, not proof
+  of provider success.
+- Response classes are limited to `success`, `no_change`, `timeout`,
+  `authentication`, `rate_limit`, `parse_error`, `provider_outage`,
+  `configuration`, `policy`, and `unknown`. Error text is redacted again at the
+  serialization boundary even when an unsafe value was written directly.
+
+Replay is always previewed before confirmation:
+
+1. Send one to 25 unique, visible operation IDs to
+   `POST /api/admin/provider-operations/jobs/replay-preview`.
+2. Review the exact scope, current state, expiry, per-row cost basis, estimated
+   total cost, and warnings. `unpriced_provider_call` means zero recorded cost
+   is available; it does not mean the provider is free.
+3. Confirm with the signed preview token and an 8-500 character operator reason
+   through the single-row or batch replay endpoint. Users with enrolled or
+   policy-required MFA must have a recent step-up for
+   `provider_operation_replay`.
+4. Refresh the job list and monitor the existing durable workers. Confirmation
+   only reschedules existing idempotent rows; it never calls a provider inline.
+
+Preview tokens are HMAC-signed with the configured authentication secret, expire
+after five minutes, and bind company, ordered operation IDs, status, update
+version, cost, and currency. Cross-tenant, malformed, expired, changed-scope,
+duplicate, oversized, and non-replayable previews fail closed. Repeating the
+same valid confirmation is safe and reports unchanged after the first
+reschedule. Batch mutation and its audit records commit atomically.
+
+Poison/dead-letter rows remain quarantined until an operator previews and
+confirms them. External notification delivery, case-tracking scheduled-window
+runs, candidate queues, and connector-health records remain non-replayable from
+this surface.
+
+Rollback uses the previous exact API/web image. No data contract must be rolled
+back. Rows already moved to `pending` or `queued` remain owned by their existing
+idempotent worker and can be observed or resolved through the prior
+provider-operations surface.
 
 ## 2026-06-13 Platform Evidence Gate
 

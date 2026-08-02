@@ -51,6 +51,7 @@ STEP_UP_PURPOSES = {
     "payment_activation_change",
     "billing_export",
     "connector_credential_change",
+    "provider_operation_replay",
     "role_capability_change",
     "bulk_export",
     "destructive_action",

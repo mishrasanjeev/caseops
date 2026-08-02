@@ -47,10 +47,92 @@ from caseops_api.services.session_context import SessionContext
 
 _TENANT_ACCOUNT = "tenant"
 _PROVIDER_OPERATIONS_LINK = "/app/admin/provider-operations"
+_DEFAULT_FRESHNESS_THRESHOLD_MINUTES = 24 * 60
+_BLOCKED_HEALTH_STATES = {
+    str(ConnectorHealthStatus.MISSING_CONFIG),
+    str(ConnectorHealthStatus.BLOCKED_BY_POLICY),
+}
+_UNHEALTHY_HEALTH_STATES = {
+    str(ConnectorHealthStatus.DEGRADED),
+    str(ConnectorHealthStatus.TOKEN_EXPIRED),
+    str(ConnectorHealthStatus.SCOPE_MISSING),
+    str(ConnectorHealthStatus.RATE_LIMITED),
+    str(ConnectorHealthStatus.PROVIDER_OUTAGE),
+}
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _as_aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _latest_time(*values: datetime | None) -> datetime | None:
+    aware = [_as_aware(value) for value in values if value is not None]
+    return max(aware) if aware else None
+
+
+def _response_class(row: ConnectorHealthRecord) -> str:
+    error = (row.error_category or "").lower()
+    state = str(row.connected_state)
+    combined = f"{state} {error}"
+    if row.polling_status == "no_change":
+        return "no_change"
+    if "timeout" in combined:
+        return "timeout"
+    if state in {
+        str(ConnectorHealthStatus.TOKEN_EXPIRED),
+        str(ConnectorHealthStatus.SCOPE_MISSING),
+    } or any(value in combined for value in ("auth", "token", "scope")):
+        return "authentication"
+    if state == str(ConnectorHealthStatus.RATE_LIMITED) or "rate" in combined:
+        return "rate_limit"
+    if any(value in combined for value in ("parse", "schema", "malformed")):
+        return "parse_error"
+    if state == str(ConnectorHealthStatus.PROVIDER_OUTAGE) or "outage" in combined:
+        return "provider_outage"
+    if state == str(ConnectorHealthStatus.MISSING_CONFIG):
+        return "configuration"
+    if state == str(ConnectorHealthStatus.BLOCKED_BY_POLICY):
+        return "policy"
+    last_success = _as_aware(row.last_success_at)
+    last_failure = _as_aware(row.last_failure_at)
+    if last_success is not None and (
+        last_failure is None or last_success >= last_failure
+    ):
+        return "success"
+    return "unknown"
+
+
+def _freshness(row: ConnectorHealthRecord) -> tuple[str, str, int | None]:
+    connected_state = str(row.connected_state)
+    configured_state = str(row.configured_state)
+    if connected_state == str(ConnectorHealthStatus.DISABLED) or configured_state == str(
+        ConnectorHealthStatus.DISABLED
+    ):
+        return "disabled", "disabled", None
+    if connected_state in _BLOCKED_HEALTH_STATES or configured_state in _BLOCKED_HEALTH_STATES:
+        return "blocked", "blocked", None
+
+    last_success = _as_aware(row.last_success_at)
+    if last_success is None:
+        return "never_succeeded", "unhealthy", None
+    age_minutes = max(0, int((_now() - last_success).total_seconds() // 60))
+    if connected_state in _UNHEALTHY_HEALTH_STATES:
+        return (
+            "stale" if age_minutes > _DEFAULT_FRESHNESS_THRESHOLD_MINUTES else "fresh",
+            "unhealthy",
+            age_minutes,
+        )
+    if age_minutes > _DEFAULT_FRESHNESS_THRESHOLD_MINUTES:
+        return "stale", "unhealthy", age_minutes
+    return "fresh", "healthy", age_minutes
 
 
 def _bounded_text(value: str | None, max_length: int) -> str | None:
@@ -827,6 +909,12 @@ def _refresh_calendar_health(
 def _record(row: ConnectorHealthRecord) -> ConnectorHealthSchema:
     required_scopes = list(row.required_scopes_json or [])
     granted_scopes = list(row.granted_scopes_json or [])
+    freshness_state, operational_state, freshness_age_minutes = _freshness(row)
+    last_attempted_at = _latest_time(
+        row.last_checked_at,
+        row.last_success_at,
+        row.last_failure_at,
+    )
     return ConnectorHealthSchema(
         id=row.id,
         company_id=row.company_id,
@@ -835,7 +923,9 @@ def _record(row: ConnectorHealthRecord) -> ConnectorHealthSchema:
         connected_state=row.connected_state,  # type: ignore[arg-type]
         last_success_at=row.last_success_at,
         last_failure_at=row.last_failure_at,
-        error_category=row.error_category,
+        error_category=(
+            redact_provider_error(row.error_category) if row.error_category else None
+        ),
         required_scopes=required_scopes,
         granted_scopes=granted_scopes,
         missing_scopes=_missing_scopes(required_scopes, granted_scopes),
@@ -845,13 +935,40 @@ def _record(row: ConnectorHealthRecord) -> ConnectorHealthSchema:
         polling_status=row.polling_status,
         rate_limit_status=row.rate_limit_status,
         next_retry_at=row.next_retry_at,
-        disabled_reason=row.disabled_reason,
+        disabled_reason=(
+            redact_provider_error(row.disabled_reason) if row.disabled_reason else None
+        ),
         last_checked_at=row.last_checked_at,
+        last_attempted_at=last_attempted_at,
+        last_good_at=row.last_success_at,
+        next_scheduled_at=row.next_retry_at,
+        freshness_state=freshness_state,  # type: ignore[arg-type]
+        operational_state=operational_state,  # type: ignore[arg-type]
+        freshness_threshold_minutes=_DEFAULT_FRESHNESS_THRESHOLD_MINUTES,
+        freshness_age_minutes=freshness_age_minutes,
+        response_class=_response_class(row),  # type: ignore[arg-type]
+        operator_attention_required=operational_state in {"unhealthy", "blocked"},
+        current_error_redacted=(
+            redact_provider_error(row.error_category or row.disabled_reason)
+            if (row.error_category or row.disabled_reason)
+            else None
+        ),
         operational_alerts=list(row.operational_alerts_json or []),
         setup_actions=list(row.setup_actions_json or []),
         provider_operations_link=_PROVIDER_OPERATIONS_LINK,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _health_response(rows: list[ConnectorHealthRecord]) -> ConnectorHealthListResponse:
+    health = [_record(row) for row in rows]
+    return ConnectorHealthListResponse(
+        health=health,
+        healthy_count=sum(row.operational_state == "healthy" for row in health),
+        unhealthy_count=sum(row.operational_state == "unhealthy" for row in health),
+        stale_count=sum(row.freshness_state == "stale" for row in health),
+        disabled_count=sum(row.operational_state == "disabled" for row in health),
     )
 
 
@@ -868,7 +985,7 @@ def list_tenant_connector_health(
             .order_by(ConnectorHealthRecord.provider.asc(), ConnectorHealthRecord.created_at.asc())
         )
     )
-    return ConnectorHealthListResponse(health=[_record(row) for row in rows])
+    return _health_response(rows)
 
 
 def check_tenant_connector_health(
@@ -886,9 +1003,14 @@ def check_tenant_connector_health(
         metadata={"provider_count": len({row.provider for row in rows})},
     )
     session.commit()
+    summary = _health_response(rows)
     return ConnectorHealthCheckResponse(
         checked_at=checked_at,
-        health=[_record(row) for row in rows],
+        health=summary.health,
+        healthy_count=summary.healthy_count,
+        unhealthy_count=summary.unhealthy_count,
+        stale_count=summary.stale_count,
+        disabled_count=summary.disabled_count,
     )
 
 
@@ -902,7 +1024,7 @@ def list_platform_connector_health(session: Session) -> ConnectorHealthListRespo
             )
         )
     )
-    return ConnectorHealthListResponse(health=[_record(row) for row in rows])
+    return _health_response(rows)
 
 
 def apply_health_to_connector_records(

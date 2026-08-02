@@ -374,7 +374,7 @@
         "IPLF-002A",
         "IPLF-002B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -2914,21 +2914,54 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/connector_health.py",
+        "apps/api/src/caseops_api/services/provider_operations.py",
+        "apps/api/src/caseops_api/api/routes/provider_operations.py",
+        "apps/web/app/app/admin/integrations/page.tsx",
+        "apps/web/app/app/admin/provider-operations/page.tsx"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_provider_operations.py",
+        "apps/api/tests/test_connector_automation_readiness.py",
+        "apps/api/tests/test_google_workspace_configuration.py",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "apps/web/app/app/admin/integrations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts"
+      ],
       "evidence_refs": [],
       "evidence_metadata": [],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Commit the validated implementation, pass exact-commit CI/security gates, merge to main, deploy API/web together, and run the dated production Playwright proof."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change or backfill. Existing connector-health and provider-operation rows remain canonical; replay only reschedules existing idempotent rows."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/runbooks/provider-operations-readiness-2026-06-02.md",
+          "disposition": "updated",
+          "owner": "Engineering/SRE",
+          "evidence": "Fail-closed freshness, replay preview, cost, step-up, rollback, and operator procedure"
+        },
+        {
+          "artifact": "apps/web/app/guide/page.tsx and README.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "User-facing health and replay workflow documentation"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Implementation, test, compatibility, rollback, and pending immutable release record"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",

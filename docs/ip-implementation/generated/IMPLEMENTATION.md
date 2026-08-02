@@ -7,7 +7,7 @@ Generated; do not edit.
 | IPLF-001A | prd_explicit | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-05 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL | implemented | passed | ready_for_review | pending |
 | IPLF-001B | prd_explicit | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-05, TRACK-14 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-001C | derived | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 |  | not_started | not_run | blocked | pending |
-| IPLF-002A | derived | IPLF-002 | M1 |  |  | not_started | not_run | blocked | pending |
+| IPLF-002A | derived | IPLF-002 | M1 |  |  | in_progress | not_run | blocked | pending |
 | IPLF-002B | derived | IPLF-002 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | not_started | not_run | blocked | pending |
 | IPLF-003A | prd_explicit | IPLF-003 | M1 | TRUST-RSCH-01, TRUST-RSCH-03, TRUST-RSCH-07 | UJ-17-EXC-01, UJ-17-EXC-02, UJ-17-EXC-03, UJ-17-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-003B | prd_explicit | IPLF-003 | M1 | TRUST-RSCH-01, TRUST-RSCH-02, TRUST-RSCH-03 | UJ-17-EXC-01, UJ-17-EXC-02, UJ-17-EXC-03, UJ-17-NORMAL, UJ-20-EXC-01, UJ-20-EXC-02, UJ-20-EXC-03, UJ-20-NORMAL | implemented | passed | deployment_verified | pending |

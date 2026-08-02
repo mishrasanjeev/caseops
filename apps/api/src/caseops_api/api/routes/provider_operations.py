@@ -9,14 +9,20 @@ from caseops_api.schemas.provider_operations import (
     ProviderOperationActionRequest,
     ProviderOperationActionResponse,
     ProviderOperationListResponse,
+    ProviderOperationReplayBatchResponse,
+    ProviderOperationReplayConfirmRequest,
+    ProviderOperationReplayPreviewRequest,
+    ProviderOperationReplayPreviewResponse,
     ProviderReadinessListResponse,
 )
 from caseops_api.services.provider_operations import (
+    confirm_provider_operation_replay,
     list_provider_operations,
+    preview_provider_operation_replay,
     provider_readiness_status,
-    replay_provider_operation,
     update_provider_operation_state,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -57,22 +63,69 @@ def get_provider_readiness(
 
 
 @router.post(
+    "/jobs/replay-preview",
+    response_model=ProviderOperationReplayPreviewResponse,
+    summary="Preview a tenant-scoped bounded provider-operation replay.",
+)
+def post_provider_operation_replay_preview(
+    payload: ProviderOperationReplayPreviewRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> ProviderOperationReplayPreviewResponse:
+    return preview_provider_operation_replay(
+        session,
+        context=context,
+        operation_ids=payload.operation_ids,
+    )
+
+
+@router.post(
+    "/jobs/replay",
+    response_model=ProviderOperationReplayBatchResponse,
+    summary="Confirm a previewed bounded provider-operation replay.",
+)
+def post_provider_operation_replay_batch(
+    payload: ProviderOperationReplayConfirmRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> ProviderOperationReplayBatchResponse:
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="provider_operation_replay",
+    )
+    return confirm_provider_operation_replay(
+        session,
+        context=context,
+        preview_token=payload.preview_token,
+        reason=payload.reason,
+    )
+
+
+@router.post(
     "/jobs/{operation_id}/replay",
     response_model=ProviderOperationActionResponse,
     summary="Request a safe replay for a tenant-scoped provider operation.",
 )
 def post_provider_operation_replay(
     operation_id: str,
-    payload: ProviderOperationActionRequest,
+    payload: ProviderOperationReplayConfirmRequest,
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> ProviderOperationActionResponse:
-    return replay_provider_operation(
+    require_recent_step_up(
         session,
         context=context,
-        operation_id=operation_id,
-        reason=payload.reason,
+        purpose="provider_operation_replay",
     )
+    response = confirm_provider_operation_replay(
+        session,
+        context=context,
+        preview_token=payload.preview_token,
+        reason=payload.reason,
+        expected_operation_ids=[operation_id],
+    )
+    return response.operations[0]
 
 
 @router.post(

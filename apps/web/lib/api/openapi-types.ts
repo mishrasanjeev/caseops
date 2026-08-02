@@ -560,6 +560,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/provider-operations/jobs/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm a previewed bounded provider-operation replay. */
+        post: operations["post_provider_operation_replay_batch_api_admin_provider_operations_jobs_replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/provider-operations/jobs/replay-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a tenant-scoped bounded provider-operation replay. */
+        post: operations["post_provider_operation_replay_preview_api_admin_provider_operations_jobs_replay_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/provider-operations/readiness": {
         parameters: {
             query?: never;
@@ -11785,13 +11819,53 @@ export interface components {
              * Format: date-time
              */
             checked_at: string;
+            /**
+             * Disabled Count
+             * @default 0
+             */
+            disabled_count: number;
             /** Health */
             health: components["schemas"]["ConnectorHealthRecord"][];
+            /**
+             * Healthy Count
+             * @default 0
+             */
+            healthy_count: number;
+            /**
+             * Stale Count
+             * @default 0
+             */
+            stale_count: number;
+            /**
+             * Unhealthy Count
+             * @default 0
+             */
+            unhealthy_count: number;
         };
         /** ConnectorHealthListResponse */
         ConnectorHealthListResponse: {
+            /**
+             * Disabled Count
+             * @default 0
+             */
+            disabled_count: number;
             /** Health */
             health: components["schemas"]["ConnectorHealthRecord"][];
+            /**
+             * Healthy Count
+             * @default 0
+             */
+            healthy_count: number;
+            /**
+             * Stale Count
+             * @default 0
+             */
+            stale_count: number;
+            /**
+             * Unhealthy Count
+             * @default 0
+             */
+            unhealthy_count: number;
         };
         /** ConnectorHealthRecord */
         ConnectorHealthRecord: {
@@ -11812,26 +11886,58 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Current Error Redacted */
+            current_error_redacted?: string | null;
             /** Disabled Reason */
             disabled_reason?: string | null;
             /** Error Category */
             error_category?: string | null;
+            /** Freshness Age Minutes */
+            freshness_age_minutes?: number | null;
+            /**
+             * Freshness State
+             * @default unknown
+             * @enum {string}
+             */
+            freshness_state: "fresh" | "stale" | "never_succeeded" | "disabled" | "blocked" | "unknown";
+            /**
+             * Freshness Threshold Minutes
+             * @default 1440
+             */
+            freshness_threshold_minutes: number;
             /** Granted Scopes */
             granted_scopes?: string[];
             /** Id */
             id: string;
+            /** Last Attempted At */
+            last_attempted_at?: string | null;
             /** Last Checked At */
             last_checked_at?: string | null;
             /** Last Failure At */
             last_failure_at?: string | null;
+            /** Last Good At */
+            last_good_at?: string | null;
             /** Last Success At */
             last_success_at?: string | null;
             /** Missing Scopes */
             missing_scopes?: string[];
             /** Next Retry At */
             next_retry_at?: string | null;
+            /** Next Scheduled At */
+            next_scheduled_at?: string | null;
             /** Operational Alerts */
             operational_alerts?: string[];
+            /**
+             * Operational State
+             * @default unhealthy
+             * @enum {string}
+             */
+            operational_state: "healthy" | "unhealthy" | "disabled" | "blocked";
+            /**
+             * Operator Attention Required
+             * @default false
+             */
+            operator_attention_required: boolean;
             /** Polling Status */
             polling_status?: string | null;
             /** Provider */
@@ -11842,6 +11948,12 @@ export interface components {
             rate_limit_status?: string | null;
             /** Required Scopes */
             required_scopes?: string[];
+            /**
+             * Response Class
+             * @default unknown
+             * @enum {string}
+             */
+            response_class: "success" | "no_change" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "configuration" | "policy" | "unknown";
             /** Setup Actions */
             setup_actions?: string[];
             /** Token Expires At */
@@ -23760,6 +23872,8 @@ export interface components {
             attempts: number;
             /** Company Id */
             company_id: string;
+            /** Correlation Ref */
+            correlation_ref?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -23769,6 +23883,27 @@ export interface components {
             dead_letter_reason?: string | null;
             /** Error Redacted */
             error_redacted?: string | null;
+            /**
+             * Estimated Cost Basis
+             * @default no_external_call
+             */
+            estimated_cost_basis: string;
+            /**
+             * Estimated Cost Currency
+             * @default INR
+             */
+            estimated_cost_currency: string;
+            /**
+             * Estimated Cost Minor
+             * @default 0
+             */
+            estimated_cost_minor: number;
+            /**
+             * Freshness State
+             * @default unknown
+             * @enum {string}
+             */
+            freshness_state: "fresh" | "stale" | "never_succeeded" | "disabled" | "blocked" | "unknown";
             /** Id */
             id: string;
             /** Ignore Available */
@@ -23777,7 +23912,13 @@ export interface components {
              * Job Kind
              * @enum {string}
              */
-            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "mailbox_message_import" | "mailbox_webhook";
+            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "mailbox_message_import" | "mailbox_webhook" | "drive_file_candidate" | "calendar_event_candidate" | "inbound_email_event" | "connector_health";
+            /** Last Attempted At */
+            last_attempted_at?: string | null;
+            /** Last Good At */
+            last_good_at?: string | null;
+            /** Last Successful At */
+            last_successful_at?: string | null;
             /** Mark Resolved Available */
             mark_resolved_available: boolean;
             /** Matter Id */
@@ -23786,6 +23927,8 @@ export interface components {
             max_attempts: number;
             /** Next Attempt At */
             next_attempt_at?: string | null;
+            /** Next Scheduled At */
+            next_scheduled_at?: string | null;
             /** Notes */
             notes?: string[];
             /**
@@ -23798,8 +23941,26 @@ export interface components {
             provider: string;
             /** Provider Item Ref */
             provider_item_ref?: string | null;
+            /**
+             * Quarantined
+             * @default false
+             */
+            quarantined: boolean;
+            /** Records Affected */
+            records_affected?: number | null;
             /** Replay Available */
             replay_available: boolean;
+            /**
+             * Response Class
+             * @default unknown
+             * @enum {string}
+             */
+            response_class: "success" | "no_change" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "configuration" | "policy" | "unknown";
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Source Ref */
             source_ref?: string | null;
             /** Source Type */
@@ -23811,6 +23972,75 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ProviderOperationReplayBatchResponse */
+        ProviderOperationReplayBatchResponse: {
+            /** Changed Count */
+            changed_count: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Estimated Total Cost Minor */
+            estimated_total_cost_minor: number;
+            /** Operations */
+            operations: components["schemas"]["ProviderOperationActionResponse"][];
+            /** Unchanged Count */
+            unchanged_count: number;
+        };
+        /** ProviderOperationReplayConfirmRequest */
+        ProviderOperationReplayConfirmRequest: {
+            /** Preview Token */
+            preview_token: string;
+            /** Reason */
+            reason: string;
+        };
+        /** ProviderOperationReplayPreviewItem */
+        ProviderOperationReplayPreviewItem: {
+            /** Cost Basis */
+            cost_basis: string;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Estimated Cost Minor */
+            estimated_cost_minor: number;
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            operation: components["schemas"]["ProviderOperationRecord"];
+        };
+        /** ProviderOperationReplayPreviewRequest */
+        ProviderOperationReplayPreviewRequest: {
+            /** Operation Ids */
+            operation_ids: string[];
+        };
+        /** ProviderOperationReplayPreviewResponse */
+        ProviderOperationReplayPreviewResponse: {
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Estimated Total Cost Minor */
+            estimated_total_cost_minor: number;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Items */
+            items: components["schemas"]["ProviderOperationReplayPreviewItem"][];
+            /** Operation Count */
+            operation_count: number;
+            /** Preview Token */
+            preview_token: string;
+            /** Warnings */
+            warnings?: string[];
         };
         /** ProviderReadinessListResponse */
         ProviderReadinessListResponse: {
@@ -26733,7 +26963,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProviderOperationActionRequest"];
+                "application/json": components["schemas"]["ProviderOperationReplayConfirmRequest"];
             };
         };
         responses: {
@@ -26744,6 +26974,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderOperationActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_provider_operation_replay_batch_api_admin_provider_operations_jobs_replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderOperationReplayConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationReplayBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_provider_operation_replay_preview_api_admin_provider_operations_jobs_replay_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderOperationReplayPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationReplayPreviewResponse"];
                 };
             };
             /** @description Validation Error */
