@@ -25663,7 +25663,7 @@ export interface components {
              * @default unhealthy
              * @enum {string}
              */
-            provider_health: "healthy" | "unhealthy" | "disabled" | "quarantined";
+            provider_health: "healthy" | "degraded" | "unhealthy" | "disabled" | "quarantined";
             /**
              * Refresh Cost Minor
              * @default 0

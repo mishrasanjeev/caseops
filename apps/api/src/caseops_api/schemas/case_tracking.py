@@ -150,7 +150,9 @@ class TrackedCaseRecord(BaseModel):
     )
     response_class: str | None = None
     last_operation_id: str | None = None
-    provider_health: Literal["healthy", "unhealthy", "disabled", "quarantined"] = "unhealthy"
+    provider_health: Literal[
+        "healthy", "degraded", "unhealthy", "disabled", "quarantined"
+    ] = "unhealthy"
     manual_refresh_allowed: bool = False
     manual_refresh_disabled_reason: str | None = None
     refresh_cost_minor: int = 0
