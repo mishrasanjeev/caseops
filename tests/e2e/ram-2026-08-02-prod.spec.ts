@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
+const PROD_API_BASE_URL =
+  process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
 const COMPANY_SLUG = process.env.CASEOPS_RAM_PROD_SLUG ?? "legal";
 const TESTER_EMAIL = process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
 
@@ -41,7 +43,7 @@ test.describe("Ram 2026-08-02 deployed provider health foundation", () => {
     });
 
     const healthResponse = await page.request.get(
-      `${PROD_BASE_URL}/api/admin/integrations/health`,
+      `${PROD_API_BASE_URL}/api/admin/integrations/health`,
     );
     expect(healthResponse.status()).toBe(200);
     const health = await healthResponse.json();
