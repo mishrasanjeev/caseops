@@ -34,21 +34,29 @@ from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_RETRY_MAXIMUM_INTERVAL,
 )
 
-_EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 _UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
     re.IGNORECASE,
 )
-_SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?i)\b(api[_ -]?key|authorization|auth[_ -]?header|bearer|"
-    r"client[_ -]?secret|private[_ -]?key|secret|signature|token|"
-    r"webhook[_ -]?signature)\b\s*[:= ]\s*\S+"
-)
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d\s().-]{8,}\d)(?!\d)")
 _LONG_TOKEN_RE = re.compile(r"\b[A-Za-z0-9_.:-]{24,}\b")
 _MAX_REDACTED_ERROR_LENGTH = 200
+_MAX_REDACTION_INPUT_LENGTH = 2_000
 _MAX_INTENT_BODY_LENGTH = 500
+_SECRET_KEYS = {
+    "apikey",
+    "authorization",
+    "authheader",
+    "bearer",
+    "clientsecret",
+    "privatekey",
+    "secret",
+    "signature",
+    "token",
+    "webhooksignature",
+}
+_TOKEN_EDGE_PUNCTUATION = "\"'<>[]{}(),;"
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,15 +123,70 @@ def notification_delivery_idempotency_key(
     return sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _normalized_secret_key(value: str) -> str:
+    return "".join(character for character in value.lower() if character.isalnum())
+
+
+def _redact_secret_tokens(text: str) -> str:
+    """Redact key/value secrets in linear time without regex backtracking."""
+    tokens = text.split()
+    redacted: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        candidate = token.strip(_TOKEN_EDGE_PUNCTUATION)
+        separator_index = min(
+            (position for position in (candidate.find("="), candidate.find(":")) if position >= 0),
+            default=-1,
+        )
+        key_text = candidate[:separator_index] if separator_index >= 0 else candidate
+        key = _normalized_secret_key(key_text)
+        consumed_key_tokens = 1
+        if key not in _SECRET_KEYS and index + 1 < len(tokens):
+            paired_key = _normalized_secret_key(f"{candidate}{tokens[index + 1]}")
+            if paired_key in _SECRET_KEYS:
+                key = paired_key
+                consumed_key_tokens = 2
+        if key not in _SECRET_KEYS:
+            redacted.append(token)
+            index += 1
+            continue
+
+        redacted.append(f"{key_text or 'secret'}=[redacted]")
+        index += consumed_key_tokens
+        inline_value = separator_index >= 0 and separator_index < len(candidate) - 1
+        if inline_value:
+            continue
+        if index < len(tokens) and tokens[index] in {"=", ":"}:
+            index += 1
+        if index < len(tokens):
+            index += 1
+    return " ".join(redacted)
+
+
+def _redact_email_tokens(text: str) -> str:
+    """Redact email-like whitespace-delimited tokens in linear time."""
+    redacted: list[str] = []
+    for token in text.split():
+        candidate = token.strip(f"{_TOKEN_EDGE_PUNCTUATION}.:")
+        local, separator, domain = candidate.partition("@")
+        suffix = domain.rpartition(".")[2]
+        if separator and local and domain and suffix.isalpha() and len(suffix) >= 2:
+            redacted.append(token.replace(candidate, "[email-redacted]", 1))
+        else:
+            redacted.append(token)
+    return " ".join(redacted)
+
+
 def redact_provider_error(value: object) -> str:
     text = str(value or "provider_error").strip() or "provider_error"
-    text = _SECRET_ASSIGNMENT_RE.sub(r"\1=[redacted]", text)
+    text = " ".join(text[:_MAX_REDACTION_INPUT_LENGTH].split())
+    text = _redact_secret_tokens(text)
     text = _URL_RE.sub("[url-redacted]", text)
-    text = _EMAIL_RE.sub("[email-redacted]", text)
+    text = _redact_email_tokens(text)
     text = _UUID_RE.sub("[id-redacted]", text)
     text = _PHONE_RE.sub("[phone-redacted]", text)
     text = _LONG_TOKEN_RE.sub("[token-redacted]", text)
-    text = " ".join(text.split())
     if len(text) > _MAX_REDACTED_ERROR_LENGTH:
         return text[: _MAX_REDACTED_ERROR_LENGTH - 3].rstrip() + "..."
     return text
