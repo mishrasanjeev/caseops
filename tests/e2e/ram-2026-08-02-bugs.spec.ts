@@ -71,7 +71,9 @@ test.describe("Ram 2026-08-02 provider health and replay foundation", () => {
     ).toBeLessThanOrEqual(360);
 
     await page.goto("/app/admin/provider-operations");
-    await expect(page.getByRole("heading", { name: "Provider operations" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Provider operations", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByText("No provider operations need attention").or(
         page.locator('[data-testid^="provider-operation-"]').first(),
