@@ -444,6 +444,10 @@ function BookmarkRow({
   onToggleNotifications: () => void;
   onArchive: () => void;
 }) {
+  const tracking = bookmark.tracked_case;
+  const refreshDisabled = busy || !tracking.manual_refresh_allowed;
+  const formatTimestamp = (value: string | null) =>
+    value ? new Date(value).toLocaleString() : "Never";
   return (
     <div className="space-y-3 p-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -456,8 +460,15 @@ function BookmarkRow({
             nextHearing={bookmark.tracked_case.next_hearing_on}
           />
         </button>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onRefresh} disabled={busy}>
+        <div className="flex w-full min-w-0 flex-wrap gap-2 md:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onRefresh}
+            disabled={refreshDisabled}
+            title={tracking.manual_refresh_disabled_reason ?? undefined}
+          >
             <RefreshCw className="h-4 w-4" aria-hidden />
             Refresh
           </Button>
@@ -483,10 +494,26 @@ function BookmarkRow({
       <div className="flex flex-wrap gap-1.5">
         <Badge tone={selected ? "brand" : "neutral"}>{bookmark.update_count} updates</Badge>
         <Badge tone="neutral">In-app only</Badge>
-        {bookmark.tracked_case.last_provider_checked_at ? (
-          <Badge tone="neutral">Checked {bookmark.tracked_case.last_provider_checked_at}</Badge>
-        ) : null}
+        <Badge tone={tracking.provider_health === "healthy" ? "success" : "warning"}>
+          {tracking.provider} · {tracking.provider_health}
+        </Badge>
+        <Badge tone={tracking.freshness_status === "fresh" ? "success" : "warning"}>
+          {tracking.freshness_status.replaceAll("_", " ")}
+        </Badge>
+        <Badge tone="neutral">Attempted {formatTimestamp(tracking.last_provider_attempted_at)}</Badge>
+        <Badge tone="neutral">Last good {formatTimestamp(tracking.last_provider_successful_at)}</Badge>
+        <Badge tone="neutral">Next {formatTimestamp(tracking.next_provider_refresh_at)}</Badge>
+        <Badge tone="neutral">
+          Refresh cost {tracking.refresh_currency} {(tracking.refresh_cost_minor / 100).toFixed(2)}
+        </Badge>
+        {tracking.response_class ? <Badge tone="neutral">{tracking.response_class}</Badge> : null}
       </div>
+      {tracking.last_error || tracking.manual_refresh_disabled_reason ? (
+        <p className="text-xs text-amber-800" role="status">
+          {tracking.last_error ?? tracking.manual_refresh_disabled_reason} Evidence remains available;
+          use manual docketing while provider health is degraded.
+        </p>
+      ) : null}
     </div>
   );
 }

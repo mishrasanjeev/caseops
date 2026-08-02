@@ -11,6 +11,7 @@ const {
   markProviderOperationResolvedMock,
   previewProviderOperationReplayMock,
   replayProviderOperationMock,
+  resolveCaseTrackingProviderIncidentMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchProviderReadinessMock: vi.fn(),
@@ -19,6 +20,7 @@ const {
   markProviderOperationResolvedMock: vi.fn(),
   previewProviderOperationReplayMock: vi.fn(),
   replayProviderOperationMock: vi.fn(),
+  resolveCaseTrackingProviderIncidentMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -29,6 +31,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   markProviderOperationResolved: markProviderOperationResolvedMock,
   previewProviderOperationReplay: previewProviderOperationReplayMock,
   replayProviderOperation: replayProviderOperationMock,
+  resolveCaseTrackingProviderIncident: resolveCaseTrackingProviderIncidentMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -118,6 +121,7 @@ describe("ProviderOperationsPage", () => {
     markProviderOperationResolvedMock.mockReset();
     previewProviderOperationReplayMock.mockReset();
     replayProviderOperationMock.mockReset();
+    resolveCaseTrackingProviderIncidentMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     listProviderOperationsMock.mockResolvedValue({
@@ -194,6 +198,60 @@ describe("ProviderOperationsPage", () => {
       operationId: operation.id,
       previewToken: "signed-preview-token-value",
       reason: "Reviewed provider failure and approved replay.",
+    });
+  });
+
+  it("requires root cause, prevention, and canary evidence for tracked-case closure", async () => {
+    const user = userEvent.setup();
+    const trackingOperation = {
+      ...operation,
+      id: "case_tracking_record:tracking-op-1",
+      job_kind: "case_tracking_record" as const,
+      provider: "ecourtsindia",
+      status: "replay_queued",
+      replay_available: false,
+      mark_resolved_available: true,
+    };
+    listProviderOperationsMock.mockResolvedValue({
+      operations: [trackingOperation],
+      open_count: 1,
+      ignored_count: 0,
+      resolved_count: 0,
+      replayable_count: 0,
+    });
+    resolveCaseTrackingProviderIncidentMock.mockResolvedValue({
+      action: "mark_resolved",
+      changed: true,
+      message: "Tracked-case provider incident closed with successful canary evidence.",
+      operation: { ...trackingOperation, status: "resolved" },
+    });
+
+    render(withClient(<ProviderOperationsPage />));
+    await user.click(
+      await screen.findByTestId(`provider-operation-resolve-${trackingOperation.id}`),
+    );
+    const confirm = screen.getByTestId("provider-operation-confirm-action");
+    await user.type(
+      screen.getByLabelText("Reason"),
+      "Provider authentication expired before the polling window.",
+    );
+    expect(confirm).toBeDisabled();
+    await user.type(
+      screen.getByLabelText("Prevention"),
+      "Alert before credentials expire and block affected polling.",
+    );
+    await user.type(
+      screen.getByLabelText("Canary evidence"),
+      "Single-record replay succeeded and remained healthy.",
+    );
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    await waitFor(() => expect(resolveCaseTrackingProviderIncidentMock).toHaveBeenCalled());
+    expect(resolveCaseTrackingProviderIncidentMock.mock.calls[0][0]).toEqual({
+      operationId: trackingOperation.id,
+      rootCause: "Provider authentication expired before the polling window.",
+      prevention: "Alert before credentials expire and block affected polling.",
+      canaryEvidence: "Single-record replay succeeded and remained healthy.",
     });
   });
 });

@@ -35,6 +35,7 @@ import {
   markProviderOperationResolved,
   previewProviderOperationReplay,
   replayProviderOperation,
+  resolveCaseTrackingProviderIncident,
 } from "@/lib/api/endpoints";
 import type {
   ProviderOperationRecord,
@@ -90,6 +91,8 @@ export default function ProviderOperationsPage() {
   const queryClient = useQueryClient();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [actionReason, setActionReason] = useState("");
+  const [incidentPrevention, setIncidentPrevention] = useState("");
+  const [incidentCanaryEvidence, setIncidentCanaryEvidence] = useState("");
   const operationsQuery = useQuery({
     queryKey: ["admin", "provider-operations", "jobs"],
     queryFn: () => listProviderOperations({ includeResolved: true, limit: 100 }),
@@ -114,6 +117,8 @@ export default function ProviderOperationsPage() {
   const closeActionDialog = () => {
     setPendingAction(null);
     setActionReason("");
+    setIncidentPrevention("");
+    setIncidentCanaryEvidence("");
     previewMutation.reset();
   };
   const replayMutation = useMutation({
@@ -146,17 +151,30 @@ export default function ProviderOperationsPage() {
     onError: (error) =>
       toast.error(apiErrorMessage(error, "Could not resolve provider operation.")),
   });
+  const trackingResolveMutation = useMutation({
+    mutationFn: resolveCaseTrackingProviderIncident,
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      closeActionDialog();
+      await refreshJobs();
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not close tracked-case incident.")),
+  });
   const actionBusy =
     previewMutation.isPending ||
     replayMutation.isPending ||
     ignoreMutation.isPending ||
     resolveMutation.isPending;
+  const anyActionBusy = actionBusy || trackingResolveMutation.isPending;
   const openActionDialog = (
     action: PendingAction["action"],
     operation: ProviderOperationRecord,
   ) => {
     setPendingAction({ action, operation });
     setActionReason("");
+    setIncidentPrevention("");
+    setIncidentCanaryEvidence("");
     previewMutation.reset();
     if (action === "replay") {
       previewMutation.mutate({ operationIds: [operation.id] });
@@ -174,7 +192,16 @@ export default function ProviderOperationsPage() {
     } else if (pendingAction.action === "ignore") {
       ignoreMutation.mutate(input);
     } else {
-      resolveMutation.mutate(input);
+      if (pendingAction.operation.job_kind === "case_tracking_record") {
+        trackingResolveMutation.mutate({
+          operationId: input.operationId,
+          rootCause: reason,
+          prevention: incidentPrevention.trim(),
+          canaryEvidence: incidentCanaryEvidence.trim(),
+        });
+      } else {
+        resolveMutation.mutate(input);
+      }
     }
   };
 
@@ -256,7 +283,7 @@ export default function ProviderOperationsPage() {
                 <OperationRow
                   key={operation.id}
                   operation={operation}
-                  busy={actionBusy}
+                  busy={anyActionBusy}
                   onReplay={() => openActionDialog("replay", operation)}
                   onIgnore={() => openActionDialog("ignore", operation)}
                   onResolve={() => openActionDialog("mark_resolved", operation)}
@@ -270,7 +297,7 @@ export default function ProviderOperationsPage() {
       <Dialog
         open={pendingAction !== null}
         onOpenChange={(open) => {
-          if (!open && !actionBusy) closeActionDialog();
+          if (!open && !anyActionBusy) closeActionDialog();
         }}
       >
         <DialogContent>
@@ -323,20 +350,47 @@ export default function ProviderOperationsPage() {
               id="provider-operation-reason"
               value={actionReason}
               onChange={(event) => setActionReason(event.target.value)}
-              disabled={actionBusy}
+              disabled={anyActionBusy}
               maxLength={500}
               placeholder="Record the operator reason for audit."
             />
             <div className="text-xs text-[var(--color-mute)]">
               {actionReason.trim().length}/500
             </div>
+            {pendingAction?.action === "mark_resolved" &&
+            pendingAction.operation.job_kind === "case_tracking_record" ? (
+              <>
+                <label htmlFor="provider-operation-prevention" className="text-sm font-medium">
+                  Prevention
+                </label>
+                <Textarea
+                  id="provider-operation-prevention"
+                  value={incidentPrevention}
+                  onChange={(event) => setIncidentPrevention(event.target.value)}
+                  disabled={anyActionBusy}
+                  maxLength={1000}
+                  placeholder="Record the durable prevention or monitoring change."
+                />
+                <label htmlFor="provider-operation-canary" className="text-sm font-medium">
+                  Canary evidence
+                </label>
+                <Textarea
+                  id="provider-operation-canary"
+                  value={incidentCanaryEvidence}
+                  onChange={(event) => setIncidentCanaryEvidence(event.target.value)}
+                  disabled={anyActionBusy}
+                  maxLength={1000}
+                  placeholder="Reference the successful replay/canary and monitoring result."
+                />
+              </>
+            ) : null}
           </div>
           <DialogFooter>
             <Button
               type="button"
               variant="ghost"
               onClick={closeActionDialog}
-              disabled={actionBusy}
+              disabled={anyActionBusy}
             >
               Cancel
             </Button>
@@ -344,8 +398,12 @@ export default function ProviderOperationsPage() {
               type="button"
               onClick={submitAction}
               disabled={
-                actionBusy ||
+                anyActionBusy ||
                 actionReason.trim().length < 8 ||
+                (pendingAction?.action === "mark_resolved" &&
+                  pendingAction.operation.job_kind === "case_tracking_record" &&
+                  (incidentPrevention.trim().length < 8 ||
+                    incidentCanaryEvidence.trim().length < 8)) ||
                 (pendingAction?.action === "replay" && !previewMutation.data)
               }
               data-testid="provider-operation-confirm-action"

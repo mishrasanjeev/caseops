@@ -19,6 +19,7 @@ from caseops_api.schemas.drive import (
     GoogleDriveFileListResponse,
     GoogleDriveStatusResponse,
 )
+from caseops_api.services.connector_health import refresh_connector_health_records
 from caseops_api.services.drive_sync import (
     complete_google_drive_connection,
     get_drive_sync_control,
@@ -31,6 +32,7 @@ from caseops_api.services.drive_sync import (
     sync_google_drive_candidates,
     update_drive_sync_control,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -91,11 +93,15 @@ async def revoke_google_drive(
     context: DriveViewer,
     session: DbSession,
 ) -> GoogleDriveConnectionRecord:
-    return revoke_google_drive_connection(
+    require_recent_step_up(session, context=context, purpose="connector_disconnect")
+    response = revoke_google_drive_connection(
         session,
         context=context,
         connection_id=connection_id,
     )
+    refresh_connector_health_records(session, context=context)
+    session.commit()
+    return response
 
 
 @router.get(

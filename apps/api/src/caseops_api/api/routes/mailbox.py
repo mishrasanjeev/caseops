@@ -39,6 +39,7 @@ from caseops_api.schemas.mailbox import (
     MailboxWebhookIngestResponse,
     OutlookMailCandidateCreateRequest,
 )
+from caseops_api.services.connector_health import refresh_connector_health_records
 from caseops_api.services.gmail_sync import (
     complete_gmail_connection,
     create_outlook_mail_candidate,
@@ -61,6 +62,7 @@ from caseops_api.services.inbound_email import (
     review_inbound_email_event,
     update_inbound_email_alias,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -122,11 +124,15 @@ async def revoke_gmail(
     session: DbSession,
     connection_id: str,
 ) -> MailboxConnectionRecord:
-    return revoke_gmail_connection(
+    require_recent_step_up(session, context=context, purpose="connector_disconnect")
+    response = revoke_gmail_connection(
         session,
         context=context,
         connection_id=connection_id,
     )
+    refresh_connector_health_records(session, context=context)
+    session.commit()
+    return response
 
 
 @router.post(

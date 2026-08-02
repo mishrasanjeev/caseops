@@ -18,6 +18,8 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
     TrackedCase,
     TrackedCaseBookmark,
+    TrackedCaseProviderOperation,
+    TrackedCaseProviderSnapshot,
     TrackedCaseUpdate,
     User,
 )
@@ -326,9 +328,7 @@ def test_case_tracking_search_accepts_general_party_query(
     )
 
     assert search.status_code == 200, search.text
-    assert search.json()["results"][0]["case_title"] == (
-        "Example Petitioner v Example Respondent"
-    )
+    assert search.json()["results"][0]["case_title"] == ("Example Petitioner v Example Respondent")
     assert provider.search_calls[0].query == "Example Petitioner"
     assert provider.search_calls[0].court_code == "DLHC"
 
@@ -363,10 +363,7 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
                     }
                 },
             )
-        if (
-            request.method == "GET"
-            and request.url.path == "/api/partner/case/DLHC010012342026"
-        ):
+        if request.method == "GET" and request.url.path == "/api/partner/case/DLHC010012342026":
             return httpx.Response(
                 200,
                 json={
@@ -429,8 +426,7 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     snapshot = provider.get_case_by_cnr(cnr="DLHC010012342026")
     assert snapshot.orders[0].title == "Interim order dated 2026-05-26"
     assert snapshot.orders[0].source_url == (
-        "https://webapi.ecourtsindia.com/api/partner/case/"
-        "DLHC010012342026/order/order-1.pdf"
+        "https://webapi.ecourtsindia.com/api/partner/case/DLHC010012342026/order/order-1.pdf"
     )
     assert snapshot.judgments[0].title == "Final judgment dated 2026-05-27"
     assert requests[1].url.path == "/api/partner/case/DLHC010012342026"
@@ -502,9 +498,9 @@ def test_case_tracking_search_bookmark_update_and_archive(
     with get_session_factory()() as session:
         assert (
             session.scalar(
-                select(func.count()).select_from(TrackedCase).where(
-                    TrackedCase.cnr_number == "DLHC010012342026"
-                )
+                select(func.count())
+                .select_from(TrackedCase)
+                .where(TrackedCase.cnr_number == "DLHC010012342026")
             )
             == 1
         )
@@ -529,9 +525,10 @@ def test_case_tracking_search_bookmark_update_and_archive(
     )
     assert archived.status_code == 200, archived.text
     assert archived.json()["is_archived"] is True
-    assert client.get("/api/case-tracking/bookmarks", headers=auth_headers(token)).json()[
-        "bookmarks"
-    ] == []
+    assert (
+        client.get("/api/case-tracking/bookmarks", headers=auth_headers(token)).json()["bookmarks"]
+        == []
+    )
 
 
 def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
@@ -595,6 +592,21 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
 
     with get_session_factory()() as session:
         assert session.scalar(select(TrackedCaseUpdate)) is not None
+        operations = list(
+            session.scalars(
+                select(TrackedCaseProviderOperation).order_by(
+                    TrackedCaseProviderOperation.created_at
+                )
+            )
+        )
+        snapshots = list(session.scalars(select(TrackedCaseProviderSnapshot)))
+        assert [row.status for row in operations] == ["succeeded", "no_change"]
+        assert [row.response_class for row in operations] == ["success", "no_change"]
+        assert len(snapshots) == 2
+        assert snapshots[0].raw_hash
+        assert snapshots[0].normalized_hash
+        assert "current_status" in snapshots[0].normalized_json
+        assert operations[0].correlation_id != operations[1].correlation_id
         intents = list(session.scalars(select(NotificationDeliveryIntent)))
         assert len(intents) == 1
         assert intents[0].channel == "in_app"
@@ -742,9 +754,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         assert request.headers["authorization"] == "Bearer server-side-token"
-        assert request.url.path == (
-            "/api/partner/case/DLHC010012342026/order/order-1.pdf"
-        )
+        assert request.url.path == ("/api/partner/case/DLHC010012342026/order/order-1.pdf")
         return httpx.Response(
             200,
             headers={
@@ -770,9 +780,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
             assert requests
             assert (
                 session.scalar(
-                    select(AuditEvent).where(
-                        AuditEvent.action == "case_tracking.source_downloaded"
-                    )
+                    select(AuditEvent).where(AuditEvent.action == "case_tracking.source_downloaded")
                 )
                 is not None
             )
@@ -813,6 +821,114 @@ def test_case_tracking_poll_continues_after_provider_failure(
             assert tracked is not None
             assert "token" in tracked.last_error
             assert "abcdefghijklmnopqrstuvwxyz" not in tracked.last_error
+            operation = session.scalar(select(TrackedCaseProviderOperation))
+            assert operation is not None
+            assert operation.status == "failed"
+            assert operation.response_class == "authentication"
+            assert operation.error_redacted == tracked.last_error
+            assert operation.next_attempt_at is not None
+            assert session.scalar(select(TrackedCaseProviderSnapshot)) is None
+            page = session.scalar(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.event_type
+                    == "case_tracking.provider_unhealthy"
+                )
+            )
+            assert page is not None
+            assert page.channel == "in_app"
+
+        jobs = client.get(
+            "/api/admin/provider-operations/jobs",
+            headers=auth_headers(token),
+        )
+        assert jobs.status_code == 200, jobs.text
+        record = next(
+            row for row in jobs.json()["operations"] if row["job_kind"] == "case_tracking_record"
+        )
+        assert record["response_class"] == "authentication"
+        assert record["retryable"] is True
+        assert record["correlation_ref"]
+
+        quarantined = client.post(
+            f"/api/admin/provider-operations/jobs/{record['id']}/ignore",
+            headers=auth_headers(token),
+            json={"reason": "Poison record isolated while the remaining batch continues."},
+        )
+        assert quarantined.status_code == 200, quarantined.text
+        assert quarantined.json()["operation"]["quarantined"] is True
+        with get_session_factory()() as session:
+            tracked = session.scalar(select(TrackedCase))
+            assert tracked is not None
+            assert tracked.quarantined_at is not None
+            healthy = FakeCaseTrackingProvider()
+            rerun = poll_tracked_cases(session, provider=healthy)
+            assert rerun[0].checked_count == 0
+            assert rerun[0].skipped_count >= 1
+            assert healthy.refresh_calls == []
+
+        preview = client.post(
+            "/api/admin/provider-operations/jobs/replay-preview",
+            headers=auth_headers(token),
+            json={"operation_ids": [record["id"]]},
+        )
+        assert preview.status_code == 200, preview.text
+        replayed = client.post(
+            "/api/admin/provider-operations/jobs/replay",
+            headers=auth_headers(token),
+            json={
+                "preview_token": preview.json()["preview_token"],
+                "reason": "Retry quarantined record after provider authentication recovery.",
+            },
+        )
+        assert replayed.status_code == 200, replayed.text
+        assert replayed.json()["operations"][0]["operation"]["status"] == "replay_queued"
+        assert replayed.json()["operations"][0]["operation"]["mark_resolved_available"] is True
+
+        premature_close = client.post(
+            f"/api/admin/provider-operations/jobs/{record['id']}/resolve-incident",
+            headers=auth_headers(token),
+            json={
+                "root_cause": "Provider authentication expired before the scheduled poll.",
+                "prevention": "Alert on authentication response class before the next window.",
+                "canary_evidence": "Replay is queued but has not yet succeeded.",
+            },
+        )
+        assert premature_close.status_code == 409, premature_close.text
+
+        with get_session_factory()() as session:
+            canary = FakeCaseTrackingProvider()
+            rerun = poll_tracked_cases(session, provider=canary)
+            assert rerun[0].checked_count == 1
+            operations = list(
+                session.scalars(
+                    select(TrackedCaseProviderOperation).order_by(
+                        TrackedCaseProviderOperation.created_at
+                    )
+                )
+            )
+            assert [row.status for row in operations] == ["replay_queued", "succeeded"]
+            assert operations[1].metadata_json["replay_of_operation_id"] == operations[0].id
+
+        closed = client.post(
+            f"/api/admin/provider-operations/jobs/{record['id']}/resolve-incident",
+            headers=auth_headers(token),
+            json={
+                "root_cause": "Provider authentication expired before the scheduled poll.",
+                "prevention": "Alert on authentication response class before the next window.",
+                "canary_evidence": "Bounded single-record replay completed successfully.",
+            },
+        )
+        assert closed.status_code == 200, closed.text
+        assert closed.json()["operation"]["status"] == "resolved"
+        with get_session_factory()() as session:
+            incident = session.scalar(
+                select(TrackedCaseProviderOperation).where(
+                    TrackedCaseProviderOperation.status == "resolved"
+                )
+            )
+            assert incident is not None
+            assert incident.metadata_json["incident_prevention"]
+            assert incident.metadata_json["incident_canary_operation_id"]
     finally:
         get_settings.cache_clear()
 

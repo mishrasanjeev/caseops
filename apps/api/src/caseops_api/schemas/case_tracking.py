@@ -142,6 +142,19 @@ class TrackedCaseRecord(BaseModel):
     current_stage: str | None
     next_hearing_on: date | None
     last_provider_checked_at: datetime | None
+    last_provider_attempted_at: datetime | None = None
+    last_provider_successful_at: datetime | None = None
+    next_provider_refresh_at: datetime | None = None
+    freshness_status: Literal["fresh", "stale", "never_succeeded", "disabled", "quarantined"] = (
+        "never_succeeded"
+    )
+    response_class: str | None = None
+    last_operation_id: str | None = None
+    provider_health: Literal["healthy", "unhealthy", "disabled", "quarantined"] = "unhealthy"
+    manual_refresh_allowed: bool = False
+    manual_refresh_disabled_reason: str | None = None
+    refresh_cost_minor: int = 0
+    refresh_currency: str = "INR"
     last_error: str | None
     metadata: dict[str, object] = Field(default_factory=dict)
 

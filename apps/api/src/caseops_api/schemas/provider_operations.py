@@ -9,6 +9,7 @@ ProviderOperationKind = Literal[
     "calendar_sync",
     "notification_delivery",
     "case_tracking_poll",
+    "case_tracking_record",
     "mailbox_message_import",
     "mailbox_webhook",
     "drive_file_candidate",
@@ -98,6 +99,17 @@ class ProviderOperationActionRequest(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+
+class ProviderIncidentResolutionRequest(BaseModel):
+    root_cause: str = Field(min_length=8, max_length=1000)
+    prevention: str = Field(min_length=8, max_length=1000)
+    canary_evidence: str = Field(min_length=8, max_length=1000)
+
+    @field_validator("root_cause", "prevention", "canary_evidence", mode="before")
+    @classmethod
+    def strip_incident_text(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
 
 
 class ProviderOperationReplayPreviewRequest(BaseModel):

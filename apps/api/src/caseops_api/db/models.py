@@ -1309,9 +1309,7 @@ class MatterBulkImportRow(Base):
     """One sanitized and normalized row in a matter import job."""
 
     __tablename__ = "matter_bulk_import_rows"
-    __table_args__ = (
-        UniqueConstraint("job_id", "row_number", name="uq_matter_import_job_row"),
-    )
+    __table_args__ = (UniqueConstraint("job_id", "row_number", name="uq_matter_import_job_row"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -2089,6 +2087,7 @@ class MailboxWebhookStatus(StrEnum):
 
 
 class ConnectorHealthProvider(StrEnum):
+    CASE_TRACKING = "case_tracking"
     GOOGLE_WORKSPACE = "google_workspace"
     GMAIL = "gmail"
     GOOGLE_DRIVE = "google_drive"
@@ -3603,9 +3602,7 @@ class NotificationDeliveryIntent(Base):
     dispatch_owner: Mapped[str] = mapped_column(
         String(32), nullable=False, default="durable_intent"
     )
-    comparison_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="not_run"
-    )
+    comparison_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_run")
     suppression_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
     fallback_intent_id: Mapped[str | None] = mapped_column(
         ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
@@ -3643,9 +3640,7 @@ class NotificationDeliveryEvent(Base):
         Index("ix_notification_delivery_events_intent_time", "intent_id", "occurred_at"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
@@ -4086,6 +4081,22 @@ class TrackedCase(Base):
         nullable=True,
         index=True,
     )
+    last_provider_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    last_provider_successful_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    next_provider_refresh_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    provider_freshness_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="never_succeeded", index=True
+    )
+    last_response_class: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quarantine_reason_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_provider_refresh_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -4112,6 +4123,12 @@ class TrackedCase(Base):
     updates: Mapped[list[TrackedCaseUpdate]] = relationship(
         back_populates="tracked_case",
         cascade="all, delete-orphan",
+    )
+    provider_operations: Mapped[list[TrackedCaseProviderOperation]] = relationship(
+        back_populates="tracked_case", cascade="all, delete-orphan"
+    )
+    provider_snapshots: Mapped[list[TrackedCaseProviderSnapshot]] = relationship(
+        back_populates="tracked_case", cascade="all, delete-orphan"
     )
 
 
@@ -4246,6 +4263,88 @@ class TrackedCasePollRun(Base):
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     company: Mapped[Company | None] = relationship()
+
+
+class TrackedCaseProviderOperation(Base):
+    """Durable, tenant-scoped provider work for one tracked case."""
+
+    __tablename__ = "tracked_case_provider_operations"
+    __table_args__ = (
+        UniqueConstraint("company_id", "correlation_id", name="uq_tracking_operation_correlation"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tracked_case_id: Mapped[str] = mapped_column(
+        ForeignKey("tracked_cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    poll_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tracked_case_poll_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    requested_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    operation_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    correlation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    response_class: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quarantine_reason_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    tracked_case: Mapped[TrackedCase] = relationship(back_populates="provider_operations")
+    snapshots: Mapped[list[TrackedCaseProviderSnapshot]] = relationship(
+        back_populates="operation", cascade="all, delete-orphan"
+    )
+
+
+class TrackedCaseProviderSnapshot(Base):
+    """Append-only provider evidence and normalized diff for one operation."""
+
+    __tablename__ = "tracked_case_provider_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tracked_case_id: Mapped[str] = mapped_column(
+        ForeignKey("tracked_cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    operation_id: Mapped[str] = mapped_column(
+        ForeignKey("tracked_case_provider_operations.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    raw_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    normalized_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    raw_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    normalized_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    diff_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    tracked_case: Mapped[TrackedCase] = relationship(back_populates="provider_snapshots")
+    operation: Mapped[TrackedCaseProviderOperation] = relationship(back_populates="snapshots")
 
 
 class MatterActivity(Base):
@@ -9084,9 +9183,7 @@ class AuthoritySearchObservation(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
@@ -10812,17 +10909,13 @@ class StatuteSection(Base):
     source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_publisher: Mapped[str | None] = mapped_column(String(160), nullable=True)
     source_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    quarantined_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quarantine_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     section_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     parent_section_id: Mapped[str | None] = mapped_column(
@@ -12001,9 +12094,7 @@ class IpDocketRecord(Base):
         Index("ix_ip_docket_company_status", "company_id", "status"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
@@ -12047,9 +12138,7 @@ class IpTrademarkParticularVersion(Base):
         Index("ix_ip_tm_versions_company_docket", "company_id", "docket_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -12067,9 +12156,7 @@ class IpTrademarkParticularVersion(Base):
     created_by_membership_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True, index=True
     )
-    finalized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -12093,17 +12180,13 @@ class CompanyNoticeIpLink(Base):
         UniqueConstraint("notice_id", "docket_id", name="uq_notice_ip_link"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     notice_id: Mapped[str] = mapped_column(String(36), nullable=False)
     link_kind: Mapped[str] = mapped_column(String(40), nullable=False)
     accepted_effect: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    created_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -12145,9 +12228,7 @@ class IpEvidenceCandidate(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     source_type: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -12181,14 +12262,10 @@ class IpDeadlineCoverage(Base):
             name="fk_ip_deadline_coverage_docket_company",
             ondelete="CASCADE",
         ),
-        UniqueConstraint(
-            "docket_id", "matter_deadline_id", name="uq_ip_deadline_coverage"
-        ),
+        UniqueConstraint("docket_id", "matter_deadline_id", name="uq_ip_deadline_coverage"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
     matter_deadline_id: Mapped[str] = mapped_column(
@@ -12198,15 +12275,11 @@ class IpDeadlineCoverage(Base):
     )
     responsible_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     backup_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    coverage_status: Mapped[str] = mapped_column(
-        String(24), nullable=False, default="accepted"
-    )
+    coverage_status: Mapped[str] = mapped_column(String(24), nullable=False, default="accepted")
     calendar_projection_status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="pending"
     )
-    accepted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reassignment_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -12228,9 +12301,7 @@ class IpDeadlineIncident(Base):
         Index("ix_ip_deadline_incidents_company_status", "company_id", "status"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     matter_deadline_id: Mapped[str | None] = mapped_column(
@@ -12249,12 +12320,8 @@ class IpDeadlineIncident(Base):
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
     corrective_action: Mapped[str | None] = mapped_column(Text, nullable=True)
-    verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    verified_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -12272,9 +12339,7 @@ class IpTitleInterest(Base):
         Index("ix_ip_title_interests_company_docket", "company_id", "docket_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     interest_type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -12283,9 +12348,7 @@ class IpTitleInterest(Base):
     effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     related_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
-    recordal_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="not_required"
-    )
+    recordal_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_required")
     conflict_flags_json: Mapped[list] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -12315,9 +12378,7 @@ class IpRelatedRightObligation(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     title_interest_id: Mapped[str | None] = mapped_column(
@@ -12336,9 +12397,7 @@ class IpRelatedRightObligation(Base):
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
     evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
-    completion_evidence_reference: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
-    )
+    completion_evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -12368,9 +12427,7 @@ class IpCostItem(Base):
         Index("ix_ip_cost_items_company_docket", "company_id", "docket_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     matter_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -12385,20 +12442,14 @@ class IpCostItem(Base):
         String(24), nullable=False, default="unlinked"
     )
     canonical_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    reconciliation_difference_minor: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True
-    )
-    reconciled_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    reconciliation_difference_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reconciled_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    created_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

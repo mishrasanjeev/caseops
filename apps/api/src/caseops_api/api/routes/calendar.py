@@ -61,11 +61,13 @@ from caseops_api.services.calendar_sync import (
     sync_status,
     sync_task_to_google_calendar,
 )
+from caseops_api.services.connector_health import refresh_connector_health_records
 from caseops_api.services.email_calendar_candidates import (
     extract_email_invitation_candidates,
     list_email_invitation_candidates,
     review_email_invitation_candidate,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 
@@ -292,7 +294,11 @@ async def revoke_calendar_connection(
     session: DbSession,
     connection_id: str,
 ) -> CalendarConnectionRecord:
-    return revoke_connection(session, context=context, connection_id=connection_id)
+    require_recent_step_up(session, context=context, purpose="connector_disconnect")
+    response = revoke_connection(session, context=context, connection_id=connection_id)
+    refresh_connector_health_records(session, context=context)
+    session.commit()
+    return response
 
 
 @router.post(

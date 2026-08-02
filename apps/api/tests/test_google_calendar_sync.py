@@ -3,6 +3,7 @@
 Regression coverage for the production-safe Google Calendar slice. The tests
 use a local provider double only; they never call Google APIs.
 """
+
 from __future__ import annotations
 
 import json
@@ -198,8 +199,14 @@ def _connect_google(
 
 def test_google_calendar_connection_start_callback_revoke_store_no_raw_tokens(
     client: TestClient,
+    monkeypatch,
 ) -> None:
     provider = StubGoogleCalendarProvider()
+    purposes: list[str] = []
+    monkeypatch.setattr(
+        "caseops_api.api.routes.calendar.require_recent_step_up",
+        lambda *args, **kwargs: purposes.append(kwargs["purpose"]),
+    )
     try:
         bootstrap = bootstrap_company(client)
         token = str(bootstrap["access_token"])
@@ -219,9 +226,7 @@ def test_google_calendar_connection_start_callback_revoke_store_no_raw_tokens(
         listed = client.get("/api/calendar/connections", headers=_auth(token))
         assert listed.status_code == 200, listed.text
         assert listed.json()["connections"][0]["provider"] == "google_calendar"
-        assert listed.json()["connections"][0]["display_email"] == (
-            "lawyer@gmail.example"
-        )
+        assert listed.json()["connections"][0]["display_email"] == ("lawyer@gmail.example")
         assert "google-access-credential" not in listed.text
 
         revoked = client.delete(
@@ -232,6 +237,7 @@ def test_google_calendar_connection_start_callback_revoke_store_no_raw_tokens(
         assert revoked.json()["provider"] == "google_calendar"
         assert revoked.json()["status"] == "revoked"
         assert "google-access-credential" not in revoked.text
+        assert purposes == ["connector_disconnect"]
     finally:
         set_google_calendar_provider_for_tests(None)
 
@@ -269,9 +275,7 @@ def test_sync_status_reports_google_config_names_without_tokens(
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        provider_config = {
-            item["provider"]: item for item in body["provider_config"]
-        }
+        provider_config = {item["provider"]: item for item in body["provider_config"]}
         assert provider_config["google_calendar"]["configured"] is False
         assert provider_config["google_calendar"]["missing_config_names"] == [
             "GOOGLE_CALENDAR_CLIENT_ID",
@@ -338,17 +342,13 @@ def test_google_calendar_manual_hearing_sync_is_idempotent_and_audited(
                 session.scalars(
                     select(AuditEvent)
                     .where(
-                        AuditEvent.action.in_(
-                            ("calendar.sync.succeeded", "calendar.sync.deleted")
-                        )
+                        AuditEvent.action.in_(("calendar.sync.succeeded", "calendar.sync.deleted"))
                     )
                     .order_by(AuditEvent.created_at.asc())
                 )
             )
             assert len(audits) == 3
-            metadata = json.dumps(
-                [json.loads(event.metadata_json or "{}") for event in audits]
-            )
+            metadata = json.dumps([json.loads(event.metadata_json or "{}") for event in audits])
             assert "google_calendar" in metadata
             assert "google-access-credential" not in metadata
 
@@ -447,9 +447,7 @@ def test_disposal_enqueues_and_drains_provider_deletion_tombstone(
         factory = get_session_factory()
         with factory() as session:
             sync = session.scalar(
-                select(CalendarEventSync).where(
-                    CalendarEventSync.source_id == hearing["id"]
-                )
+                select(CalendarEventSync).where(CalendarEventSync.source_id == hearing["id"])
             )
             assert sync is not None
             assert sync.sync_status == CalendarEventSyncStatus.DELETE_PENDING
@@ -473,9 +471,7 @@ def test_disposal_enqueues_and_drains_provider_deletion_tombstone(
         assert provider.delete_calls == ["google-event-1"]
         with factory() as session:
             sync = session.scalar(
-                select(CalendarEventSync).where(
-                    CalendarEventSync.source_id == hearing["id"]
-                )
+                select(CalendarEventSync).where(CalendarEventSync.source_id == hearing["id"])
             )
             assert sync is not None
             assert sync.sync_status == CalendarEventSyncStatus.DELETED
@@ -528,9 +524,7 @@ def test_provider_upsert_cannot_overwrite_lifecycle_change_with_synced(
         assert provider.delete_calls == ["google-event-1"]
         with factory() as session:
             sync = session.scalar(
-                select(CalendarEventSync).where(
-                    CalendarEventSync.source_id == hearing["id"]
-                )
+                select(CalendarEventSync).where(CalendarEventSync.source_id == hearing["id"])
             )
             assert sync is not None
             assert sync.sync_status == CalendarEventSyncStatus.DELETED
@@ -773,10 +767,7 @@ def test_admin_google_calendar_replay_is_local_safe_and_token_safe(
         with factory() as session:
             audit = session.scalar(
                 select(AuditEvent)
-                .where(
-                    AuditEvent.action
-                    == "calendar.durable_google_calendar_sync.replayed"
-                )
+                .where(AuditEvent.action == "calendar.durable_google_calendar_sync.replayed")
                 .order_by(AuditEvent.created_at.desc())
             )
             assert audit is not None
