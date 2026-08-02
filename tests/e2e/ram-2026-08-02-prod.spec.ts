@@ -64,7 +64,9 @@ test.describe("Ram 2026-08-02 deployed provider health foundation", () => {
     ).toBeLessThanOrEqual(360);
 
     await page.goto(`${PROD_BASE_URL}/app/admin/provider-operations`);
-    await expect(page.getByRole("heading", { name: "Provider operations" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Provider operations", exact: true }),
+    ).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(360);
