@@ -29,6 +29,13 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForURL(new RegExp(`${PROD_BASE_URL}/app(?:[/?]|$)`));
 }
 
+async function csrfHeaders(page: Page): Promise<Record<string, string>> {
+  const cookies = await page.context().cookies();
+  const csrf = cookies.find((cookie) => cookie.name === "caseops_csrf")?.value;
+  expect(csrf, "caseops_csrf cookie must exist after sign-in").toBeTruthy();
+  return { "X-CSRF-Token": csrf! };
+}
+
 test.describe("Ram 2026-08-02 deployed provider health foundation", () => {
   test.setTimeout(120_000);
 
@@ -78,9 +85,11 @@ test.describe("Ram 2026-08-02 deployed provider health foundation", () => {
     page,
   }) => {
     await signIn(page);
+    const headers = await csrfHeaders(page);
     const suffix = Date.now().toString(36).toUpperCase();
     const title = `IPLF-002B synthetic ${suffix}`;
     const created = await page.request.post(`${PROD_API_BASE_URL}/api/case-tracking/bookmarks`, {
+      headers,
       data: {
         provider: "ecourtsindia",
         cnr_number: `E2E002B${suffix}`.slice(0, 32),
@@ -91,26 +100,28 @@ test.describe("Ram 2026-08-02 deployed provider health foundation", () => {
         notification_enabled: false,
       },
     });
-    expect(created.status()).toBe(201);
     const bookmark = await created.json();
+    expect(created.status(), JSON.stringify(bookmark)).toBe(201);
     expect(bookmark.tracked_case.freshness_status).toBeTruthy();
     expect(typeof bookmark.tracked_case.refresh_cost_minor).toBe("number");
 
-    await page.setViewportSize({ width: 360, height: 800 });
-    await page.goto(`${PROD_BASE_URL}/app/case-tracking`);
-    await expect(page.getByText(title)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Refresh cost INR/i).last()).toBeVisible();
-    await expect(page.getByText(/Attempted/i).last()).toBeVisible();
-    await expect(page.getByText(/Last good/i).last()).toBeVisible();
-    await expect(page.getByText(/Next/i).last()).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-      360,
-    );
-
-    const archived = await page.request.patch(
-      `${PROD_API_BASE_URL}/api/case-tracking/bookmarks/${bookmark.id}`,
-      { data: { is_archived: true } },
-    );
-    expect(archived.status()).toBe(200);
+    try {
+      await page.setViewportSize({ width: 360, height: 800 });
+      await page.goto(`${PROD_BASE_URL}/app/case-tracking`);
+      await expect(page.getByText(title)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Refresh cost INR/i).last()).toBeVisible();
+      await expect(page.getByText(/Attempted/i).last()).toBeVisible();
+      await expect(page.getByText(/Last good/i).last()).toBeVisible();
+      await expect(page.getByText(/Next/i).last()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        360,
+      );
+    } finally {
+      const archived = await page.request.patch(
+        `${PROD_API_BASE_URL}/api/case-tracking/bookmarks/${bookmark.id}`,
+        { headers, data: { is_archived: true } },
+      );
+      expect(archived.status(), await archived.text()).toBe(200);
+    }
   });
 });
