@@ -64,6 +64,7 @@ from caseops_api.services.judgment_alerts import (
     update_judgment_alert_rule,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.source_actions import inspect_source_action
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -447,6 +448,12 @@ async def get_saved_annotations(
                 authority_forum_level=auth.forum_level,
                 authority_document_type=auth.document_type,
                 authority_title=auth.title,
+                authority_source=auth.source,
+                authority_source_reference=auth.source_reference,
+                authority_source_action=inspect_source_action(
+                    auth.source_reference,
+                    verified=(auth.source == "official"),
+                ),
                 authority_neutral_citation=auth.neutral_citation,
                 authority_case_reference=auth.case_reference,
                 authority_decision_date=auth.decision_date,

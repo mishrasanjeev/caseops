@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, ExternalLink, Loader2 } from "lucide-react";
+import { Bookmark, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -17,6 +17,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { SourceAction } from "@/components/app/SourceAction";
 import {
   fetchSavedAuthorityAnnotations,
   type SavedAuthorityAnnotation,
@@ -136,12 +137,7 @@ function SavedAnnotationCard({
               .join(" · ")}
           </CardDescription>
         </div>
-        <Link href={`/app/research?q=${encodeURIComponent(a.authority_title)}`}>
-          <Button variant="outline" size="sm">
-            <ExternalLink className="mr-1 h-3.5 w-3.5" />
-            Open
-          </Button>
-        </Link>
+        <SourceAction action={a.authority_source_action} compact />
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
         <p className="font-medium text-[var(--color-ink-1)]">{a.title}</p>
@@ -151,7 +147,7 @@ function SavedAnnotationCard({
           </p>
         ) : null}
         <p className="text-xs text-[var(--color-ink-3)]">
-          Saved {formatLegalDate(a.created_at)}
+          Source: {a.authority_source} · Saved {formatLegalDate(a.created_at)}
         </p>
       </CardContent>
     </Card>

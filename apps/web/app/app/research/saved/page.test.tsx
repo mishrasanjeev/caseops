@@ -54,6 +54,17 @@ describe("SavedResearchPage", () => {
           authority_forum_level: "high_court",
           authority_document_type: "judgment",
           authority_title: "State v Kumar",
+          authority_source: "official",
+          authority_source_reference: "https://www.indiacode.nic.in/document.pdf",
+          authority_source_action: {
+            state: "available",
+            label: "Open source",
+            open_url:
+              "/api/source-actions/open?url=https%3A%2F%2Fwww.indiacode.nic.in%2Fdocument.pdf",
+            source_reference: "https://www.indiacode.nic.in/document.pdf",
+            reason: null,
+            opens_new_tab: true,
+          },
           authority_neutral_citation: "2024:DHC:1111",
           authority_case_reference: "BAIL APPLN. 99/2024",
           authority_decision_date: "2024-06-01",
@@ -69,7 +80,54 @@ describe("SavedResearchPage", () => {
     expect(screen.getByText("Delhi High Court")).toBeInTheDocument();
     expect(screen.getByText("flag")).toBeInTheDocument();
     expect(screen.getByText(/2024:DHC:1111/)).toBeInTheDocument();
+    expect(screen.getByText(/Source: official/)).toBeInTheDocument();
+    expect(screen.getByTestId("source-action-open")).toHaveAttribute(
+      "href",
+      expect.stringContaining("/api/source-actions/open?url="),
+    );
     expect(screen.getByText("1 saved")).toBeInTheDocument();
+  });
+
+  it("keeps citation metadata when the saved source cannot be opened", async () => {
+    fetchSavedMock.mockResolvedValue({
+      annotations: [
+        {
+          id: "ann-blocked",
+          authority_document_id: "auth-blocked",
+          created_by_membership_id: "mem-1",
+          kind: "flag",
+          title: "Review source failure",
+          body: null,
+          is_archived: false,
+          created_at: "2026-08-03T00:00:00Z",
+          updated_at: "2026-08-03T00:00:00Z",
+          authority_court_name: "Delhi High Court",
+          authority_forum_level: "high_court",
+          authority_document_type: "judgment",
+          authority_title: "Citation remains visible",
+          authority_source: "provider",
+          authority_source_reference: "https://provider.invalid/expired",
+          authority_source_action: {
+            state: "unverified",
+            label: "Open source",
+            open_url: null,
+            source_reference: "https://provider.invalid/expired",
+            reason: "Source access must be refreshed by the provider.",
+            opens_new_tab: true,
+          },
+          authority_neutral_citation: "2026:DHC:42",
+          authority_case_reference: null,
+          authority_decision_date: "2026-01-02",
+          authority_summary: "Source failure fixture",
+        },
+      ],
+    });
+
+    render(withClient(<SavedResearchPage />));
+    expect(await screen.findByText("Citation remains visible")).toBeInTheDocument();
+    expect(screen.getByText(/2026:DHC:42/)).toBeInTheDocument();
+    expect(screen.getByTestId("source-action-unverified")).toBeVisible();
+    expect(screen.queryByTestId("source-action-open")).not.toBeInTheDocument();
   });
 
   it("toggles include_archived when the user clicks Show archived", async () => {

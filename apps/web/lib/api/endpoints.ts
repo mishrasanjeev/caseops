@@ -4819,6 +4819,9 @@ export type SavedAuthorityAnnotation = {
   authority_forum_level: AuthorityForumLevel;
   authority_document_type: AuthorityDocumentType;
   authority_title: string;
+  authority_source: string;
+  authority_source_reference: string | null;
+  authority_source_action: SourceActionContract;
   authority_neutral_citation: string | null;
   authority_case_reference: string | null;
   authority_decision_date: string | null;
