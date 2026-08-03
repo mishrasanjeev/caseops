@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-003C",
+    "active_slice": "IPLF-004A",
     "checkpoint": {
-      "recorded_at": "2026-08-03T07:53:15+05:30",
-      "repository_revision": "336136f97f6107251f9a2fc5f05d9ea0810b9470",
-      "environment": "IPLF-002B production verified: API caseops-api-00227-kj8 and web caseops-web-00207-59f Ready at 100% traffic; same-SHA production workflow 30778000276 passed",
-      "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-002B exact-head CI, additive migration, immutable API/web deployment, scheduler digest/IAM/timezone inventory, repeated health, fail-closed tracking, bounded quarantine/replay, canary-only incident closure, connector disconnect step-up, and complete dated production RAM plus notice workflows passed without an arbitrary seven-day delay.",
+      "recorded_at": "2026-08-03T07:56:16+05:30",
+      "repository_revision": "505044afdfa5f4340f131fcf9a41379d68f70ebb",
+      "environment": "IPLF-002B production verified; IPLF-003C implementation candidate passed focused API/UI, broader authority/judge regression, production web build, OpenAPI regeneration, and dated 360px browser verification locally",
+      "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-003C now preserves the canonical authority source, source reference, and typed source action through saved research; available actions use the server-issued safe route, unavailable states remain non-links with citations visible, and deterministic local verification passed. Exact-head CI and production release proof remain pending.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-003C",
-      "next_action": "Complete IPLF-003C remaining source-action behavior, exact-head CI, immutable production deployment, and dated deployed acceptance while the M0 human program-lock gate remains pending.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md"
+      "next_slice": "IPLF-004A",
+      "next_action": "Merge IPLF-003C after exact-head CI, deploy the immutable API/web revision, run the dated saved-source production acceptance, then execute IPLF-004A while the M0 human program-lock gate remains pending.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-003C/release-2026-08-03.md"
     }
   },
   "milestones": [
@@ -422,12 +422,13 @@
         "IPLF-003B",
         "IPLF-003C"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m1/IPLF-003C/release-2026-08-03.md"
       ]
     },
     {
@@ -2838,7 +2839,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-001",
       "primary_behavior": "Remaining PRD behavior and exception coverage",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "No schema change. AuthorityDocument and authority annotation persistence remain canonical; this slice adds response serialization and UI rendering only.",
       "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
       "requirement_ids": [
         "TRACK-01",
@@ -3296,27 +3297,54 @@
       "dependencies": [
         "IPLF-003B"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/authorities.py",
+        "apps/api/src/caseops_api/schemas/authorities.py",
+        "apps/web/app/app/research/saved/page.tsx",
+        "apps/web/components/app/SourceAction.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-003C/release-2026-08-03.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-003C/release-2026-08-03.md",
+          "revision": "505044afdfa5f4340f131fcf9a41379d68f70ebb",
+          "environment": "local production-mode implementation candidate; exact-head CI and production deployment pending",
+          "fixtures": "tenant-scoped saved official authority, unverified provider authority, missing/blocked/quarantined shared source-action states, and authenticated deterministic 360px browser records",
+          "assertions": "source publisher/reference preservation, server-issued safe open route, no raw unverified link, citation persistence through unavailable state, reverse-tabnabbing/referrer controls, OpenAPI parity, narrow-viewport visibility, and no horizontal overflow",
+          "result": "passed",
+          "recorded_at": "2026-08-03T07:56:16+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Pass exact-head CI, merge to canonical main, deploy the exact immutable API/web images, and execute the dated saved-source production journey."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, backfill, legal-source fetch, or new writer. Existing AuthorityDocument source fields and tenant-scoped annotation rows remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-003C/release-2026-08-03.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Bounded ownership, source-surface behavior, security, local verification, rollback, and pending exact-production record"
+        }
+      ],
+      "allocation_review": "Definition of Ready completed against PRD Sections 11, 13.2, 13.9, 15 UJ-17, 23, and 25. Existing AuthorityDocument, annotation, source-action service, and SourceAction renderer were confirmed as the canonical owners; no duplicate source master or writer was introduced.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -12482,7 +12510,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12516,7 +12544,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12550,7 +12578,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12628,7 +12656,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12662,7 +12690,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12696,7 +12724,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12730,7 +12758,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -12764,7 +12792,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18291,7 +18319,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18324,7 +18352,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18357,7 +18385,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18390,7 +18418,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18423,7 +18451,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18456,7 +18484,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18489,7 +18517,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18522,7 +18550,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18555,7 +18583,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18588,7 +18616,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
