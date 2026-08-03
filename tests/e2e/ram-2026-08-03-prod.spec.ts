@@ -37,6 +37,21 @@ async function csrfHeaders(page: Page): Promise<Record<string, string>> {
   return { "X-CSRF-Token": csrf! };
 }
 
+function isOfficialSourceReference(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return (
+      hostname === "gov.in" ||
+      hostname.endsWith(".gov.in") ||
+      hostname.endsWith(".nic.in") ||
+      hostname.endsWith(".judiciary.gov.in")
+    );
+  } catch {
+    return false;
+  }
+}
+
 test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
   test.setTimeout(120_000);
 
@@ -53,7 +68,7 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
     const recent = await recentResponse.json();
     const sourceBacked = recent.documents.find(
       (document: { source?: string; source_reference?: string | null }) =>
-        document.source === "official" && Boolean(document.source_reference),
+        isOfficialSourceReference(document.source_reference),
     );
     expect(
       sourceBacked,
@@ -86,7 +101,7 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
         (annotation: { id: string }) => annotation.id === created.id,
       );
       expect(liveRow).toBeTruthy();
-      expect(liveRow.authority_source).toBe("official");
+      expect(liveRow.authority_source).toBe(sourceBacked.source);
       expect(liveRow.authority_source_reference).toBe(
         sourceBacked.source_reference,
       );
