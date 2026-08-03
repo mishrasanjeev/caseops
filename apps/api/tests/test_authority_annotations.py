@@ -8,14 +8,19 @@ from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
-def _seed_authority(title: str = "State of Delhi v Kumar") -> str:
+def _seed_authority(
+    title: str = "State of Delhi v Kumar",
+    *,
+    source: str = "indiakanoon",
+    source_reference: str | None = None,
+) -> str:
     """Insert a standalone authority_document row for the test to annotate."""
     from datetime import date
 
     Session = get_session_factory()
     with Session() as session:
         doc = AuthorityDocument(
-            source="indiakanoon",
+            source=source,
             adapter_name="indiakanoon",
             court_name="Delhi High Court",
             forum_level="high_court",
@@ -25,6 +30,7 @@ def _seed_authority(title: str = "State of Delhi v Kumar") -> str:
             case_reference="BAIL APPLN. 99/2024",
             decision_date=date(2024, 6, 1),
             canonical_key=f"dh-{title}",
+            source_reference=source_reference,
             summary="Sample bail order for annotation tests.",
             document_text="Full document text (elided).",
             extracted_char_count=40,
@@ -315,3 +321,42 @@ def test_saved_annotations_default_hides_archived_and_orders_newest_first(
     assert resp.status_code == 200
     ids = [r["id"] for r in resp.json()["annotations"]]
     assert ids == [newer_id, older_id]
+
+
+def test_saved_annotation_preserves_source_contract(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    source_reference = "https://www.indiacode.nic.in/document.pdf"
+    authority_id = _seed_authority(
+        "Source-backed saved authority",
+        source="official",
+        source_reference=source_reference,
+    )
+    created = client.post(
+        f"/api/authorities/documents/{authority_id}/annotations",
+        headers=auth_headers(token),
+        json={"kind": "flag", "title": "Keep the source"},
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.get(
+        "/api/authorities/annotations",
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    saved = response.json()["annotations"][0]
+    assert saved["authority_source"] == "official"
+    assert saved["authority_source_reference"] == source_reference
+    assert saved["authority_source_action"] == {
+        "state": "available",
+        "label": "Open source",
+        "open_url": (
+            "/api/source-actions/open?url="
+            "https%3A%2F%2Fwww.indiacode.nic.in%2Fdocument.pdf"
+        ),
+        "source_reference": source_reference,
+        "reason": None,
+        "opens_new_tab": True,
+    }

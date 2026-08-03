@@ -24373,6 +24373,11 @@ export interface components {
             authority_forum_level: "high_court" | "supreme_court";
             /** Authority Neutral Citation */
             authority_neutral_citation: string | null;
+            /** Authority Source */
+            authority_source: string;
+            authority_source_action: components["schemas"]["SourceActionRecord"];
+            /** Authority Source Reference */
+            authority_source_reference: string | null;
             /** Authority Summary */
             authority_summary: string;
             /** Authority Title */

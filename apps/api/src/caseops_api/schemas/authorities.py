@@ -419,6 +419,9 @@ class SavedAuthorityAnnotationRecord(BaseModel):
     authority_forum_level: AuthorityForumLevelLiteral
     authority_document_type: AuthorityDocumentTypeLiteral
     authority_title: str
+    authority_source: str
+    authority_source_reference: str | None
+    authority_source_action: SourceActionRecord
     authority_neutral_citation: str | None
     authority_case_reference: str | None
     authority_decision_date: date | None
