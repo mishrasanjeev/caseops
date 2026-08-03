@@ -16,13 +16,13 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-003C",
     "checkpoint": {
-      "recorded_at": "2026-08-02T22:35:00+05:30",
-      "repository_revision": "c65e5d4f809faab31984f9d865062c46fe781343",
-      "environment": "IPLF-002B exact-commit CI and production deployment pending",
-      "completed_scope": "IPLF-002A is production verified. IPLF-002B tracking operations, health-gated refresh, bounded quarantine/replay, canary-only incident closure, connector disconnect step-up, documentation, and local dated E2E are implemented and locally verified; exact-main production release proof remains pending.",
+      "recorded_at": "2026-08-03T07:53:15+05:30",
+      "repository_revision": "336136f97f6107251f9a2fc5f05d9ea0810b9470",
+      "environment": "IPLF-002B production verified: API caseops-api-00227-kj8 and web caseops-web-00207-59f Ready at 100% traffic; same-SHA production workflow 30778000276 passed",
+      "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-002B exact-head CI, additive migration, immutable API/web deployment, scheduler digest/IAM/timezone inventory, repeated health, fail-closed tracking, bounded quarantine/replay, canary-only incident closure, connector disconnect step-up, and complete dated production RAM plus notice workflows passed without an arbitrary seven-day delay.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-003C",
-      "next_action": "Complete exact-commit CI and production release proof for IPLF-002B, then implement IPLF-003C remaining source-action behavior and exceptions while the M0 human program-lock gate remains pending.",
+      "next_action": "Complete IPLF-003C remaining source-action behavior, exact-head CI, immutable production deployment, and dated deployed acceptance while the M0 human program-lock gate remains pending.",
       "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md"
     }
   },
@@ -376,7 +376,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-002A/release-2026-08-02.md",
@@ -3066,19 +3066,17 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md",
-          "revision": "c65e5d4f809faab31984f9d865062c46fe781343",
-          "environment": "local production-mode candidate; exact-main production deployment pending",
+          "revision": "7c7ebbb43d40039fc62d368a267a05056ed4f047",
+          "environment": "production: API caseops-api-00227-kj8 and web caseops-web-00207-59f Ready at 100% traffic; production-test correction on main 336136f97f6107251f9a2fc5f05d9ea0810b9470",
           "fixtures": "anonymized case-tracking records, forced provider authentication failure, quarantined poison record, bounded replay child, successful canary, and disconnected OAuth connectors",
-          "assertions": "correlation and redaction, immutable snapshots/diffs, response classes, retry/quarantine exclusion, health-gated refresh, stale/manual fallback, cost disclosure, step-up disconnect, replay preservation, canary-only structured incident closure, and 360px visible controls",
+          "assertions": "exact-head CI, additive migration on the immutable API digest, scheduler digest/IAM/schedule/timezone reconciliation, repeated public health, correlation and redaction, immutable snapshots/diffs, response classes, retry/quarantine exclusion, health-gated refresh, stale/manual fallback, cost disclosure, step-up disconnect, replay preservation, canary-only structured incident closure, 360px visible controls, 55/57 RAM production tests with two explicit skips, and 2/2 notice production tests",
           "result": "passed",
-          "recorded_at": "2026-08-02T22:30:00+05:30"
+          "recorded_at": "2026-08-03T07:53:15+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [
-        "Run exact-commit CI, migrate and deploy the validated main revision, verify scheduler IAM/image/canary state, and execute the dated production Playwright batch."
-      ],
+      "next_actions": [],
       "data_impact": [
         "Additive tracked-case health fields plus tenant-scoped provider operation and append-only provider snapshot tables; no destructive rewrite or backfill."
       ],
@@ -3093,13 +3091,13 @@
           "artifact": "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md",
           "disposition": "created",
           "owner": "Engineering/SRE",
-          "evidence": "Implementation, verification, security, migration, rollback, and pending exact-production record"
+          "evidence": "Implementation, verification, security, migration, immutable deployment, scheduler inventory, dated production acceptance, and rollback record"
         }
       ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
