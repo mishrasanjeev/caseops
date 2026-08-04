@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-007C",
+    "active_slice": "IPLF-008A",
     "checkpoint": {
-      "recorded_at": "2026-08-04T19:50:00+05:30",
-      "repository_revision": "2f36aa31462f651a94b24047bfa0ed1bf1807432",
-      "environment": "IPLF-003C remains production verified. IPLF-004A canonical main 36aac3a passed exact-head CI run 30903784411, deployed through migration execution caseops-migrate-job-5sq6g, and serves on API caseops-api-00229-5h2 plus web caseops-web-00209-fmh at 100% traffic; production run 30915519778 passed 55 RAM and 2 notice tests. IPLF-004B exact head 2d74f10 is in fresh CI. IPLF-005B exact stack head 6c7521a is published on PR 158. IPLF-006C rebased application commit 2f36aa3 retains 196 consolidated API tests, 564 web tests, locked 65-route build, deterministic OpenAPI generation, and the dated 360px UJ-15/UJ-48 browser pass.",
+      "recorded_at": "2026-08-04T21:05:00+05:30",
+      "repository_revision": "95cb866bceb0ac509c23490064eaceefc691bec9",
+      "environment": "IPLF-004B is merged at canonical main 4c2ce1c, deployed on API caseops-api-00230-xv5 and web caseops-web-00210-b96 at 100% traffic with migration success and immutable scheduler-job image convergence. Exact production run 30920962309 exposed the unbounded Notice Matter picker and a source-action response mismatch; the picker root-cause fix is PR 160 and production verification remains red until rerun. IPLF-005B exact head 5715f2c is in full CI on PR 158. IPLF-006C application commit 2f36aa3 retains its full local gates. IPLF-007C application commit 95cb866 completes local migration/API/web/real-API mobile verification.",
       "completed_scope": "IPLF-002A and IPLF-002B are production verified; IPLF-003C is merged, deployed, and production verified. IPLF-004A implements opaque canonical source resolution, redirect-time validation, hashed access audit, and the tenant source-defect queue. IPLF-004B completes source report UI/health queueing, protected Matter-document proxying, tenant isolation, and responsive UJ-17 handling. IPLF-005B completes seven explicit research modes, measured corpus/index scope, typed recovery states, frozen committed criteria, explainable result evidence, immutable tenant research reports, and the lawyer-approval-aware golden-query runner. IPLF-006C completes verified-only statute text, full provision provenance, immutable two-person source review, typed link/conflict governance, seed/enrichment non-downgrade, licensed-use controls, truthful coverage, and responsive UJ-15/UJ-48 handling.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-007C",
-      "next_action": "Finish IPLF-004B exact-head CI, merge/deploy and run the strengthened production source proof; then release IPLF-005B and IPLF-006C in dependency order with exact-head CI and dated production proof. Continue independent repository work at IPLF-007C without imposing an elapsed-time scheduler blocker. Obtain named lawyer approval for the three golden-query fixtures and the M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md"
+      "next_slice": "IPLF-008A",
+      "next_action": "Merge and deploy the Phase 0 Notice responsiveness fix only after exact-head CI; rerun the complete dated production workflow and resolve the saved-source contract mismatch. Then release IPLF-005B, IPLF-006C, and IPLF-007C in dependency order. Continue repository work at IPLF-008A without imposing an elapsed-time scheduler blocker. Obtain named lawyer approval for the golden-query fixtures and the M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
     }
   },
   "milestones": [
@@ -622,8 +622,8 @@
         "IPLF-007B",
         "IPLF-007C"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": [
@@ -4214,26 +4214,59 @@
       "dependencies": [
         "IPLF-007B"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260804_0004_notification_recovery_convergence.py",
+        "apps/api/src/caseops_api/services/notification_delivery.py",
+        "apps/api/src/caseops_api/services/hearing_reminders.py",
+        "apps/api/src/caseops_api/api/routes/notifications.py",
+        "apps/web/app/app/admin/notifications/page.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_notification_convergence_20260804.py",
+        "apps/api/tests/test_hearing_reminders.py",
+        "apps/api/tests/test_durable_workflows.py",
+        "apps/web/app/app/admin/notifications/page.test.tsx",
+        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+          "revision": "95cb866bceb0ac509c23490064eaceefc691bec9",
+          "environment": "local SQLite/API, generated OpenAPI, production web build, real-API Playwright",
+          "fixtures": "isolated deterministic law-firm tenants, exact/session-only hearings, SendGrid bounce/delivered events, suppression and recovery destinations",
+          "assertions": "durable lineage, no invented hearing time, permission revalidation, confidentiality, scheduling/cancellation, fallback, monotonic webhook state, idempotency, suppression evidence, versioned recovery, metrics, persistence, and 360px usability",
+          "result": "passed",
+          "recorded_at": "2026-08-04T21:00:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Integrate IPLF-005B and IPLF-006C, rebase this revision onto main, pass exact-head CI and PostgreSQL migration gates, then deploy and run the dated production UJ-11 proof without contacting an unapproved external recipient."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive hearing policy/time precision, immutable delivery target/version/recovery metadata, provider event idempotency/application metadata, suppression recovery evidence, and hearing-reminder-to-intent lineage; legacy reminder rows are backfilled without dispatch."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/runbooks/hearing-reminder-channels.md and docs/runbooks/sendgrid-event-webhook.md",
+          "disposition": "updated",
+          "owner": "Engineering/SRE",
+          "evidence": "Durable intent lineage, explicit hearing time, fallback, monotonic provider events, suppression evidence, and versioned recovery operations"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+          "disposition": "created",
+          "owner": "Engineering/Product",
+          "evidence": "Exact application revision, migration, focused/full tests, browser proof, provider gates, and remaining release work"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -13549,7 +13582,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -13588,7 +13621,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -13861,7 +13894,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -13996,7 +14029,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14035,7 +14068,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14120,7 +14153,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14207,7 +14240,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -14432,7 +14465,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -36523,16 +36556,16 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL"
+        "apps/api/tests/test_notification_convergence_20260804.py",
+        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -41984,14 +42017,15 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-11-NORMAL"
+        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts::IPLF-UJ-11-NORMAL"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -42035,14 +42069,15 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-11-EXC-01"
+        "apps/api/tests/test_notification_convergence_20260804.py::IPLF-UJ-11-EXC-01::test_provider_events_are_monotonic_idempotent_suppressed_and_fallback"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -42086,14 +42121,15 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-11-EXC-02"
+        "apps/api/tests/test_notification_convergence_20260804.py::IPLF-UJ-11-EXC-02::test_provider_disabled_recovery_is_versioned_and_previewed"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
