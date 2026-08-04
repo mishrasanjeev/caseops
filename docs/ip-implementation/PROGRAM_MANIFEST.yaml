@@ -3712,8 +3712,8 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md",
-          "revision": "f6eda119eb0e16d9aa11a255e88e021e886af901",
-          "environment": "local integrated candidate on IPLF-004B aa419cd; exact-head CI, canonical merge, production migration/deployment, and exact-revision production proof pending",
+          "revision": "87d5e67b2ad81e0be6a8a898a0b605c659b69bc4",
+          "environment": "local integrated candidate rebased onto IPLF-004B exact head 0586405; exact-head CI after upstream canonical merge, production migration/deployment, and exact-revision production proof pending",
           "fixtures": "authenticated tenant and cross-tenant research users, absent/current/stale corpus evidence, all seven search modes, official/unverified authority sources, immutable result IDs, three pending-lawyer-review golden queries, and 360px browser viewport",
           "assertions": "typed no-result/unavailable/stale/provider/permission/validation/timeout/pagination/unreadable recovery, committed-query freezing, measured corpus scope, canonical metadata ranking, explainable result evidence, immutable tenant report persistence, hashed-query audit, opaque source target identity, linear migration, and responsive grouped controls",
           "result": "passed",
