@@ -653,7 +653,7 @@
         "IPLF-008A",
         "IPLF-008B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -4189,22 +4189,51 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        ".github/workflows/prod-verify.yml",
+        "scripts/deploy-prod.sh",
+        "scripts/verify_deployed_release.py",
+        "apps/api/src/caseops_api/api/routes/health.py",
+        "apps/web/app/api/release-identity/route.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_health.py",
+        "apps/api/tests/test_verify_deployed_release_script.py",
+        "apps/web/app/api/release-identity/route.test.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md",
+          "revision": "38354616d65e551f921846c606c3390cde0e7782",
+          "environment": "local API, generated OpenAPI, Next.js production build, and GitHub Actions workflow validation",
+          "fixtures": "valid full release SHAs, abbreviated tags, mixed API/web identities, stale expected revision, and local/runtime Cloud Run revision values",
+          "assertions": "fail-closed public identity, exact API/web equality, expected revision equality, exact serving checkout, bounded deployment convergence, no cached web identity, and canonical deploy injection",
+          "result": "passed",
+          "recorded_at": "2026-08-05T04:50:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Rebase after preceding M1 slices, run exact-head CI, merge and deploy; require matching API/web release identity and exact-serving production Playwright before changing release status."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, backfill, tenant mutation, external provider operation, or legal side effect; only non-secret runtime release identity is published."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Exact application revision, ownership, identity contract, negative controls, local gates, rollback, and remaining production proof"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "administrative_exception": {
