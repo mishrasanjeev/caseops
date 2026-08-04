@@ -1,11 +1,10 @@
 """Add immutable tenant research report snapshots.
 
 Revision ID: 20260804_0002
-Revises: 20260802_0001
+Revises: 20260804_0001
 
-The parent is the current canonical head on this independent slice.  When the
-source-reporting slice is merged first, this additive revision is rebased to
-that new head before release.
+This additive revision follows the IPLF-004B source-reporting migration so the
+release graph remains linear.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20260804_0002"
-down_revision = "20260802_0001"
+down_revision = "20260804_0001"
 branch_labels = None
 depends_on = None
 

@@ -18,7 +18,7 @@ from caseops_api.schemas.authorities import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.source_actions import inspect_source_action
+from caseops_api.services.source_actions import inspect_source_target_action
 
 ANALYSIS_VERSION = "authority-search-v3-2026-08-04"
 
@@ -69,8 +69,10 @@ def create_research_report(
     snapshot: list[dict] = []
     for document_id in ordered_ids:
         document = by_id[document_id]
-        action = inspect_source_action(
+        action = inspect_source_target_action(
             document.source_reference,
+            target_type="authority_document",
+            target_id=document.id,
             verified=(document.source == "official"),
         )
         snapshot.append(
