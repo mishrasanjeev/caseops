@@ -224,7 +224,11 @@ export default function JudgeProfilePage() {
                     </div>
                   ) : null}
                   <div className="mt-1 flex min-w-0 flex-wrap">
-                    <SourceAction action={appt.source_action} compact />
+                    <SourceAction
+                      action={appt.source_action}
+                      compact
+                      originSurface="judge_profile"
+                    />
                   </div>
                 </li>
               ))}
@@ -523,7 +527,11 @@ function AuthorityCaseList({
                 </p>
               ) : null}
               <div className="mt-2 flex min-w-0 flex-wrap">
-                <SourceAction action={authority.source_action} compact />
+                <SourceAction
+                  action={authority.source_action}
+                  compact
+                  originSurface="judge_profile"
+                />
               </div>
             </li>
           ))}

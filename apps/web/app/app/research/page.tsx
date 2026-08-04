@@ -782,7 +782,11 @@ function AuthorityCard({
           ) : null}
         </div>
         <div className="flex flex-col gap-2">
-          <SourceAction action={result.source_action} compact />
+          <SourceAction
+            action={result.source_action}
+            compact
+            originSurface="research"
+          />
           {canAnnotate ? (
             <Button
               size="sm"

@@ -427,6 +427,19 @@ def test_litigation_intelligence_review_aggregates_source_linked_items_and_audit
     assert "not legal advice" in body["disclaimer"]
     assert all(item["source"]["source_id"] for item in body["items"])
     assert all(item["source"]["snippet"] for item in body["items"])
+    matter_sources = [
+        item["source"]
+        for item in body["items"]
+        if item["source"]["source_type"] == "matter_document"
+    ]
+    assert matter_sources
+    assert all(
+        source["source_action"]["target_type"] == "matter_attachment"
+        and source["source_action"]["target_id"] == source["source_id"]
+        and "/source-actions/targets/matter_attachment/"
+        in source["source_action"]["open_url"]
+        for source in matter_sources
+    )
     rendered = json.dumps(body).lower()
     for forbidden in (
         "guaranteed",

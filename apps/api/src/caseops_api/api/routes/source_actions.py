@@ -22,6 +22,7 @@ from caseops_api.services.source_actions import (
     create_source_link_report,
     inspect_resolved_source_target,
     inspect_source_action,
+    queue_source_health_check,
     resolve_source_target,
 )
 
@@ -73,7 +74,7 @@ async def open_source(
 async def open_source_target(
     target_type: SourceTargetType,
     target_id: str,
-    context: CurrentContext,
+    context: SourceInspector,
     session: DbSession,
     origin: Annotated[SourceOriginSurface, Query()] = "other",
 ) -> RedirectResponse:
@@ -81,6 +82,7 @@ async def open_source_target(
         session,
         target_type=target_type,
         target_id=target_id,
+        context=context,
     )
     if target is None:
         raise HTTPException(
@@ -89,6 +91,13 @@ async def open_source_target(
         )
     action = inspect_resolved_source_target(target)
     if action.state != "available" or not action.source_reference:
+        queue_source_health_check(
+            session,
+            context=context,
+            target=target,
+            action=action,
+            origin_surface=origin,
+        )
         audit_source_open(
             session,
             context=context,

@@ -71,8 +71,7 @@ from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
-    inspect_source_action,
-    source_target_open_url,
+    inspect_source_target_action,
 )
 
 router = APIRouter()
@@ -151,11 +150,12 @@ class StatuteSectionRecord(BaseModel):
         )
         if not authoritative:
             self.section_text = None
-        self.source_action = inspect_source_action(
+        self.source_action = inspect_source_target_action(
             self.section_url,
+            target_type="statute_section",
+            target_id=self.id,
             verified=authoritative,
             quarantined=quarantined,
-            open_url=source_target_open_url("statute_section", self.id),
         )
         return self
 
@@ -188,11 +188,12 @@ class StatuteSectionListItem(BaseModel):
 
     @model_validator(mode="after")
     def source_contract(self) -> StatuteSectionListItem:
-        self.source_action = inspect_source_action(
+        self.source_action = inspect_source_target_action(
             self.section_url,
+            target_type="statute_section",
+            target_id=self.id,
             verified=self.verification_status in {"verified_official", "verified_licensed"},
             quarantined=self.verification_status in {"quarantined", "retired"},
-            open_url=source_target_open_url("statute_section", self.id),
         )
         return self
 

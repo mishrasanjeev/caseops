@@ -16,6 +16,7 @@ SourceTargetType = Literal[
     "authority_document",
     "statute_section",
     "judge_appointment",
+    "matter_attachment",
 ]
 SourceOriginSurface = Literal[
     "research",
@@ -44,6 +45,8 @@ class SourceActionRecord(BaseModel):
     source_reference: str | None = None
     reason: str | None = None
     opens_new_tab: bool = True
+    target_type: SourceTargetType | None = None
+    target_id: str | None = None
 
 
 class SourceActionInspectRequest(BaseModel):

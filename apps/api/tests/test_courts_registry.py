@@ -182,6 +182,10 @@ def test_judge_profile_returns_source_backed_descriptive_analytics(
     assert analytics["case_list"][0]["source_reference"].startswith(
         "https://official.example.test/adp06-"
     )
+    assert analytics["case_list"][0]["source_action"]["target_type"] == (
+        "authority_document"
+    )
+    assert analytics["case_list"][0]["source_action"]["target_id"]
     assert analytics["case_list"][0]["summary_preview"]
     assert "document_text" not in analytics["case_list"][0]
     assert any(

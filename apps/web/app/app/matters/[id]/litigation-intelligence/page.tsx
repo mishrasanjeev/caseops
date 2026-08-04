@@ -475,7 +475,11 @@ function SourceBlock({ source }: { source: LitigationIntelligenceReviewSource })
         </p>
       ) : null}
       <div className="mt-2 flex min-w-0 flex-wrap">
-        <SourceAction action={source.source_action} compact />
+        <SourceAction
+          action={source.source_action}
+          compact
+          originSurface="intelligent_review"
+        />
       </div>
     </div>
   );

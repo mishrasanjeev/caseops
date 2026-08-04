@@ -196,7 +196,7 @@ def test_matter_file_qa_answers_from_uploaded_chunks_and_persists_model_run(
     boot = _bootstrap(client, f"mfq-s1-main-{uuid4().hex[:6]}")
     token = str(boot["access_token"])
     matter_id = _create_matter(client, token, "MFQ-S1-MAIN")
-    _attachment_id, chunk_ids = _seed_attachment(
+    attachment_id, chunk_ids = _seed_attachment(
         matter_id,
         chunks=[
             (
@@ -222,6 +222,11 @@ def test_matter_file_qa_answers_from_uploaded_chunks_and_persists_model_run(
     assert body["sources"]
     assert body["sources"][0]["chunk_id"] in chunk_ids
     assert body["sources"][0]["snippet"]
+    assert body["sources"][0]["source_action"]["target_type"] == "matter_attachment"
+    assert body["sources"][0]["source_action"]["target_id"] == attachment_id
+    assert "/source-actions/targets/matter_attachment/" in body["sources"][0][
+        "source_action"
+    ]["open_url"]
     assert "Only uploaded matter document chunks were used." in body["limitations"]
     assert body["model_run_id"]
 

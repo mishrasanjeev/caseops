@@ -109,7 +109,7 @@ export default function StatuteSectionDetailPage() {
         title={section.section_number}
         description={section.section_label ?? "Section of the Act"}
         actions={
-          <SourceAction action={section.source_action} />
+          <SourceAction action={section.source_action} originSurface="statute" />
         }
       />
 

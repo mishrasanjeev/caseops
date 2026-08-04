@@ -10507,7 +10507,8 @@ class SourceLinkReport(Base):
     __tablename__ = "source_link_reports"
     __table_args__ = (
         CheckConstraint(
-            "target_type in ('authority_document', 'statute_section', 'judge_appointment')",
+            "target_type in ('authority_document', 'statute_section', "
+            "'judge_appointment', 'matter_attachment')",
             name="ck_source_link_reports_target_type",
         ),
         CheckConstraint(

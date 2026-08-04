@@ -1922,7 +1922,11 @@ function AskCaseFileSection({
                               </span>
                             )}
                             <div className="flex flex-wrap gap-1.5">
-                              <SourceAction action={source.source_action} compact />
+                              <SourceAction
+                                action={source.source_action}
+                                compact
+                                originSurface="uploaded_case_analysis"
+                              />
                               <Badge tone="neutral">Chunk {source.chunk_index + 1}</Badge>
                               {source.page_number ? (
                                 <Badge tone="neutral">Page {source.page_number}</Badge>
@@ -2081,7 +2085,11 @@ function AskCaseFileSection({
                                     {source.attachment_name}
                                   </span>
                                 )}
-                                <SourceAction action={source.source_action} compact />
+                                <SourceAction
+                                  action={source.source_action}
+                                  compact
+                                  originSurface="uploaded_case_analysis"
+                                />
                                 <Badge tone="neutral">Chunk {source.chunk_index + 1}</Badge>
                                 {!isKnownAttachment ? (
                                   <Badge tone="neutral">Source link unavailable</Badge>

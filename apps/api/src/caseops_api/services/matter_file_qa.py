@@ -52,7 +52,7 @@ from caseops_api.services.matters import (
 )
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.source_actions import inspect_source_action
+from caseops_api.services.source_actions import inspect_source_target_action
 
 PURPOSE = "matter_file_qa"
 PROVIDER_LABEL = "caseops-matter-file-qa-v1"
@@ -1116,7 +1116,12 @@ def _source_record(source: _RetrievedSource, *, matter_id: str) -> MatterFileQAS
         snippet=_bounded_snippet(source.snippet),
         score=source.score,
         matched_terms=source.matched_terms[:8],
-        source_action=inspect_source_action(source_reference, verified=True),
+        source_action=inspect_source_target_action(
+            source_reference,
+            target_type="matter_attachment",
+            target_id=source.attachment.id,
+            verified=True,
+        ),
     )
 
 

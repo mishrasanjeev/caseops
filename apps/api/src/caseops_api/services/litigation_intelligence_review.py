@@ -40,7 +40,10 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.source_actions import inspect_source_action
+from caseops_api.services.source_actions import (
+    inspect_source_action,
+    inspect_source_target_action,
+)
 
 DISCLAIMER = (
     "Litigation intelligence review is source-backed decision support, not legal "
@@ -121,10 +124,18 @@ def build_litigation_intelligence_review(
                 f"/api/matters/{matter.id}/attachments/"
                 f"{item.source.source_id}/download"
             )
-        item.source.source_action = inspect_source_action(
-            reference,
-            verified=reference is not None,
-        )
+        if item.source.source_type == "matter_document" and item.source.source_id:
+            item.source.source_action = inspect_source_target_action(
+                reference,
+                target_type="matter_attachment",
+                target_id=item.source.source_id,
+                verified=True,
+            )
+        else:
+            item.source.source_action = inspect_source_action(
+                reference,
+                verified=reference is not None,
+            )
 
     record_from_context(
         session,

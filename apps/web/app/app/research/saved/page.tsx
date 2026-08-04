@@ -117,8 +117,8 @@ function SavedAnnotationCard({
     a.authority_forum_level === "supreme_court" ? "brand" : "neutral";
   return (
     <Card data-testid={`saved-research-row-${a.id}`}>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
+      <CardHeader className="min-w-0 items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex w-full min-w-0 flex-col gap-1 sm:flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={courtTone}>{a.authority_court_name}</Badge>
             <Badge tone="neutral">{a.kind}</Badge>
@@ -137,7 +137,11 @@ function SavedAnnotationCard({
               .join(" · ")}
           </CardDescription>
         </div>
-        <SourceAction action={a.authority_source_action} compact />
+        <SourceAction
+          action={a.authority_source_action}
+          compact
+          originSurface="saved_research"
+        />
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
         <p className="font-medium text-[var(--color-ink-1)]">{a.title}</p>
