@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-004A",
+    "active_slice": "IPLF-004B",
     "checkpoint": {
-      "recorded_at": "2026-08-03T07:56:16+05:30",
-      "repository_revision": "505044afdfa5f4340f131fcf9a41379d68f70ebb",
-      "environment": "IPLF-002B production verified; IPLF-003C implementation candidate passed focused API/UI, broader authority/judge regression, production web build, OpenAPI regeneration, and dated 360px browser verification locally",
-      "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-003C now preserves the canonical authority source, source reference, and typed source action through saved research; available actions use the server-issued safe route, unavailable states remain non-links with citations visible, and deterministic local verification passed. Exact-head CI and production release proof remain pending.",
+      "recorded_at": "2026-08-04T14:04:53+05:30",
+      "repository_revision": "8a9e9371f452023a3c97ceb36547c4b8d78b93ad",
+      "environment": "IPLF-002B production verified; IPLF-003C exact-head CI in progress after security lock refresh; IPLF-004A exact application candidate passed focused API/UI, broader legal-source regressions, migration graph verification, production-mode web build, OpenAPI regeneration, and dated 360px browser verification locally",
+      "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-003C preserves canonical source metadata/actions through saved research and is awaiting completion of exact-head coverage shards before merge/deploy. IPLF-004A adds opaque canonical source-open routes, redirect-time revalidation, hashed source audit, and a tenant-owned link-defect/health queue without creating a duplicate legal-source master; deterministic local verification passed.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-004A",
-      "next_action": "Merge IPLF-003C after exact-head CI, deploy the immutable API/web revision, run the dated saved-source production acceptance, then execute IPLF-004A while the M0 human program-lock gate remains pending.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-003C/release-2026-08-03.md"
+      "next_slice": "IPLF-004B",
+      "next_action": "Complete IPLF-003C exact-head CI and production release, rebase IPLF-004A onto canonical main for exact-head CI/migration/deployment proof, then implement the IPLF-004B user workflow and exceptions while the M0 human program-lock gate remains pending.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-004A/release-2026-08-04.md"
     }
   },
   "milestones": [
@@ -492,11 +492,13 @@
         "IPLF-004A",
         "IPLF-004B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-004A/release-2026-08-04.md"
+      ]
     },
     {
       "id": "IPLF-005",
@@ -3370,22 +3372,59 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260803_0001_source_link_reports.py",
+        "apps/api/src/caseops_api/db/models.py#SourceLinkReport",
+        "apps/api/src/caseops_api/schemas/source_actions.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/api/src/caseops_api/api/routes/source_actions.py",
+        "apps/api/src/caseops_api/api/routes/authorities.py",
+        "apps/api/src/caseops_api/api/routes/courts.py",
+        "apps/api/src/caseops_api/api/routes/statutes.py",
+        "apps/api/src/caseops_api/services/authorities.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-004A/release-2026-08-04.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-004A/release-2026-08-04.md",
+          "revision": "8a9e9371f452023a3c97ceb36547c4b8d78b93ad",
+          "environment": "local production-mode implementation candidate; exact-head CI and production deployment pending",
+          "fixtures": "tenant-owned authenticated workspace, official authority, unverified authority, statute and judge source targets, failed source state, unknown target, link-defect report, and deterministic 360px saved-source records",
+          "assertions": "opaque resource route, redirect-time canonical resolution and allow-list validation, typed fail-closed response, no raw destination in audit/report persistence, source-reference SHA-256, tenant and actor ownership, health-check request audit, OpenAPI parity, narrow-viewport action/citation visibility, and no horizontal overflow",
+          "result": "passed",
+          "recorded_at": "2026-08-04T14:04:53+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Pass exact-head CI, merge the validated commit to canonical main, run the additive migration, deploy exact immutable API/web revisions, and execute the dated source-access production journey."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive source_link_reports table only: tenant and membership ownership, canonical target identity, typed issue/source/status metadata, optional bounded description, and source-reference SHA-256; no raw destination column, backfill, or existing-row rewrite."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-004A/release-2026-08-04.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Bounded ownership, opaque source-open contract, migration, audit/privacy behavior, local verification, rollback, and pending exact-production record"
+        }
+      ],
+      "allocation_review": "Definition of Ready completed against PRD Sections 11.2, 13.2, 13.9, 15 UJ-17, 23, and 25. Existing authority/statute/judge records, source-action service, unified AuditEvent, and provider-operation boundaries were confirmed as canonical; the new SourceLinkReport is a bounded tenant defect queue and not a duplicate legal-source master or provider subsystem.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "administrative_exception": {
