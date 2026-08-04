@@ -1756,6 +1756,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public exact release identity
+         * @description Return non-secret runtime identity for deployed-release verification.
+         *
+         *     A release is only identifiable when the canonical deploy injected a full
+         *     immutable Git SHA.  Missing or malformed values fail closed as
+         *     ``unavailable``; callers must not substitute a local checkout or image tag.
+         */
+        get: operations["build_identity_api_build_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/connections": {
         parameters: {
             query?: never;
@@ -29264,6 +29288,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    build_identity_api_build_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

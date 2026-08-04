@@ -1,3 +1,5 @@
+import os
+import re
 from datetime import datetime
 
 from fastapi import APIRouter
@@ -7,11 +9,33 @@ from caseops_api.api.dependencies import DbSession
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
 
 router = APIRouter()
+_RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 @router.get("/health", summary="Service health probe")
 async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/build", summary="Public exact release identity")
+async def build_identity() -> dict[str, str]:
+    """Return non-secret runtime identity for deployed-release verification.
+
+    A release is only identifiable when the canonical deploy injected a full
+    immutable Git SHA.  Missing or malformed values fail closed as
+    ``unavailable``; callers must not substitute a local checkout or image tag.
+    """
+    from caseops_api.core.settings import get_settings
+
+    release_sha = (get_settings().release_sha or "").strip().lower()
+    if not _RELEASE_SHA.fullmatch(release_sha):
+        release_sha = "unavailable"
+    revision = os.environ.get("K_REVISION", "").strip() or "local"
+    return {
+        "service": "api",
+        "release_sha": release_sha,
+        "revision": revision,
+    }
 
 
 @router.get(

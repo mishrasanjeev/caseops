@@ -28,6 +28,11 @@ on:
   schedule:
     - cron: "0 */6 * * *"  # every 6 hours
   workflow_dispatch:
+    inputs:
+      expected_release_sha:
+        description: "Exact 40-character commit expected on both production services"
+        required: false
+        type: string
 
 concurrency:
   # Two scheduled runs on the same prod surface contending for the QA
@@ -43,9 +48,39 @@ jobs:
   prod-playwright:
     name: Prod-Playwright suites
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out release-verification control plane
+        uses: actions/checkout@v4
+
+      - name: Wait for one exact API/web production release
+        id: deployed-release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_SHA: ${{ github.sha }}
+          DISPATCH_SHA: ${{ inputs.expected_release_sha }}
+        run: |
+          expected=""
+          if [ "$EVENT_NAME" != "schedule" ]; then
+            expected="${DISPATCH_SHA:-$PUSH_SHA}"
+          fi
+          args=(--wait-seconds 1500 --interval-seconds 15 --github-output "$GITHUB_OUTPUT")
+          if [ -n "$expected" ]; then
+            args+=(--expected-sha "$expected")
+          fi
+          python scripts/verify_deployed_release.py "${args[@]}"
+
+      - name: Check out the exact serving production release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.deployed-release.outputs.release_sha }}
+
+      - name: Record exact serving identity
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ steps.deployed-release.outputs.release_sha }}"
+          echo "release_sha=${{ steps.deployed-release.outputs.release_sha }}"
+          echo "api_revision=${{ steps.deployed-release.outputs.api_revision }}"
+          echo "web_revision=${{ steps.deployed-release.outputs.web_revision }}"
 
       - name: Gate on CASEOPS_QA_PASSWORD secret
         # Fail loudly + early if the secret is missing. Without it the
