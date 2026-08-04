@@ -969,6 +969,20 @@ def _seed_statute_reference(matter_id: str) -> None:
                 "Sanhita, or to prevent abuse of the process of any Court "
                 "or otherwise to secure the ends of justice."
             ),
+            section_text_source="official_source",
+            section_text_fetched_at=datetime.datetime.now(datetime.UTC),
+            verification_status="verified_official",
+            source_sha256="a" * 64,
+            source_publisher="India Code",
+            issuing_body="Legislative Department",
+            source_status="official",
+            legal_status="enacted",
+            exact_source_version="consolidated-2026-08-04",
+            source_locator_type="section_deep_link",
+            link_health_status="available",
+            section_url=(
+                "https://www.indiacode.nic.in/show-data?actid=bnss&orderno=528"
+            ),
         )
         session.add(section)
         session.flush()

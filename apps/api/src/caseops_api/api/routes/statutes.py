@@ -34,6 +34,7 @@ from caseops_api.db.models import (
     MatterStatuteReference,
     Statute,
     StatuteSection,
+    StatuteSourceVersion,
 )
 from caseops_api.schemas.legal_updates import (
     LegalUpdateActionRequest,
@@ -73,6 +74,13 @@ from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     inspect_source_target_action,
 )
+from caseops_api.services.statute_source_governance import (
+    check_statute_section_link,
+    create_statute_source_conflict,
+    decide_statute_source_conflict,
+    decide_statute_source_version,
+    propose_statute_source_version,
+)
 
 router = APIRouter()
 matter_scoped_router = APIRouter()
@@ -95,6 +103,18 @@ class StatuteRecord(BaseModel):
     enacted_year: int | None
     jurisdiction: str
     source_url: str | None
+    issuing_body: str | None = None
+    source_category: str = "consolidated_statute"
+    source_status: str = "unverified"
+    legal_status: str = "enacted"
+    verification_status: str = "unverified"
+    publication_date: date | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    source_retrieved_at: datetime | None = None
+    source_sha256: str | None = None
+    exact_source_version: str | None = None
+    history_status: str = "current_text_only"
     is_active: bool
 
 
@@ -108,11 +128,15 @@ class StatuteListItem(BaseModel):
     jurisdiction: str
     source_url: str | None
     section_count: int
+    catalog_section_count: int
+    coverage_label: str
 
 
 class StatuteListResponse(BaseModel):
     statutes: list[StatuteListItem]
     total_section_count: int
+    total_catalog_section_count: int
+    coverage_label: str = "Verified statutory text only"
 
 
 class StatuteSectionRecord(BaseModel):
@@ -124,10 +148,28 @@ class StatuteSectionRecord(BaseModel):
     section_label: str | None
     section_text: str | None
     section_text_source: str | None = None
+    editorial_notes: str | None = None
+    case_annotations: str | None = None
+    ai_explanation: str | None = None
     is_provisional: bool = False
     verification_status: str = "unverified"
     source_sha256: str | None = None
     source_publisher: str | None = None
+    issuing_body: str | None = None
+    source_category: str = "consolidated_statute"
+    source_status: str = "unverified"
+    legal_status: str = "enacted"
+    publication_date: date | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    amendment_metadata_json: dict = Field(default_factory=dict)
+    history_status: str = "current_text_only"
+    exact_source_version: str | None = None
+    source_locator_type: str = "unavailable"
+    source_policy_json: dict = Field(default_factory=dict, exclude=True)
+    link_health_status: str = "not_checked"
+    link_last_checked_at: datetime | None = None
+    link_last_error: str | None = None
     source_retrieved_at: datetime | None = None
     section_text_fetched_at: datetime | None = Field(default=None, exclude=True)
     source_version: int = 1
@@ -140,18 +182,27 @@ class StatuteSectionRecord(BaseModel):
 
     @model_validator(mode="after")
     def fail_closed_source(self) -> StatuteSectionRecord:
-        authoritative = self.verification_status in {
+        self.source_retrieved_at = self.source_retrieved_at or getattr(
+            self, "section_text_fetched_at", None
+        )
+        complete_provenance = bool(
+            self.source_sha256
+            and self.source_publisher
+            and self.issuing_body
+            and self.source_retrieved_at
+            and self.exact_source_version
+            and self.source_locator_type == "section_deep_link"
+            and self.link_health_status == "available"
+        )
+        authoritative = complete_provenance and self.verification_status in {
             "verified_official",
             "verified_licensed",
         }
         quarantined = self.verification_status in {"quarantined", "retired"}
-        self.source_retrieved_at = self.source_retrieved_at or getattr(
-            self, "section_text_fetched_at", None
-        )
         if not authoritative:
             self.section_text = None
         self.source_action = inspect_source_target_action(
-            self.section_url,
+            self.section_url if self.source_locator_type == "section_deep_link" else None,
             target_type="statute_section",
             target_id=self.id,
             verified=authoritative,
@@ -181,6 +232,9 @@ class StatuteSectionListItem(BaseModel):
     verification_status: str = "unverified"
     source_version: int = 1
     quarantine_reason: str | None = None
+    source_locator_type: str = "unavailable"
+    link_health_status: str = "not_checked"
+    link_last_checked_at: datetime | None = None
     source_action: SourceActionRecord | None = None
     section_url: str | None
     parent_section_id: str | None
@@ -189,10 +243,13 @@ class StatuteSectionListItem(BaseModel):
     @model_validator(mode="after")
     def source_contract(self) -> StatuteSectionListItem:
         self.source_action = inspect_source_target_action(
-            self.section_url,
+            self.section_url if self.source_locator_type == "section_deep_link" else None,
             target_type="statute_section",
             target_id=self.id,
-            verified=self.verification_status in {"verified_official", "verified_licensed"},
+            verified=(
+                self.verification_status in {"verified_official", "verified_licensed"}
+                and self.link_health_status == "available"
+            ),
             quarantined=self.verification_status in {"quarantined", "retired"},
         )
         return self
@@ -232,6 +289,108 @@ class StatuteVerificationRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class StatuteSourceVersionProposalRequest(BaseModel):
+    expected_source_version: int = Field(ge=1)
+    candidate_text: str = Field(min_length=20)
+    source_url: str = Field(min_length=8, max_length=500)
+    source_publisher: str = Field(min_length=2, max_length=160)
+    issuing_body: str = Field(min_length=2, max_length=160)
+    source_category: str = "consolidated_statute"
+    source_status: Literal["official", "licensed"]
+    legal_status: Literal["enacted", "advisory", "draft", "repealed"] = "enacted"
+    source_locator_type: Literal["section_deep_link"]
+    exact_source_version: str = Field(min_length=1, max_length=160)
+    retrieved_at: datetime
+    publication_date: date | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    amendment_metadata: dict = Field(default_factory=dict)
+    source_policy: dict = Field(default_factory=dict)
+
+
+class StatuteSourceVersionDecisionRequest(BaseModel):
+    expected_source_version: int = Field(ge=1)
+    decision: Literal["approve", "reject"]
+    reason: str = Field(min_length=5, max_length=500)
+
+
+class StatuteSourceVersionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    section_id: str
+    proposed_source_version: int
+    candidate_text: str
+    candidate_sha256: str
+    source_url: str
+    source_publisher: str
+    issuing_body: str
+    source_category: str
+    source_status: str
+    legal_status: str
+    source_locator_type: str
+    exact_source_version: str
+    retrieved_at: datetime
+    publication_date: date | None
+    effective_from: date | None
+    effective_to: date | None
+    amendment_metadata_json: dict
+    diff_unified: str
+    status: str
+    proposed_by_membership_id: str | None
+    proposed_at: datetime
+    reviewed_by_membership_id: str | None
+    reviewed_at: datetime | None
+    review_reason: str | None
+
+
+class StatuteSourceVersionListResponse(BaseModel):
+    versions: list[StatuteSourceVersionRecord]
+
+
+class StatuteSourceConflictCreateRequest(BaseModel):
+    expected_source_version: int = Field(ge=1)
+    disputed_facts: dict
+    source_versions: list[dict] = Field(min_length=2)
+    authority_rank: dict
+    affected_records: list[dict] = Field(default_factory=list)
+    impact_scan: dict = Field(default_factory=dict)
+
+
+class StatuteSourceConflictDecisionRequest(BaseModel):
+    decision: str = Field(min_length=10, max_length=2_000)
+
+
+class StatuteSourceConflictRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    section_id: str
+    disputed_facts_json: dict
+    source_versions_json: list
+    authority_rank_json: dict
+    affected_records_json: list
+    impact_scan_json: dict
+    status: str
+    decision: str | None
+    decision_by_membership_id: str | None
+    decided_at: datetime | None
+    created_by_membership_id: str | None
+    created_at: datetime
+
+
+class StatuteLinkHealthRecord(BaseModel):
+    section_id: str
+    source_version: int
+    status: str
+    checked_at: datetime
+    error_class: str | None
+
+
+class StatuteVerificationSectionListResponse(BaseModel):
+    sections: list[StatuteSectionRecord]
+
+
 @router.get(
     "/",
     response_model=StatuteListResponse,
@@ -248,7 +407,21 @@ def list_statutes(
     rows = session.execute(
         select(
             Statute,
-            func.count(StatuteSection.id).label("section_count"),
+            func.count(StatuteSection.id).label("catalog_section_count"),
+            func.count(StatuteSection.id)
+            .filter(
+                StatuteSection.verification_status.in_(
+                    {"verified_official", "verified_licensed"}
+                ),
+                StatuteSection.source_sha256.is_not(None),
+                StatuteSection.source_publisher.is_not(None),
+                StatuteSection.issuing_body.is_not(None),
+                StatuteSection.section_text_fetched_at.is_not(None),
+                StatuteSection.exact_source_version.is_not(None),
+                StatuteSection.source_locator_type == "section_deep_link",
+                StatuteSection.link_health_status == "available",
+            )
+            .label("verified_section_count"),
         )
         .outerjoin(
             StatuteSection,
@@ -262,7 +435,8 @@ def list_statutes(
     total = 0
     for row in rows:
         statute: Statute = row[0]
-        count: int = int(row[1] or 0)
+        catalog_count = int(row[1] or 0)
+        count = int(row[2] or 0)
         total += count
         items.append(
             StatuteListItem(
@@ -273,9 +447,15 @@ def list_statutes(
                 jurisdiction=statute.jurisdiction,
                 source_url=statute.source_url,
                 section_count=count,
+                catalog_section_count=catalog_count,
+                coverage_label=f"{count} verified of {catalog_count} catalogued sections",
             )
         )
-    return StatuteListResponse(statutes=items, total_section_count=total)
+    return StatuteListResponse(
+        statutes=items,
+        total_section_count=total,
+        total_catalog_section_count=sum(item.catalog_section_count for item in items),
+    )
 
 
 @router.get(
@@ -503,26 +683,13 @@ def verify_statute_section(
             detail="Statute source version changed; reload before reviewing.",
         )
     if payload.status in {"verified_official", "verified_licensed"}:
-        text_value = (section.section_text or "").strip()
-        if (
-            len(text_value) < 20
-            or not section.section_url
-            or section.section_text_source == "haiku_generated"
-            or not section.source_publisher
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Only non-AI legal text with an official source URL may be marked verified."
-                ),
-            )
-        section.source_sha256 = sha256(text_value.encode("utf-8")).hexdigest()
-        section.section_text_fetched_at = section.section_text_fetched_at or datetime.now(UTC)
-        section.verified_at = datetime.now(UTC)
-        section.verified_by_membership_id = context.membership.id
-        section.quarantined_at = None
-        section.quarantine_reason = None
-        section.is_provisional = False
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Direct verification is disabled. Propose an immutable source version "
+                "and obtain approval from a different legal reviewer."
+            ),
+        )
     elif payload.status in {"quarantined", "retired"}:
         if not (payload.reason or "").strip():
             raise HTTPException(
@@ -540,6 +707,7 @@ def verify_statute_section(
         section.quarantined_at = None
         section.quarantine_reason = payload.reason.strip() if payload.reason else None
         section.is_provisional = True
+    previous_status = section.verification_status
     section.verification_status = payload.status
     section.source_version += 1
     record_from_context(
@@ -549,14 +717,182 @@ def verify_statute_section(
         target_type="statute_section",
         target_id=section.id,
         metadata={
+            "previous_verification_status": previous_status,
             "verification_status": payload.status,
             "source_version": section.source_version,
             "has_source_hash": bool(section.source_sha256),
+            "reason_sha256": (
+                sha256((payload.reason or "").encode("utf-8")).hexdigest()
+                if payload.reason
+                else None
+            ),
         },
     )
     session.commit()
     session.refresh(section)
     return StatuteSectionRecord.model_validate(section)
+
+
+@router.post(
+    "/verification/sections/{section_id}/source-versions",
+    response_model=StatuteSourceVersionRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Propose an immutable statute-text source version for independent review.",
+)
+def post_statute_source_version(
+    section_id: str,
+    payload: StatuteSourceVersionProposalRequest,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteSourceVersionRecord:
+    row = propose_statute_source_version(
+        session,
+        context=context,
+        section_id=section_id,
+        **payload.model_dump(),
+    )
+    return StatuteSourceVersionRecord.model_validate(row)
+
+
+@router.get(
+    "/verification/sections",
+    response_model=StatuteVerificationSectionListResponse,
+    summary="Search the complete curator corpus, including quarantined records.",
+)
+def list_statute_verification_sections(
+    context: LegalUpdateAdmin,
+    session: DbSession,
+    statute_id: str | None = None,
+    verification_status: Literal[
+        "unverified",
+        "verified_official",
+        "verified_licensed",
+        "quarantined",
+        "retired",
+    ]
+    | None = None,
+    limit: int = 100,
+) -> StatuteVerificationSectionListResponse:
+    _ = context
+    stmt = select(StatuteSection).order_by(
+        StatuteSection.statute_id,
+        StatuteSection.ordinal,
+        StatuteSection.section_number,
+    )
+    if statute_id:
+        stmt = stmt.where(StatuteSection.statute_id == statute_id)
+    if verification_status:
+        stmt = stmt.where(StatuteSection.verification_status == verification_status)
+    rows = list(session.scalars(stmt.limit(max(1, min(limit, 500)))).all())
+    return StatuteVerificationSectionListResponse(
+        sections=[StatuteSectionRecord.model_validate(row) for row in rows]
+    )
+@router.get(
+    "/verification/sections/{section_id}/source-versions",
+    response_model=StatuteSourceVersionListResponse,
+    summary="List immutable source proposals and their independent-review decisions.",
+)
+def get_statute_source_versions(
+    section_id: str,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteSourceVersionListResponse:
+    _ = context
+    if session.get(StatuteSection, section_id) is None:
+        raise HTTPException(status_code=404, detail="Statute section not found.")
+    rows = list(
+        session.scalars(
+            select(StatuteSourceVersion)
+            .where(StatuteSourceVersion.section_id == section_id)
+            .order_by(StatuteSourceVersion.proposed_at.desc())
+        ).all()
+    )
+    return StatuteSourceVersionListResponse(
+        versions=[StatuteSourceVersionRecord.model_validate(row) for row in rows]
+    )
+
+
+@router.post(
+    "/verification/source-versions/{proposal_id}/decision",
+    response_model=StatuteSourceVersionRecord,
+    summary="Approve or reject a proposal as a distinct legal reviewer.",
+)
+def post_statute_source_version_decision(
+    proposal_id: str,
+    payload: StatuteSourceVersionDecisionRequest,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteSourceVersionRecord:
+    row = decide_statute_source_version(
+        session,
+        context=context,
+        proposal_id=proposal_id,
+        **payload.model_dump(),
+    )
+    return StatuteSourceVersionRecord.model_validate(row)
+
+
+@router.post(
+    "/verification/sections/{section_id}/link-check",
+    response_model=StatuteLinkHealthRecord,
+    summary="Check and persist typed health for an approved section-level source link.",
+)
+def post_statute_section_link_check(
+    section_id: str,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteLinkHealthRecord:
+    section = check_statute_section_link(
+        session, context=context, section_id=section_id
+    )
+    return StatuteLinkHealthRecord(
+        section_id=section.id,
+        source_version=section.source_version,
+        status=section.link_health_status,
+        checked_at=section.link_last_checked_at,
+        error_class=section.link_last_error,
+    )
+
+
+@router.post(
+    "/verification/sections/{section_id}/conflicts",
+    response_model=StatuteSourceConflictRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Open a source conflict and immediately quarantine affected statutory text.",
+)
+def post_statute_source_conflict(
+    section_id: str,
+    payload: StatuteSourceConflictCreateRequest,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteSourceConflictRecord:
+    row = create_statute_source_conflict(
+        session,
+        context=context,
+        section_id=section_id,
+        **payload.model_dump(),
+    )
+    return StatuteSourceConflictRecord.model_validate(row)
+
+
+@router.post(
+    "/verification/conflicts/{conflict_id}/decision",
+    response_model=StatuteSourceConflictRecord,
+    summary="Record an independent legal decision while keeping text quarantined.",
+)
+def post_statute_source_conflict_decision(
+    conflict_id: str,
+    payload: StatuteSourceConflictDecisionRequest,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+) -> StatuteSourceConflictRecord:
+    row = decide_statute_source_conflict(
+        session,
+        context=context,
+        conflict_id=conflict_id,
+        decision=payload.decision,
+    )
+    return StatuteSourceConflictRecord.model_validate(row)
 
 
 @router.get(
@@ -627,6 +963,16 @@ def list_statute_sections(
             .where(
                 StatuteSection.statute_id == statute_id,
                 StatuteSection.is_active.is_(True),
+                StatuteSection.verification_status.in_(
+                    {"verified_official", "verified_licensed"}
+                ),
+                StatuteSection.source_sha256.is_not(None),
+                StatuteSection.source_publisher.is_not(None),
+                StatuteSection.issuing_body.is_not(None),
+                StatuteSection.section_text_fetched_at.is_not(None),
+                StatuteSection.exact_source_version.is_not(None),
+                StatuteSection.source_locator_type == "section_deep_link",
+                StatuteSection.link_health_status == "available",
             )
             .order_by(StatuteSection.ordinal, StatuteSection.section_number)
         ).all()

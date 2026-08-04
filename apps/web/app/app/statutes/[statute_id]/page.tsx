@@ -81,8 +81,8 @@ export default function StatuteDetailPage() {
         title={statute.long_name}
         description={
           statute.enacted_year
-            ? `Enacted ${statute.enacted_year} · ${sections.length} sections indexed`
-            : `${sections.length} sections indexed`
+            ? `Enacted ${statute.enacted_year} · ${sections.length} independently verified sections available`
+            : `${sections.length} independently verified sections available`
         }
         actions={
           statute.source_url ? (
@@ -92,7 +92,7 @@ export default function StatuteDetailPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
             >
-              indiacode.nic.in
+              Act landing page
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </a>
           ) : undefined
@@ -170,8 +170,8 @@ export default function StatuteDetailPage() {
         <CardContent>
           {sections.length === 0 ? (
             <EmptyState
-              title="No sections indexed for this Act yet"
-              description="Re-run the seed loader to populate sections."
+              title="No verified sections available"
+              description="Catalog entries remain hidden until exact source provenance and independent legal review are complete."
             />
           ) : (
             <ul
