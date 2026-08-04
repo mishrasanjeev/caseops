@@ -10496,6 +10496,64 @@ class AuditEvent(Base):
     )
 
 
+class SourceLinkReport(Base):
+    """Tenant-scoped defect report and health-check request for a canonical source.
+
+    The referenced legal record remains authoritative. This row stores only the
+    operational workflow plus a one-way reference hash, never provider credentials
+    or the raw destination URL.
+    """
+
+    __tablename__ = "source_link_reports"
+    __table_args__ = (
+        CheckConstraint(
+            "target_type in ('authority_document', 'statute_section', 'judge_appointment')",
+            name="ck_source_link_reports_target_type",
+        ),
+        CheckConstraint(
+            "issue_type in ('broken', 'wrong_document', 'access_denied', 'stale', 'other')",
+            name="ck_source_link_reports_issue_type",
+        ),
+        CheckConstraint(
+            "status in ('queued', 'investigating', 'resolved', 'dismissed')",
+            name="ck_source_link_reports_status",
+        ),
+        Index(
+            "ix_source_link_reports_target_created",
+            "target_type",
+            "target_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reported_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    target_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    origin_surface: Mapped[str] = mapped_column(String(64), nullable=False)
+    issue_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    source_reference_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    destination_class: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="queued", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class MatterAccessLevel(StrEnum):
     # Single-level v1: if the grant exists, the membership gets full
     # access to the matter. Finer gradation (read-only, billing-only,

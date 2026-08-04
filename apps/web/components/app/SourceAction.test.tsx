@@ -23,7 +23,7 @@ describe("SourceAction", () => {
       <SourceAction
         action={contract({
           state: "available",
-          open_url: "/api/source-actions/open?url=https%3A%2F%2Fwww.sci.gov.in%2Fcase.pdf",
+          open_url: "/api/source-actions/targets/authority_document/source-proof/open",
           source_reference: "https://www.sci.gov.in/case.pdf",
         })}
       />,
@@ -32,7 +32,9 @@ describe("SourceAction", () => {
     const link = screen.getByTestId("source-action-open");
     expect(link).toHaveAttribute(
       "href",
-      expect.stringContaining("/api/source-actions/open?url="),
+      expect.stringContaining(
+        "/api/source-actions/targets/authority_document/source-proof/open",
+      ),
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");

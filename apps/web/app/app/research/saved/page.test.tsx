@@ -60,7 +60,7 @@ describe("SavedResearchPage", () => {
             state: "available",
             label: "Open source",
             open_url:
-              "/api/source-actions/open?url=https%3A%2F%2Fwww.indiacode.nic.in%2Fdocument.pdf",
+              "/api/source-actions/targets/authority_document/authority-available/open",
             source_reference: "https://www.indiacode.nic.in/document.pdf",
             reason: null,
             opens_new_tab: true,
@@ -83,7 +83,9 @@ describe("SavedResearchPage", () => {
     expect(screen.getByText(/Source: official/)).toBeInTheDocument();
     expect(screen.getByTestId("source-action-open")).toHaveAttribute(
       "href",
-      expect.stringContaining("/api/source-actions/open?url="),
+      expect.stringContaining(
+        "/api/source-actions/targets/authority_document/authority-available/open",
+      ),
     );
     expect(screen.getByText("1 saved")).toBeInTheDocument();
   });

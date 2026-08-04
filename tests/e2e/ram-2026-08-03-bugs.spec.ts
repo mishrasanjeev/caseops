@@ -1,4 +1,4 @@
-import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
 
@@ -10,7 +10,17 @@ function unique(prefix: string): string {
     .slice(2, 8)}`;
 }
 
-async function bootstrap(api: APIRequestContext, slug: string): Promise<void> {
+type BootstrapSession = {
+  company: unknown;
+  user: unknown;
+  membership: unknown;
+  capabilities: string[];
+};
+
+async function bootstrap(
+  api: APIRequestContext,
+  slug: string,
+): Promise<BootstrapSession> {
   const response = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
     data: {
       company_name: "Saved Source Proof LLP",
@@ -22,33 +32,33 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<void> {
     },
   });
   expect(response.status(), await response.text()).toBe(200);
-}
-
-async function signIn(page: Page, slug: string): Promise<void> {
-  await page.goto("/sign-in");
-  await page.locator("#company-slug").fill(slug);
-  await page.locator("#email").fill(`owner-${slug}@example.com`);
-  await page.locator("#password").fill(PASSWORD);
-  const login = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/auth/login" &&
-      response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: /^Sign in$/ }).click();
-  expect((await login).status()).toBe(200);
-  await page.waitForURL(/\/app(?:[/?]|$)/);
+  const payload = (await response.json()) as BootstrapSession;
+  return {
+    company: payload.company,
+    user: payload.user,
+    membership: payload.membership,
+    capabilities: payload.capabilities,
+  };
 }
 
 test.describe("Ram 2026-08-03 saved research source actions", () => {
   test("IPLF-003C preserves source metadata and fail-closed actions at 360px", async ({
     page,
   }) => {
-    const api = await request.newContext();
     const slug = unique("saved-source");
-    await bootstrap(api, slug);
-    await signIn(page, slug);
+    // page.request shares the browser context's HttpOnly session cookie. Seed
+    // only the non-sensitive shell context, matching storeSession; no access
+    // token is exposed to browser JavaScript.
+    const session = await bootstrap(page.request, slug);
+    await page.goto("/sign-in");
+    await page.evaluate((value) => {
+      window.localStorage.setItem(
+        "caseops.session.context",
+        JSON.stringify(value),
+      );
+    }, session);
 
-    await page.route("**/api/authorities/annotations?**", (route) =>
+    await page.route("**/api/authorities/annotations**", (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -74,7 +84,7 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
                 state: "available",
                 label: "Open source",
                 open_url:
-                  "/api/source-actions/open?url=https%3A%2F%2Fwww.sci.gov.in%2Fsource-proof.pdf",
+                  "/api/source-actions/targets/authority_document/authority-available/open",
                 source_reference: "https://www.sci.gov.in/source-proof.pdf",
                 reason: null,
                 opens_new_tab: true,
@@ -130,7 +140,7 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
     await expect(openSource).toBeVisible();
     await expect(openSource).toHaveAttribute(
       "href",
-      /\/api\/source-actions\/open\?url=/,
+      /\/api\/source-actions\/targets\/authority_document\/[^/]+\/open/,
     );
     await expect(openSource).toHaveAttribute("target", "_blank");
 
