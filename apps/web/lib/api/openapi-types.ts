@@ -423,6 +423,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/notifications/intents/{intent_id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a versioned recovery intent after preview. */
+        post: operations["recover_notification_intent_api_admin_notifications_intents__intent_id__recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications/intents/{intent_id}/recovery-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview a notification recovery without dispatching it. */
+        get: operations["preview_notification_recovery_api_admin_notifications_intents__intent_id__recovery_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications/suppressions/{suppression_id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recover a suppression while preserving its provider evidence. */
+        post: operations["recover_admin_suppression_api_admin_notifications_suppressions__suppression_id__recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/outlook-configuration": {
         parameters: {
             query?: never;
@@ -6379,6 +6430,23 @@ export interface paths {
         head?: never;
         /** Update current user's notification opt-in/opt-out preferences. */
         patch: operations["patch_notification_preferences_api_notification_preferences_patch"];
+        trace?: never;
+    };
+    "/api/notification-preferences/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create and deliver a safe self-service in-app test notification. */
+        post: operations["test_current_user_notification_api_notification_preferences_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/notification-rules": {
@@ -14059,6 +14127,33 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** EmailSuppressionRecord */
+        EmailSuppressionRecord: {
+            /** Affected Address */
+            affected_address: string;
+            /** Category */
+            category: string;
+            /** Fallback Sent */
+            fallback_sent: boolean;
+            /**
+             * First Occurrence
+             * Format: date-time
+             */
+            first_occurrence: string;
+            /** Id */
+            id: string;
+            /**
+             * Last Occurrence
+             * Format: date-time
+             */
+            last_occurrence: string;
+            /** Provider */
+            provider: string;
+            /** Recovered At */
+            recovered_at: string | null;
+            /** Recovery Action */
+            recovery_action: string | null;
+        };
         /** EmailTemplateCreateRequest */
         EmailTemplateCreateRequest: {
             /** Body Template */
@@ -15447,8 +15542,13 @@ export interface components {
         };
         /** HearingReminderListResponse */
         HearingReminderListResponse: {
+            /** Intents */
+            intents?: components["schemas"]["NotificationIntentRecord"][];
+            metrics?: components["schemas"]["NotificationMetrics"] | null;
             /** Reminders */
             reminders: components["schemas"]["HearingReminderRecord"][];
+            /** Suppressions */
+            suppressions?: components["schemas"]["EmailSuppressionRecord"][];
             /** Total Delivered */
             total_delivered: number;
             /** Total Failed */
@@ -15473,10 +15573,21 @@ export interface components {
             created_at: string;
             /** Delivered At */
             delivered_at: string | null;
+            /** Delivery Status */
+            delivery_status?: string | null;
+            /** Destination Version */
+            destination_version?: number | null;
+            /**
+             * Fallback Sent
+             * @default false
+             */
+            fallback_sent: boolean;
             /** Hearing Id */
             hearing_id: string;
             /** Id */
             id: string;
+            /** Intent Ids */
+            intent_ids?: string[];
             /** Last Error */
             last_error: string | null;
             /** Matter Id */
@@ -15499,6 +15610,8 @@ export interface components {
              * @enum {string}
              */
             status: "queued" | "sent" | "delivered" | "failed" | "cancelled";
+            /** Superseded By Intent Id */
+            superseded_by_intent_id?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -19873,6 +19986,8 @@ export interface components {
         };
         /** MatterHearingCreateRequest */
         MatterHearingCreateRequest: {
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
             /** Forum Name */
             forum_name: string;
             /**
@@ -19880,18 +19995,44 @@ export interface components {
              * Format: date
              */
             hearing_on: string;
+            /** Hearing Time */
+            hearing_time?: string | null;
             /** Judge Name */
             judge_name?: string | null;
+            /**
+             * Notification Critical
+             * @default true
+             */
+            notification_critical: boolean;
             /** Outcome Note */
             outcome_note?: string | null;
             /** Purpose */
             purpose: string;
+            /** Reminder Channels */
+            reminder_channels?: ("in_app" | "email" | "sms" | "whatsapp")[];
+            /** Reminder Offsets Hours */
+            reminder_offsets_hours?: number[] | null;
+            /** Reminder Recipient Membership Ids */
+            reminder_recipient_membership_ids?: string[];
+            /** Session Label */
+            session_label?: string | null;
             /**
              * Status
              * @default scheduled
              * @enum {string}
              */
             status: "scheduled" | "completed" | "adjourned" | "cancelled";
+            /**
+             * Time Status
+             * @default time_not_published
+             * @enum {string}
+             */
+            time_status: "exact" | "session" | "time_not_published";
+            /**
+             * Timezone
+             * @default Asia/Kolkata
+             */
+            timezone: string;
         };
         /** MatterHearingRecord */
         MatterHearingRecord: {
@@ -19912,6 +20053,8 @@ export interface components {
              * Format: date
              */
             hearing_on: string;
+            /** Hearing Time */
+            hearing_time: string | null;
             /** Id */
             id: string;
             /** Judge Name */
@@ -19922,11 +20065,24 @@ export interface components {
             outcome_note: string | null;
             /** Purpose */
             purpose: string;
+            /** Reminder Policy */
+            reminder_policy: {
+                [key: string]: unknown;
+            } | null;
+            /** Session Label */
+            session_label: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "scheduled" | "completed" | "adjourned" | "cancelled";
+            /**
+             * Time Status
+             * @enum {string}
+             */
+            time_status: "exact" | "session" | "time_not_published";
+            /** Timezone */
+            timezone: string;
         };
         /** MatterHearingUpdateRequest */
         MatterHearingUpdateRequest: {
@@ -19934,10 +20090,18 @@ export interface components {
             create_follow_up?: boolean | null;
             /** Hearing On */
             hearing_on?: string | null;
+            /** Hearing Time */
+            hearing_time?: string | null;
             /** Outcome Note */
             outcome_note?: string | null;
+            /** Session Label */
+            session_label?: string | null;
             /** Status */
             status?: ("scheduled" | "completed" | "adjourned" | "cancelled") | null;
+            /** Time Status */
+            time_status?: ("exact" | "session" | "time_not_published") | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** MatterImportCommitResponse */
         MatterImportCommitResponse: {
@@ -21723,6 +21887,72 @@ export interface components {
              */
             provider_configured: boolean;
         };
+        /** NotificationIntentRecord */
+        NotificationIntentRecord: {
+            /** Attempts */
+            attempts: number;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Critical */
+            critical: boolean;
+            /** Destination */
+            destination: string | null;
+            /** Destination Version */
+            destination_version: number;
+            /** Event Type */
+            event_type: string;
+            /** Fallback Intent Id */
+            fallback_intent_id: string | null;
+            /** Id */
+            id: string;
+            /** Last Error Redacted */
+            last_error_redacted: string | null;
+            /** Recovery Of Intent Id */
+            recovery_of_intent_id: string | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Status */
+            status: string;
+            /** Superseded By Intent Id */
+            superseded_by_intent_id: string | null;
+            /** Suppression Reason */
+            suppression_reason: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** NotificationMetrics */
+        NotificationMetrics: {
+            /** Attempted */
+            attempted: number;
+            /** Bounced */
+            bounced: number;
+            /** Critical Alerts */
+            critical_alerts: number;
+            /** Delivered */
+            delivered: number;
+            /** Due */
+            due: number;
+            /** Failed */
+            failed: number;
+            /** Fallback */
+            fallback: number;
+            /** Stale Queue */
+            stale_queue: number;
+            /** Suppressed */
+            suppressed: number;
+        };
         /** NotificationPreferenceRecord */
         NotificationPreferenceRecord: {
             /** Channels */
@@ -21823,6 +22053,28 @@ export interface components {
              */
             timezone: string;
         };
+        /** NotificationRecoveryPreview */
+        NotificationRecoveryPreview: {
+            /** Current Status */
+            current_status: string;
+            /** Impact */
+            impact: string;
+            /** Next Destination Version */
+            next_destination_version: number;
+            /** Original Intent Id */
+            original_intent_id: string;
+            /** Recoverable */
+            recoverable: boolean;
+            /** Requires Changed Destination */
+            requires_changed_destination: boolean;
+        };
+        /** NotificationRecoveryRequest */
+        NotificationRecoveryRequest: {
+            /** Recovery Action */
+            recovery_action: string;
+            /** Replacement Membership Id */
+            replacement_membership_id?: string | null;
+        };
         /** NotificationRuleCreateRequest */
         NotificationRuleCreateRequest: {
             /** Channels */
@@ -21915,6 +22167,12 @@ export interface components {
             scope_id?: string | null;
             /** Scope Type */
             scope_type?: ("company" | "matter" | "user") | null;
+        };
+        /** NotificationTestResponse */
+        NotificationTestResponse: {
+            intent: components["schemas"]["NotificationIntentRecord"];
+            /** Message */
+            message: string;
         };
         /** ObligationExtractionResponse */
         ObligationExtractionResponse: {
@@ -25647,6 +25905,13 @@ export interface components {
         SubscriptionActionResponse: {
             subscription: components["schemas"]["BillingSubscriptionRecord"];
         };
+        /** SuppressionRecoveryRequest */
+        SuppressionRecoveryRequest: {
+            /** Recovery Action */
+            recovery_action: string;
+            /** Replacement Membership Id */
+            replacement_membership_id?: string | null;
+        };
         /** TDSReconciliationCreateRequest */
         TDSReconciliationCreateRequest: {
             /** Certificate Number */
@@ -27447,6 +27712,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HearingReminderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_notification_intent_api_admin_notifications_intents__intent_id__recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_notification_recovery_api_admin_notifications_intents__intent_id__recovery_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecoveryPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_admin_suppression_api_admin_notifications_suppressions__suppression_id__recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suppression_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuppressionRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSuppressionRecord"];
                 };
             };
             /** @description Validation Error */
@@ -39648,6 +40014,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_current_user_notification_api_notification_preferences_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestResponse"];
                 };
             };
         };

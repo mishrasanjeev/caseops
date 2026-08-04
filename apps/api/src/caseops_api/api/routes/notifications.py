@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
 
@@ -27,7 +28,13 @@ from caseops_api.api.dependencies import (
     require_capability,
 )
 from caseops_api.core.settings import get_settings, is_non_local_env
-from caseops_api.db.models import HearingReminder
+from caseops_api.db.models import (
+    CompanyMembership,
+    EmailSuppression,
+    HearingReminder,
+    HearingReminderDeliveryIntent,
+    NotificationDeliveryIntent,
+)
 from caseops_api.schemas.calendar import (
     NotificationRuleCreateRequest,
     NotificationRuleListResponse,
@@ -38,11 +45,16 @@ from caseops_api.schemas.notification_preferences import (
     NotificationPreferenceResponse,
     NotificationPreferenceUpdateRequest,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
 )
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
-from caseops_api.services.notification_delivery import apply_notification_provider_event
+from caseops_api.services.notification_delivery import (
+    apply_notification_provider_event,
+    enqueue_notification_delivery_intent,
+    process_notification_delivery_intent,
+)
 from caseops_api.services.notification_preferences import (
     notification_preferences,
     update_tenant_notification_preferences,
@@ -93,6 +105,56 @@ class HearingReminderRecord(BaseModel):
     delivered_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    intent_ids: list[str] = Field(default_factory=list)
+    delivery_status: str | None = None
+    destination_version: int | None = None
+    superseded_by_intent_id: str | None = None
+    fallback_sent: bool = False
+
+
+class NotificationIntentRecord(BaseModel):
+    id: str
+    channel: str
+    status: str
+    event_type: str
+    source_type: str
+    source_id: str
+    scheduled_for: datetime | None
+    attempts: int
+    destination_version: int
+    destination: str | None
+    critical: bool
+    suppression_reason: str | None
+    fallback_intent_id: str | None
+    superseded_by_intent_id: str | None
+    recovery_of_intent_id: str | None
+    last_error_redacted: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class EmailSuppressionRecord(BaseModel):
+    id: str
+    provider: str
+    category: str
+    affected_address: str
+    first_occurrence: datetime
+    last_occurrence: datetime
+    recovery_action: str | None
+    recovered_at: datetime | None
+    fallback_sent: bool
+
+
+class NotificationMetrics(BaseModel):
+    due: int
+    attempted: int
+    delivered: int
+    suppressed: int
+    bounced: int
+    failed: int
+    fallback: int
+    stale_queue: int
+    critical_alerts: int
 
 
 class HearingReminderListResponse(BaseModel):
@@ -101,11 +163,173 @@ class HearingReminderListResponse(BaseModel):
     total_sent: int
     total_delivered: int
     total_failed: int
+    intents: list[NotificationIntentRecord] = Field(default_factory=list)
+    suppressions: list[EmailSuppressionRecord] = Field(default_factory=list)
+    metrics: NotificationMetrics | None = None
+
+
+class NotificationTestResponse(BaseModel):
+    intent: NotificationIntentRecord
+    message: str
+
+
+class SuppressionRecoveryRequest(BaseModel):
+    recovery_action: str = Field(min_length=8, max_length=500)
+    replacement_membership_id: str | None = None
+
+
+class NotificationRecoveryPreview(BaseModel):
+    original_intent_id: str
+    recoverable: bool
+    requires_changed_destination: bool
+    next_destination_version: int
+    current_status: str
+    impact: str
+
+
+class NotificationRecoveryRequest(BaseModel):
+    replacement_membership_id: str | None = None
+    recovery_action: str = Field(min_length=8, max_length=500)
 
 
 class WebhookAckResponse(BaseModel):
     accepted: int
     matched: int
+
+
+def _intent_record(intent: NotificationDeliveryIntent) -> NotificationIntentRecord:
+    snapshot = intent.recipient_snapshot_json or {}
+    return NotificationIntentRecord(
+        id=intent.id,
+        channel=str(intent.channel),
+        status=str(intent.status),
+        event_type=intent.event_type,
+        source_type=intent.source_type,
+        source_id=intent.source_id,
+        scheduled_for=intent.scheduled_for,
+        attempts=intent.attempts,
+        destination_version=intent.destination_version,
+        destination=str(snapshot.get("destination") or "") or None,
+        critical=bool(intent.critical),
+        suppression_reason=intent.suppression_reason,
+        fallback_intent_id=intent.fallback_intent_id,
+        superseded_by_intent_id=intent.superseded_by_intent_id,
+        recovery_of_intent_id=intent.recovery_of_intent_id,
+        last_error_redacted=intent.last_error_redacted,
+        created_at=intent.created_at,
+        updated_at=intent.updated_at,
+    )
+
+
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _admin_notification_response(
+    session,
+    *,
+    company_id: str,
+    rows: list[HearingReminder],
+    totals: dict[str, int],
+    intents: list[NotificationDeliveryIntent],
+    limit: int,
+) -> HearingReminderListResponse:
+    links = list(
+        session.scalars(
+            select(HearingReminderDeliveryIntent).where(
+                HearingReminderDeliveryIntent.hearing_reminder_id.in_([row.id for row in rows])
+            )
+        )
+    ) if rows else []
+    linked_intents = {
+        intent.id: intent
+        for intent in session.scalars(
+            select(NotificationDeliveryIntent).where(
+                NotificationDeliveryIntent.id.in_([link.intent_id for link in links])
+            )
+        )
+    } if links else {}
+    by_reminder: dict[str, list[HearingReminderDeliveryIntent]] = {}
+    for link in links:
+        by_reminder.setdefault(link.hearing_reminder_id, []).append(link)
+    reminder_records: list[HearingReminderRecord] = []
+    for row in rows:
+        row_links = by_reminder.get(row.id, [])
+        primary_link = next((link for link in row_links if link.is_primary), None)
+        primary = linked_intents.get(primary_link.intent_id) if primary_link else None
+        reminder_records.append(
+            HearingReminderRecord.model_validate(row).model_copy(
+                update={
+                    "intent_ids": [link.intent_id for link in row_links],
+                    "delivery_status": str(primary.status) if primary else None,
+                    "destination_version": primary.destination_version if primary else None,
+                    "superseded_by_intent_id": primary.superseded_by_intent_id if primary else None,
+                    "fallback_sent": bool(primary and primary.fallback_intent_id),
+                }
+            )
+        )
+    suppressions = list(
+        session.scalars(
+            select(EmailSuppression)
+            .where(EmailSuppression.company_id == company_id)
+            .order_by(desc(EmailSuppression.last_event_at))
+            .limit(limit)
+        )
+    )
+    all_intents = list(
+        session.scalars(
+            select(NotificationDeliveryIntent).where(
+                NotificationDeliveryIntent.company_id == company_id
+            )
+        )
+    )
+    now = datetime.now(UTC)
+    due = sum(
+        1 for intent in all_intents
+        if str(intent.status) in {"queued", "retry_scheduled"}
+        and (intent.scheduled_for is None or _aware(intent.scheduled_for) <= now)
+    )
+    failed_statuses = {"dead_letter", "blocked"}
+    alert_statuses = failed_statuses | {"suppressed", "bounced"}
+    return HearingReminderListResponse(
+        reminders=reminder_records,
+        total_queued=totals["queued"],
+        total_sent=totals["sent"],
+        total_delivered=totals["delivered"],
+        total_failed=totals["failed"],
+        intents=[_intent_record(intent) for intent in intents],
+        suppressions=[
+            EmailSuppressionRecord(
+                id=item.id,
+                provider=item.provider,
+                category=str(item.reason),
+                affected_address=item.recipient_email,
+                first_occurrence=item.first_event_at,
+                last_occurrence=item.last_event_at,
+                recovery_action=item.recovery_action,
+                recovered_at=item.recovered_at,
+                fallback_sent=bool(item.fallback_sent),
+            ) for item in suppressions
+        ],
+        metrics=NotificationMetrics(
+            due=due,
+            attempted=sum(intent.attempts > 0 for intent in all_intents),
+            delivered=sum(str(intent.status) == "delivered" for intent in all_intents),
+            suppressed=sum(str(intent.status) == "suppressed" for intent in all_intents),
+            bounced=sum(str(intent.status) == "bounced" for intent in all_intents),
+            failed=sum(str(intent.status) in failed_statuses for intent in all_intents),
+            fallback=sum(bool(intent.fallback_intent_id) for intent in all_intents),
+            stale_queue=sum(
+                str(intent.status) in {"queued", "retry_scheduled"}
+                and _aware(intent.created_at) <= now - timedelta(minutes=15)
+                for intent in all_intents
+            ),
+            critical_alerts=sum(
+                bool(intent.critical) and str(intent.status) in alert_statuses
+                for intent in all_intents
+            ),
+        ),
+    )
 
 
 # ---------------------------------------------------------------
@@ -307,13 +531,297 @@ async def list_admin_notifications(
     for r in all_rows:
         if r.status in totals:
             totals[r.status] += 1
-    _ = UTC  # reserved for future "due in N minutes" filter
-    return HearingReminderListResponse(
-        reminders=[HearingReminderRecord.model_validate(r) for r in rows],
-        total_queued=totals["queued"],
-        total_sent=totals["sent"],
-        total_delivered=totals["delivered"],
-        total_failed=totals["failed"],
+    intents = list(
+        session.scalars(
+            select(NotificationDeliveryIntent)
+            .where(NotificationDeliveryIntent.company_id == context.company.id)
+            .order_by(
+                desc(NotificationDeliveryIntent.created_at),
+                desc(NotificationDeliveryIntent.id),
+            )
+            .limit(limit)
+        )
+    )
+    return _admin_notification_response(
+        session,
+        company_id=context.company.id,
+        rows=rows,
+        totals=totals,
+        intents=intents,
+        limit=limit,
+    )
+
+
+@preferences_router.post(
+    "/test",
+    response_model=NotificationTestResponse,
+    summary="Create and deliver a safe self-service in-app test notification.",
+)
+async def test_current_user_notification(
+    context: PreferenceContext,
+    session: DbSession,
+) -> NotificationTestResponse:
+    intent = enqueue_notification_delivery_intent(
+        session,
+        context=context,
+        recipient_membership=context.membership,
+        channel="in_app",
+        event_type="notification_test",
+        source_type="self_service_test",
+        source_id=str(uuid4()),
+        title="Test notification",
+        body="Your CaseOps in-app notification channel is working.",
+    )
+    if intent is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The current notification target is not eligible.",
+        )
+    process_notification_delivery_intent(
+        session,
+        intent_id=intent.id,
+        context=context,
+    )
+    record_from_context(
+        session,
+        context,
+        action="notification.test.completed",
+        target_type="notification_delivery_intent",
+        target_id=intent.id,
+        metadata={"channel": "in_app", "external_calls": 0},
+    )
+    session.commit()
+    session.refresh(intent)
+    return NotificationTestResponse(
+        intent=_intent_record(intent),
+        message="In-app test delivered without contacting an external provider.",
+    )
+
+
+@admin_router.post(
+    "/notifications/suppressions/{suppression_id}/recover",
+    response_model=EmailSuppressionRecord,
+    summary="Recover a suppression while preserving its provider evidence.",
+)
+async def recover_admin_suppression(
+    suppression_id: str,
+    payload: SuppressionRecoveryRequest,
+    context: AdminContext,
+    session: DbSession,
+) -> EmailSuppressionRecord:
+    suppression = session.scalar(
+        select(EmailSuppression).where(
+            EmailSuppression.id == suppression_id,
+            EmailSuppression.company_id == context.company.id,
+        )
+    )
+    if suppression is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suppression not found.")
+    if suppression.recovered_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Suppression has already been recovered.",
+        )
+    if suppression.reason == "bounce":
+        if not payload.replacement_membership_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Permanent bounce recovery requires a changed destination.",
+            )
+        replacement = session.scalar(
+            select(CompanyMembership).where(
+                CompanyMembership.id == payload.replacement_membership_id,
+                CompanyMembership.company_id == context.company.id,
+                CompanyMembership.is_active.is_(True),
+            )
+        )
+        if (
+            replacement is None
+            or replacement.user is None
+            or replacement.user.email.strip().lower() == suppression.recipient_email
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Permanent bounce recovery requires a different active destination.",
+            )
+    from caseops_api.services.email_suppression import recover_suppression
+
+    recover_suppression(
+        session,
+        suppression=suppression,
+        recovered_by_membership_id=context.membership.id,
+        recovery_action=payload.recovery_action,
+    )
+    record_from_context(
+        session,
+        context,
+        action="notification.suppression.recovered",
+        target_type="email_suppression",
+        target_id=suppression.id,
+        metadata={
+            "provider": suppression.provider,
+            "category": suppression.reason,
+            "changed_destination": bool(payload.replacement_membership_id),
+        },
+    )
+    session.commit()
+    return EmailSuppressionRecord(
+        id=suppression.id,
+        provider=suppression.provider,
+        category=str(suppression.reason),
+        affected_address=suppression.recipient_email,
+        first_occurrence=suppression.first_event_at,
+        last_occurrence=suppression.last_event_at,
+        recovery_action=suppression.recovery_action,
+        recovered_at=suppression.recovered_at,
+        fallback_sent=bool(suppression.fallback_sent),
+    )
+
+
+@admin_router.get(
+    "/notifications/intents/{intent_id}/recovery-preview",
+    response_model=NotificationRecoveryPreview,
+    summary="Preview a notification recovery without dispatching it.",
+)
+async def preview_notification_recovery(
+    intent_id: str,
+    context: AdminContext,
+    session: DbSession,
+) -> NotificationRecoveryPreview:
+    intent = session.scalar(
+        select(NotificationDeliveryIntent).where(
+            NotificationDeliveryIntent.id == intent_id,
+            NotificationDeliveryIntent.company_id == context.company.id,
+        )
+    )
+    if intent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intent not found.")
+    recoverable = str(intent.status) in {
+        "blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled",
+    }
+    return NotificationRecoveryPreview(
+        original_intent_id=intent.id,
+        recoverable=recoverable,
+        requires_changed_destination=str(intent.status) == "bounced",
+        next_destination_version=intent.destination_version + 1,
+        current_status=str(intent.status),
+        impact=(
+            "Creates a new immutable destination/version and retains the original attempts, "
+            "provider events, fallback, and failure evidence."
+        ),
+    )
+
+
+@admin_router.post(
+    "/notifications/intents/{intent_id}/recover",
+    response_model=NotificationTestResponse,
+    summary="Create a versioned recovery intent after preview.",
+)
+async def recover_notification_intent(
+    intent_id: str,
+    payload: NotificationRecoveryRequest,
+    context: AdminContext,
+    session: DbSession,
+) -> NotificationTestResponse:
+    original = session.scalar(
+        select(NotificationDeliveryIntent)
+        .where(
+            NotificationDeliveryIntent.id == intent_id,
+            NotificationDeliveryIntent.company_id == context.company.id,
+        )
+        .with_for_update(of=NotificationDeliveryIntent)
+    )
+    if original is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intent not found.")
+    if str(original.status) not in {
+        "blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only failed, suppressed, bounced, blocked, or retrying intents "
+                "are recoverable."
+            ),
+        )
+    target_id = payload.replacement_membership_id or original.recipient_membership_id
+    if not target_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Choose an active internal replacement destination for this recovery.",
+        )
+    replacement = session.scalar(
+        select(CompanyMembership).where(
+            CompanyMembership.id == target_id,
+            CompanyMembership.company_id == context.company.id,
+            CompanyMembership.is_active.is_(True),
+        )
+    )
+    if replacement is None or replacement.user is None or not replacement.user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Recovery destination is not an active workspace membership.",
+        )
+    original_destination = str((original.recipient_snapshot_json or {}).get("destination") or "")
+    if (
+        str(original.status) == "bounced"
+        and replacement.user.email.strip().lower() == original_destination.strip().lower()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Permanent bounce recovery requires a changed destination.",
+        )
+    new_version = original.destination_version + 1
+    recovered = enqueue_notification_delivery_intent(
+        session,
+        context=context,
+        recipient_membership=replacement,
+        channel=str(original.channel),
+        event_type=original.event_type,
+        source_type="notification_recovery",
+        source_id=f"{original.id}:v{new_version}",
+        matter=original.matter,
+        notification_rule_id=original.notification_rule_id,
+        title=original.title or "Recovered notification",
+        body=original.body or "Open CaseOps to review this recovered notification.",
+        destination_version=new_version,
+        critical=bool(original.critical),
+        escalation_membership=replacement,
+        recovery_of_intent_id=original.id,
+        schedule_source_type=original.schedule_source_type,
+        schedule_source_id=original.schedule_source_id,
+    )
+    if recovered is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Recovery destination is not permitted for the source record.",
+        )
+    original.superseded_by_intent_id = recovered.id
+    session.add(original)
+    record_from_context(
+        session,
+        context,
+        action="notification.delivery.recovered",
+        target_type="notification_delivery_intent",
+        target_id=recovered.id,
+        matter_id=original.matter_id,
+        metadata={
+            "original_intent_id": original.id,
+            "destination_version": new_version,
+            "changed_destination": replacement.id != original.recipient_membership_id,
+            "recovery_action": payload.recovery_action,
+        },
+    )
+    if recovered.channel == "in_app":
+        process_notification_delivery_intent(
+            session,
+            intent_id=recovered.id,
+            context=context,
+        )
+    session.commit()
+    session.refresh(recovered)
+    return NotificationTestResponse(
+        intent=_intent_record(recovered),
+        message="Recovery intent created; original delivery evidence remains immutable.",
     )
 
 
