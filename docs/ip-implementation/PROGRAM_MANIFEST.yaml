@@ -16,13 +16,13 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-005B",
     "checkpoint": {
-      "recorded_at": "2026-08-04T15:02:36+05:30",
-      "repository_revision": "4327dd5f34113ed09be41ed48b6f6962e46f2bb1",
-      "environment": "IPLF-003C exact main commit 12c21fff is serving production on API revision caseops-api-00228-gfc and web revision caseops-web-00208-jmn; corrected corpus-safe production verification run 30896152589 passed. IPLF-004A exact-head CI is in progress on PR 156 at 24ecc28. IPLF-004B has been rebased onto that security-clean head and its prior local API, full web, migration, OpenAPI, production-build, and dated 360px workflow verification will be rerun on the rebased commit.",
+      "recorded_at": "2026-08-04T19:45:00+05:30",
+      "repository_revision": "3f6a202afeec82bc3a1f94c85e0e9e6650452d88",
+      "environment": "IPLF-003C remains production verified. IPLF-004A merged as canonical main 36aac3a after exact-head CI run 30903784411 passed all eight API coverage shards, aggregate gates, web/security/CodeQL/Postgres/OpenAPI, and full app Playwright. Production migration execution caseops-migrate-job-5sq6g completed; API caseops-api-00229-5h2 and web caseops-web-00209-fmh serve 100% traffic from tag 36aac3a; recurring jobs use API digest sha256:a4b38166; production run 30915519778 passed 55 RAM tests plus 2 notice tests. IPLF-004B application candidate 496c976 and strengthened production harness 3f6a202 are rebased onto that canonical release.",
       "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-003C is merged and deployed. IPLF-004A implements opaque canonical source resolution, redirect-time validation, hashed access audit, and the tenant source-defect queue. IPLF-004B completes report UI, automatic failed-source health queueing, canonical target identity across all source surfaces, protected Matter-document proxying, tenant isolation, and responsive UJ-17 exception handling.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-005B",
-      "next_action": "Clear IPLF-003C corrected production verification, merge/deploy/verify IPLF-004A, then rebase IPLF-004B onto the resulting security-clean canonical main for exact-head CI, migration, deployment, and dated production proof before continuing IPLF-005B. The M0 human program-lock gate remains pending.",
+      "next_action": "Run IPLF-004B exact-head CI/security on canonical main, merge, migrate/deploy immutable images, and execute the strengthened dated production source-action journey; then rebase and release IPLF-005B. The M0 human program-lock gate remains pending and is not replaced with an elapsed-time blocker.",
       "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-004B/release-2026-08-04.md"
     }
   },
@@ -3532,7 +3532,8 @@
         "apps/api/tests/test_courts_registry.py",
         "apps/web/components/app/SourceAction.test.tsx",
         "apps/web/app/app/research/saved/page.test.tsx",
-        "tests/e2e/ram-2026-08-03-bugs.spec.ts"
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-004B/release-2026-08-04.md"
@@ -3540,8 +3541,8 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-004B/release-2026-08-04.md",
-          "revision": "1f04b0ce3364acb8432e0f4fa55f22c1c64db523",
-          "environment": "local stacked implementation candidate; security-clean rebase, exact-head CI, canonical merge, migration, and production deployment pending",
+          "revision": "496c976d14af8484b38a162bd9eef043efd2151a",
+          "environment": "local candidate rebased onto canonical IPLF-004A production release 36aac3a; exact-head CI, canonical merge, migration, production deployment, and strengthened production proof pending",
           "fixtures": "authenticated tenant and cross-tenant owners, global authority/statute/judge targets, protected Matter attachment, available/unverified/missing/blocked/quarantined actions, automatic health queue, explicit defect report, and deterministic saved-source records at 360px",
           "assertions": "canonical target identity, redirect-time re-resolution, protected document reauthorization, tenant isolation, source-state failure, idempotent health queue, SHA-256-only destination persistence, report UI payload, origin correlation, full source-surface propagation, grouped-control visibility, and zero horizontal overflow",
           "result": "passed",
@@ -3551,7 +3552,7 @@
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Rebase onto the security-clean canonical main after IPLF-004A is released, pass exact-head CI/security, merge, migrate, deploy immutable API/web revisions, and execute the dated UJ-17 production journey."
+        "Pass exact-head CI/security on canonical main, merge, migrate, deploy immutable API/web revisions, and execute the strengthened dated UJ-17 production journey."
       ],
       "data_impact": [
         "Additive constraint expansion only: source_link_reports.target_type also accepts matter_attachment. No existing row rewrite or backfill. Failed opens may idempotently add a tenant-owned queued report containing canonical identity, typed state, bounded operational metadata, and source-reference SHA-256 but no raw destination."
