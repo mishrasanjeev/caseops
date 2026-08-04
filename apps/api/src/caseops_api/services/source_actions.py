@@ -4,22 +4,27 @@ import hashlib
 from dataclasses import dataclass
 from urllib.parse import quote, urlsplit
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     AuthorityDocument,
     JudgeAppointment,
+    Matter,
+    MatterAttachment,
     SourceLinkReport,
     StatuteSection,
 )
 from caseops_api.schemas.source_actions import (
     SourceActionRecord,
+    SourceIssueType,
     SourceLinkReportCreateRequest,
     SourceLinkReportRecord,
     SourceOriginSurface,
     SourceTargetType,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.matter_access import assert_access
 from caseops_api.services.session_context import SessionContext
 
 _OFFICIAL_HOST_SUFFIXES = (".gov.in", ".nic.in", ".judiciary.gov.in")
@@ -72,7 +77,7 @@ def inspect_source_action(
     if reference.startswith("/api/"):
         return SourceActionRecord(
             state="available",
-            open_url=reference,
+            open_url=open_url or reference,
             source_reference=reference,
         )
 
@@ -106,11 +111,31 @@ def source_target_open_url(target_type: SourceTargetType, target_id: str) -> str
     return f"/api/source-actions/targets/{target_type}/{quote(target_id, safe='')}/open"
 
 
+def inspect_source_target_action(
+    source_reference: str | None,
+    *,
+    target_type: SourceTargetType,
+    target_id: str,
+    verified: bool = False,
+    quarantined: bool = False,
+) -> SourceActionRecord:
+    action = inspect_source_action(
+        source_reference,
+        verified=verified,
+        quarantined=quarantined,
+        open_url=source_target_open_url(target_type, target_id),
+    )
+    return action.model_copy(
+        update={"target_type": target_type, "target_id": target_id}
+    )
+
+
 def resolve_source_target(
     session: Session,
     *,
     target_type: SourceTargetType,
     target_id: str,
+    context: SessionContext | None = None,
 ) -> ResolvedSourceTarget | None:
     if target_type == "authority_document":
         row = session.get(AuthorityDocument, target_id)
@@ -138,6 +163,25 @@ def resolve_source_target(
             source_version=str(row.source_version),
             provider=row.source_publisher,
         )
+    if target_type == "matter_attachment":
+        row = session.get(MatterAttachment, target_id)
+        if row is None or context is None:
+            return None
+        matter = session.get(Matter, row.matter_id)
+        if matter is None or matter.company_id != context.company.id:
+            return None
+        assert_access(session, context=context, matter=matter)
+        return ResolvedSourceTarget(
+            target_type=target_type,
+            target_id=row.id,
+            source_reference=(
+                f"/api/matters/{matter.id}/attachments/{row.id}/download"
+            ),
+            verified=True,
+            quarantined=False,
+            source_version=row.sha256_hex,
+            provider="caseops_matter_document",
+        )
     row = session.get(JudgeAppointment, target_id)
     if row is None:
         return None
@@ -153,11 +197,12 @@ def resolve_source_target(
 
 
 def inspect_resolved_source_target(target: ResolvedSourceTarget) -> SourceActionRecord:
-    return inspect_source_action(
+    return inspect_source_target_action(
         target.source_reference,
+        target_type=target.target_type,
+        target_id=target.target_id,
         verified=target.verified,
         quarantined=target.quarantined,
-        open_url=source_target_open_url(target.target_type, target.target_id),
     )
 
 
@@ -207,6 +252,77 @@ def audit_source_open(
     )
 
 
+def queue_source_health_check(
+    session: Session,
+    *,
+    context: SessionContext,
+    target: ResolvedSourceTarget,
+    action: SourceActionRecord,
+    origin_surface: SourceOriginSurface,
+) -> SourceLinkReport:
+    """Idempotently queue an unavailable canonical source for investigation."""
+
+    issue_by_state: dict[str, SourceIssueType] = {
+        "missing": "broken",
+        "unverified": "stale",
+        "blocked": "access_denied",
+        "quarantined": "wrong_document",
+    }
+    issue_type = issue_by_state.get(action.state, "other")
+    existing = session.scalar(
+        select(SourceLinkReport)
+        .where(
+            SourceLinkReport.company_id == context.company.id,
+            SourceLinkReport.target_type == target.target_type,
+            SourceLinkReport.target_id == target.target_id,
+            SourceLinkReport.origin_surface == origin_surface,
+            SourceLinkReport.issue_type == issue_type,
+            SourceLinkReport.status.in_(("queued", "investigating")),
+        )
+        .order_by(SourceLinkReport.created_at.desc())
+    )
+    if existing is not None:
+        return existing
+
+    destination_class = source_destination_class(action)
+    report = SourceLinkReport(
+        company_id=context.company.id,
+        reported_by_membership_id=context.membership.id,
+        target_type=target.target_type,
+        target_id=target.target_id,
+        origin_surface=origin_surface,
+        issue_type=issue_type,
+        description="Automatically queued after a failed source-open check.",
+        source_reference_sha256=source_reference_sha256(target.source_reference),
+        destination_class=destination_class,
+        source_state=action.state,
+        status="queued",
+    )
+    session.add(report)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="source_access.defect_reported",
+        target_type=target.target_type,
+        target_id=target.target_id,
+        result="failed",
+        metadata={
+            "report_id": report.id,
+            "origin_surface": origin_surface,
+            "issue_type": issue_type,
+            "destination_class": destination_class,
+            "source_state": action.state,
+            "source_version": target.source_version,
+            "provider": target.provider,
+            "source_reference_sha256": report.source_reference_sha256,
+            "health_check_requested": True,
+            "automatic": True,
+        },
+    )
+    return report
+
+
 def create_source_link_report(
     session: Session,
     *,
@@ -217,6 +333,7 @@ def create_source_link_report(
         session,
         target_type=payload.target_type,
         target_id=payload.target_id,
+        context=context,
     )
     if target is None:
         raise LookupError("Source target was not found.")
@@ -274,6 +391,8 @@ __all__ = [
     "create_source_link_report",
     "inspect_resolved_source_target",
     "inspect_source_action",
+    "inspect_source_target_action",
+    "queue_source_health_check",
     "resolve_source_target",
     "source_destination_class",
     "source_reference_sha256",

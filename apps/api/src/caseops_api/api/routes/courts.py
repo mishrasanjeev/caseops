@@ -31,8 +31,7 @@ from caseops_api.db.models import (
 from caseops_api.schemas.source_actions import SourceActionRecord
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
-    inspect_source_action,
-    source_target_open_url,
+    inspect_source_target_action,
 )
 
 router = APIRouter()
@@ -382,12 +381,11 @@ def _build_descriptive_analytics(
                     neutral_citation=row.neutral_citation,
                     source=row.source,
                     source_reference=row.source_reference,
-                    source_action=inspect_source_action(
+                    source_action=inspect_source_target_action(
                         row.source_reference,
+                        target_type="authority_document",
+                        target_id=row.id,
                         verified=bool(row.source_reference),
-                        open_url=source_target_open_url(
-                            "authority_document", row.id
-                        ),
                     ),
                     practice_area=practice_area,
                     statutes_or_sections=sections[:6],
@@ -947,12 +945,11 @@ def get_judge_profile(
                 end_date=row.end_date.isoformat() if row.end_date else None,
                 source_url=row.source_url,
                 source_evidence_text=row.source_evidence_text,
-                source_action=inspect_source_action(
+                source_action=inspect_source_target_action(
                     row.source_url,
+                    target_type="judge_appointment",
+                    target_id=row.id,
                     verified=bool(row.source_url),
-                    open_url=source_target_open_url(
-                        "judge_appointment", row.id
-                    ),
                 ),
             )
             for row in career_rows

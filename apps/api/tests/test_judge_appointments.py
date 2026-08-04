@@ -136,16 +136,17 @@ def test_ft_024c_4_career_endpoint_surfaces_source_url(
             s, court_id="supreme-court-india",
             name="Justice Career Url Test",
         )
-        s.add(
-            JudgeAppointment(
-                judge_id=judge.id,
-                court_id="supreme-court-india",
-                role="judge_supreme_court",
-                start_date=date(2024, 5, 1),
-                source_url="https://www.sci.gov.in/judge/test/",
-                source_evidence_text="Elevated as Judge of the SC.",
-            ),
+        appointment = JudgeAppointment(
+            judge_id=judge.id,
+            court_id="supreme-court-india",
+            role="judge_supreme_court",
+            start_date=date(2024, 5, 1),
+            source_url="https://www.sci.gov.in/judge/test/",
+            source_evidence_text="Elevated as Judge of the SC.",
         )
+        s.add(appointment)
+        s.flush()
+        appointment_id = appointment.id
         s.commit()
         judge_id = judge.id
 
@@ -161,6 +162,11 @@ def test_ft_024c_4_career_endpoint_surfaces_source_url(
     assert appt["source_url"] == "https://www.sci.gov.in/judge/test/"
     assert appt["source_evidence_text"]
     assert appt["court_name"] == "Supreme Court of India"
+    assert appt["source_action"]["target_type"] == "judge_appointment"
+    assert appt["source_action"]["target_id"] == appointment_id
+    assert "/source-actions/targets/judge_appointment/" in appt[
+        "source_action"
+    ]["open_url"]
 
 
 def test_ft_024c_5_empty_career_returns_empty_array_not_null(

@@ -224,6 +224,11 @@ def test_ft_s2_6_get_section_detail_returns_section_url_fallback(
     assert body["section"]["section_label"] == "Punishment for murder"
     assert body["section"]["section_url"]
     assert "indiacode" in body["section"]["section_url"]
+    assert body["section"]["source_action"]["target_type"] == "statute_section"
+    assert body["section"]["source_action"]["target_id"] == body["section"]["id"]
+    assert "/source-actions/targets/statute_section/" in body["section"][
+        "source_action"
+    ]["open_url"]
     # No parent or children for this section in v1 seed.
     assert body["parent_section"] is None
     assert body["child_sections"] == []

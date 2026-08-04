@@ -1125,8 +1125,7 @@ def search_authorities(
         session, [r.authority_document_id for r in page],
     )
     from caseops_api.services.source_actions import (
-        inspect_source_action,
-        source_target_open_url,
+        inspect_source_target_action,
     )
 
     enriched_page = [
@@ -1138,12 +1137,11 @@ def search_authorities(
                 "adverse_count": treatment_lookup.get(
                     r.authority_document_id, (None, 0),
                 )[1],
-                "source_action": inspect_source_action(
+                "source_action": inspect_source_target_action(
                     r.source_reference,
+                    target_type="authority_document",
+                    target_id=r.authority_document_id,
                     verified=(r.source == "official"),
-                    open_url=source_target_open_url(
-                        "authority_document", r.authority_document_id
-                    ),
                 ),
             },
         )

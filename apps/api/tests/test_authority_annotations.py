@@ -358,4 +358,6 @@ def test_saved_annotation_preserves_source_contract(
         "source_reference": source_reference,
         "reason": None,
         "opens_new_tab": True,
+        "target_type": "authority_document",
+        "target_id": authority_id,
     }

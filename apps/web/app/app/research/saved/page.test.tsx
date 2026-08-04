@@ -64,6 +64,8 @@ describe("SavedResearchPage", () => {
             source_reference: "https://www.indiacode.nic.in/document.pdf",
             reason: null,
             opens_new_tab: true,
+            target_type: "authority_document",
+            target_id: "authority-available",
           },
           authority_neutral_citation: "2024:DHC:1111",
           authority_case_reference: "BAIL APPLN. 99/2024",
@@ -87,6 +89,11 @@ describe("SavedResearchPage", () => {
         "/api/source-actions/targets/authority_document/authority-available/open",
       ),
     );
+    expect(screen.getByTestId("source-action-open")).toHaveAttribute(
+      "href",
+      expect.stringContaining("origin=saved_research"),
+    );
+    expect(screen.getByTestId("source-action-report")).toBeVisible();
     expect(screen.getByText("1 saved")).toBeInTheDocument();
   });
 
@@ -116,6 +123,8 @@ describe("SavedResearchPage", () => {
             source_reference: "https://provider.invalid/expired",
             reason: "Source access must be refreshed by the provider.",
             opens_new_tab: true,
+            target_type: "authority_document",
+            target_id: "auth-blocked",
           },
           authority_neutral_citation: "2026:DHC:42",
           authority_case_reference: null,
@@ -129,6 +138,7 @@ describe("SavedResearchPage", () => {
     expect(await screen.findByText("Citation remains visible")).toBeInTheDocument();
     expect(screen.getByText(/2026:DHC:42/)).toBeInTheDocument();
     expect(screen.getByTestId("source-action-unverified")).toBeVisible();
+    expect(screen.getByTestId("source-action-report")).toBeVisible();
     expect(screen.queryByTestId("source-action-open")).not.toBeInTheDocument();
   });
 

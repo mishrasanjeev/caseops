@@ -24642,6 +24642,10 @@ export interface components {
              * @enum {string}
              */
             state: "available" | "missing" | "unverified" | "blocked" | "quarantined";
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Type */
+            target_type?: ("authority_document" | "statute_section" | "judge_appointment" | "matter_attachment") | null;
         };
         /** SourceLinkReportCreateRequest */
         SourceLinkReportCreateRequest: {
@@ -24663,7 +24667,7 @@ export interface components {
              * Target Type
              * @enum {string}
              */
-            target_type: "authority_document" | "statute_section" | "judge_appointment";
+            target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment";
         };
         /** SourceLinkReportRecord */
         SourceLinkReportRecord: {
@@ -24702,7 +24706,7 @@ export interface components {
              * Target Type
              * @enum {string}
              */
-            target_type: "authority_document" | "statute_section" | "judge_appointment";
+            target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment";
         };
         /** StatuteAmendmentHistoryResponse */
         StatuteAmendmentHistoryResponse: {
@@ -41587,7 +41591,7 @@ export interface operations {
             header?: never;
             path: {
                 target_id: string;
-                target_type: "authority_document" | "statute_section" | "judge_appointment";
+                target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment";
             };
             cookie?: never;
         };

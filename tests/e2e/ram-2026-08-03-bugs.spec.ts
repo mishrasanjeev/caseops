@@ -42,7 +42,7 @@ async function bootstrap(
 }
 
 test.describe("Ram 2026-08-03 saved research source actions", () => {
-  test("IPLF-003C preserves source metadata and fail-closed actions at 360px", async ({
+  test("IPLF-003C/004B preserves source state and reports defects at 360px", async ({
     page,
   }) => {
     const slug = unique("saved-source");
@@ -57,6 +57,29 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
         JSON.stringify(value),
       );
     }, session);
+
+    let reportPayload: Record<string, unknown> | null = null;
+    await page.route("**/api/source-actions/reports", async (route) => {
+      reportPayload = (await route.request().postDataJSON()) as Record<
+        string,
+        unknown
+      >;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "report-proof",
+          target_type: reportPayload.target_type,
+          target_id: reportPayload.target_id,
+          origin_surface: reportPayload.origin_surface,
+          issue_type: reportPayload.issue_type,
+          status: "queued",
+          source_state: "unverified",
+          destination_class: "unavailable_unverified",
+          created_at: "2026-08-04T00:00:00Z",
+        }),
+      });
+    });
 
     await page.route("**/api/authorities/annotations**", (route) =>
       route.fulfill({
@@ -88,6 +111,8 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
                 source_reference: "https://www.sci.gov.in/source-proof.pdf",
                 reason: null,
                 opens_new_tab: true,
+                target_type: "authority_document",
+                target_id: "authority-available",
               },
               authority_neutral_citation: "2026 INSC 303",
               authority_case_reference: null,
@@ -117,6 +142,8 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
                 source_reference: "https://provider.invalid/expired",
                 reason: "Source access must be refreshed by the provider.",
                 opens_new_tab: true,
+                target_type: "authority_document",
+                target_id: "authority-unverified",
               },
               authority_neutral_citation: "2026:DHC:303",
               authority_case_reference: null,
@@ -143,6 +170,7 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
       /\/api\/source-actions\/targets\/authority_document\/[^/]+\/open/,
     );
     await expect(openSource).toHaveAttribute("target", "_blank");
+    await expect(openSource).toHaveAttribute("href", /origin=saved_research/);
 
     await expect(page.getByText("Citation survives source failure")).toBeVisible();
     await expect(page.getByText(/2026:DHC:303/)).toBeVisible();
@@ -150,6 +178,27 @@ test.describe("Ram 2026-08-03 saved research source actions", () => {
     await expect(page.getByTestId("source-action-unverified")).toHaveText(
       "unverified",
     );
+    const reportButtons = page.getByTestId("source-action-report");
+    await expect(reportButtons).toHaveCount(2);
+    for (const reportButton of await reportButtons.all()) {
+      const box = await reportButton.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    }
+    await reportButtons.nth(1).click();
+    await page.getByLabel("Issue", { exact: true }).selectOption("wrong_document");
+    await page
+      .getByLabel("Details (optional)")
+      .fill("The citation opens a different judgment.");
+    await page.getByRole("button", { name: "Queue report" }).click();
+    await expect(page.getByText("Source report queued for review.")).toBeVisible();
+    expect(reportPayload).toMatchObject({
+      target_type: "authority_document",
+      target_id: "authority-unverified",
+      origin_surface: "saved_research",
+      issue_type: "wrong_document",
+      description: "The citation opens a different judgment.",
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       360,
     );
