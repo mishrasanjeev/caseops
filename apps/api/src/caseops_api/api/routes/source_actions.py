@@ -143,7 +143,7 @@ async def open_source_target(
 )
 async def report_source_link(
     payload: SourceLinkReportCreateRequest,
-    context: CurrentContext,
+    context: SourceInspector,
     session: DbSession,
 ) -> SourceLinkReportRecord:
     try:
