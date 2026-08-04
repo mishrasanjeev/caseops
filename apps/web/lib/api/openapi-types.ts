@@ -7685,6 +7685,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-actions/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report a wrong or unavailable canonical source */
+        post: operations["report_source_link_api_source_actions_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-actions/targets/{target_type}/{target_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open a canonical source without exposing its destination in the request URL */
+        get: operations["open_source_target_api_source_actions_targets__target_type___target_id__open_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statutes/": {
         parameters: {
             query?: never;
@@ -24609,6 +24643,67 @@ export interface components {
              */
             state: "available" | "missing" | "unverified" | "blocked" | "quarantined";
         };
+        /** SourceLinkReportCreateRequest */
+        SourceLinkReportCreateRequest: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Issue Type
+             * @enum {string}
+             */
+            issue_type: "broken" | "wrong_document" | "access_denied" | "stale" | "other";
+            /**
+             * Origin Surface
+             * @enum {string}
+             */
+            origin_surface: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "other";
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "authority_document" | "statute_section" | "judge_appointment";
+        };
+        /** SourceLinkReportRecord */
+        SourceLinkReportRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Destination Class */
+            destination_class: string;
+            /** Id */
+            id: string;
+            /**
+             * Issue Type
+             * @enum {string}
+             */
+            issue_type: "broken" | "wrong_document" | "access_denied" | "stale" | "other";
+            /**
+             * Origin Surface
+             * @enum {string}
+             */
+            origin_surface: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "other";
+            /**
+             * Source State
+             * @enum {string}
+             */
+            source_state: "available" | "missing" | "unverified" | "blocked" | "quarantined";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "investigating" | "resolved" | "dismissed";
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "authority_document" | "statute_section" | "judge_appointment";
+        };
         /** StatuteAmendmentHistoryResponse */
         StatuteAmendmentHistoryResponse: {
             /** Events */
@@ -41429,6 +41524,71 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            307: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_source_link_api_source_actions_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceLinkReportCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceLinkReportRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_source_target_api_source_actions_targets__target_type___target_id__open_get: {
+        parameters: {
+            query?: {
+                origin?: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "other";
+            };
+            header?: never;
+            path: {
+                target_id: string;
+                target_type: "authority_document" | "statute_section" | "judge_appointment";
+            };
             cookie?: never;
         };
         requestBody?: never;

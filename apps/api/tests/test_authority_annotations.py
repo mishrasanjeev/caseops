@@ -353,8 +353,7 @@ def test_saved_annotation_preserves_source_contract(
         "state": "available",
         "label": "Open source",
         "open_url": (
-            "/api/source-actions/open?url="
-            "https%3A%2F%2Fwww.indiacode.nic.in%2Fdocument.pdf"
+            f"/api/source-actions/targets/authority_document/{authority_id}/open"
         ),
         "source_reference": source_reference,
         "reason": None,

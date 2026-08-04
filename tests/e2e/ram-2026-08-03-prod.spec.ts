@@ -112,7 +112,7 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
         opens_new_tab: true,
       });
       expect(liveRow.authority_source_action.open_url).toContain(
-        "/api/source-actions/open?url=",
+        "/api/source-actions/targets/authority_document/",
       );
 
       await page.route("**/api/authorities/annotations**", (route) =>
@@ -162,7 +162,7 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
       await expect(openSource).toBeVisible();
       await expect(openSource).toHaveAttribute(
         "href",
-        /\/api\/source-actions\/open\?url=/,
+        /\/api\/source-actions\/targets\/authority_document\/[^/]+\/open/,
       );
       await expect(openSource).toHaveAttribute("target", "_blank");
       await expect(openSource).toHaveAttribute("rel", "noopener noreferrer");

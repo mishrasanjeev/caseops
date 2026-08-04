@@ -64,7 +64,10 @@ from caseops_api.services.judgment_alerts import (
     update_judgment_alert_rule,
 )
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.source_actions import inspect_source_action
+from caseops_api.services.source_actions import (
+    inspect_source_action,
+    source_target_open_url,
+)
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -453,6 +456,9 @@ async def get_saved_annotations(
                 authority_source_action=inspect_source_action(
                     auth.source_reference,
                     verified=(auth.source == "official"),
+                    open_url=source_target_open_url(
+                        "authority_document", auth.id
+                    ),
                 ),
                 authority_neutral_citation=auth.neutral_citation,
                 authority_case_reference=auth.case_reference,

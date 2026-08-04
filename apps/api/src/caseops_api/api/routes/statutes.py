@@ -70,7 +70,10 @@ from caseops_api.services.legal_updates import (
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.source_actions import inspect_source_action
+from caseops_api.services.source_actions import (
+    inspect_source_action,
+    source_target_open_url,
+)
 
 router = APIRouter()
 matter_scoped_router = APIRouter()
@@ -152,6 +155,7 @@ class StatuteSectionRecord(BaseModel):
             self.section_url,
             verified=authoritative,
             quarantined=quarantined,
+            open_url=source_target_open_url("statute_section", self.id),
         )
         return self
 
@@ -188,6 +192,7 @@ class StatuteSectionListItem(BaseModel):
             self.section_url,
             verified=self.verification_status in {"verified_official", "verified_licensed"},
             quarantined=self.verification_status in {"quarantined", "retired"},
+            open_url=source_target_open_url("statute_section", self.id),
         )
         return self
 

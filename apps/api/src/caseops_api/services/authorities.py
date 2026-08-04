@@ -1124,7 +1124,10 @@ def search_authorities(
     treatment_lookup = compute_search_result_treatments(
         session, [r.authority_document_id for r in page],
     )
-    from caseops_api.services.source_actions import inspect_source_action
+    from caseops_api.services.source_actions import (
+        inspect_source_action,
+        source_target_open_url,
+    )
 
     enriched_page = [
         r.model_copy(
@@ -1138,6 +1141,9 @@ def search_authorities(
                 "source_action": inspect_source_action(
                     r.source_reference,
                     verified=(r.source == "official"),
+                    open_url=source_target_open_url(
+                        "authority_document", r.authority_document_id
+                    ),
                 ),
             },
         )
