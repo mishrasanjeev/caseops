@@ -9205,6 +9205,45 @@ class AuthoritySearchObservation(Base):
     )
 
 
+class AuthorityResearchReport(Base):
+    """Tenant-owned immutable snapshot of a user-selected research result set.
+
+    The shared authority corpus remains canonical.  A report freezes only the
+    identifiers and source metadata that were visible when the lawyer saved it,
+    together with the search-analysis version.  Reports are never silently
+    refreshed when the global corpus changes.
+    """
+
+    __tablename__ = "authority_research_reports"
+    __table_args__ = (
+        Index(
+            "ix_authority_research_reports_company_created",
+            "company_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    query: Mapped[str] = mapped_column(String(600), nullable=False)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    criteria_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    result_snapshot_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    analysis_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class AuthorityDocument(Base):
     __tablename__ = "authority_documents"
     __table_args__ = (

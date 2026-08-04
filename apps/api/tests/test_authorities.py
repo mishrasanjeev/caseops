@@ -1132,6 +1132,114 @@ def test_authority_search_court_name_filter_is_case_insensitive_contains(
     assert "custody" in match["snippet"].casefold()
 
 
+def test_authority_search_distinguishes_unavailable_corpus_from_no_match(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={"query": "section 11 trademark", "mode": "keyword"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["outcome"] == "corpus_unavailable"
+    assert body["results"] == []
+    assert body["corpus_coverage"]["document_count"] == 0
+    assert body["corpus_coverage"]["index_state"] == "unavailable"
+    assert "corpus is unavailable" in body["coverage_notice"].casefold()
+
+
+def test_structured_research_modes_and_immutable_report_snapshot(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    authority_id = _seed_madras_bail_authority()
+    with get_session_factory()() as session:
+        document = session.get(AuthorityDocument, authority_id)
+        assert document is not None
+        document.neutral_citation = "2026:MHC:483"
+        document.parties_json = json.dumps(["Aster Labs", "Registrar of Trade Marks"])
+        document.judges_json = json.dumps(["Justice M. Sundar"])
+        document.sections_cited_json = json.dumps(["Section 11 Trade Marks Act"])
+        session.commit()
+
+    mode_queries = {
+        "exact_citation": "2026:MHC:483",
+        "party": "Aster Labs",
+        "court": "Madras High Court",
+        "judge": "Justice M. Sundar",
+        "act_section": "Section 11 Trade Marks Act",
+    }
+    for mode, query in mode_queries.items():
+        response = client.post(
+            "/api/authorities/search",
+            headers=auth_headers(token),
+            json={"query": query, "mode": mode, "language": "any"},
+        )
+        assert response.status_code == 200, (mode, response.text)
+        body = response.json()
+        assert body["outcome"] == "results_found", (mode, body)
+        assert authority_id in {
+            result["authority_document_id"] for result in body["results"]
+        }
+        assert body["corpus_coverage"]["index_state"] == "current"
+
+    created = client.post(
+        "/api/authorities/research-reports",
+        headers=auth_headers(token),
+        json={
+            "name": "Section 11 source set",
+            "query": "Section 11 Trade Marks Act",
+            "mode": "act_section",
+            "result_ids": [authority_id],
+            "criteria": {"language": "any"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    report = created.json()
+    assert report["company_id"] == bootstrap["company"]["id"]
+    assert report["results"][0]["authority_document_id"] == authority_id
+    assert report["results"][0]["neutral_citation"] == "2026:MHC:483"
+    assert report["analysis_version"] == "authority-search-v3-2026-08-04"
+
+    with get_session_factory()() as session:
+        document = session.get(AuthorityDocument, authority_id)
+        assert document is not None
+        document.neutral_citation = "2026:MHC:CHANGED"
+        session.commit()
+
+    listed = client.get(
+        "/api/authorities/research-reports",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200, listed.text
+    frozen = listed.json()["reports"][0]
+    assert frozen["results"][0]["neutral_citation"] == "2026:MHC:483"
+    assert "CHANGED" not in json.dumps(frozen)
+
+    second_response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Other Research LLP",
+            "company_slug": "other-research",
+            "company_type": "law_firm",
+            "owner_full_name": "Other Lawyer",
+            "owner_email": "other-research@example.com",
+            "owner_password": "OtherPass123!",
+        },
+    )
+    assert second_response.status_code == 200, second_response.text
+    second = second_response.json()
+    isolated = client.get(
+        "/api/authorities/research-reports",
+        headers=auth_headers(str(second["access_token"])),
+    )
+    assert isolated.status_code == 200, isolated.text
+    assert isolated.json()["reports"] == []
+
+
 def test_contextual_search_returns_limited_coverage_without_model_memory(
     client: TestClient,
     monkeypatch,
@@ -1156,10 +1264,11 @@ def test_contextual_search_returns_limited_coverage_without_model_memory(
     body = response.json()
     assert body["results"] == []
     assert body["contextual_plan"] is not None
+    assert body["outcome"] == "corpus_unavailable"
     assert body["coverage_notice"] == (
-        "No indexed authority matched the planned contextual query. Results are "
-        "limited to existing source-backed corpus records."
+        "The authority corpus is unavailable. Retry after corpus health is restored."
     )
+    assert body["corpus_coverage"]["index_state"] == "unavailable"
     assert body["provider"] == "caseops-authority-contextual-search-v1"
     assert "success probability" not in json.dumps(body).casefold()
     factory = get_session_factory()

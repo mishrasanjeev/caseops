@@ -2,16 +2,34 @@
   {
     "id": "IP-GOLDEN-001",
     "query": "passing off deceptive similarity prior user trademark",
-    "expected_terms": ["passing", "similarity", "trademark"]
+    "mode": "keyword",
+    "court_scope": "India — permitted indexed courts",
+    "practice_area": "trademark",
+    "minimum_results": 1,
+    "language": "en",
+    "expected_terms": ["passing", "similarity", "trademark"],
+    "approval": {"status": "pending_lawyer_review", "approved_by": null, "approved_at": null}
   },
   {
     "id": "IP-GOLDEN-002",
     "query": "Trade Marks Act section 11 relative grounds refusal",
-    "expected_terms": ["section 11", "relative grounds"]
+    "mode": "act_section",
+    "court_scope": "India — permitted indexed courts",
+    "practice_area": "trademark",
+    "minimum_results": 1,
+    "language": "en",
+    "expected_terms": ["section 11", "relative grounds"],
+    "approval": {"status": "pending_lawyer_review", "approved_by": null, "approved_at": null}
   },
   {
     "id": "IP-GOLDEN-003",
     "query": "interim injunction trademark infringement balance of convenience",
-    "expected_terms": ["injunction", "infringement"]
+    "mode": "contextual",
+    "court_scope": "India — permitted indexed courts",
+    "practice_area": "trademark litigation",
+    "minimum_results": 1,
+    "language": "en",
+    "expected_terms": ["injunction", "infringement"],
+    "approval": {"status": "pending_lawyer_review", "approved_by": null, "approved_at": null}
   }
 ]

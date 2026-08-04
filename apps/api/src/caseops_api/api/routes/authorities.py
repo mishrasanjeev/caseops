@@ -18,6 +18,9 @@ from caseops_api.schemas.authorities import (
     AuthorityDocumentListResponse,
     AuthorityIngestionRequest,
     AuthorityIngestionRunRecord,
+    AuthorityResearchReportCreateRequest,
+    AuthorityResearchReportListResponse,
+    AuthorityResearchReportRecord,
     AuthoritySearchRequest,
     AuthoritySearchResponse,
     AuthoritySourceListResponse,
@@ -50,6 +53,10 @@ from caseops_api.services.authority_annotations import (
     list_annotations,
     list_tenant_annotations,
     update_annotation,
+)
+from caseops_api.services.authority_research_reports import (
+    create_research_report,
+    list_research_reports,
 )
 from caseops_api.services.authority_treatments import (
     summarize_treatments,
@@ -135,6 +142,33 @@ async def post_authority_search(
     session: DbSession,
 ) -> AuthoritySearchResponse:
     return search_authorities(session, context=context, payload=payload)
+
+
+@router.get(
+    "/research-reports",
+    response_model=AuthorityResearchReportListResponse,
+    summary="List immutable saved research reports",
+)
+async def get_authority_research_reports(
+    context: AuthoritySearcher,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> AuthorityResearchReportListResponse:
+    return list_research_reports(session, context=context, limit=limit)
+
+
+@router.post(
+    "/research-reports",
+    response_model=AuthorityResearchReportRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Freeze a source-backed authority research report",
+)
+async def post_authority_research_report(
+    payload: AuthorityResearchReportCreateRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> AuthorityResearchReportRecord:
+    return create_research_report(session, context=context, payload=payload)
 
 
 @router.get(
