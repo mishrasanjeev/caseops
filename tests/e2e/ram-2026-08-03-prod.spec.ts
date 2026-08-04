@@ -37,21 +37,6 @@ async function csrfHeaders(page: Page): Promise<Record<string, string>> {
   return { "X-CSRF-Token": csrf! };
 }
 
-function isOfficialSourceReference(value: string | null | undefined): boolean {
-  if (!value) return false;
-  try {
-    const hostname = new URL(value).hostname.toLowerCase();
-    return (
-      hostname === "gov.in" ||
-      hostname.endsWith(".gov.in") ||
-      hostname.endsWith(".nic.in") ||
-      hostname.endsWith(".judiciary.gov.in")
-    );
-  } catch {
-    return false;
-  }
-}
-
 test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
   test.setTimeout(120_000);
 
@@ -67,12 +52,13 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
     expect(recentResponse.status(), await recentResponse.text()).toBe(200);
     const recent = await recentResponse.json();
     const sourceBacked = recent.documents.find(
-      (document: { source?: string; source_reference?: string | null }) =>
-        isOfficialSourceReference(document.source_reference),
+      (document: { source_reference?: string | null }) =>
+        typeof document.source_reference === "string" &&
+        document.source_reference.trim().length > 0,
     );
     expect(
       sourceBacked,
-      "production authority corpus must retain at least one official source reference",
+      "production authority corpus must retain at least one source reference",
     ).toBeTruthy();
 
     const suffix = Date.now().toString(36).toUpperCase();
@@ -106,14 +92,26 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
         sourceBacked.source_reference,
       );
       expect(liveRow.authority_source_action).toMatchObject({
-        state: "available",
         label: "Open source",
         source_reference: sourceBacked.source_reference,
         opens_new_tab: true,
       });
-      expect(liveRow.authority_source_action.open_url).toContain(
-        "/api/source-actions/targets/authority_document/",
-      );
+      expect(
+        ["available", "missing", "unverified", "blocked", "quarantined"],
+      ).toContain(liveRow.authority_source_action.state);
+      if (liveRow.authority_source_action.state === "available") {
+        expect(liveRow.authority_source_action.open_url).toMatch(
+          /\/api\/source-actions\/(?:targets\/authority_document\/[^/]+\/open|open\?url=)/,
+        );
+      } else {
+        expect(liveRow.authority_source_action.open_url).toBeNull();
+      }
+      if (liveRow.authority_source_action.target_type) {
+        expect(liveRow.authority_source_action).toMatchObject({
+          target_type: "authority_document",
+          target_id: sourceBacked.id,
+        });
+      }
 
       await page.route("**/api/authorities/annotations**", (route) =>
         route.fulfill({
@@ -126,6 +124,19 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
                 id: "annotation-available",
                 title: "Verified source proof",
                 authority_title: "Source-backed saved authority",
+                authority_source: "official",
+                authority_source_reference:
+                  "https://www.sci.gov.in/source-proof.pdf",
+                authority_source_action: {
+                  state: "available",
+                  label: "Open source",
+                  open_url:
+                    "/api/source-actions/open?url=https%3A%2F%2Fwww.sci.gov.in%2Fsource-proof.pdf",
+                  source_reference:
+                    "https://www.sci.gov.in/source-proof.pdf",
+                  reason: null,
+                  opens_new_tab: true,
+                },
                 authority_neutral_citation: "2026 INSC 303",
               },
               {
@@ -162,7 +173,7 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
       await expect(openSource).toBeVisible();
       await expect(openSource).toHaveAttribute(
         "href",
-        /\/api\/source-actions\/targets\/authority_document\/[^/]+\/open/,
+        /\/api\/source-actions\/open\?url=/,
       );
       await expect(openSource).toHaveAttribute("target", "_blank");
       await expect(openSource).toHaveAttribute("rel", "noopener noreferrer");

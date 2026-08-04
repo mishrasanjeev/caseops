@@ -17,7 +17,7 @@
     "active_slice": "IPLF-004B",
     "checkpoint": {
       "recorded_at": "2026-08-04T14:04:53+05:30",
-      "repository_revision": "8a9e9371f452023a3c97ceb36547c4b8d78b93ad",
+      "repository_revision": "a7d793dab9b0f8ddaf22b9b04f743a7f4f985c44",
       "environment": "IPLF-002B production verified; IPLF-003C exact-head CI in progress after security lock refresh; IPLF-004A exact application candidate passed focused API/UI, broader legal-source regressions, migration graph verification, production-mode web build, OpenAPI regeneration, and dated 360px browser verification locally",
       "completed_scope": "IPLF-002A and IPLF-002B are production verified. IPLF-003C preserves canonical source metadata/actions through saved research and is awaiting completion of exact-head coverage shards before merge/deploy. IPLF-004A adds opaque canonical source-open routes, redirect-time revalidation, hashed source audit, and a tenant-owned link-defect/health queue without creating a duplicate legal-source master; deterministic local verification passed.",
       "program_state": "PROGRAM INCOMPLETE",
@@ -3398,7 +3398,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-004A/release-2026-08-04.md",
-          "revision": "8a9e9371f452023a3c97ceb36547c4b8d78b93ad",
+          "revision": "a7d793dab9b0f8ddaf22b9b04f743a7f4f985c44",
           "environment": "local production-mode implementation candidate; exact-head CI and production deployment pending",
           "fixtures": "tenant-owned authenticated workspace, official authority, unverified authority, statute and judge source targets, failed source state, unknown target, link-defect report, and deterministic 360px saved-source records",
           "assertions": "opaque resource route, redirect-time canonical resolution and allow-list validation, typed fail-closed response, no raw destination in audit/report persistence, source-reference SHA-256, tenant and actor ownership, health-check request audit, OpenAPI parity, narrow-viewport action/citation visibility, and no horizontal overflow",
