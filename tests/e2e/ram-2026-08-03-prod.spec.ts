@@ -100,17 +100,29 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
         ["available", "missing", "unverified", "blocked", "quarantined"],
       ).toContain(liveRow.authority_source_action.state);
       if (liveRow.authority_source_action.state === "available") {
-        expect(liveRow.authority_source_action.open_url).toMatch(
-          /\/api\/source-actions\/(?:targets\/authority_document\/[^/]+\/open|open\?url=)/,
+        expect(liveRow.authority_source_action.open_url).toBe(
+          `/api/source-actions/targets/authority_document/${sourceBacked.id}/open`,
         );
       } else {
         expect(liveRow.authority_source_action.open_url).toBeNull();
       }
-      if (liveRow.authority_source_action.target_type) {
-        expect(liveRow.authority_source_action).toMatchObject({
-          target_type: "authority_document",
-          target_id: sourceBacked.id,
-        });
+      expect(liveRow.authority_source_action).toMatchObject({
+        target_type: "authority_document",
+        target_id: sourceBacked.id,
+      });
+
+      const opaqueOpenUrl = `${PROD_API_BASE_URL}/api/source-actions/targets/authority_document/${sourceBacked.id}/open?origin=saved_research`;
+      const opened = await page.request.get(opaqueOpenUrl, { maxRedirects: 0 });
+      if (liveRow.authority_source_action.state === "available") {
+        expect(opened.status(), await opened.text()).toBe(307);
+        expect(opened.headers()["cache-control"]).toBe("no-store");
+        expect(opened.headers()["referrer-policy"]).toBe("no-referrer");
+        expect(opened.headers().location).toMatch(/^https:\/\//);
+      } else {
+        expect(opened.status(), await opened.text()).toBe(409);
+        expect(opened.headers()["x-source-state"]).toBe(
+          liveRow.authority_source_action.state,
+        );
       }
 
       await page.route("**/api/authorities/annotations**", (route) =>
@@ -131,11 +143,13 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
                   state: "available",
                   label: "Open source",
                   open_url:
-                    "/api/source-actions/open?url=https%3A%2F%2Fwww.sci.gov.in%2Fsource-proof.pdf",
+                    `/api/source-actions/targets/authority_document/${sourceBacked.id}/open`,
                   source_reference:
                     "https://www.sci.gov.in/source-proof.pdf",
                   reason: null,
                   opens_new_tab: true,
+                  target_type: "authority_document",
+                  target_id: sourceBacked.id,
                 },
                 authority_neutral_citation: "2026 INSC 303",
               },
@@ -153,6 +167,8 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
                   source_reference: "https://provider.invalid/expired",
                   reason: "Source access must be refreshed by the provider.",
                   opens_new_tab: true,
+                  target_type: "authority_document",
+                  target_id: sourceBacked.id,
                 },
                 authority_neutral_citation: "2026:DHC:303",
               },
@@ -173,7 +189,9 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
       await expect(openSource).toBeVisible();
       await expect(openSource).toHaveAttribute(
         "href",
-        /\/api\/source-actions\/open\?url=/,
+        new RegExp(
+          `/api/source-actions/targets/authority_document/${sourceBacked.id}/open$`,
+        ),
       );
       await expect(openSource).toHaveAttribute("target", "_blank");
       await expect(openSource).toHaveAttribute("rel", "noopener noreferrer");
