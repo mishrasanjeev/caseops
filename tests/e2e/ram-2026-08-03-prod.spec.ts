@@ -187,12 +187,14 @@ test.describe("Ram 2026-08-03 deployed saved research source actions", () => {
 
       const openSource = page.getByTestId("source-action-open");
       await expect(openSource).toBeVisible();
-      await expect(openSource).toHaveAttribute(
-        "href",
-        new RegExp(
-          `/api/source-actions/targets/authority_document/${sourceBacked.id}/open$`,
-        ),
+      const renderedHref = await openSource.getAttribute("href");
+      expect(renderedHref, "source action must render a navigable href").toBeTruthy();
+      const renderedUrl = new URL(renderedHref!, PROD_BASE_URL);
+      expect(renderedUrl.pathname).toBe(
+        `/api/source-actions/targets/authority_document/${sourceBacked.id}/open`,
       );
+      expect(renderedUrl.searchParams.get("origin")).toBe("saved_research");
+      expect(renderedUrl.origin).toBe(PROD_API_BASE_URL);
       await expect(openSource).toHaveAttribute("target", "_blank");
       await expect(openSource).toHaveAttribute("rel", "noopener noreferrer");
       await expect(openSource).toHaveAttribute("referrerpolicy", "no-referrer");
