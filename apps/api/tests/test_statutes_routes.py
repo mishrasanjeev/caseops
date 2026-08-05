@@ -159,10 +159,12 @@ def test_ft_s2_1_list_statutes_returns_seeded_acts(client: TestClient) -> None:
     assert {
         "BNSS", "BNS", "BSA", "CrPC", "IPC", "Constitution", "NI Act",
     } <= short_names
-    assert body["total_section_count"] > 0
-    # Each item has its denormalised section_count.
+    assert body["total_section_count"] == 0
+    assert body["total_catalog_section_count"] > 0
+    # Catalog coverage is truthful: unreviewed seed text is not counted as verified.
     bnss = next(a for a in body["statutes"] if a["short_name"] == "BNSS")
-    assert bnss["section_count"] >= 17  # we seeded 17 BNSS sections
+    assert bnss["section_count"] == 0
+    assert bnss["catalog_section_count"] >= 17
 
 
 def test_ft_s2_2_list_statutes_requires_auth(client: TestClient) -> None:
@@ -199,9 +201,7 @@ def test_ft_s2_5_list_sections_returns_ordered_rows(client: TestClient) -> None:
     body = resp.json()
     assert body["statute"]["short_name"] == "CrPC"
     nums = [s["section_number"] for s in body["sections"]]
-    assert "Section 482" in nums
-    assert "Section 41A" in nums
-    assert "Section 438" in nums  # Sushila Aggarwal anticipatory bail
+    assert nums == []
     # Ordinals are monotonic (seed loader sets them by JSON position).
     ordinals = [s["ordinal"] for s in body["sections"]]
     assert ordinals == sorted(ordinals)
@@ -226,9 +226,9 @@ def test_ft_s2_6_get_section_detail_returns_section_url_fallback(
     assert "indiacode" in body["section"]["section_url"]
     assert body["section"]["source_action"]["target_type"] == "statute_section"
     assert body["section"]["source_action"]["target_id"] == body["section"]["id"]
-    assert "/source-actions/targets/statute_section/" in body["section"][
-        "source_action"
-    ]["open_url"]
+    assert body["section"]["source_action"]["state"] == "missing"
+    assert body["section"]["source_action"]["open_url"] is None
+    assert body["section"]["section_text"] is None
     # No parent or children for this section in v1 seed.
     assert body["parent_section"] is None
     assert body["child_sections"] == []

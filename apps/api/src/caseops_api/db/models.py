@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 from uuid import uuid4
 
@@ -19,9 +19,11 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Time,
     UniqueConstraint,
     false,
     text,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -1952,6 +1954,15 @@ class MatterHearing(Base):
         index=True,
     )
     hearing_on: Mapped[date] = mapped_column(Date, nullable=False)
+    time_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="time_not_published"
+    )
+    hearing_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    session_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="Asia/Kolkata"
+    )
+    reminder_policy_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     forum_name: Mapped[str] = mapped_column(String(255), nullable=False)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     purpose: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -2185,6 +2196,9 @@ class NotificationDeliveryStatus(StrEnum):
     DELIVERED = "delivered"
     RETRY_SCHEDULED = "retry_scheduled"
     BLOCKED = "blocked"
+    SUPPRESSED = "suppressed"
+    BOUNCED = "bounced"
+    CANCELLED = "cancelled"
     DEAD_LETTER = "dead_letter"
 
 
@@ -2210,9 +2224,10 @@ class HearingReminder(Base):
     __table_args__ = (
         UniqueConstraint(
             "hearing_id",
+            "recipient_membership_id",
             "channel",
             "scheduled_for",
-            name="uq_hearing_reminders_channel_time",
+            name="uq_hearing_reminders_recipient_channel_time",
         ),
     )
 
@@ -2339,8 +2354,20 @@ class EmailSuppression(Base):
     # `sg_message_id` of the event that introduced the suppression.
     # Useful for audit + dedupe; nullable for `manual` insertions.
     source_message_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="sendgrid")
+    first_event_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
     last_event_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    recovery_action: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recovered_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+    )
+    fallback_sent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -3542,6 +3569,12 @@ class NotificationDeliveryIntent(Base):
             "idempotency_key",
             name="uq_notification_delivery_intent_idempotency",
         ),
+        CheckConstraint(
+            "(CASE WHEN recipient_membership_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN recipient_portal_user_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN recipient_external_ref IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_notification_delivery_exactly_one_recipient",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -3550,11 +3583,16 @@ class NotificationDeliveryIntent(Base):
         nullable=False,
         index=True,
     )
-    recipient_membership_id: Mapped[str] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="CASCADE"),
-        nullable=False,
+    recipient_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    recipient_portal_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    recipient_external_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    destination_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
         nullable=True,
@@ -3588,6 +3626,18 @@ class NotificationDeliveryIntent(Base):
         nullable=True,
         index=True,
     )
+    scheduled_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    critical: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    escalation_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+    )
+    confidentiality_mode: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="minimal"
+    )
     last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     dead_letter_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -3609,6 +3659,19 @@ class NotificationDeliveryIntent(Base):
         nullable=True,
         index=True,
     )
+    superseded_by_intent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recovery_of_intent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider_state_occurred_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -3622,7 +3685,9 @@ class NotificationDeliveryIntent(Base):
     )
 
     company: Mapped[Company] = relationship()
-    recipient_membership: Mapped[CompanyMembership] = relationship()
+    recipient_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[recipient_membership_id]
+    )
     matter: Mapped[Matter | None] = relationship()
     notification_rule: Mapped[NotificationRule | None] = relationship()
     in_app_notification: Mapped[InAppNotification | None] = relationship()
@@ -3638,6 +3703,10 @@ class NotificationDeliveryEvent(Base):
             name="uq_notification_delivery_provider_event",
         ),
         Index("ix_notification_delivery_events_intent_time", "intent_id", "occurred_at"),
+        UniqueConstraint(
+            "company_id", "provider", "idempotency_key",
+            name="uq_notification_delivery_event_idempotency",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -3650,10 +3719,42 @@ class NotificationDeliveryEvent(Base):
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    applied_to_state: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
     error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class HearingReminderDeliveryIntent(Base):
+    """Compatibility lineage from a legacy schedule row to durable delivery truth."""
+
+    __tablename__ = "hearing_reminder_delivery_intents"
+    __table_args__ = (
+        UniqueConstraint("hearing_reminder_id", "intent_id", name="uq_hearing_reminder_intent"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    hearing_reminder_id: Mapped[str] = mapped_column(
+        ForeignKey("hearing_reminders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    intent_id: Mapped[str] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
 
@@ -9205,6 +9306,45 @@ class AuthoritySearchObservation(Base):
     )
 
 
+class AuthorityResearchReport(Base):
+    """Tenant-owned immutable snapshot of a user-selected research result set.
+
+    The shared authority corpus remains canonical.  A report freezes only the
+    identifiers and source metadata that were visible when the lawyer saved it,
+    together with the search-analysis version.  Reports are never silently
+    refreshed when the global corpus changes.
+    """
+
+    __tablename__ = "authority_research_reports"
+    __table_args__ = (
+        Index(
+            "ix_authority_research_reports_company_created",
+            "company_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    query: Mapped[str] = mapped_column(String(600), nullable=False)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    criteria_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    result_snapshot_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    analysis_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class AuthorityDocument(Base):
     __tablename__ = "authority_documents"
     __table_args__ = (
@@ -10907,6 +11047,31 @@ class Statute(Base):
     enacted_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jurisdiction: Mapped[str] = mapped_column(String(64), nullable=False, default="india")
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    issuing_body: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_category: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="consolidated_statute"
+    )
+    source_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified"
+    )
+    legal_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="enacted"
+    )
+    verification_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified", index=True
+    )
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_retrieved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    exact_source_version: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    history_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="current_text_only"
+    )
+    source_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -10952,6 +11117,9 @@ class StatuteSection(Base):
         String(32),
         nullable=True,
     )
+    editorial_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    case_annotations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     section_text_fetched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -10967,6 +11135,37 @@ class StatuteSection(Base):
     )
     source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_publisher: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    issuing_body: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_category: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="consolidated_statute"
+    )
+    source_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified"
+    )
+    legal_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="enacted"
+    )
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amendment_metadata_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    history_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="current_text_only"
+    )
+    exact_source_version: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_locator_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unavailable"
+    )
+    source_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    link_health_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_checked"
+    )
+    link_last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    link_last_error: Mapped[str | None] = mapped_column(String(240), nullable=True)
     source_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_membership_id: Mapped[str | None] = mapped_column(
@@ -10993,6 +11192,102 @@ class StatuteSection(Base):
         default=utcnow,
         onupdate=utcnow,
         nullable=False,
+    )
+
+
+class StatuteSourceVersion(Base):
+    """Immutable candidate/review record for a statute provision source."""
+
+    __tablename__ = "statute_source_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "section_id",
+            "proposed_source_version",
+            name="uq_statute_source_versions_section_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    proposed_source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    candidate_text: Mapped[str] = mapped_column(Text, nullable=False)
+    candidate_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_publisher: Mapped[str] = mapped_column(String(160), nullable=False)
+    issuing_body: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    legal_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_locator_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    exact_source_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amendment_metadata_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    source_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    diff_unified: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    proposed_by_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class StatuteSourceConflict(Base):
+    """Fail-closed record for disputed statute source facts and impact review."""
+
+    __tablename__ = "statute_source_conflicts"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    disputed_facts_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_versions_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    authority_rank_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    affected_records_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    impact_scan_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    decision: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 

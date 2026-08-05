@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 # NOTE for reviewers: the task spec asked for this wiring to land in
@@ -36,6 +36,7 @@ from caseops_api.schemas.authorities import (
     AuthorityDocumentRecord,
     AuthorityIngestionRequest,
     AuthorityIngestionRunRecord,
+    AuthoritySearchCoverage,
     AuthoritySearchRequest,
     AuthoritySearchResponse,
     AuthoritySearchResult,
@@ -729,8 +730,6 @@ def get_authority_corpus_stats(
     tenant-scoped), so we don't filter by company — context is accepted
     for auth + audit consistency with the sibling endpoints.
     """
-    from sqlalchemy import func
-
     del context
     doc_count = (
         session.scalar(select(func.count()).select_from(AuthorityDocument)) or 0
@@ -771,6 +770,7 @@ def search_authority_catalog(
     forum_level: str | None = None,
     court_name: str | None = None,
     document_type: str | None = None,
+    search_mode: str = "keyword",
     suppress_unreadable: bool = True,
 ) -> list[AuthoritySearchResult]:
     # Parties / title exact-match boost: case-name queries ("Wahid State
@@ -780,13 +780,18 @@ def search_authority_catalog(
     # search eliminates the class of probe misses where cosine walks
     # away from a short, semantically-thin case name. Topic queries
     # ("bail triple test") return zero exact hits → fall through.
-    name_match_ids = _exact_name_match_document_ids(
-        session,
-        query=query,
-        forum_level=forum_level,
-        court_name=court_name,
-        document_type=document_type,
-        limit=max(limit * 6, 30),
+    structured_mode = search_mode not in {"keyword", "contextual"}
+    name_match_ids = (
+        []
+        if structured_mode
+        else _exact_name_match_document_ids(
+            session,
+            query=query,
+            forum_level=forum_level,
+            court_name=court_name,
+            document_type=document_type,
+            limit=max(limit * 6, 30),
+        )
     )
 
     # Fast path: when running on Postgres + we have embeddings in the column
@@ -809,7 +814,7 @@ def search_authority_catalog(
 
     pg_document_ids: list[str] | None = None
     pg_any_attempted = False
-    for variant in query_variants:
+    for variant in ([] if structured_mode else query_variants):
         variant_ids = _pg_prefilter_document_ids(
             session,
             query=variant,
@@ -864,6 +869,9 @@ def search_authority_catalog(
         stmt = stmt.where(court_clause)
     if document_type:
         stmt = stmt.where(AuthorityDocument.document_type == document_type)
+    mode_clause = _authority_mode_filter_clause(search_mode, query)
+    if mode_clause is not None:
+        stmt = stmt.where(mode_clause)
 
     if pg_document_ids is None:
         stmt = stmt.limit(300)
@@ -888,7 +896,12 @@ def search_authority_catalog(
                             for part in [
                                 document.title,
                                 document.case_reference or "",
+                                document.neutral_citation or "",
                                 document.court_name,
+                                document.bench_name or "",
+                                document.parties_json or "",
+                                document.judges_json or "",
+                                document.sections_cited_json or "",
                                 document.summary,
                                 chunk.content,
                             ]
@@ -911,7 +924,12 @@ def search_authority_catalog(
                     for part in [
                         document.title,
                         document.case_reference or "",
+                        document.neutral_citation or "",
                         document.court_name,
+                        document.bench_name or "",
+                        document.parties_json or "",
+                        document.judges_json or "",
+                        document.sections_cited_json or "",
                         document.summary,
                         document.document_text or "",
                     ]
@@ -980,6 +998,7 @@ def search_authority_catalog(
             document_type=document.document_type,
             decision_date=document.decision_date,
             case_reference=document.case_reference,
+            neutral_citation=document.neutral_citation,
             bench_name=document.bench_name,
             summary=document.summary,
             source=document.source,
@@ -1097,15 +1116,22 @@ def search_authorities(
         contextual_plan.planned_query if contextual_plan is not None else payload.query
     )
     overfetch = max((payload.offset + payload.limit) * 5, 50)
-    raw = search_authority_catalog(
-        session,
-        query=search_query,
-        limit=overfetch,
-        forum_level=payload.forum_level,
-        court_name=payload.court_name,
-        document_type=payload.document_type,
-        suppress_unreadable=False,
-    )
+    coverage = _authority_search_coverage(session, payload=payload)
+    provider_unavailable = False
+    try:
+        raw = search_authority_catalog(
+            session,
+            query=search_query,
+            limit=overfetch,
+            forum_level=payload.forum_level,
+            court_name=payload.court_name,
+            document_type=payload.document_type,
+            search_mode=payload.mode,
+            suppress_unreadable=False,
+        )
+    except EmbeddingProviderError:
+        raw = []
+        provider_unavailable = True
     if payload.language == "en":
         filtered = [r for r in raw if _title_is_predominantly_ascii(r.title)]
     else:
@@ -1147,17 +1173,19 @@ def search_authorities(
         )
         for r in page
     ]
+    enriched_page = [
+        r.model_copy(
+            update={
+                "relevance_reason": (
+                    _contextual_relevance_reason(r, contextual_plan)
+                    if contextual_plan is not None
+                    else _explain_authority_match(r, payload=payload)
+                ),
+            },
+        )
+        for r in enriched_page
+    ]
     if contextual_plan is not None:
-        enriched_page = [
-            r.model_copy(
-                update={
-                    "relevance_reason": _contextual_relevance_reason(
-                        r, contextual_plan
-                    ),
-                },
-            )
-            for r in enriched_page
-        ]
         _record_contextual_search_audit(
             session,
             context=context,
@@ -1172,8 +1200,14 @@ def search_authorities(
         outcome = "offset_out_of_range"
     elif unreadable_omitted_count and not total:
         outcome = "unreadable_filtered"
+    elif provider_unavailable:
+        outcome = "provider_unavailable"
+    elif coverage.document_count == 0:
+        outcome = "corpus_unavailable"
+    elif coverage.index_state == "stale":
+        outcome = "index_stale"
     else:
-        outcome = "no_results"
+        outcome = "no_matching_documents"
 
     session.add(
         AuthoritySearchObservation(
@@ -1210,13 +1244,15 @@ def search_authorities(
         results=enriched_page,
         contextual_plan=contextual_plan,
         coverage_notice=(
-            _contextual_coverage_notice(
+            _search_coverage_notice(
+                coverage=coverage,
+                outcome=outcome,
+                contextual_notice=_contextual_coverage_notice(
                 total_after_filter=total,
                 raw_count=len(raw),
                 unreadable_omitted_count=unreadable_omitted_count,
+                ) if contextual_plan is not None else None,
             )
-            if contextual_plan is not None
-            else None
         ),
         total_after_filter=total,
         offset=payload.offset,
@@ -1227,7 +1263,172 @@ def search_authorities(
             "returned_count": len(enriched_page),
             "has_more": payload.offset + payload.limit < total,
         },
+        corpus_coverage=coverage,
     )
+
+
+def _authority_mode_filter_clause(search_mode: str, query: str):
+    """Apply explicit PRD search modes without changing the shared ranker.
+
+    Keyword/contextual search keep hybrid retrieval.  The structured modes
+    narrow the candidate set on canonical extracted metadata, after which the
+    same source-backed ranking and treatment enrichment still apply.
+    """
+    cleaned = " ".join(query.split()).strip()
+    if search_mode in {"keyword", "contextual"} or not cleaned:
+        return None
+    pattern = f"%{cleaned}%"
+    if search_mode == "exact_citation":
+        normalized = _normalize_case_reference(cleaned)
+        normalized_pattern = f"%{normalized}%" if normalized else pattern
+        return or_(
+            AuthorityDocument.case_reference.ilike(pattern),
+            AuthorityDocument.neutral_citation.ilike(pattern),
+            AuthorityDocument.case_reference.ilike(normalized_pattern),
+            AuthorityDocument.neutral_citation.ilike(normalized_pattern),
+        )
+    if search_mode == "party":
+        return or_(
+            AuthorityDocument.parties_json.ilike(pattern),
+            AuthorityDocument.title.ilike(pattern),
+        )
+    if search_mode == "court":
+        return AuthorityDocument.court_name.ilike(pattern)
+    if search_mode == "judge":
+        return or_(
+            AuthorityDocument.bench_name.ilike(pattern),
+            AuthorityDocument.judges_json.ilike(pattern),
+        )
+    if search_mode == "act_section":
+        return or_(
+            AuthorityDocument.sections_cited_json.ilike(pattern),
+            AuthorityDocument.title.ilike(pattern),
+            AuthorityDocument.summary.ilike(pattern),
+        )
+    return None
+
+
+def _explain_authority_match(
+    result: AuthoritySearchResult,
+    *,
+    payload: AuthoritySearchRequest,
+) -> str:
+    signals: list[str] = []
+    if result.matched_terms:
+        signals.append(
+            "indexed passage match on " + ", ".join(result.matched_terms[:5])
+        )
+    if payload.mode == "exact_citation":
+        signals.append("exact citation metadata match")
+    elif payload.mode == "party":
+        signals.append("extracted party metadata match")
+    elif payload.mode == "court":
+        signals.append("court metadata match")
+    elif payload.mode == "judge":
+        signals.append("extracted bench or judge metadata match")
+    elif payload.mode == "act_section":
+        signals.append("extracted Act or section metadata match")
+    if payload.forum_level:
+        signals.append(
+            f"precedent hierarchy considered for {payload.forum_level.replace('_', ' ')}"
+        )
+    if result.worst_treatment:
+        signals.append(
+            f"known {result.worst_treatment} treatment "
+            f"({result.adverse_count} adverse citations)"
+        )
+    else:
+        signals.append("no adverse treatment found in the indexed citation graph")
+    return (
+        "Why this result: "
+        + "; ".join(signals)
+        + ". Verify the source before relying on it."
+    )
+
+
+def _authority_search_coverage(
+    session: Session,
+    *,
+    payload: AuthoritySearchRequest,
+) -> AuthoritySearchCoverage:
+    document_count = int(
+        session.scalar(select(func.count()).select_from(AuthorityDocument)) or 0
+    )
+    chunk_count = int(
+        session.scalar(select(func.count()).select_from(AuthorityDocumentChunk)) or 0
+    )
+    embedded_chunk_count = int(
+        session.scalar(
+            select(func.count())
+            .select_from(AuthorityDocumentChunk)
+            .where(AuthorityDocumentChunk.embedding_model.is_not(None))
+        ) or 0
+    )
+    last_ingested_at = session.scalar(select(func.max(AuthorityDocument.ingested_at)))
+    last_indexed_at = session.scalar(
+        select(func.max(func.coalesce(
+            AuthorityDocumentChunk.embedded_at,
+            AuthorityDocumentChunk.created_at,
+        )))
+    )
+    latest_run = session.scalar(
+        select(AuthorityIngestionRun).order_by(
+            AuthorityIngestionRun.completed_at.desc(),
+            AuthorityIngestionRun.started_at.desc(),
+        ).limit(1)
+    )
+    if document_count == 0:
+        index_state = "unavailable"
+    elif chunk_count == 0 or last_indexed_at is None:
+        index_state = "stale"
+    elif latest_run is not None and latest_run.status == AuthorityIngestionStatus.FAILED:
+        index_state = "stale"
+    else:
+        index_state = "current"
+
+    forum_rows = session.execute(
+        select(AuthorityDocument.forum_level, func.count())
+        .group_by(AuthorityDocument.forum_level)
+    ).all()
+    scope_parts = ["indexed authority corpus"]
+    if payload.forum_level:
+        scope_parts.append(payload.forum_level.replace("_", " "))
+    if payload.court_name:
+        scope_parts.append(f'court containing "{payload.court_name.strip()}"')
+    if payload.document_type:
+        scope_parts.append(payload.document_type.replace("_", " "))
+    scope_parts.append(f"{payload.language} language scope")
+    return AuthoritySearchCoverage(
+        document_count=document_count,
+        chunk_count=chunk_count,
+        embedded_chunk_count=embedded_chunk_count,
+        forum_counts={str(forum): int(count) for forum, count in forum_rows if forum},
+        last_ingested_at=last_ingested_at,
+        last_indexed_at=last_indexed_at,
+        index_state=index_state,
+        scope_summary="; ".join(scope_parts),
+    )
+
+
+def _search_coverage_notice(
+    *,
+    coverage: AuthoritySearchCoverage,
+    outcome: str,
+    contextual_notice: str | None,
+) -> str | None:
+    if outcome == "corpus_unavailable":
+        return "The authority corpus is unavailable. Retry after corpus health is restored."
+    if outcome == "provider_unavailable":
+        return (
+            "The configured research provider is unavailable. Your committed "
+            "query was preserved; retry later."
+        )
+    if coverage.index_state == "stale":
+        return (
+            "Index evidence is incomplete or the latest ingestion failed. Results may not "
+            "include the newest corpus records; retry after indexing is reconciled."
+        )
+    return contextual_notice
 
 
 def _title_is_predominantly_ascii(title: str | None) -> bool:

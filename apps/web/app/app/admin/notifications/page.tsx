@@ -1,7 +1,19 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, CircleCheck, CircleX, Clock, Mail, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Bell,
+  CircleCheck,
+  CircleX,
+  Clock,
+  Mail,
+  Plus,
+  RotateCcw,
+  Send,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -27,6 +39,10 @@ import {
   type HearingReminderStatus,
   listAdminNotifications,
   listNotificationRules,
+  previewNotificationRecovery,
+  recoverEmailSuppression,
+  recoverNotificationIntent,
+  testCurrentUserNotification,
   type NotificationRuleInput,
   updateNotificationRule,
 } from "@/lib/api/endpoints";
@@ -51,6 +67,15 @@ function statusTone(s: HearingReminderStatus): "neutral" | "success" | "warning"
   return "neutral";
 }
 
+function deliveryTone(status: string): "neutral" | "success" | "warning" | "brand" {
+  if (status === "delivered") return "success";
+  if (["blocked", "suppressed", "bounced", "dead_letter", "cancelled"].includes(status)) {
+    return "warning";
+  }
+  if (status === "sent") return "brand";
+  return "neutral";
+}
+
 function formatWhen(value: string | null | undefined): string {
   if (!value) return "—";
   try {
@@ -71,6 +96,9 @@ export default function AdminNotificationsPage() {
   const canManageNotifications = useCapability("notifications:manage");
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [recoveryAction, setRecoveryAction] = useState("");
+  const [replacementMembershipId, setReplacementMembershipId] = useState("");
+  const [previewedIntentId, setPreviewedIntentId] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState<NotificationRuleInput>({
     scope_type: "company",
     scope_id: null,
@@ -121,6 +149,45 @@ export default function AdminNotificationsPage() {
     },
     onError: (error) => toast.error(String(error)),
   });
+  const testMutation = useMutation({
+    mutationFn: testCurrentUserNotification,
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await queryClient.invalidateQueries({ queryKey: ["admin", "notifications"] });
+    },
+    onError: (error) => toast.error(String(error)),
+  });
+  const previewMutation = useMutation({
+    mutationFn: previewNotificationRecovery,
+    onSuccess: (preview) => {
+      setPreviewedIntentId(preview.original_intent_id);
+      toast.success(
+        preview.requires_changed_destination
+          ? "Preview ready. A changed destination is required."
+          : "Recovery preview ready.",
+      );
+    },
+    onError: (error) => toast.error(String(error)),
+  });
+  const recoverIntentMutation = useMutation({
+    mutationFn: recoverNotificationIntent,
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      setPreviewedIntentId(null);
+      setRecoveryAction("");
+      await queryClient.invalidateQueries({ queryKey: ["admin", "notifications"] });
+    },
+    onError: (error) => toast.error(String(error)),
+  });
+  const recoverSuppressionMutation = useMutation({
+    mutationFn: recoverEmailSuppression,
+    onSuccess: async () => {
+      toast.success("Suppression recovered; provider evidence was retained.");
+      setRecoveryAction("");
+      await queryClient.invalidateQueries({ queryKey: ["admin", "notifications"] });
+    },
+    onError: (error) => toast.error(String(error)),
+  });
 
   if (!canManageNotifications) {
     return (
@@ -136,9 +203,31 @@ export default function AdminNotificationsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Admin · Notifications"
-        title="Hearing reminders"
-        description="Every reminder the system intends to send, with delivery status from SendGrid. Durable — rows persist even when the provider isn't wired yet."
+        title="Notification delivery and recovery"
+        description="Every intended reminder, its immutable recipient snapshot, provider evidence, fallback, and versioned recovery path."
       />
+
+      <Card>
+        <CardContent className="flex min-w-0 flex-col gap-3 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-[var(--color-ink)]">
+              Self-service channel test
+            </h2>
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Delivers a safe in-app test only. It never contacts an external provider.
+            </p>
+          </div>
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            onClick={() => testMutation.mutate()}
+            disabled={testMutation.isPending}
+            data-testid="notification-self-test"
+          >
+            <Send className="h-4 w-4" aria-hidden /> Test notification
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-5">
@@ -289,24 +378,219 @@ export default function AdminNotificationsPage() {
         </CardContent>
       </Card>
 
-      <section className="grid gap-3 md:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           icon={Clock}
-          label="Queued"
-          value={query.data?.total_queued ?? 0}
+          label="Due"
+          value={query.data?.metrics?.due ?? query.data?.total_queued ?? 0}
         />
-        <KpiCard icon={Mail} label="Sent" value={query.data?.total_sent ?? 0} />
+        <KpiCard
+          icon={Mail}
+          label="Attempted"
+          value={query.data?.metrics?.attempted ?? query.data?.total_sent ?? 0}
+        />
         <KpiCard
           icon={CircleCheck}
           label="Delivered"
-          value={query.data?.total_delivered ?? 0}
+          value={query.data?.metrics?.delivered ?? query.data?.total_delivered ?? 0}
         />
         <KpiCard
           icon={CircleX}
           label="Failed"
-          value={query.data?.total_failed ?? 0}
+          value={query.data?.metrics?.failed ?? query.data?.total_failed ?? 0}
+        />
+        <KpiCard
+          icon={ShieldCheck}
+          label="Suppressed"
+          value={query.data?.metrics?.suppressed ?? 0}
+        />
+        <KpiCard
+          icon={CircleX}
+          label="Bounced"
+          value={query.data?.metrics?.bounced ?? 0}
+        />
+        <KpiCard
+          icon={RotateCcw}
+          label="Fallback"
+          value={query.data?.metrics?.fallback ?? 0}
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          label="Critical alerts"
+          value={query.data?.metrics?.critical_alerts ?? 0}
         />
       </section>
+
+      <Card>
+        <CardContent className="flex min-w-0 flex-col gap-4 pt-5">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-[var(--color-ink)]">
+              Failed and suppressed delivery recovery
+            </h2>
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Preview first. Recovery creates a new destination version and never rewrites the
+              original attempts or provider events.
+            </p>
+          </div>
+          <div className="grid min-w-0 gap-3 md:grid-cols-2">
+            <Input
+              value={recoveryAction}
+              onChange={(event) => setRecoveryAction(event.target.value)}
+              placeholder="Recovery action and evidence"
+              aria-label="Recovery action and evidence"
+              data-testid="notification-recovery-action"
+            />
+            <Input
+              value={replacementMembershipId}
+              onChange={(event) => setReplacementMembershipId(event.target.value)}
+              placeholder="Replacement membership ID for a changed destination"
+              aria-label="Replacement membership ID"
+              data-testid="notification-replacement-membership"
+            />
+          </div>
+          {(query.data?.intents ?? []).filter((intent) =>
+            ["blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled"].includes(
+              intent.status,
+            ),
+          ).length === 0 ? (
+            <EmptyState
+              icon={CircleCheck}
+              title="No actionable delivery failures"
+              description="Critical unsent reminders will stay visible here until recovered."
+            />
+          ) : (
+            <ul className="flex min-w-0 flex-col divide-y divide-[var(--color-line)]">
+              {(query.data?.intents ?? [])
+                .filter((intent) =>
+                  [
+                    "blocked",
+                    "suppressed",
+                    "bounced",
+                    "dead_letter",
+                    "retry_scheduled",
+                  ].includes(intent.status),
+                )
+                .map((intent) => (
+                  <li
+                    key={intent.id}
+                    className="flex min-w-0 flex-col gap-3 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between"
+                    data-testid={`notification-intent-${intent.id}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Badge tone={deliveryTone(intent.status)}>{intent.status}</Badge>
+                        {intent.critical ? <Badge tone="warning">critical</Badge> : null}
+                        <span className="break-all text-xs text-[var(--color-mute)]">
+                          {intent.channel} · destination v{intent.destination_version}
+                        </span>
+                      </div>
+                      <p className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                        {intent.destination ?? "No external destination"}
+                        {intent.last_error_redacted ? ` · ${intent.last_error_redacted}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        onClick={() => previewMutation.mutate(intent.id)}
+                        disabled={previewMutation.isPending}
+                        data-testid={`notification-preview-${intent.id}`}
+                      >
+                        Preview recovery
+                      </Button>
+                      <Button
+                        type="button"
+                        className="w-full sm:w-auto"
+                        onClick={() =>
+                          recoverIntentMutation.mutate({
+                            intentId: intent.id,
+                            recoveryAction,
+                            replacementMembershipId: replacementMembershipId || null,
+                          })
+                        }
+                        disabled={
+                          previewedIntentId !== intent.id ||
+                          recoveryAction.trim().length < 8 ||
+                          recoverIntentMutation.isPending
+                        }
+                        data-testid={`notification-recover-${intent.id}`}
+                      >
+                        <RotateCcw className="h-4 w-4" aria-hidden /> Recover
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex min-w-0 flex-col gap-4 pt-5">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-ink)]">
+              Suppression evidence
+            </h2>
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Provider/category, first and last occurrence, affected address, fallback, and
+              recovery action remain auditable.
+            </p>
+          </div>
+          {(query.data?.suppressions ?? []).length === 0 ? (
+            <EmptyState
+              icon={ShieldCheck}
+              title="No suppression records"
+              description="Bounce, drop, spam, and unsubscribe evidence will appear here."
+            />
+          ) : (
+            <ul className="flex min-w-0 flex-col divide-y divide-[var(--color-line)]">
+              {(query.data?.suppressions ?? []).map((suppression) => (
+                <li
+                  key={suppression.id}
+                  className="flex min-w-0 flex-col gap-3 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between"
+                  data-testid={`notification-suppression-${suppression.id}`}
+                >
+                  <div className="min-w-0 text-xs text-[var(--color-mute)]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={suppression.recovered_at ? "success" : "warning"}>
+                        {suppression.recovered_at ? "recovered" : suppression.category}
+                      </Badge>
+                      <span className="break-all">{suppression.affected_address}</span>
+                    </div>
+                    <p className="mt-1">
+                      {suppression.provider} · first {formatWhen(suppression.first_occurrence)} ·
+                      last {formatWhen(suppression.last_occurrence)} · fallback {" "}
+                      {suppression.fallback_sent ? "sent" : "not sent"}
+                    </p>
+                  </div>
+                  {!suppression.recovered_at ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full lg:w-auto"
+                      onClick={() =>
+                        recoverSuppressionMutation.mutate({
+                          suppressionId: suppression.id,
+                          recoveryAction,
+                          replacementMembershipId: replacementMembershipId || null,
+                        })
+                      }
+                      disabled={
+                        recoveryAction.trim().length < 8 || recoverSuppressionMutation.isPending
+                      }
+                      data-testid={`suppression-recover-${suppression.id}`}
+                    >
+                      Recover suppression
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-5">
@@ -468,6 +752,9 @@ function ReminderRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+          {r.delivery_status ? (
+            <Badge tone={deliveryTone(r.delivery_status)}>{r.delivery_status}</Badge>
+          ) : null}
           <span className="text-xs text-[var(--color-mute)]">
             {r.channel}
           </span>
@@ -479,6 +766,13 @@ function ReminderRow({
           Scheduled: {formatWhen(r.scheduled_for)}
           {r.sent_at ? ` · Sent: ${formatWhen(r.sent_at)}` : ""}
           {r.delivered_at ? ` · Delivered: ${formatWhen(r.delivered_at)}` : ""}
+        </div>
+        <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+          {r.destination_version ? `Destination v${r.destination_version}` : ""}
+          {r.fallback_sent ? " · In-app fallback sent" : ""}
+          {r.superseded_by_intent_id
+            ? ` · Replaced by ${r.superseded_by_intent_id}`
+            : ""}
         </div>
         {r.last_error ? (
           <div className="mt-1 text-xs text-[var(--color-warn-700,#a55400)]">

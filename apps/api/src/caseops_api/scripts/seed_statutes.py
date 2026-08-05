@@ -79,16 +79,27 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
             sec_text = sec.get("section_text")
             sec_text_source = sec.get("section_text_source")
             if row is None:
+                section_url = sec.get("section_url")
+                source_name = sec_text_source or "seed_catalog"
                 session.add(
                     StatuteSection(
                         statute_id=act_id,
                         section_number=num,
                         section_label=sec.get("section_label"),
                         section_text=sec_text,
-                        section_text_source=sec_text_source,
+                        section_text_source=source_name if sec_text else None,
                         section_text_fetched_at=now if sec_text else None,
-                        is_provisional=False,
-                        section_url=sec.get("section_url") or act.get("source_url"),
+                        is_provisional=bool(sec_text),
+                        verification_status="unverified",
+                        source_status=(
+                            "official_candidate"
+                            if source_name == "indiacode_scrape"
+                            else "editorial_candidate"
+                        ),
+                        source_locator_type=(
+                            "section_deep_link" if section_url else "act_landing_page"
+                        ),
+                        section_url=section_url or act.get("source_url"),
                         ordinal=ordinal,
                         is_active=True,
                         created_at=now, updated_at=now,
@@ -97,7 +108,13 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                 sec_ins += 1
             else:
                 row.section_label = sec.get("section_label") or row.section_label
-                row.section_url = sec.get("section_url") or row.section_url
+                if row.verification_status not in {
+                    "verified_official",
+                    "verified_licensed",
+                    "quarantined",
+                    "retired",
+                }:
+                    row.section_url = sec.get("section_url") or row.section_url
                 row.ordinal = ordinal
                 # Bake-in pattern (2026-04-26): when the seed JSON has
                 # section_text from a curated scrape, persist it so a
@@ -106,11 +123,21 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                 # overwritten unless the JSON explicitly carries new
                 # text — leaving section_text out of the JSON keeps
                 # whatever's already in the DB row.
-                if sec_text:
+                if sec_text and row.verification_status == "unverified":
                     row.section_text = sec_text
                     row.section_text_source = sec_text_source or row.section_text_source
                     row.section_text_fetched_at = now
-                    row.is_provisional = False
+                    row.is_provisional = True
+                    row.source_status = (
+                        "official_candidate"
+                        if sec_text_source == "indiacode_scrape"
+                        else "editorial_candidate"
+                    )
+                    row.source_locator_type = (
+                        "section_deep_link"
+                        if sec.get("section_url")
+                        else "act_landing_page"
+                    )
                 row.updated_at = now
                 sec_upd += 1
 

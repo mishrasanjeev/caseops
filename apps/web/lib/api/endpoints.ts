@@ -2854,6 +2854,56 @@ export type HearingReminderRecord = {
   delivered_at: string | null;
   created_at: string;
   updated_at: string;
+  intent_ids: string[];
+  delivery_status: string | null;
+  destination_version: number | null;
+  superseded_by_intent_id: string | null;
+  fallback_sent: boolean;
+};
+
+export type NotificationDeliveryIntentRecord = {
+  id: string;
+  channel: string;
+  status: string;
+  event_type: string;
+  source_type: string;
+  source_id: string;
+  scheduled_for: string | null;
+  attempts: number;
+  destination_version: number;
+  destination: string | null;
+  critical: boolean;
+  suppression_reason: string | null;
+  fallback_intent_id: string | null;
+  superseded_by_intent_id: string | null;
+  recovery_of_intent_id: string | null;
+  last_error_redacted: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmailSuppressionRecord = {
+  id: string;
+  provider: string;
+  category: string;
+  affected_address: string;
+  first_occurrence: string;
+  last_occurrence: string;
+  recovery_action: string | null;
+  recovered_at: string | null;
+  fallback_sent: boolean;
+};
+
+export type NotificationMetrics = {
+  due: number;
+  attempted: number;
+  delivered: number;
+  suppressed: number;
+  bounced: number;
+  failed: number;
+  fallback: number;
+  stale_queue: number;
+  critical_alerts: number;
 };
 
 export type HearingReminderListResponse = {
@@ -2862,6 +2912,9 @@ export type HearingReminderListResponse = {
   total_sent: number;
   total_delivered: number;
   total_failed: number;
+  intents: NotificationDeliveryIntentRecord[];
+  suppressions: EmailSuppressionRecord[];
+  metrics: NotificationMetrics | null;
 };
 
 export async function listAdminNotifications(input?: {
@@ -2875,6 +2928,52 @@ export async function listAdminNotifications(input?: {
     ? `/api/admin/notifications?${qs.toString()}`
     : "/api/admin/notifications";
   return apiRequest<HearingReminderListResponse>(path);
+}
+
+export async function testCurrentUserNotification(): Promise<{
+  intent: NotificationDeliveryIntentRecord;
+  message: string;
+}> {
+  return apiRequest("/api/notification-preferences/test", { method: "POST", body: {} });
+}
+
+export async function previewNotificationRecovery(intentId: string): Promise<{
+  original_intent_id: string;
+  recoverable: boolean;
+  requires_changed_destination: boolean;
+  next_destination_version: number;
+  current_status: string;
+  impact: string;
+}> {
+  return apiRequest(`/api/admin/notifications/intents/${intentId}/recovery-preview`);
+}
+
+export async function recoverNotificationIntent(input: {
+  intentId: string;
+  recoveryAction: string;
+  replacementMembershipId?: string | null;
+}): Promise<{ intent: NotificationDeliveryIntentRecord; message: string }> {
+  return apiRequest(`/api/admin/notifications/intents/${input.intentId}/recover`, {
+    method: "POST",
+    body: {
+      recovery_action: input.recoveryAction,
+      replacement_membership_id: input.replacementMembershipId || null,
+    },
+  });
+}
+
+export async function recoverEmailSuppression(input: {
+  suppressionId: string;
+  recoveryAction: string;
+  replacementMembershipId?: string | null;
+}): Promise<EmailSuppressionRecord> {
+  return apiRequest(`/api/admin/notifications/suppressions/${input.suppressionId}/recover`, {
+    method: "POST",
+    body: {
+      recovery_action: input.recoveryAction,
+      replacement_membership_id: input.replacementMembershipId || null,
+    },
+  });
 }
 
 
@@ -3066,6 +3165,18 @@ export type StatuteRecord = {
   enacted_year: number | null;
   jurisdiction: string;
   source_url: string | null;
+  issuing_body?: string | null;
+  source_category?: string;
+  source_status?: string;
+  legal_status?: string;
+  verification_status?: string;
+  publication_date?: string | null;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  source_retrieved_at?: string | null;
+  source_sha256?: string | null;
+  exact_source_version?: string | null;
+  history_status?: string;
   is_active?: boolean;
 };
 
@@ -3077,11 +3188,15 @@ export type StatuteListItem = {
   jurisdiction: string;
   source_url: string | null;
   section_count: number;
+  catalog_section_count?: number;
+  coverage_label?: string;
 };
 
 export type StatuteListResponse = {
   statutes: StatuteListItem[];
   total_section_count: number;
+  total_catalog_section_count?: number;
+  coverage_label?: string;
 };
 
 export type StatuteSectionRecord = {
@@ -3091,6 +3206,9 @@ export type StatuteSectionRecord = {
   section_label: string | null;
   section_text: string | null;
   section_text_source: string | null;
+  editorial_notes?: string | null;
+  case_annotations?: string | null;
+  ai_explanation?: string | null;
   is_provisional: boolean;
   section_url: string | null;
   parent_section_id: string | null;
@@ -3103,6 +3221,20 @@ export type StatuteSectionRecord = {
     | "retired";
   source_sha256: string | null;
   source_publisher: string | null;
+  issuing_body?: string | null;
+  source_category?: string;
+  source_status?: string;
+  legal_status?: string;
+  publication_date?: string | null;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  amendment_metadata_json?: Record<string, unknown>;
+  history_status?: string;
+  exact_source_version?: string | null;
+  source_locator_type?: string;
+  link_health_status?: string;
+  link_last_checked_at?: string | null;
+  link_last_error?: string | null;
   source_retrieved_at: string | null;
   source_version: number;
   verified_at: string | null;
@@ -3148,6 +3280,84 @@ export async function fetchStatuteSection(
 ): Promise<StatuteSectionDetailResponse> {
   return apiRequest(
     `/api/statutes/${statuteId}/sections/${encodeURIComponent(sectionNumber)}`,
+  );
+}
+
+export type StatuteSourceVersionRecord = {
+  id: string;
+  section_id: string;
+  proposed_source_version: number;
+  candidate_text: string;
+  candidate_sha256: string;
+  source_url: string;
+  source_publisher: string;
+  issuing_body: string;
+  source_category: string;
+  source_status: "official" | "licensed";
+  legal_status: string;
+  source_locator_type: string;
+  exact_source_version: string;
+  retrieved_at: string;
+  publication_date: string | null;
+  effective_from: string | null;
+  effective_to: string | null;
+  amendment_metadata_json: Record<string, unknown>;
+  diff_unified: string;
+  status: "pending" | "approved" | "rejected" | "superseded";
+  proposed_by_membership_id: string;
+  proposed_at: string;
+  reviewed_by_membership_id: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+};
+
+export async function listStatuteSourceVersions(
+  sectionId: string,
+): Promise<{ versions: StatuteSourceVersionRecord[] }> {
+  return apiRequest(
+    `/api/statutes/verification/sections/${encodeURIComponent(sectionId)}/source-versions`,
+  );
+}
+
+export async function proposeStatuteSourceVersion(input: {
+  sectionId: string;
+  expected_source_version: number;
+  candidate_text: string;
+  source_url: string;
+  source_publisher: string;
+  issuing_body: string;
+  source_status: "official" | "licensed";
+  exact_source_version: string;
+  retrieved_at: string;
+  effective_from?: string | null;
+}): Promise<StatuteSourceVersionRecord> {
+  const { sectionId, ...body } = input;
+  return apiRequest(
+    `/api/statutes/verification/sections/${encodeURIComponent(sectionId)}/source-versions`,
+    {
+      method: "POST",
+      body: {
+        ...body,
+        source_category: "consolidated_statute",
+        legal_status: "enacted",
+        source_locator_type: "section_deep_link",
+        source_policy: {},
+        amendment_metadata: {},
+      },
+    },
+  );
+}
+
+export async function decideStatuteSourceVersion(input: {
+  proposalId: string;
+  expected_source_version: number;
+  decision: "approve" | "reject";
+  reason: string;
+}): Promise<StatuteSourceVersionRecord> {
+  const { proposalId, ...body } = input;
+  return apiRequest(
+    `/api/statutes/verification/source-versions/${encodeURIComponent(proposalId)}/decision`,
+    { method: "POST", body },
   );
 }
 
@@ -4517,7 +4727,26 @@ export type AuthorityForumLevel =
   | "tribunal";
 
 export type AuthorityDocumentType = "judgment" | "order" | "statute" | "regulation" | "other";
-export type AuthoritySearchMode = "keyword" | "contextual";
+export type AuthoritySearchMode =
+  | "keyword"
+  | "contextual"
+  | "exact_citation"
+  | "party"
+  | "court"
+  | "judge"
+  | "act_section";
+
+export type AuthoritySearchOutcome =
+  | "results_found"
+  | "no_matching_documents"
+  | "corpus_unavailable"
+  | "index_stale"
+  | "provider_unavailable"
+  | "permission_denied"
+  | "query_invalid"
+  | "request_timed_out"
+  | "offset_out_of_range"
+  | "unreadable_filtered";
 
 // PG-006 Phase 1B (2026-05-01) — good-law signal carried alongside
 // every search result so the result card can surface a treatment
@@ -4549,6 +4778,7 @@ export type AuthoritySearchResult = {
   document_type: AuthorityDocumentType;
   decision_date: string | null;
   case_reference: string | null;
+  neutral_citation: string | null;
   bench_name: string | null;
   summary: string;
   source: string;
@@ -4592,26 +4822,90 @@ export async function searchAuthorities(input: {
   coverage_notice: string | null;
   total_after_filter: number;
   offset: number;
-  outcome:
-    | "results_found"
-    | "no_results"
-    | "offset_out_of_range"
-    | "unreadable_filtered";
-  diagnostics: Record<string, number | boolean>;
-}> {
-  return apiRequest("/api/authorities/search", {
+    outcome: AuthoritySearchOutcome;
+    diagnostics: Record<string, number | boolean>;
+    corpus_coverage: {
+      document_count: number;
+      chunk_count: number;
+      embedded_chunk_count: number;
+      forum_counts: Record<string, number>;
+      last_ingested_at: string | null;
+      last_indexed_at: string | null;
+      index_state: "current" | "stale" | "unavailable";
+      scope_summary: string;
+    };
+  }> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    try {
+      return await apiRequest("/api/authorities/search", {
+        method: "POST",
+        signal: controller.signal,
+        body: {
+          query: input.query,
+          mode: input.mode ?? "keyword",
+          limit: input.limit ?? 10,
+          offset: input.offset ?? 0,
+          language: input.language ?? "en",
+          forum_level: input.forumLevel ?? null,
+          court_name: input.courtName ?? null,
+          document_type: input.documentType ?? null,
+        },
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+export type AuthorityResearchReport = {
+  id: string;
+  company_id: string;
+  created_by_membership_id: string | null;
+  name: string;
+  query: string;
+  mode: AuthoritySearchMode;
+  criteria: Record<string, string | number | boolean | null>;
+  results: Array<{
+    authority_document_id: string;
+    title: string;
+    court_name: string;
+    forum_level: string;
+    document_type: string;
+    decision_date: string | null;
+    case_reference: string | null;
+    neutral_citation: string | null;
+    source: string;
+    source_reference: string | null;
+    source_action: SourceActionContract;
+  }>;
+  analysis_version: string;
+  generated_at: string;
+  created_at: string;
+};
+
+export async function createAuthorityResearchReport(input: {
+  name: string;
+  query: string;
+  mode: AuthoritySearchMode;
+  resultIds: string[];
+  criteria: Record<string, string | number | boolean | null>;
+}): Promise<AuthorityResearchReport> {
+  return apiRequest("/api/authorities/research-reports", {
     method: "POST",
     body: {
+      name: input.name,
       query: input.query,
-      mode: input.mode ?? "keyword",
-      limit: input.limit ?? 10,
-      offset: input.offset ?? 0,
-      language: input.language ?? "en",
-      forum_level: input.forumLevel ?? null,
-      court_name: input.courtName ?? null,
-      document_type: input.documentType ?? null,
+      mode: input.mode,
+      result_ids: input.resultIds,
+      criteria: input.criteria,
     },
   });
+}
+
+export async function fetchAuthorityResearchReports(): Promise<{
+  reports: AuthorityResearchReport[];
+}> {
+  return apiRequest("/api/authorities/research-reports");
 }
 
 export type AuthorityCorpusStats = {

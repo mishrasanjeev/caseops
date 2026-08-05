@@ -88,12 +88,14 @@ def test_scrape_success_persists_with_indiacode_source(
             result = se.enrich_section(session, sec, statute=st)
 
     assert result.source == se.SOURCE_INDIACODE
-    assert result.is_provisional is False
+    assert result.is_provisional is True
     with factory() as session:
         sec = session.get(StatuteSection, sec_id)
     assert sec.section_text is not None
     assert sec.section_text_source == se.SOURCE_INDIACODE
-    assert sec.is_provisional is False
+    assert sec.is_provisional is True
+    assert sec.verification_status == "unverified"
+    assert sec.source_status == "official_candidate"
     assert sec.section_text_fetched_at is not None
 
 
@@ -136,8 +138,9 @@ def test_scrape_ambiguous_falls_through_to_haiku(
     assert mock_haiku.called
     with factory() as session:
         sec = session.get(StatuteSection, sec_id)
-    assert sec.section_text.startswith("OFFICIAL HAIKU TEXT")
-    assert sec.section_text_source == se.SOURCE_HAIKU
+    assert sec.section_text is None
+    assert sec.ai_explanation.startswith("OFFICIAL HAIKU TEXT")
+    assert sec.source_status == "ai_generated"
     assert sec.is_provisional is True
 
 
@@ -237,15 +240,17 @@ def test_kanoon_scrape_finds_section_in_akoma_ntoso_html(
             result = se.enrich_section(session, sec, statute=st)
 
     assert result.source == se.SOURCE_KANOON
-    assert result.is_provisional is False
-    assert "Murder" in result.section_text
-    assert "Secondly" in result.section_text  # nested paragraph captured
+    assert result.is_provisional is True
+    assert result.section_text is None
     # Did not bleed in section 299 or 301
-    assert "Culpable homicide by causing" not in result.section_text
     with factory() as session:
         sec = session.get(StatuteSection, sec_id)
-    assert sec.section_text_source == se.SOURCE_KANOON
-    assert sec.is_provisional is False
+    assert sec.section_text is None
+    assert "Murder" in sec.editorial_notes
+    assert "Secondly" in sec.editorial_notes
+    assert "Culpable homicide by causing" not in sec.editorial_notes
+    assert sec.source_status == "editorial_candidate"
+    assert sec.is_provisional is True
 
 
 def test_kanoon_section_not_found_falls_through(client: TestClient) -> None:

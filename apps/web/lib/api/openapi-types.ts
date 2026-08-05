@@ -423,6 +423,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/notifications/intents/{intent_id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a versioned recovery intent after preview. */
+        post: operations["recover_notification_intent_api_admin_notifications_intents__intent_id__recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications/intents/{intent_id}/recovery-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview a notification recovery without dispatching it. */
+        get: operations["preview_notification_recovery_api_admin_notifications_intents__intent_id__recovery_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications/suppressions/{suppression_id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recover a suppression while preserving its provider evidence. */
+        post: operations["recover_admin_suppression_api_admin_notifications_suppressions__suppression_id__recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/outlook-configuration": {
         parameters: {
             query?: never;
@@ -1342,6 +1393,24 @@ export interface paths {
         put?: never;
         /** Pull authority documents from an official live source */
         post: operations["pull_authority_source_api_authorities_ingestions_pull_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/research-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List immutable saved research reports */
+        get: operations["get_authority_research_reports_api_authorities_research_reports_get"];
+        put?: never;
+        /** Freeze a source-backed authority research report */
+        post: operations["post_authority_research_report_api_authorities_research_reports_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6387,6 +6456,23 @@ export interface paths {
         patch: operations["patch_notification_preferences_api_notification_preferences_patch"];
         trace?: never;
     };
+    "/api/notification-preferences/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create and deliver a safe self-service in-app test notification. */
+        post: operations["test_current_user_notification_api_notification_preferences_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notification-rules": {
         parameters: {
             query?: never;
@@ -7982,6 +8068,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statutes/verification/conflicts/{conflict_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record an independent legal decision while keeping text quarantined. */
+        post: operations["post_statute_source_conflict_decision_api_statutes_verification_conflicts__conflict_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/verification/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search the complete curator corpus, including quarantined records. */
+        get: operations["list_statute_verification_sections_api_statutes_verification_sections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statutes/verification/sections/{section_id}": {
         parameters: {
             query?: never;
@@ -7993,6 +8113,75 @@ export interface paths {
         put?: never;
         /** Apply an optimistic, audited curator decision to statute text. */
         post: operations["verify_statute_section_api_statutes_verification_sections__section_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/verification/sections/{section_id}/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open a source conflict and immediately quarantine affected statutory text. */
+        post: operations["post_statute_source_conflict_api_statutes_verification_sections__section_id__conflicts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/verification/sections/{section_id}/link-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check and persist typed health for an approved section-level source link. */
+        post: operations["post_statute_section_link_check_api_statutes_verification_sections__section_id__link_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/verification/sections/{section_id}/source-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List immutable source proposals and their independent-review decisions. */
+        get: operations["get_statute_source_versions_api_statutes_verification_sections__section_id__source_versions_get"];
+        put?: never;
+        /** Propose an immutable statute-text source version for independent review. */
+        post: operations["post_statute_source_version_api_statutes_verification_sections__section_id__source_versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/verification/source-versions/{proposal_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve or reject a proposal as a distinct legal reviewer. */
+        post: operations["post_statute_source_version_decision_api_statutes_verification_source_versions__proposal_id__decision_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8944,6 +9133,124 @@ export interface components {
             /** Summary */
             summary: string | null;
         };
+        /** AuthorityResearchReportCreateRequest */
+        AuthorityResearchReportCreateRequest: {
+            /** Criteria */
+            criteria?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Mode
+             * @default keyword
+             * @enum {string}
+             */
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
+            /** Name */
+            name: string;
+            /** Query */
+            query: string;
+            /** Result Ids */
+            result_ids: string[];
+        };
+        /** AuthorityResearchReportListResponse */
+        AuthorityResearchReportListResponse: {
+            /** Reports */
+            reports: components["schemas"]["AuthorityResearchReportRecord"][];
+        };
+        /** AuthorityResearchReportRecord */
+        AuthorityResearchReportRecord: {
+            /** Analysis Version */
+            analysis_version: string;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Criteria */
+            criteria: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
+            /** Name */
+            name: string;
+            /** Query */
+            query: string;
+            /** Results */
+            results: components["schemas"]["AuthorityResearchReportResult"][];
+        };
+        /** AuthorityResearchReportResult */
+        AuthorityResearchReportResult: {
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Case Reference */
+            case_reference: string | null;
+            /** Court Name */
+            court_name: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Document Type */
+            document_type: string;
+            /** Forum Level */
+            forum_level: string;
+            /** Neutral Citation */
+            neutral_citation: string | null;
+            /** Source */
+            source: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Reference */
+            source_reference: string | null;
+            /** Title */
+            title: string;
+        };
+        /** AuthoritySearchCoverage */
+        AuthoritySearchCoverage: {
+            /**
+             * Chunk Count
+             * @default 0
+             */
+            chunk_count: number;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /**
+             * Embedded Chunk Count
+             * @default 0
+             */
+            embedded_chunk_count: number;
+            /** Forum Counts */
+            forum_counts?: {
+                [key: string]: number;
+            };
+            /**
+             * Index State
+             * @default unavailable
+             * @enum {string}
+             */
+            index_state: "current" | "stale" | "unavailable";
+            /** Last Indexed At */
+            last_indexed_at?: string | null;
+            /** Last Ingested At */
+            last_ingested_at?: string | null;
+            /** Scope Summary */
+            scope_summary: string;
+        };
         /** AuthoritySearchRequest */
         AuthoritySearchRequest: {
             /** Court Name */
@@ -8968,7 +9275,7 @@ export interface components {
              * @default keyword
              * @enum {string}
              */
-            mode: "keyword" | "contextual";
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
             /**
              * Offset
              * @default 0
@@ -8980,6 +9287,7 @@ export interface components {
         /** AuthoritySearchResponse */
         AuthoritySearchResponse: {
             contextual_plan?: components["schemas"]["AuthorityContextualQueryPlan"] | null;
+            corpus_coverage: components["schemas"]["AuthoritySearchCoverage"];
             /** Coverage Notice */
             coverage_notice?: string | null;
             /** Diagnostics */
@@ -8996,7 +9304,7 @@ export interface components {
              * @default keyword
              * @enum {string}
              */
-            mode: "keyword" | "contextual";
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
             /**
              * Offset
              * @default 0
@@ -9004,10 +9312,10 @@ export interface components {
             offset: number;
             /**
              * Outcome
-             * @default no_results
+             * @default no_matching_documents
              * @enum {string}
              */
-            outcome: "results_found" | "no_results" | "offset_out_of_range" | "unreadable_filtered";
+            outcome: "results_found" | "no_matching_documents" | "corpus_unavailable" | "index_stale" | "provider_unavailable" | "permission_denied" | "query_invalid" | "request_timed_out" | "offset_out_of_range" | "unreadable_filtered";
             /** Provider */
             provider: string;
             /** Query */
@@ -9049,6 +9357,8 @@ export interface components {
             forum_level: "high_court" | "supreme_court";
             /** Matched Terms */
             matched_terms: string[];
+            /** Neutral Citation */
+            neutral_citation?: string | null;
             /** Relevance Reason */
             relevance_reason?: string | null;
             /** Score */
@@ -13841,6 +14151,33 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** EmailSuppressionRecord */
+        EmailSuppressionRecord: {
+            /** Affected Address */
+            affected_address: string;
+            /** Category */
+            category: string;
+            /** Fallback Sent */
+            fallback_sent: boolean;
+            /**
+             * First Occurrence
+             * Format: date-time
+             */
+            first_occurrence: string;
+            /** Id */
+            id: string;
+            /**
+             * Last Occurrence
+             * Format: date-time
+             */
+            last_occurrence: string;
+            /** Provider */
+            provider: string;
+            /** Recovered At */
+            recovered_at: string | null;
+            /** Recovery Action */
+            recovery_action: string | null;
+        };
         /** EmailTemplateCreateRequest */
         EmailTemplateCreateRequest: {
             /** Body Template */
@@ -15229,8 +15566,13 @@ export interface components {
         };
         /** HearingReminderListResponse */
         HearingReminderListResponse: {
+            /** Intents */
+            intents?: components["schemas"]["NotificationIntentRecord"][];
+            metrics?: components["schemas"]["NotificationMetrics"] | null;
             /** Reminders */
             reminders: components["schemas"]["HearingReminderRecord"][];
+            /** Suppressions */
+            suppressions?: components["schemas"]["EmailSuppressionRecord"][];
             /** Total Delivered */
             total_delivered: number;
             /** Total Failed */
@@ -15255,10 +15597,21 @@ export interface components {
             created_at: string;
             /** Delivered At */
             delivered_at: string | null;
+            /** Delivery Status */
+            delivery_status?: string | null;
+            /** Destination Version */
+            destination_version?: number | null;
+            /**
+             * Fallback Sent
+             * @default false
+             */
+            fallback_sent: boolean;
             /** Hearing Id */
             hearing_id: string;
             /** Id */
             id: string;
+            /** Intent Ids */
+            intent_ids?: string[];
             /** Last Error */
             last_error: string | null;
             /** Matter Id */
@@ -15281,6 +15634,8 @@ export interface components {
              * @enum {string}
              */
             status: "queued" | "sent" | "delivered" | "failed" | "cancelled";
+            /** Superseded By Intent Id */
+            superseded_by_intent_id?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -19655,6 +20010,8 @@ export interface components {
         };
         /** MatterHearingCreateRequest */
         MatterHearingCreateRequest: {
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
             /** Forum Name */
             forum_name: string;
             /**
@@ -19662,18 +20019,44 @@ export interface components {
              * Format: date
              */
             hearing_on: string;
+            /** Hearing Time */
+            hearing_time?: string | null;
             /** Judge Name */
             judge_name?: string | null;
+            /**
+             * Notification Critical
+             * @default true
+             */
+            notification_critical: boolean;
             /** Outcome Note */
             outcome_note?: string | null;
             /** Purpose */
             purpose: string;
+            /** Reminder Channels */
+            reminder_channels?: ("in_app" | "email" | "sms" | "whatsapp")[];
+            /** Reminder Offsets Hours */
+            reminder_offsets_hours?: number[] | null;
+            /** Reminder Recipient Membership Ids */
+            reminder_recipient_membership_ids?: string[];
+            /** Session Label */
+            session_label?: string | null;
             /**
              * Status
              * @default scheduled
              * @enum {string}
              */
             status: "scheduled" | "completed" | "adjourned" | "cancelled";
+            /**
+             * Time Status
+             * @default time_not_published
+             * @enum {string}
+             */
+            time_status: "exact" | "session" | "time_not_published";
+            /**
+             * Timezone
+             * @default Asia/Kolkata
+             */
+            timezone: string;
         };
         /** MatterHearingRecord */
         MatterHearingRecord: {
@@ -19694,6 +20077,8 @@ export interface components {
              * Format: date
              */
             hearing_on: string;
+            /** Hearing Time */
+            hearing_time: string | null;
             /** Id */
             id: string;
             /** Judge Name */
@@ -19704,11 +20089,24 @@ export interface components {
             outcome_note: string | null;
             /** Purpose */
             purpose: string;
+            /** Reminder Policy */
+            reminder_policy: {
+                [key: string]: unknown;
+            } | null;
+            /** Session Label */
+            session_label: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "scheduled" | "completed" | "adjourned" | "cancelled";
+            /**
+             * Time Status
+             * @enum {string}
+             */
+            time_status: "exact" | "session" | "time_not_published";
+            /** Timezone */
+            timezone: string;
         };
         /** MatterHearingUpdateRequest */
         MatterHearingUpdateRequest: {
@@ -19716,10 +20114,18 @@ export interface components {
             create_follow_up?: boolean | null;
             /** Hearing On */
             hearing_on?: string | null;
+            /** Hearing Time */
+            hearing_time?: string | null;
             /** Outcome Note */
             outcome_note?: string | null;
+            /** Session Label */
+            session_label?: string | null;
             /** Status */
             status?: ("scheduled" | "completed" | "adjourned" | "cancelled") | null;
+            /** Time Status */
+            time_status?: ("exact" | "session" | "time_not_published") | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** MatterImportCommitResponse */
         MatterImportCommitResponse: {
@@ -21505,6 +21911,72 @@ export interface components {
              */
             provider_configured: boolean;
         };
+        /** NotificationIntentRecord */
+        NotificationIntentRecord: {
+            /** Attempts */
+            attempts: number;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Critical */
+            critical: boolean;
+            /** Destination */
+            destination: string | null;
+            /** Destination Version */
+            destination_version: number;
+            /** Event Type */
+            event_type: string;
+            /** Fallback Intent Id */
+            fallback_intent_id: string | null;
+            /** Id */
+            id: string;
+            /** Last Error Redacted */
+            last_error_redacted: string | null;
+            /** Recovery Of Intent Id */
+            recovery_of_intent_id: string | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Status */
+            status: string;
+            /** Superseded By Intent Id */
+            superseded_by_intent_id: string | null;
+            /** Suppression Reason */
+            suppression_reason: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** NotificationMetrics */
+        NotificationMetrics: {
+            /** Attempted */
+            attempted: number;
+            /** Bounced */
+            bounced: number;
+            /** Critical Alerts */
+            critical_alerts: number;
+            /** Delivered */
+            delivered: number;
+            /** Due */
+            due: number;
+            /** Failed */
+            failed: number;
+            /** Fallback */
+            fallback: number;
+            /** Stale Queue */
+            stale_queue: number;
+            /** Suppressed */
+            suppressed: number;
+        };
         /** NotificationPreferenceRecord */
         NotificationPreferenceRecord: {
             /** Channels */
@@ -21605,6 +22077,28 @@ export interface components {
              */
             timezone: string;
         };
+        /** NotificationRecoveryPreview */
+        NotificationRecoveryPreview: {
+            /** Current Status */
+            current_status: string;
+            /** Impact */
+            impact: string;
+            /** Next Destination Version */
+            next_destination_version: number;
+            /** Original Intent Id */
+            original_intent_id: string;
+            /** Recoverable */
+            recoverable: boolean;
+            /** Requires Changed Destination */
+            requires_changed_destination: boolean;
+        };
+        /** NotificationRecoveryRequest */
+        NotificationRecoveryRequest: {
+            /** Recovery Action */
+            recovery_action: string;
+            /** Replacement Membership Id */
+            replacement_membership_id?: string | null;
+        };
         /** NotificationRuleCreateRequest */
         NotificationRuleCreateRequest: {
             /** Channels */
@@ -21697,6 +22191,12 @@ export interface components {
             scope_id?: string | null;
             /** Scope Type */
             scope_type?: ("company" | "matter" | "user") | null;
+        };
+        /** NotificationTestResponse */
+        NotificationTestResponse: {
+            intent: components["schemas"]["NotificationIntentRecord"];
+            /** Message */
+            message: string;
         };
         /** ObligationExtractionResponse */
         ObligationExtractionResponse: {
@@ -24774,11 +25274,31 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** StatuteLinkHealthRecord */
+        StatuteLinkHealthRecord: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Error Class */
+            error_class: string | null;
+            /** Section Id */
+            section_id: string;
+            /** Source Version */
+            source_version: number;
+            /** Status */
+            status: string;
+        };
         /**
          * StatuteListItem
          * @description Statute with a section_count denormalised for the list view.
          */
         StatuteListItem: {
+            /** Catalog Section Count */
+            catalog_section_count: number;
+            /** Coverage Label */
+            coverage_label: string;
             /** Enacted Year */
             enacted_year: number | null;
             /** Id */
@@ -24796,27 +25316,73 @@ export interface components {
         };
         /** StatuteListResponse */
         StatuteListResponse: {
+            /**
+             * Coverage Label
+             * @default Verified statutory text only
+             */
+            coverage_label: string;
             /** Statutes */
             statutes: components["schemas"]["StatuteListItem"][];
+            /** Total Catalog Section Count */
+            total_catalog_section_count: number;
             /** Total Section Count */
             total_section_count: number;
         };
         /** StatuteRecord */
         StatuteRecord: {
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
             /** Enacted Year */
             enacted_year: number | null;
+            /** Exact Source Version */
+            exact_source_version?: string | null;
+            /**
+             * History Status
+             * @default current_text_only
+             */
+            history_status: string;
             /** Id */
             id: string;
             /** Is Active */
             is_active: boolean;
+            /** Issuing Body */
+            issuing_body?: string | null;
             /** Jurisdiction */
             jurisdiction: string;
+            /**
+             * Legal Status
+             * @default enacted
+             */
+            legal_status: string;
             /** Long Name */
             long_name: string;
+            /** Publication Date */
+            publication_date?: string | null;
             /** Short Name */
             short_name: string;
+            /**
+             * Source Category
+             * @default consolidated_statute
+             */
+            source_category: string;
+            /** Source Retrieved At */
+            source_retrieved_at?: string | null;
+            /** Source Sha256 */
+            source_sha256?: string | null;
+            /**
+             * Source Status
+             * @default unverified
+             */
+            source_status: string;
             /** Source Url */
             source_url: string | null;
+            /**
+             * Verification Status
+             * @default unverified
+             */
+            verification_status: string;
         };
         /** StatuteSectionDetailResponse */
         StatuteSectionDetailResponse: {
@@ -24844,6 +25410,13 @@ export interface components {
              * @default false
              */
             is_provisional: boolean;
+            /**
+             * Link Health Status
+             * @default not_checked
+             */
+            link_health_status: string;
+            /** Link Last Checked At */
+            link_last_checked_at?: string | null;
             /** Ordinal */
             ordinal: number;
             /** Parent Section Id */
@@ -24859,6 +25432,11 @@ export interface components {
             /** Section Url */
             section_url: string | null;
             source_action?: components["schemas"]["SourceActionRecord"] | null;
+            /**
+             * Source Locator Type
+             * @default unavailable
+             */
+            source_locator_type: string;
             /**
              * Source Version
              * @default 1
@@ -24874,6 +25452,27 @@ export interface components {
         };
         /** StatuteSectionRecord */
         StatuteSectionRecord: {
+            /** Ai Explanation */
+            ai_explanation?: string | null;
+            /** Amendment Metadata Json */
+            amendment_metadata_json?: {
+                [key: string]: unknown;
+            };
+            /** Case Annotations */
+            case_annotations?: string | null;
+            /** Editorial Notes */
+            editorial_notes?: string | null;
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
+            /** Exact Source Version */
+            exact_source_version?: string | null;
+            /**
+             * History Status
+             * @default current_text_only
+             */
+            history_status: string;
             /** Id */
             id: string;
             /**
@@ -24881,10 +25480,28 @@ export interface components {
              * @default false
              */
             is_provisional: boolean;
+            /** Issuing Body */
+            issuing_body?: string | null;
+            /**
+             * Legal Status
+             * @default enacted
+             */
+            legal_status: string;
+            /**
+             * Link Health Status
+             * @default not_checked
+             */
+            link_health_status: string;
+            /** Link Last Checked At */
+            link_last_checked_at?: string | null;
+            /** Link Last Error */
+            link_last_error?: string | null;
             /** Ordinal */
             ordinal: number;
             /** Parent Section Id */
             parent_section_id: string | null;
+            /** Publication Date */
+            publication_date?: string | null;
             /** Quarantine Reason */
             quarantine_reason?: string | null;
             /** Section Label */
@@ -24898,12 +25515,27 @@ export interface components {
             /** Section Url */
             section_url: string | null;
             source_action?: components["schemas"]["SourceActionRecord"] | null;
+            /**
+             * Source Category
+             * @default consolidated_statute
+             */
+            source_category: string;
+            /**
+             * Source Locator Type
+             * @default unavailable
+             */
+            source_locator_type: string;
             /** Source Publisher */
             source_publisher?: string | null;
             /** Source Retrieved At */
             source_retrieved_at?: string | null;
             /** Source Sha256 */
             source_sha256?: string | null;
+            /**
+             * Source Status
+             * @default unverified
+             */
+            source_status: string;
             /**
              * Source Version
              * @default 1
@@ -24924,6 +25556,207 @@ export interface components {
             /** Sections */
             sections: components["schemas"]["StatuteSectionListItem"][];
             statute: components["schemas"]["StatuteRecord"];
+        };
+        /** StatuteSourceConflictCreateRequest */
+        StatuteSourceConflictCreateRequest: {
+            /** Affected Records */
+            affected_records?: {
+                [key: string]: unknown;
+            }[];
+            /** Authority Rank */
+            authority_rank: {
+                [key: string]: unknown;
+            };
+            /** Disputed Facts */
+            disputed_facts: {
+                [key: string]: unknown;
+            };
+            /** Expected Source Version */
+            expected_source_version: number;
+            /** Impact Scan */
+            impact_scan?: {
+                [key: string]: unknown;
+            };
+            /** Source Versions */
+            source_versions: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** StatuteSourceConflictDecisionRequest */
+        StatuteSourceConflictDecisionRequest: {
+            /** Decision */
+            decision: string;
+        };
+        /** StatuteSourceConflictRecord */
+        StatuteSourceConflictRecord: {
+            /** Affected Records Json */
+            affected_records_json: unknown[];
+            /** Authority Rank Json */
+            authority_rank_json: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decision */
+            decision: string | null;
+            /** Decision By Membership Id */
+            decision_by_membership_id: string | null;
+            /** Disputed Facts Json */
+            disputed_facts_json: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Impact Scan Json */
+            impact_scan_json: {
+                [key: string]: unknown;
+            };
+            /** Section Id */
+            section_id: string;
+            /** Source Versions Json */
+            source_versions_json: unknown[];
+            /** Status */
+            status: string;
+        };
+        /** StatuteSourceVersionDecisionRequest */
+        StatuteSourceVersionDecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Expected Source Version */
+            expected_source_version: number;
+            /** Reason */
+            reason: string;
+        };
+        /** StatuteSourceVersionListResponse */
+        StatuteSourceVersionListResponse: {
+            /** Versions */
+            versions: components["schemas"]["StatuteSourceVersionRecord"][];
+        };
+        /** StatuteSourceVersionProposalRequest */
+        StatuteSourceVersionProposalRequest: {
+            /** Amendment Metadata */
+            amendment_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Candidate Text */
+            candidate_text: string;
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
+            /** Exact Source Version */
+            exact_source_version: string;
+            /** Expected Source Version */
+            expected_source_version: number;
+            /** Issuing Body */
+            issuing_body: string;
+            /**
+             * Legal Status
+             * @default enacted
+             * @enum {string}
+             */
+            legal_status: "enacted" | "advisory" | "draft" | "repealed";
+            /** Publication Date */
+            publication_date?: string | null;
+            /**
+             * Retrieved At
+             * Format: date-time
+             */
+            retrieved_at: string;
+            /**
+             * Source Category
+             * @default consolidated_statute
+             */
+            source_category: string;
+            /**
+             * Source Locator Type
+             * @constant
+             */
+            source_locator_type: "section_deep_link";
+            /** Source Policy */
+            source_policy?: {
+                [key: string]: unknown;
+            };
+            /** Source Publisher */
+            source_publisher: string;
+            /**
+             * Source Status
+             * @enum {string}
+             */
+            source_status: "official" | "licensed";
+            /** Source Url */
+            source_url: string;
+        };
+        /** StatuteSourceVersionRecord */
+        StatuteSourceVersionRecord: {
+            /** Amendment Metadata Json */
+            amendment_metadata_json: {
+                [key: string]: unknown;
+            };
+            /** Candidate Sha256 */
+            candidate_sha256: string;
+            /** Candidate Text */
+            candidate_text: string;
+            /** Diff Unified */
+            diff_unified: string;
+            /** Effective From */
+            effective_from: string | null;
+            /** Effective To */
+            effective_to: string | null;
+            /** Exact Source Version */
+            exact_source_version: string;
+            /** Id */
+            id: string;
+            /** Issuing Body */
+            issuing_body: string;
+            /** Legal Status */
+            legal_status: string;
+            /**
+             * Proposed At
+             * Format: date-time
+             */
+            proposed_at: string;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id: string | null;
+            /** Proposed Source Version */
+            proposed_source_version: number;
+            /** Publication Date */
+            publication_date: string | null;
+            /**
+             * Retrieved At
+             * Format: date-time
+             */
+            retrieved_at: string;
+            /** Review Reason */
+            review_reason: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Section Id */
+            section_id: string;
+            /** Source Category */
+            source_category: string;
+            /** Source Locator Type */
+            source_locator_type: string;
+            /** Source Publisher */
+            source_publisher: string;
+            /** Source Status */
+            source_status: string;
+            /** Source Url */
+            source_url: string;
+            /** Status */
+            status: string;
         };
         /** StatuteVerificationAuditResponse */
         StatuteVerificationAuditResponse: {
@@ -24953,6 +25786,11 @@ export interface components {
              * @enum {string}
              */
             status: "verified_official" | "verified_licensed" | "unverified" | "quarantined" | "retired";
+        };
+        /** StatuteVerificationSectionListResponse */
+        StatuteVerificationSectionListResponse: {
+            /** Sections */
+            sections: components["schemas"]["StatuteSectionRecord"][];
         };
         /** StorageArchiveCandidate */
         StorageArchiveCandidate: {
@@ -25090,6 +25928,13 @@ export interface components {
         /** SubscriptionActionResponse */
         SubscriptionActionResponse: {
             subscription: components["schemas"]["BillingSubscriptionRecord"];
+        };
+        /** SuppressionRecoveryRequest */
+        SuppressionRecoveryRequest: {
+            /** Recovery Action */
+            recovery_action: string;
+            /** Replacement Membership Id */
+            replacement_membership_id?: string | null;
         };
         /** TDSReconciliationCreateRequest */
         TDSReconciliationCreateRequest: {
@@ -26904,6 +27749,107 @@ export interface operations {
             };
         };
     };
+    recover_notification_intent_api_admin_notifications_intents__intent_id__recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_notification_recovery_api_admin_notifications_intents__intent_id__recovery_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecoveryPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_admin_suppression_api_admin_notifications_suppressions__suppression_id__recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suppression_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuppressionRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSuppressionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_outlook_configuration_api_admin_outlook_configuration_get: {
         parameters: {
             query?: never;
@@ -28673,6 +29619,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorityIngestionRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_authority_research_reports_api_authorities_research_reports_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityResearchReportListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_authority_research_report_api_authorities_research_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorityResearchReportCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityResearchReportRecord"];
                 };
             };
             /** @description Validation Error */
@@ -39054,6 +40064,26 @@ export interface operations {
             };
         };
     };
+    test_current_user_notification_api_notification_preferences_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestResponse"];
+                };
+            };
+        };
+    };
     list_rules_api_notification_rules_get: {
         parameters: {
             query?: never;
@@ -42119,6 +43149,74 @@ export interface operations {
             };
         };
     };
+    post_statute_source_conflict_decision_api_statutes_verification_conflicts__conflict_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conflict_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatuteSourceConflictDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSourceConflictRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_statute_verification_sections_api_statutes_verification_sections_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                statute_id?: string | null;
+                verification_status?: ("unverified" | "verified_official" | "verified_licensed" | "quarantined" | "retired") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteVerificationSectionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     verify_statute_section_api_statutes_verification_sections__section_id__post: {
         parameters: {
             query?: never;
@@ -42141,6 +43239,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatuteSectionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_statute_source_conflict_api_statutes_verification_sections__section_id__conflicts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatuteSourceConflictCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSourceConflictRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_statute_section_link_check_api_statutes_verification_sections__section_id__link_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteLinkHealthRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_statute_source_versions_api_statutes_verification_sections__section_id__source_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSourceVersionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_statute_source_version_api_statutes_verification_sections__section_id__source_versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatuteSourceVersionProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSourceVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_statute_source_version_decision_api_statutes_verification_source_versions__proposal_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatuteSourceVersionDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSourceVersionRecord"];
                 };
             };
             /** @description Validation Error */

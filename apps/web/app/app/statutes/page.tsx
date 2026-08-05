@@ -92,8 +92,9 @@ export default function StatutesIndexPage() {
         description={
           `Indian central Acts with structured section catalogs. ` +
           `${data.statutes.length} acts · ${data.total_section_count} ` +
-          `sections indexed. All bare text sourced from indiacode.nic.in ` +
-          `(Government of India, public domain).`
+          `independently verified sections available from ` +
+          `${data.total_catalog_section_count ?? data.total_section_count} catalogued. ` +
+          `Unreviewed, quarantined, editorial, and AI material is excluded from statutory text.`
         }
       />
 
@@ -122,7 +123,7 @@ export default function StatutesIndexPage() {
                       {s.short_name}
                     </Link>
                     <span className="text-xs font-mono text-[var(--color-mute)]">
-                      {s.section_count} sections
+                      {s.section_count} verified / {s.catalog_section_count ?? s.section_count} catalogued
                     </span>
                   </CardTitle>
                   <CardDescription>

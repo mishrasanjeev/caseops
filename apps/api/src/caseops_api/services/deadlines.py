@@ -311,6 +311,20 @@ def update_deadline(
             deadline.completed_at = deadline.completed_at or now
         elif deadline.status == MatterDeadlineStatus.OPEN:
             deadline.completed_at = None
+        if deadline.status in {
+            MatterDeadlineStatus.DONE,
+            MatterDeadlineStatus.CANCELLED,
+        }:
+            from caseops_api.services.notification_delivery import (
+                cancel_pending_notification_intents,
+            )
+
+            cancel_pending_notification_intents(
+                session,
+                company_id=context.company.id,
+                schedule_source_type="matter_deadline",
+                schedule_source_id=deadline.id,
+            )
 
     action = "deadline.updated"
     if previous_status != deadline.status:
@@ -400,6 +414,17 @@ def transition_deadline(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown deadline action {action!r}.",
+        )
+    if action in {"complete", "cancel"}:
+        from caseops_api.services.notification_delivery import (
+            cancel_pending_notification_intents,
+        )
+
+        cancel_pending_notification_intents(
+            session,
+            company_id=context.company.id,
+            schedule_source_type="matter_deadline",
+            schedule_source_id=deadline.id,
         )
     session.flush()
     record_from_context(
