@@ -7,7 +7,7 @@ import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import Statute, StatuteSection, StatuteSourceVersion
+from caseops_api.db.models import AuditEvent, Statute, StatuteSection, StatuteSourceVersion
 from caseops_api.db.session import get_session_factory
 from caseops_api.scripts.seed_statutes import _seed
 from caseops_api.services.source_actions import inspect_source_action
@@ -243,6 +243,52 @@ def test_link_probe_returns_typed_health_without_following_redirects() -> None:
     assert health == "protected"
     assert error == "http_403"
     assert seen[0].method == "HEAD"
+
+
+def test_link_check_route_persists_typed_health(client: TestClient) -> None:
+    owner_token, _ = _setup_reviewers(client)
+    section_id = _seed_section()
+    with get_session_factory()() as session:
+        section = session.get(StatuteSection, section_id)
+        assert section is not None
+        section.section_url = (
+            "https://www.indiacode.nic.in/show-data?actid=trust-2026&orderno=12"
+        )
+        section.source_status = "official"
+        section.source_locator_type = "section_deep_link"
+        session.commit()
+
+    with patch(
+        "caseops_api.services.statute_source_governance.probe_statute_source",
+        return_value=("protected", "http_403"),
+    ):
+        response = client.post(
+            f"/api/statutes/verification/sections/{section_id}/link-check",
+            headers=auth_headers(owner_token),
+        )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "section_id": section_id,
+        "source_version": 1,
+        "status": "protected",
+        "checked_at": response.json()["checked_at"],
+        "error_class": "http_403",
+    }
+    assert response.json()["checked_at"]
+    with get_session_factory()() as session:
+        section = session.get(StatuteSection, section_id)
+        assert section is not None
+        assert section.link_health_status == "protected"
+        assert section.link_last_error == "http_403"
+        assert section.link_last_checked_at is not None
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "statute_source_link.checked",
+                AuditEvent.target_id == section_id,
+            )
+        )
+        assert audit is not None
+        assert audit.result == "protected"
 
 
 def test_conflict_quarantines_immediately_and_decision_does_not_reactivate(
