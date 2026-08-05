@@ -351,6 +351,15 @@ def test_notification_convergence_backfills_boolean_on_postgres(
             {"reminder_id": reminder_id, "intent_id": intent.id},
         ).scalar_one()
 
+    # The module contains another downgrade/re-upgrade regression. Remove this
+    # isolated tenant so that a second upgrade cannot legitimately rediscover
+    # the same legacy reminder and collide with its durable idempotency key.
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM companies WHERE id = :company_id"),
+            {"company_id": company_id},
+        )
+
     assert intent.critical is True
     assert intent.destination_version == 1
     assert intent.comparison_status == "legacy_backfilled"
