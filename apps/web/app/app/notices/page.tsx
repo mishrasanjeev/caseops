@@ -21,7 +21,7 @@ import {
   Send,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -229,25 +229,13 @@ function toPayload(draft: NoticeDraft, matterIds: string[]): CreateNoticeInput {
   };
 }
 
-async function loadAllMatters(): Promise<MatterOption[]> {
-  const matters = new Map<string, MatterOption>();
-  const seenCursors = new Set<string>();
-  let cursor: string | null = null;
-  while (true) {
-    const page = await listMatters({ limit: 100, cursor });
-    for (const matter of page.matters) {
-      matters.set(matter.id, {
-        id: matter.id,
-        matter_code: matter.matter_code,
-        title: matter.title,
-      });
-    }
-    const next = page.next_cursor ?? null;
-    if (!next || seenCursors.has(next)) break;
-    seenCursors.add(next);
-    cursor = next;
-  }
-  return Array.from(matters.values()).sort((left, right) =>
+async function loadMatterOptions(query: string): Promise<MatterOption[]> {
+  const page = await listMatters({ limit: 100, q: query.trim() || undefined });
+  return page.matters.map((matter) => ({
+    id: matter.id,
+    matter_code: matter.matter_code,
+    title: matter.title,
+  })).sort((left, right) =>
     `${left.matter_code} ${left.title}`.localeCompare(`${right.matter_code} ${right.title}`),
   );
 }
@@ -292,6 +280,8 @@ function NoticeFormDialog({
   matters,
   mattersPending,
   mattersError,
+  matterSearch,
+  onMatterSearchChange,
   owners,
   canAssignOwner,
   submitting,
@@ -303,6 +293,8 @@ function NoticeFormDialog({
   matters: MatterOption[];
   mattersPending: boolean;
   mattersError: boolean;
+  matterSearch: string;
+  onMatterSearchChange: (value: string) => void;
   owners: OwnerOption[];
   canAssignOwner: boolean;
   submitting: boolean;
@@ -310,22 +302,16 @@ function NoticeFormDialog({
 }) {
   const [draft, setDraft] = useState<NoticeDraft>(emptyDraft);
   const [matterIds, setMatterIds] = useState<string[]>([]);
-  const [matterSearch, setMatterSearch] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setDraft(notice ? noticeDraft(notice) : emptyDraft());
     setMatterIds(notice?.matter_links.map((matter) => matter.matter_id) ?? []);
-    setMatterSearch("");
     setFile(null);
   }, [notice, open]);
 
-  const visibleMatters = matters.filter((matter) =>
-    `${matter.matter_code} ${matter.title}`
-      .toLocaleLowerCase()
-      .includes(matterSearch.trim().toLocaleLowerCase()),
-  );
+  const visibleMatters = matters;
   const invalidAmount = [draft.amount, draft.disputeAmount, draft.recoveredAmount].some(
     (value) => value.trim() !== "" && amountToMinor(value) === null,
   );
@@ -532,7 +518,7 @@ function NoticeFormDialog({
               id="notice-matter-search"
               className="mb-3 mt-1.5"
               value={matterSearch}
-              onChange={(event) => setMatterSearch(event.target.value)}
+              onChange={(event) => onMatterSearchChange(event.target.value)}
               placeholder="Matter code, title, client, or party"
             />
             {mattersPending ? (
@@ -660,10 +646,12 @@ export default function NoticesPage() {
   const [filters, setFilters] = useState<NoticeFilters>(EMPTY_FILTERS);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingNotice, setEditingNotice] = useState<NoticeRecord | null>(null);
+  const [matterSearch, setMatterSearch] = useState("");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const canCreate = useCapability("documents:upload");
   const canManage = useCapability("documents:manage");
   const formOpen = createOpen || Boolean(editingNotice);
+  const deferredMatterSearch = useDeferredValue(matterSearch);
   const currentContext = useMemo(() => getStoredContext(), []);
 
   const registerParams = useMemo<NoticeListParams>(
@@ -697,8 +685,8 @@ export default function NoticesPage() {
     queryFn: () => listNotices({ limit: 1, direction: "sent" }),
   });
   const mattersQuery = useQuery({
-    queryKey: ["matters", "notice-options", "all"],
-    queryFn: loadAllMatters,
+    queryKey: ["matters", "notice-options", deferredMatterSearch],
+    queryFn: () => loadMatterOptions(deferredMatterSearch),
   });
   const ownersQuery = useQuery({
     queryKey: ["notices", "owner-options"],
@@ -820,6 +808,18 @@ export default function NoticesPage() {
       })),
     [mattersQuery.data],
   );
+  const formMatterOptions = useMemo(() => {
+    const options = new Map<string, MatterOption>();
+    for (const matter of mattersQuery.data ?? []) options.set(matter.id, matter);
+    for (const link of editingNotice?.matter_links ?? []) {
+      options.set(link.matter_id, {
+        id: link.matter_id,
+        matter_code: link.matter_code,
+        title: link.matter_title,
+      });
+    }
+    return Array.from(options.values());
+  }, [editingNotice, mattersQuery.data]);
   const ownerOptions = useMemo(() => directoryOwners.map((owner) => ({ id: owner.membership_id, label: owner.full_name })), [directoryOwners]);
   const statusOptions = useMemo(
     () =>
@@ -847,7 +847,7 @@ export default function NoticesPage() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="notices-page">
-      <PageHeader eyebrow="Workspace" title="Notice management" description="Receive, send, assign, track, and search notices across the workspace - with or without a linked matter." actions={canCreate ? <Button type="button" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" aria-hidden /> New notice</Button> : null} />
+      <PageHeader eyebrow="Workspace" title="Notice management" description="Receive, send, assign, track, and search notices across the workspace - with or without a linked matter." actions={canCreate ? <Button type="button" onClick={() => { setMatterSearch(""); setCreateOpen(true); }}><Plus className="h-4 w-4" aria-hidden /> New notice</Button> : null} />
       {!canCreate ? <div className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-3 text-sm text-[var(--color-mute)]" data-testid="notices-read-only">You have read-only notice access. Ask a workspace administrator for document upload permission to create notices.</div> : null}
       <>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><SummaryCard title="Received" value={receivedTotal} description="All received notices visible in this workspace." /><SummaryCard title="Sent" value={sentTotal} description="All sent notices visible in this workspace." /><SummaryCard title="Matching results" value={matchingTotal} description="Server-authoritative total for the active filters." /><SummaryCard title="Rows loaded" value={notices.length} description="Rows loaded from the current cursor result." /></div>
@@ -868,7 +868,7 @@ export default function NoticesPage() {
               </div>
             ) : noticesQuery.isError ? (
               <QueryErrorState title="Could not load notices from this workspace" error={noticesQuery.error} onRetry={noticesQuery.refetch} />
-            ) : visibleNotices.length === 0 ? <EmptyState icon={activeDirection === "received" ? Inbox : Send} title={hasFilters ? "No notices match these filters" : `No ${activeDirection} notices`} description={hasFilters ? "Reset or adjust the workspace notice filters." : canCreate ? `Create a ${activeDirection} notice here; linking a matter is optional.` : `There are no ${activeDirection} notices visible in this workspace.`} action={hasFilters ? <Button type="button" variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}><RotateCcw className="h-4 w-4" aria-hidden /> Reset filters</Button> : canCreate ? <Button type="button" variant="outline" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" aria-hidden /> Create notice</Button> : null} /> : <div className="flex flex-col gap-3" aria-live="polite">{visibleNotices.map((notice) => <NoticeCard key={notice.id} notice={notice} owners={directoryOwners} canUpload={canCreate} canManage={canManage} updating={(updateMutation.isPending && updateMutation.variables?.noticeId === notice.id) || (fileMutation.isPending && fileMutation.variables?.noticeId === notice.id)} downloading={downloadingId === notice.id} onEdit={setEditingNotice} onUpdate={(noticeId, input) => updateMutation.mutate({ noticeId, input })} onUpload={(noticeId, file, expectedUpdatedAt) => fileMutation.mutate({ noticeId, file, expectedUpdatedAt })} onDownload={download} />)}</div>}
+            ) : visibleNotices.length === 0 ? <EmptyState icon={activeDirection === "received" ? Inbox : Send} title={hasFilters ? "No notices match these filters" : `No ${activeDirection} notices`} description={hasFilters ? "Reset or adjust the workspace notice filters." : canCreate ? `Create a ${activeDirection} notice here; linking a matter is optional.` : `There are no ${activeDirection} notices visible in this workspace.`} action={hasFilters ? <Button type="button" variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}><RotateCcw className="h-4 w-4" aria-hidden /> Reset filters</Button> : canCreate ? <Button type="button" variant="outline" onClick={() => { setMatterSearch(""); setCreateOpen(true); }}><Plus className="h-4 w-4" aria-hidden /> Create notice</Button> : null} /> : <div className="flex flex-col gap-3" aria-live="polite">{visibleNotices.map((notice) => <NoticeCard key={notice.id} notice={notice} owners={directoryOwners} canUpload={canCreate} canManage={canManage} updating={(updateMutation.isPending && updateMutation.variables?.noticeId === notice.id) || (fileMutation.isPending && fileMutation.variables?.noticeId === notice.id)} downloading={downloadingId === notice.id} onEdit={(notice) => { setMatterSearch(""); setEditingNotice(notice); }} onUpdate={(noticeId, input) => updateMutation.mutate({ noticeId, input })} onUpload={(noticeId, file, expectedUpdatedAt) => fileMutation.mutate({ noticeId, file, expectedUpdatedAt })} onDownload={download} />)}</div>}
             {noticesQuery.hasNextPage ? (
               <div className="flex justify-center">
                 <Button
@@ -887,7 +887,7 @@ export default function NoticesPage() {
           </CardContent>
         </Card>
       </>
-      {(canCreate || canManage) ? <NoticeFormDialog open={formOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditingNotice(null); } }} notice={editingNotice} matters={mattersQuery.data ?? []} mattersPending={mattersQuery.isPending && formOpen} mattersError={mattersQuery.isError} owners={directoryOwners} canAssignOwner={canManage || Boolean(currentContext?.membership.id)} submitting={createMutation.isPending || updateMutation.isPending} onSubmit={({ payload, file }) => { if (editingNotice) { updateMutation.mutate({ noticeId: editingNotice.id, input: { ...payload, expected_updated_at: editingNotice.updated_at }, closeDialog: true }); } else { createMutation.mutate({ payload, file }); } }} /> : null}
+      {(canCreate || canManage) ? <NoticeFormDialog open={formOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditingNotice(null); setMatterSearch(""); } }} notice={editingNotice} matters={formMatterOptions} mattersPending={mattersQuery.isPending && formOpen} mattersError={mattersQuery.isError} matterSearch={matterSearch} onMatterSearchChange={setMatterSearch} owners={directoryOwners} canAssignOwner={canManage || Boolean(currentContext?.membership.id)} submitting={createMutation.isPending || updateMutation.isPending} onSubmit={({ payload, file }) => { if (editingNotice) { updateMutation.mutate({ noticeId: editingNotice.id, input: { ...payload, expected_updated_at: editingNotice.updated_at }, closeDialog: true }); } else { createMutation.mutate({ payload, file }); } }} /> : null}
     </div>
   );
 }
