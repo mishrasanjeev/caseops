@@ -3989,7 +3989,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md",
-          "revision": "2f36aa31462f651a94b24047bfa0ed1bf1807432",
+          "revision": "10087197bf302179737367e011aba2b9174a6715",
           "environment": "fresh migrated local API plus locked Next.js 16.3.0 production server; exact-head CI, canonical merge, production migration/deployment, and exact-serving-revision browser proof pending",
           "fixtures": "isolated law-firm tenant, official India Code provision deep link, Act landing page, unverified and quarantined records, immutable source-version proposals, distinct proposer/reviewer memberships, exact content hash/version, typed link outcomes, conflicting authorities, licensed internal-use policy, seed/enrichment attempts, and 360x800 viewport",
           "assertions": "full provision provenance, verified-only text/default listing/downstream use, truthful coverage, editorial/case/AI separation, Act versus section link, optimistic immutable two-person approval/rejection, stale/self-review rejection, typed link health, immediate conflict quarantine, controlled supersession, licensed-use restrictions, seed/enrichment non-downgrade, responsive curator controls, and fail-closed reload",
