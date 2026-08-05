@@ -265,6 +265,107 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
     )
 
 
+def test_notification_convergence_backfills_boolean_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A legacy reminder upgrades with a native PostgreSQL boolean value."""
+    from alembic.config import Config
+
+    from alembic import command
+    from caseops_api.core.settings import get_settings
+
+    url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
+    get_settings.cache_clear()
+    project_root = Path(__file__).resolve().parents[1]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "alembic"))
+    config.set_main_option("sqlalchemy.url", url)
+
+    pg_engine.dispose()
+    command.downgrade(config, "20260804_0003")
+
+    reminder_id = str(uuid4())
+    hearing_id = str(uuid4())
+    scheduled_for = datetime(2099, 8, 5, 4, 30, tzinfo=UTC)
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        membership_id = _seed_membership(session, company_id)
+        matter_id = _seed_matter(session, company_id)
+        session.execute(
+            text(
+                "INSERT INTO matter_hearings "
+                "(id, matter_id, hearing_on, forum_name, purpose, status, created_at) "
+                "VALUES (:id, :matter_id, :hearing_on, 'Delhi High Court', "
+                "'Legacy notification convergence proof', 'scheduled', :created_at)"
+            ),
+            {
+                "id": hearing_id,
+                "matter_id": matter_id,
+                "hearing_on": scheduled_for.date(),
+                "created_at": now,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO hearing_reminders "
+                "(id, company_id, matter_id, hearing_id, recipient_membership_id, "
+                "recipient_email, channel, scheduled_for, status, attempts, "
+                "created_at, updated_at) "
+                "VALUES (:id, :company_id, :matter_id, :hearing_id, :membership_id, "
+                "'notification-pg@example.com', 'email', :scheduled_for, 'queued', 0, "
+                ":created_at, :updated_at)"
+            ),
+            {
+                "id": reminder_id,
+                "company_id": company_id,
+                "matter_id": matter_id,
+                "hearing_id": hearing_id,
+                "membership_id": membership_id,
+                "scheduled_for": scheduled_for,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        session.commit()
+
+    pg_engine.dispose()
+    command.upgrade(config, "head")
+
+    with pg_engine.connect() as connection:
+        intent = connection.execute(
+            text(
+                "SELECT id, critical, destination_version, comparison_status "
+                "FROM notification_delivery_intents "
+                "WHERE source_type = 'hearing_reminder' AND source_id = :source_id"
+            ),
+            {"source_id": reminder_id},
+        ).one()
+        lineage_count = connection.execute(
+            text(
+                "SELECT count(*) FROM hearing_reminder_delivery_intents "
+                "WHERE hearing_reminder_id = :reminder_id AND intent_id = :intent_id"
+            ),
+            {"reminder_id": reminder_id, "intent_id": intent.id},
+        ).scalar_one()
+
+    # The module contains another downgrade/re-upgrade regression. Remove this
+    # isolated tenant so that a second upgrade cannot legitimately rediscover
+    # the same legacy reminder and collide with its durable idempotency key.
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM companies WHERE id = :company_id"),
+            {"company_id": company_id},
+        )
+
+    assert intent.critical is True
+    assert intent.destination_version == 1
+    assert intent.comparison_status == "legacy_backfilled"
+    assert lineage_count == 1
+
+
 def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
