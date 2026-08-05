@@ -286,7 +286,7 @@ def upgrade() -> None:
                 ":channel, 'hearing_upcoming', 'hearing_reminder', :source_id, :idem, "
                 ":status, :attempts, 3, :scheduled_for, :error, :dead_letter_reason, "
                 ":delivered_at, :failed_at, 'matter_hearing', :source_id, :snapshot, "
-                ":provider_event_id, 'durable_intent', 'legacy_backfilled', 1, 1, "
+                ":provider_event_id, 'durable_intent', 'legacy_backfilled', 1, :critical, "
                 "'minimal', :created_at, :updated_at)"
             ),
             {
@@ -318,6 +318,7 @@ def upgrade() -> None:
                     }
                 ),
                 "provider_event_id": reminder["provider_message_id"],
+                "critical": True,
                 "created_at": reminder["created_at"] or now,
                 "updated_at": reminder["updated_at"] or now,
             },
