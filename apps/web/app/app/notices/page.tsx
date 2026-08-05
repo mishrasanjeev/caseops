@@ -754,20 +754,39 @@ export default function NoticesPage() {
   });
   const updateMutation = useMutation({
     mutationFn: ({ noticeId, input }: { noticeId: string; input: UpdateNoticeInput; closeDialog?: boolean }) => updateNotice(noticeId, input),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ["notices"] });
+    onSuccess: (updatedNotice, variables) => {
+      // A successful PATCH must release the row controls immediately. Keeping
+      // the mutation pending until every active/inactive notice query refetches
+      // can leave the row disabled indefinitely when one refresh is slow.
+      // Apply the authoritative response first so the enabled control also has
+      // the new concurrency token and cannot submit a stale follow-up write.
+      queryClient.setQueriesData<InfiniteData<NoticeListResponse>>(
+        { queryKey: ["notices", "register"] },
+        (current) => current
+          ? {
+              ...current,
+              pages: current.pages.map((page) => ({
+                ...page,
+                notices: page.notices.map((row) =>
+                  row.id === updatedNotice.id ? updatedNotice : row,
+                ),
+              })),
+            }
+          : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["notices"] });
       if (variables.closeDialog) setEditingNotice(null);
       toast.success("Notice updated.");
     },
-    onError: async (error, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ["notices"] });
+    onError: (error, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["notices"] });
       if (variables.closeDialog) {
-        try {
-          setEditingNotice(await getNotice(variables.noticeId));
-        } catch {
-          // The list invalidation above remains the fallback when the record
-          // is no longer visible under the current access policy.
-        }
+        void getNotice(variables.noticeId)
+          .then(setEditingNotice)
+          .catch(() => {
+            // The list invalidation above remains the fallback when the record
+            // is no longer visible under the current access policy.
+          });
       }
       toast.error(apiErrorMessage(error, "Could not update the notice. Refresh and retry if another session changed it."));
     },
