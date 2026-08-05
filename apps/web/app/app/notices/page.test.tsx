@@ -608,7 +608,7 @@ describe("centralized notice management", () => {
     );
   });
 
-  it("loads every matter page and can add or remove links through CAS-protected edit", async () => {
+  it("searches bounded matter options and preserves multi-link CAS edits", async () => {
     mockNoticeRegister([
         notice({
           matter_links: [
@@ -620,8 +620,8 @@ describe("centralized notice management", () => {
           ],
         }),
     ]);
-    listMattersMock.mockImplementation(async ({ cursor }: { cursor?: string | null }) =>
-      cursor
+    listMattersMock.mockImplementation(async ({ q }: { q?: string }) =>
+      q
         ? {
             matters: [
               { id: "matter-101", matter_code: "MAT-101", title: "Later page matter" },
@@ -637,9 +637,12 @@ describe("centralized notice management", () => {
     );
     const dialog = await screen.findByTestId("create-notice-dialog");
     const first = await within(dialog).findByRole("checkbox", { name: /MAT-001/ });
-    const later = await within(dialog).findByRole("checkbox", { name: /MAT-101/ });
     expect(first).toBeChecked();
     fireEvent.click(first);
+    fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
+      target: { value: "MAT-101" },
+    });
+    const later = await within(dialog).findByRole("checkbox", { name: /MAT-101/ });
     fireEvent.click(later);
     fireEvent.change(within(dialog).getByLabelText("Remarks"), {
       target: { value: "Corrected links" },
@@ -647,10 +650,10 @@ describe("centralized notice management", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(updateNoticeMock).toHaveBeenCalledTimes(1));
-    expect(listMattersMock).toHaveBeenNthCalledWith(1, { limit: 100, cursor: null });
-    expect(listMattersMock).toHaveBeenNthCalledWith(2, {
+    expect(listMattersMock).toHaveBeenNthCalledWith(1, { limit: 100, q: undefined });
+    expect(listMattersMock).toHaveBeenLastCalledWith({
       limit: 100,
-      cursor: "page-2",
+      q: "MAT-101",
     });
     expect(updateNoticeMock).toHaveBeenCalledWith(
       "notice-1",
