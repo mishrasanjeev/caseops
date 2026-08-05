@@ -122,6 +122,9 @@ jobs:
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
+          CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
 
       - name: Run prod-Playwright suite (notice module)

@@ -449,7 +449,10 @@ function BookmarkRow({
   const formatTimestamp = (value: string | null) =>
     value ? new Date(value).toLocaleString() : "Never";
   return (
-    <div className="space-y-3 p-3">
+    <div
+      className="space-y-3 p-3"
+      data-testid={`case-tracking-bookmark-${bookmark.id}`}
+    >
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <button type="button" className="min-w-0 text-left" onClick={onSelect}>
           <CaseSummary
@@ -525,7 +528,10 @@ function UpdateRow({ update }: { update: CaseTrackingUpdateRecord }) {
       : update.source_url
     : null;
   return (
-    <div className="space-y-2 p-3">
+    <div
+      className="space-y-2 p-3"
+      data-testid={`case-tracking-update-${update.id}`}
+    >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-sm font-medium text-[var(--color-ink)]">{update.title}</p>

@@ -13,6 +13,8 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingBookmarkUpdateRequest,
     CaseTrackingProviderStatusResponse,
     CaseTrackingRefreshResponse,
+    CaseTrackingReleaseSmokeRequest,
+    CaseTrackingReleaseSmokeResponse,
     CaseTrackingSearchRequest,
     CaseTrackingSearchResponse,
     CaseTrackingUpdateListResponse,
@@ -25,6 +27,7 @@ from caseops_api.services.case_tracking import (
     list_updates,
     provider_status_response,
     refresh_bookmark,
+    run_release_smoke,
     search_cases,
     update_bookmark,
 )
@@ -38,6 +41,10 @@ router = APIRouter()
 CaseTrackingUser = Annotated[
     SessionContext,
     Depends(require_capability("authorities:search")),
+]
+CaseTrackingAdmin = Annotated[
+    SessionContext,
+    Depends(require_capability("workspace:admin")),
 ]
 
 
@@ -139,6 +146,25 @@ def post_case_tracking_bookmark_refresh(
     session: DbSession,
 ) -> CaseTrackingRefreshResponse:
     return refresh_bookmark(session, context=context, bookmark_id=bookmark_id)
+
+
+@router.post(
+    "/bookmarks/{bookmark_id}/release-smoke",
+    response_model=CaseTrackingReleaseSmokeResponse,
+    summary="Run one costed tracked-case canary for the exact deployed release.",
+)
+def post_case_tracking_release_smoke(
+    bookmark_id: str,
+    payload: CaseTrackingReleaseSmokeRequest,
+    context: CaseTrackingAdmin,
+    session: DbSession,
+) -> CaseTrackingReleaseSmokeResponse:
+    return run_release_smoke(
+        session,
+        context=context,
+        bookmark_id=bookmark_id,
+        release_sha=payload.release_sha,
+    )
 
 
 @router.get(

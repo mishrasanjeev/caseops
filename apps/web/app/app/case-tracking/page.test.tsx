@@ -223,7 +223,9 @@ describe("CaseTrackingPage", () => {
       }),
     );
     await user.click(screen.getAllByText("Example Petitioner v Example Respondent")[1]);
+    expect(screen.getByTestId("case-tracking-bookmark-bm-1")).toBeInTheDocument();
     expect(await screen.findByText("Order dated 26 May 2026")).toBeInTheDocument();
+    expect(screen.getByTestId("case-tracking-update-upd-1")).toBeInTheDocument();
     expect(screen.getAllByText(/lawyer review/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Source/i })).toHaveAttribute(
       "href",
