@@ -493,60 +493,42 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       .filter((c) => c.domain.includes("caseops.ai"))
       .map((c) => `${c.name}=${c.value}`)
       .join("; ");
-    // Try multiple candidate routes — the schema isn't documented in
-    // this test file. The fix verification is: SOMEWHERE in prod, the
-    // hand-curated section_text for BNS §318 (cheating, 1593 chars,
-    // section_text_source="manual") is reachable.
-    const candidates = [
-      `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections`,
-      `${PROD_API_BASE_URL}/api/statutes/sections?bare_act=BNS&section=318`,
-      `${PROD_API_BASE_URL}/api/v1/statutes/sections?bare_act=BNS&section=318`,
-      `${PROD_API_BASE_URL}/api/statutes/`,
-    ];
-    let bnsBody: unknown = null;
-    let hitRoute: string | null = null;
-    for (const url of candidates) {
-      const r = await request.get(url, {
+    // IPLF-006C makes the public list verified-only. Legacy manual BNS
+    // §318 must be absent instead of appearing as a row with a hidden body.
+    const listUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections`;
+    const listResp = await request.get(listUrl, {
+      headers: { Cookie: cookieHeader, Accept: "application/json" },
+      timeout: 120_000,
+    });
+    expect(listResp.ok(), `${listUrl} returned ${listResp.status()}`).toBeTruthy();
+    const listBody = (await listResp.json()) as {
+      sections?: Array<{ section_number: string }>;
+    };
+    const listed318 = (listBody.sections ?? []).find((section) =>
+      /\b(?:Section\s*)?318\b/i.test(section.section_number),
+    );
+    expect(
+      listed318,
+      "unverified BNS §318 must not appear in the verified-only list",
+    ).toBeUndefined();
+
+    // Direct detail preserves metadata for controlled review while text
+    // fails closed. Accept the two historical number spellings, but require
+    // one canonical detail record to exist.
+    let detailResp = null;
+    for (const sectionNumber of ["Section 318", "318"]) {
+      const candidateUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections/${encodeURIComponent(sectionNumber)}`;
+      const candidate = await request.get(candidateUrl, {
         headers: { Cookie: cookieHeader, Accept: "application/json" },
-        timeout: 120_000,
+        timeout: 60_000,
       });
-      if (r.ok()) {
-        bnsBody = await r.json();
-        hitRoute = url;
-        const text = JSON.stringify(bnsBody);
-        if (text.includes("BNS") || text.includes("bns")) break;
+      if (candidate.ok()) {
+        detailResp = candidate;
+        break;
       }
     }
-    if (!hitRoute) {
-      throw new Error(
-        "STATUTE-LOOP NOT VERIFIED — no statute API route returned 200 for any of: " +
-        candidates.join(", "),
-      );
-    }
-    // Section_number is a STRING like "Section 63" / "Section 318".
-    // Find the section explicitly so we can also check section_text length
-    // (hand-curated BNS §318 = 1593 chars).
-    const sections = (bnsBody as { sections?: Array<{ section_number: string }> })?.sections ?? [];
-    const sec318 = sections.find((s) => /\bSection\s*318\b/i.test(s.section_number));
-    if (!sec318) {
-      const numbers = sections.map((s) => s.section_number).join(", ");
-      throw new Error(
-        `STATUTE-LOOP NOT VERIFIED — route ${hitRoute} returned ${sections.length} sections but none match Section 318. Found: ${numbers.slice(0, 400)}`,
-      );
-    }
-    // 2026-05-01: the list endpoint legitimately drops section_text from
-    // its payload (commit 213dbde) to keep the response small; the full
-    // text only ships from the per-section detail endpoint. Since the
-    // 2026-08-01 trust migration, legacy manual text remains unverified
-    // until a curator records official/licensed provenance. The API must
-    // preserve the section record while withholding its legal text.
-    const detailUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections/${encodeURIComponent(sec318.section_number)}`;
-    const detailResp = await request.get(detailUrl, {
-      headers: { Cookie: cookieHeader, Accept: "application/json" },
-      timeout: 60_000,
-    });
-    expect(detailResp.ok(), `${detailUrl} returned ${detailResp.status()}`).toBeTruthy();
-    const detail = (await detailResp.json()) as {
+    expect(detailResp, "BNS §318 controlled detail record must exist").not.toBeNull();
+    const detail = (await detailResp!.json()) as {
       section: {
         section_text: string | null;
         verification_status: string;

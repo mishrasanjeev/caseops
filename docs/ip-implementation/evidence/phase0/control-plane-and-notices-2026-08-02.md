@@ -195,3 +195,44 @@ Codex cannot self-approve the M0 program lock, legal rules/forms/deadlines, prov
 `PROGRAM INCOMPLETE - REPOSITORY WORK COMPLETE, EXTERNAL ACCEPTANCE PENDING`
 
 At this checkpoint even that narrower statement is premature: substantial M0-M10 repository implementation remains represented by the derived `not_started` slices.
+
+## 5 August 2026 scheduled-run observer-race correction
+
+Scheduled production run `30969876138` on application revision
+`623ca8f5e88a8110c71cc1c6edca9c951eac7e1a` reported 52 RAM passes, four
+intentional environment skips, one unexecuted dependent test, and one failure
+in the global Notice workflow. The created Notice, owner, status PATCH, and
+server response were correct. The failure occurred only while the spec waited
+for one GET containing query, status, and owner filters after changing all
+three controls immediately after the PATCH-triggered query invalidation.
+
+The test observer was non-deterministic: it did not wait for the status
+mutation's cache reconciliation, and the three immediate control changes could
+cause React Query to supersede intermediate requests before the one combined
+response observer resolved. This was not accepted as a retry-to-green flake.
+The dated spec now:
+
+1. waits until the status mutation and its invalidation are quiescent through
+   the user-visible enabled status control;
+2. verifies the persisted `Under Review` control value;
+3. applies query, status, and owner filters one at a time;
+4. requires an HTTP 200 server response after every filter transition;
+5. still asserts the final combined response contains the created Notice and
+   the filtered row is visible.
+
+No sleep, retry, weakened filter, mocked response, or product-state shortcut
+was introduced. Playwright discovery compiled all three tests in the modified
+file. Exact-head CI and a fresh post-deployment production workflow remain the
+release evidence for this correction.
+
+Fresh post-deployment run `30971023210` then proved the original Notice workflow
+green in 23.3 seconds, including created-record, owner/status persistence,
+filters, multi-Matter behavior, lifecycle continuation, and cleanup. That run
+exposed a separate stale STATUTE-LOOP assertion: after IPLF-006C, the BNS
+section list correctly excludes unverified Section 318, while the historical
+test still required it to appear before checking its hidden body.
+
+The regression now requires Section 318 to be absent from the verified-only
+list and verifies through the controlled detail route that its metadata remains
+available but `section_text` is `null`. This is the intended fail-closed product
+contract, not a skipped or weakened assertion.

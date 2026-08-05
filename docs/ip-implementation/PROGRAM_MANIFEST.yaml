@@ -579,7 +579,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
@@ -4037,7 +4037,8 @@
         "apps/api/tests/test_ip_prd_slices.py",
         "apps/api/tests/test_drafting_studio.py",
         "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.test.tsx",
-        "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts"
+        "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md"
@@ -4045,18 +4046,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md",
-          "revision": "80e60fd757566a29d12b7f6f321cd8fe1794b7f9",
-          "environment": "fresh migrated local API plus locked Next.js 16.3.0 production server; exact-head CI, canonical merge, production migration/deployment, and exact-serving-revision browser proof pending",
+          "revision": "cbf64db8fffa375745e94aac1f4c6e99b138dd99",
+          "environment": "exact-head CI; canonical main; production migration caseops-migrate-job-z6f8m; API caseops-api-00234-l4f and web caseops-web-00214-lqx at 100% traffic; post-deploy workflow 30978246930",
           "fixtures": "isolated law-firm tenant, official India Code provision deep link, Act landing page, unverified and quarantined records, immutable source-version proposals, distinct proposer/reviewer memberships, exact content hash/version, typed link outcomes, conflicting authorities, licensed internal-use policy, seed/enrichment attempts, and 360x800 viewport",
-          "assertions": "full provision provenance, verified-only text/default listing/downstream use, truthful coverage, editorial/case/AI separation, Act versus section link, optimistic immutable two-person approval/rejection, stale/self-review rejection, typed link health, immediate conflict quarantine, controlled supersession, licensed-use restrictions, seed/enrichment non-downgrade, responsive curator controls, and fail-closed reload",
+          "assertions": "full provision provenance, verified-only text/default listing/downstream use, truthful coverage, editorial/case/AI separation, Act versus section link, optimistic immutable two-person approval/rejection, stale/self-review rejection, typed link health, immediate conflict quarantine, controlled supersession, licensed-use restrictions, seed/enrichment non-downgrade, responsive curator controls, fail-closed reload, exact immutable image convergence, and live 360px production behavior",
           "result": "passed",
-          "recorded_at": "2026-08-04T17:22:00+05:30"
+          "recorded_at": "2026-08-05T11:15:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Rebase after IPLF-004A, IPLF-004B, and IPLF-005B merge in dependency order; require exact-head CI/security, merge to canonical main, migrate/deploy immutable images, and rerun the dated UJ-15/UJ-48 journey against the exact serving production revisions."
+        "Record genuine named legal/source-policy acceptance where required; no repository-controlled release work remains for IPLF-006C."
       ],
       "data_impact": [
         "Additive statute/statute-section provenance, policy, history, and link-health columns plus immutable statute_source_versions and statute_source_conflicts tables. Legacy rows remain fail-closed; no replacement legal text or optimistic verification is introduced by migration."
@@ -4072,7 +4073,7 @@
       "allocation_review": "Definition of Ready reviewed against PRD Sections 11.2, 15 UJ-15/UJ-48, 23, 25, and 26. Existing Statute/StatuteSection, source-action/report, AuthorityDocument, drafting, litigation-strategy, capability, and AuditEvent owners remain canonical; immutable source versions/conflicts add evidence without creating a second mutable legal-source owner.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -36896,7 +36897,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -38636,7 +38637,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -42846,7 +42847,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -42894,7 +42895,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -42942,7 +42943,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -49283,7 +49284,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -49331,7 +49332,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -49379,7 +49380,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -49427,7 +49428,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -49475,7 +49476,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
@@ -49523,7 +49524,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-006A",
