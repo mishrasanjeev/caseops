@@ -128,3 +128,108 @@ def test_live_inspection_detects_identity_and_image_drift(monkeypatch) -> None:
     assert "caseops-legal-update-sync-midnight: image drift" in errors
     assert "caseops-legal-update-sync-midnight: invoker_iam drift" in errors
     assert summary["result"] == "fail"
+
+
+def test_execution_summary_distinguishes_success_failure_and_missing() -> None:
+    assert scheduler_inventory.summarize_execution([])["outcome"] == "missing"
+    assert (
+        scheduler_inventory.summarize_execution(
+            [
+                {
+                    "metadata": {"name": "job-ok", "creationTimestamp": "2026-08-05T00:00:00Z"},
+                    "status": {
+                        "completionTime": "2026-08-05T00:01:00Z",
+                        "conditions": [{"type": "Completed", "status": "True"}],
+                        "succeededCount": 1,
+                    },
+                }
+            ]
+        )["outcome"]
+        == "succeeded"
+    )
+    assert (
+        scheduler_inventory.summarize_execution(
+            [
+                {
+                    "metadata": {"name": "job-safe-stop"},
+                    "status": {
+                        "conditions": [{"type": "Completed", "status": "False"}],
+                        "failedCount": 1,
+                    },
+                }
+            ]
+        )["outcome"]
+        == "failed"
+    )
+
+
+def test_attempt_audit_requires_delivery_but_reports_workload_failure(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    inventory["jobs"] = [inventory["jobs"][0]]
+    expected_image = "registry.example/caseops-api@sha256:" + "a" * 64
+
+    def fake_gcloud(arguments: list[str], *, expect_json: bool = False):
+        assert expect_json
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            return {
+                "state": "ENABLED",
+                "schedule": "0 0 * * *",
+                "timeZone": "Asia/Kolkata",
+                "lastAttemptTime": "",
+                "status": {"code": 7, "message": "delivery rejected"},
+                "httpTarget": {
+                    "uri": scheduler_inventory.scheduler_uri(
+                        inventory["production_project"],
+                        inventory["location"],
+                        "caseops-legal-update-sync",
+                    ),
+                    "oauthToken": {
+                        "serviceAccountEmail": inventory["invoker_service_account"]
+                    },
+                },
+            }
+        if arguments[:4] == ["run", "jobs", "executions", "list"]:
+            return [
+                {
+                    "metadata": {"name": "execution-failed"},
+                    "status": {
+                        "conditions": [{"type": "Completed", "status": "False"}],
+                        "failedCount": 1,
+                    },
+                }
+            ]
+        if arguments[:3] == ["run", "jobs", "describe"]:
+            return {
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "template": {
+                                "spec": {"containers": [{"image": expected_image}]}
+                            }
+                        }
+                    }
+                }
+            }
+        return {
+            "bindings": [
+                {
+                    "role": "roles/run.invoker",
+                    "members": [
+                        f"serviceAccount:{inventory['invoker_service_account']}"
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    errors, summary = scheduler_inventory.inspect_live(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        expected_image=expected_image,
+        audit_attempts=True,
+    )
+
+    assert "caseops-legal-update-sync-midnight: natural_or_canary_attempt drift" in errors
+    assert "caseops-legal-update-sync-midnight: scheduler_delivery drift" in errors
+    assert summary["jobs"][0]["latest_execution"]["outcome"] == "failed"
