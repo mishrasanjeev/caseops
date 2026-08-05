@@ -86,7 +86,28 @@ describe("AdminNotificationsPage", () => {
       total_delivered: 10,
       total_failed: 2,
       reminders: [],
-      intents: [],
+      intents: [
+        {
+          id: "intent-1",
+          attempts: 1,
+          channel: "in_app",
+          created_at: "2026-08-05T15:00:00Z",
+          critical: false,
+          destination: null,
+          destination_version: 1,
+          event_type: "notification_test",
+          fallback_intent_id: null,
+          last_error_redacted: null,
+          recovery_of_intent_id: null,
+          scheduled_for: "2026-08-05T15:00:00Z",
+          source_id: "membership-1",
+          source_type: "self_test",
+          status: "delivered",
+          superseded_by_intent_id: null,
+          suppression_reason: null,
+          updated_at: "2026-08-05T15:00:01Z",
+        },
+      ],
       suppressions: [],
       metrics: {
         due: 4,
@@ -134,6 +155,10 @@ describe("AdminNotificationsPage", () => {
     expect(screen.getByText("Fallback")).toBeInTheDocument();
     expect(screen.getByText("Critical alerts")).toBeInTheDocument();
     expect(screen.getByTestId("notification-self-test")).toBeInTheDocument();
+    expect(screen.getByText("Recent delivery intents")).toBeInTheDocument();
+    expect(screen.getByTestId("notification-intent-intent-1")).toHaveTextContent(
+      /delivered.*notification test.*in_app.*No external destination/i,
+    );
   });
 
   it("does not call the API while waiting for capability resolution", () => {

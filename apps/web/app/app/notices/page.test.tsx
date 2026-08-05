@@ -546,6 +546,30 @@ describe("centralized notice management", () => {
     });
   });
 
+  it("re-enables row controls after PATCH even while background refresh is slow", async () => {
+    mockNoticeRegister([notice()]);
+    let resolveUpdate!: (record: NoticeRecord) => void;
+    updateNoticeMock.mockImplementationOnce(
+      () =>
+        new Promise<NoticeRecord>((resolve) => {
+          resolveUpdate = resolve;
+        }),
+    );
+    render(withClient(<NoticesPage />));
+
+    const status = await screen.findByLabelText("Status for Income tax demand");
+    fireEvent.change(status, { target: { value: "Under Review" } });
+    await waitFor(() => expect(updateNoticeMock).toHaveBeenCalledTimes(1));
+    expect(status).toBeDisabled();
+
+    listNoticesMock.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    resolveUpdate(notice({ status: "Under Review" }));
+
+    await waitFor(() => expect(status).toBeEnabled());
+  });
+
   it("submits every standalone metadata family from the create form", async () => {
     render(withClient(<NoticesPage />));
 
