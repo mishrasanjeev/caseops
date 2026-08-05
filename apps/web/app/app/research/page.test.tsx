@@ -6,16 +6,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   statsMock,
   searchMock,
+  createReportMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   statsMock: vi.fn(),
   searchMock: vi.fn(),
+  createReportMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchAuthorityCorpusStats: statsMock,
   searchAuthorities: searchMock,
+  createAuthorityResearchReport: createReportMock,
   createAuthorityAnnotation: vi.fn(),
 }));
 
@@ -40,6 +43,8 @@ describe("ResearchPage", () => {
   beforeEach(() => {
     statsMock.mockReset();
     searchMock.mockReset();
+    createReportMock.mockReset();
+    createReportMock.mockResolvedValue({ id: "report-1" });
     useCapabilityMock.mockReset();
     useCapabilityMock.mockImplementation(() => true);
     statsMock.mockResolvedValue({ document_count: 0 });
@@ -53,6 +58,18 @@ describe("ResearchPage", () => {
       coverage_notice: null,
       total_after_filter: 0,
       offset: 0,
+      outcome: "no_matching_documents",
+      diagnostics: {},
+      corpus_coverage: {
+        document_count: 0,
+        chunk_count: 0,
+        embedded_chunk_count: 0,
+        forum_counts: {},
+        last_ingested_at: null,
+        last_indexed_at: null,
+        index_state: "unavailable",
+        scope_summary: "indexed authority corpus; en language scope",
+      },
     });
   });
 
@@ -113,6 +130,55 @@ describe("ResearchPage", () => {
     });
   });
 
+  it("submits exact citation mode and keeps the search action operable", async () => {
+    render(withClient(<ResearchPage />));
+    fireEvent.click(screen.getByTestId("research-mode-exact-citation"));
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: { value: "2026:DHC:111" },
+    });
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+    await waitFor(() =>
+      expect(searchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "exact_citation", query: "2026:DHC:111" }),
+      ),
+    );
+  });
+
+  it("renders corpus unavailable separately from no matching documents", async () => {
+    searchMock.mockResolvedValue({
+      query: "section 11 trademark",
+      mode: "keyword",
+      provider: "caseops-authority-search-v2",
+      generated_at: "2026-08-04T00:00:00Z",
+      results: [],
+      contextual_plan: null,
+      coverage_notice: "The authority corpus is unavailable.",
+      total_after_filter: 0,
+      offset: 0,
+      outcome: "corpus_unavailable",
+      diagnostics: {},
+      corpus_coverage: {
+        document_count: 0,
+        chunk_count: 0,
+        embedded_chunk_count: 0,
+        forum_counts: {},
+        last_ingested_at: null,
+        last_indexed_at: null,
+        index_state: "unavailable",
+        scope_summary: "indexed authority corpus; en language scope",
+      },
+    });
+    render(withClient(<ResearchPage />));
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: { value: "section 11 trademark" },
+    });
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+    expect(await screen.findByText("Corpus unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("research-corpus-coverage")).toHaveTextContent(
+      "index unavailable",
+    );
+  });
+
   it("submits a partial court filter and renders the matching court result", async () => {
     searchMock.mockResolvedValue({
       query: "Triple test for bail under BNSS s.483; parity; custody duration",
@@ -128,6 +194,7 @@ describe("ResearchPage", () => {
           document_type: "judgment",
           decision_date: "2026-06-15",
           case_reference: "CRL.O.P. 483/2026",
+          neutral_citation: "2026:MHC:483",
           bench_name: "Justice M. Sundar",
           summary: "Madras High Court judgment on parity and custody duration.",
           source: "test",
@@ -136,7 +203,8 @@ describe("ResearchPage", () => {
             "The Madras High Court applied the triple test for bail under BNSS section 483, considering parity and custody duration.",
           score: 220,
           matched_terms: ["triple", "bail", "bnss", "parity", "custody"],
-          relevance_reason: null,
+          relevance_reason:
+            "Why this result: indexed passage match on bail; no adverse treatment found in the indexed citation graph. Verify the source before relying on it.",
           worst_treatment: null,
           adverse_count: 0,
         },
@@ -162,6 +230,11 @@ describe("ResearchPage", () => {
       await screen.findByText("Triple test for bail under BNSS section 483"),
     ).toBeInTheDocument();
     expect(screen.getByText("Madras High Court")).toBeInTheDocument();
+    expect(screen.getByText(/2026:MHC:483/)).toBeInTheDocument();
+    expect(screen.getByText(/Publisher: test/)).toBeInTheDocument();
+    expect(screen.getByTestId("research-result-relevance")).toHaveTextContent(
+      "Why this result",
+    );
     expect(searchMock).toHaveBeenCalledWith(
       expect.objectContaining({
         courtName: "Madras",

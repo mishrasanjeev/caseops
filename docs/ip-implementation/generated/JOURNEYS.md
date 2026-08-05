@@ -19,7 +19,7 @@ Generated; do not edit.
 | UJ-13 | Docket opposition as opponent | 4 | IPLF-040B, IPLF-042B | 4 | 0 | not_started | not_run | false |
 | UJ-14 | Classify, name, and file documents | 5 | IPLF-024B, IPLF-036B | 5 | 0 | not_started | not_run | false |
 | UJ-15 | Browse verified Bare Act | 3 | IPLF-006A, IPLF-006B, IPLF-006C | 3 | 1 | in_progress | not_run | false |
-| UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 4 | 1 | in_progress | not_run | false |
+| UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 4 | 2 | implemented | passed | false |
 | UJ-17 | Open judgment or reference source | 4 | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B | 4 | 1 | implemented | passed | false |
 | UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 4 | 0 | not_started | not_run | false |
 | UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 5 | 0 | not_started | not_run | false |

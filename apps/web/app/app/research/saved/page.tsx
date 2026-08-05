@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, Loader2 } from "lucide-react";
+import { Bookmark, FileCheck2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -20,6 +20,8 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { SourceAction } from "@/components/app/SourceAction";
 import {
   fetchSavedAuthorityAnnotations,
+  fetchAuthorityResearchReports,
+  type AuthorityResearchReport,
   type SavedAuthorityAnnotation,
 } from "@/lib/api/endpoints";
 import { formatLegalDate } from "@/lib/dates";
@@ -30,6 +32,10 @@ export default function SavedResearchPage() {
     queryKey: ["authorities", "saved", { includeArchived }],
     queryFn: () =>
       fetchSavedAuthorityAnnotations({ includeArchived, limit: 200 }),
+  });
+  const reportsQuery = useQuery({
+    queryKey: ["authorities", "research-reports"],
+    queryFn: fetchAuthorityResearchReports,
   });
 
   const annotations: SavedAuthorityAnnotation[] =
@@ -79,6 +85,41 @@ export default function SavedResearchPage() {
         />
       ) : null}
 
+      <section className="flex flex-col gap-3" aria-labelledby="saved-reports-title">
+        <div className="flex min-w-0 flex-wrap items-end justify-between gap-2">
+          <div className="min-w-0">
+            <h2 id="saved-reports-title" className="text-base font-semibold text-[var(--color-ink)]">
+              Frozen reports
+            </h2>
+            <p className="text-xs text-[var(--color-mute)]">
+              Immutable result IDs, source metadata, and analysis version captured when saved.
+            </p>
+          </div>
+          <span className="text-xs text-[var(--color-mute)]">
+            {reportsQuery.data?.reports.length ?? 0} reports
+          </span>
+        </div>
+        {reportsQuery.isError ? (
+          <QueryErrorState
+            error={reportsQuery.error}
+            title="Could not load frozen research reports"
+            onRetry={() => reportsQuery.refetch()}
+          />
+        ) : null}
+        {!reportsQuery.isError && !reportsQuery.isLoading && (reportsQuery.data?.reports.length ?? 0) === 0 ? (
+          <EmptyState
+            icon={FileCheck2}
+            title="No frozen reports yet"
+            description="Run a search and choose Save report to preserve its result set and source metadata."
+          />
+        ) : null}
+        <div className="grid gap-3">
+          {(reportsQuery.data?.reports ?? []).map((report) => (
+            <SavedResearchReportCard key={report.id} report={report} />
+          ))}
+        </div>
+      </section>
+
       {!savedQuery.isError && !savedQuery.isLoading && annotations.length === 0 ? (
         <EmptyState
           icon={Bookmark}
@@ -102,6 +143,53 @@ export default function SavedResearchPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+function SavedResearchReportCard({ report }: { report: AuthorityResearchReport }) {
+  const query = new URLSearchParams({ q: report.query, mode: report.mode });
+  return (
+    <Card data-testid={`saved-research-report-${report.id}`}>
+      <CardHeader className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <CardTitle className="break-words text-base">{report.name}</CardTitle>
+          <CardDescription className="mt-1 break-words">
+            {report.query}
+          </CardDescription>
+        </div>
+        <Link href={`/app/research?${query.toString()}`} className="w-full sm:w-auto">
+          <Button size="sm" variant="outline" className="w-full sm:w-auto">
+            Refine search
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <div className="flex flex-wrap gap-2 text-xs text-[var(--color-mute)]">
+          <Badge tone="neutral">{report.mode.replace(/_/g, " ")}</Badge>
+          <span>{report.results.length} frozen results</span>
+          <span>Analysis {report.analysis_version}</span>
+          <span>Saved {formatLegalDate(report.created_at)}</span>
+        </div>
+        <ul className="grid gap-2">
+          {report.results.map((result) => (
+            <li
+              key={result.authority_document_id}
+              className="flex min-w-0 flex-col gap-2 rounded-md border border-[var(--color-line)] p-3 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="break-words font-medium text-[var(--color-ink)]">{result.title}</p>
+                <p className="text-xs text-[var(--color-mute)]">
+                  {[result.court_name, result.neutral_citation, result.case_reference]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+              <SourceAction action={result.source_action} compact />
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 

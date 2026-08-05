@@ -4517,7 +4517,26 @@ export type AuthorityForumLevel =
   | "tribunal";
 
 export type AuthorityDocumentType = "judgment" | "order" | "statute" | "regulation" | "other";
-export type AuthoritySearchMode = "keyword" | "contextual";
+export type AuthoritySearchMode =
+  | "keyword"
+  | "contextual"
+  | "exact_citation"
+  | "party"
+  | "court"
+  | "judge"
+  | "act_section";
+
+export type AuthoritySearchOutcome =
+  | "results_found"
+  | "no_matching_documents"
+  | "corpus_unavailable"
+  | "index_stale"
+  | "provider_unavailable"
+  | "permission_denied"
+  | "query_invalid"
+  | "request_timed_out"
+  | "offset_out_of_range"
+  | "unreadable_filtered";
 
 // PG-006 Phase 1B (2026-05-01) — good-law signal carried alongside
 // every search result so the result card can surface a treatment
@@ -4549,6 +4568,7 @@ export type AuthoritySearchResult = {
   document_type: AuthorityDocumentType;
   decision_date: string | null;
   case_reference: string | null;
+  neutral_citation: string | null;
   bench_name: string | null;
   summary: string;
   source: string;
@@ -4592,26 +4612,90 @@ export async function searchAuthorities(input: {
   coverage_notice: string | null;
   total_after_filter: number;
   offset: number;
-  outcome:
-    | "results_found"
-    | "no_results"
-    | "offset_out_of_range"
-    | "unreadable_filtered";
-  diagnostics: Record<string, number | boolean>;
-}> {
-  return apiRequest("/api/authorities/search", {
+    outcome: AuthoritySearchOutcome;
+    diagnostics: Record<string, number | boolean>;
+    corpus_coverage: {
+      document_count: number;
+      chunk_count: number;
+      embedded_chunk_count: number;
+      forum_counts: Record<string, number>;
+      last_ingested_at: string | null;
+      last_indexed_at: string | null;
+      index_state: "current" | "stale" | "unavailable";
+      scope_summary: string;
+    };
+  }> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    try {
+      return await apiRequest("/api/authorities/search", {
+        method: "POST",
+        signal: controller.signal,
+        body: {
+          query: input.query,
+          mode: input.mode ?? "keyword",
+          limit: input.limit ?? 10,
+          offset: input.offset ?? 0,
+          language: input.language ?? "en",
+          forum_level: input.forumLevel ?? null,
+          court_name: input.courtName ?? null,
+          document_type: input.documentType ?? null,
+        },
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+export type AuthorityResearchReport = {
+  id: string;
+  company_id: string;
+  created_by_membership_id: string | null;
+  name: string;
+  query: string;
+  mode: AuthoritySearchMode;
+  criteria: Record<string, string | number | boolean | null>;
+  results: Array<{
+    authority_document_id: string;
+    title: string;
+    court_name: string;
+    forum_level: string;
+    document_type: string;
+    decision_date: string | null;
+    case_reference: string | null;
+    neutral_citation: string | null;
+    source: string;
+    source_reference: string | null;
+    source_action: SourceActionContract;
+  }>;
+  analysis_version: string;
+  generated_at: string;
+  created_at: string;
+};
+
+export async function createAuthorityResearchReport(input: {
+  name: string;
+  query: string;
+  mode: AuthoritySearchMode;
+  resultIds: string[];
+  criteria: Record<string, string | number | boolean | null>;
+}): Promise<AuthorityResearchReport> {
+  return apiRequest("/api/authorities/research-reports", {
     method: "POST",
     body: {
+      name: input.name,
       query: input.query,
-      mode: input.mode ?? "keyword",
-      limit: input.limit ?? 10,
-      offset: input.offset ?? 0,
-      language: input.language ?? "en",
-      forum_level: input.forumLevel ?? null,
-      court_name: input.courtName ?? null,
-      document_type: input.documentType ?? null,
+      mode: input.mode,
+      result_ids: input.resultIds,
+      criteria: input.criteria,
     },
   });
+}
+
+export async function fetchAuthorityResearchReports(): Promise<{
+  reports: AuthorityResearchReport[];
+}> {
+  return apiRequest("/api/authorities/research-reports");
 }
 
 export type AuthorityCorpusStats = {

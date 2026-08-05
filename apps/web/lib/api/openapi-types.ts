@@ -1348,6 +1348,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/authorities/research-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List immutable saved research reports */
+        get: operations["get_authority_research_reports_api_authorities_research_reports_get"];
+        put?: never;
+        /** Freeze a source-backed authority research report */
+        post: operations["post_authority_research_report_api_authorities_research_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/authorities/search": {
         parameters: {
             query?: never;
@@ -8920,6 +8938,124 @@ export interface components {
             /** Summary */
             summary: string | null;
         };
+        /** AuthorityResearchReportCreateRequest */
+        AuthorityResearchReportCreateRequest: {
+            /** Criteria */
+            criteria?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Mode
+             * @default keyword
+             * @enum {string}
+             */
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
+            /** Name */
+            name: string;
+            /** Query */
+            query: string;
+            /** Result Ids */
+            result_ids: string[];
+        };
+        /** AuthorityResearchReportListResponse */
+        AuthorityResearchReportListResponse: {
+            /** Reports */
+            reports: components["schemas"]["AuthorityResearchReportRecord"][];
+        };
+        /** AuthorityResearchReportRecord */
+        AuthorityResearchReportRecord: {
+            /** Analysis Version */
+            analysis_version: string;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Criteria */
+            criteria: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
+            /** Name */
+            name: string;
+            /** Query */
+            query: string;
+            /** Results */
+            results: components["schemas"]["AuthorityResearchReportResult"][];
+        };
+        /** AuthorityResearchReportResult */
+        AuthorityResearchReportResult: {
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Case Reference */
+            case_reference: string | null;
+            /** Court Name */
+            court_name: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Document Type */
+            document_type: string;
+            /** Forum Level */
+            forum_level: string;
+            /** Neutral Citation */
+            neutral_citation: string | null;
+            /** Source */
+            source: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Reference */
+            source_reference: string | null;
+            /** Title */
+            title: string;
+        };
+        /** AuthoritySearchCoverage */
+        AuthoritySearchCoverage: {
+            /**
+             * Chunk Count
+             * @default 0
+             */
+            chunk_count: number;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /**
+             * Embedded Chunk Count
+             * @default 0
+             */
+            embedded_chunk_count: number;
+            /** Forum Counts */
+            forum_counts?: {
+                [key: string]: number;
+            };
+            /**
+             * Index State
+             * @default unavailable
+             * @enum {string}
+             */
+            index_state: "current" | "stale" | "unavailable";
+            /** Last Indexed At */
+            last_indexed_at?: string | null;
+            /** Last Ingested At */
+            last_ingested_at?: string | null;
+            /** Scope Summary */
+            scope_summary: string;
+        };
         /** AuthoritySearchRequest */
         AuthoritySearchRequest: {
             /** Court Name */
@@ -8944,7 +9080,7 @@ export interface components {
              * @default keyword
              * @enum {string}
              */
-            mode: "keyword" | "contextual";
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
             /**
              * Offset
              * @default 0
@@ -8956,6 +9092,7 @@ export interface components {
         /** AuthoritySearchResponse */
         AuthoritySearchResponse: {
             contextual_plan?: components["schemas"]["AuthorityContextualQueryPlan"] | null;
+            corpus_coverage: components["schemas"]["AuthoritySearchCoverage"];
             /** Coverage Notice */
             coverage_notice?: string | null;
             /** Diagnostics */
@@ -8972,7 +9109,7 @@ export interface components {
              * @default keyword
              * @enum {string}
              */
-            mode: "keyword" | "contextual";
+            mode: "keyword" | "contextual" | "exact_citation" | "party" | "court" | "judge" | "act_section";
             /**
              * Offset
              * @default 0
@@ -8980,10 +9117,10 @@ export interface components {
             offset: number;
             /**
              * Outcome
-             * @default no_results
+             * @default no_matching_documents
              * @enum {string}
              */
-            outcome: "results_found" | "no_results" | "offset_out_of_range" | "unreadable_filtered";
+            outcome: "results_found" | "no_matching_documents" | "corpus_unavailable" | "index_stale" | "provider_unavailable" | "permission_denied" | "query_invalid" | "request_timed_out" | "offset_out_of_range" | "unreadable_filtered";
             /** Provider */
             provider: string;
             /** Query */
@@ -9025,6 +9162,8 @@ export interface components {
             forum_level: "high_court" | "supreme_court";
             /** Matched Terms */
             matched_terms: string[];
+            /** Neutral Citation */
+            neutral_citation?: string | null;
             /** Relevance Reason */
             relevance_reason?: string | null;
             /** Score */
@@ -28649,6 +28788,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorityIngestionRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_authority_research_reports_api_authorities_research_reports_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityResearchReportListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_authority_research_report_api_authorities_research_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorityResearchReportCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityResearchReportRecord"];
                 };
             };
             /** @description Validation Error */

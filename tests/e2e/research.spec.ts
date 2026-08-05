@@ -72,7 +72,9 @@ test.describe("Research page (§4.2)", () => {
     // Wait up to 30 s for a result card OR the empty-state to render.
     // Local SQLite has no corpus, so empty-state is the expected pass.
     const results = page.getByTestId("research-results");
-    const emptyState = page.getByText(/No authorities matched/i);
+    const emptyState = page.getByText(
+      /No matching documents|Corpus unavailable|Index stale/i,
+    );
     await Promise.race([
       results.waitFor({ state: "visible", timeout: 30_000 }).catch(() => null),
       emptyState

@@ -3,12 +3,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchSavedMock } = vi.hoisted(() => ({
+const { fetchSavedMock, fetchReportsMock } = vi.hoisted(() => ({
   fetchSavedMock: vi.fn(),
+  fetchReportsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchSavedAuthorityAnnotations: fetchSavedMock,
+  fetchAuthorityResearchReports: fetchReportsMock,
 }));
 
 import SavedResearchPage from "@/app/app/research/saved/page";
@@ -23,6 +25,59 @@ function withClient(children: ReactNode) {
 describe("SavedResearchPage", () => {
   beforeEach(() => {
     fetchSavedMock.mockReset();
+    fetchReportsMock.mockReset();
+    fetchReportsMock.mockResolvedValue({ reports: [] });
+  });
+
+  it("renders immutable research report metadata and a refine action", async () => {
+    fetchSavedMock.mockResolvedValue({ annotations: [] });
+    fetchReportsMock.mockResolvedValue({
+      reports: [
+        {
+          id: "report-1",
+          company_id: "company-1",
+          created_by_membership_id: "member-1",
+          name: "Section 11 research",
+          query: "Trade Marks Act section 11 relative grounds refusal",
+          mode: "act_section",
+          criteria: { language: "en" },
+          results: [
+            {
+              authority_document_id: "authority-1",
+              title: "Relative grounds for refusal",
+              court_name: "Delhi High Court",
+              forum_level: "high_court",
+              document_type: "judgment",
+              decision_date: "2026-07-01",
+              case_reference: "CS(COMM) 11/2026",
+              neutral_citation: "2026:DHC:111",
+              source: "official",
+              source_reference: "https://official.example/judgment.pdf",
+              source_action: {
+                state: "available",
+                label: "Open source",
+                open_url: "/api/source-actions/authority/authority-1/open",
+                source_reference: "https://official.example/judgment.pdf",
+                reason: null,
+                opens_new_tab: true,
+              },
+            },
+          ],
+          analysis_version: "authority-search-v3-2026-08-04",
+          generated_at: "2026-08-04T10:00:00Z",
+          created_at: "2026-08-04T10:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<SavedResearchPage />));
+    expect(await screen.findByText("Section 11 research")).toBeInTheDocument();
+    expect(screen.getByText("Relative grounds for refusal")).toBeInTheDocument();
+    expect(screen.getByText(/authority-search-v3-2026-08-04/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Refine search/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("mode=act_section"),
+    );
   });
 
   it("renders an empty state when the tenant has nothing saved", async () => {
