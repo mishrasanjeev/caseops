@@ -533,15 +533,44 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
         new URL(response.url()).pathname === `/api/notices/${receivedNotice.id}` &&
         response.request().method() === "PATCH",
     );
-    await receivedRow
-      .getByLabel(`Status for ${receivedSubject}`)
-      .selectOption("Under Review");
+    const receivedStatus = receivedRow.getByLabel(`Status for ${receivedSubject}`);
+    await receivedStatus.selectOption("Under Review");
     const statusResponse = await statusUpdatePromise;
     if (statusResponse.status() >= 200 && statusResponse.status() < 300) {
       receivedNotice = (await statusResponse.json()) as NoticeRecord;
     }
     expect(statusResponse.status(), await statusResponse.text()).toBe(200);
     expect(receivedNotice.status).toBe("Under Review");
+    await expect(receivedStatus).toBeEnabled({ timeout: 30_000 });
+    await expect(receivedStatus).toHaveValue("Under Review");
+
+    const queryFilterPromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === "/api/notices/" &&
+        response.request().method() === "GET" &&
+        url.searchParams.get("query") === receivedSubject &&
+        !url.searchParams.has("status") &&
+        !url.searchParams.has("owner_membership_id")
+      );
+    });
+    await page.locator("#notice-search").fill(receivedSubject);
+    const queryFilterResponse = await queryFilterPromise;
+    expect(queryFilterResponse.status(), await queryFilterResponse.text()).toBe(200);
+
+    const statusFilterPromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === "/api/notices/" &&
+        response.request().method() === "GET" &&
+        url.searchParams.get("query") === receivedSubject &&
+        url.searchParams.get("status") === "Under Review" &&
+        !url.searchParams.has("owner_membership_id")
+      );
+    });
+    await page.getByLabel("Filter by status").fill("Under Review");
+    const statusFilterResponse = await statusFilterPromise;
+    expect(statusFilterResponse.status(), await statusFilterResponse.text()).toBe(200);
 
     const filteredRegisterPromise = page.waitForResponse(
       (response) => {
@@ -556,8 +585,6 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
       },
       { timeout: 30_000 },
     );
-    await page.locator("#notice-search").fill(receivedSubject);
-    await page.getByLabel("Filter by status").fill("Under Review");
     await page.getByLabel("Filter by owner").selectOption(tester.membership.id);
     const filteredRegisterResponse = await filteredRegisterPromise;
     expect(
