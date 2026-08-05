@@ -4230,7 +4230,8 @@
         "apps/api/tests/test_hearing_reminders.py",
         "apps/api/tests/test_durable_workflows.py",
         "apps/web/app/app/admin/notifications/page.test.tsx",
-        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts"
+        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
@@ -4238,12 +4239,12 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
-          "revision": "95cb866bceb0ac509c23490064eaceefc691bec9",
-          "environment": "local SQLite/API, generated OpenAPI, production web build, real-API Playwright",
+          "revision": "560d325e95b09452005461443d23cff40160bade",
+          "environment": "local SQLite/API, generated OpenAPI, production web build, real-API Playwright, plus exact-CI route-matrix and FK-index guard repair",
           "fixtures": "isolated deterministic law-firm tenants, exact/session-only hearings, SendGrid bounce/delivered events, suppression and recovery destinations",
-          "assertions": "durable lineage, no invented hearing time, permission revalidation, confidentiality, scheduling/cancellation, fallback, monotonic webhook state, idempotency, suppression evidence, versioned recovery, metrics, persistence, and 360px usability",
+          "assertions": "durable lineage, no invented hearing time, permission revalidation, confidentiality, scheduling/cancellation, fallback, monotonic webhook state, idempotency, suppression evidence and authenticated recovery, versioned retry recovery, leading FK indexes, metrics, persistence, and 360px usability",
           "result": "passed",
-          "recorded_at": "2026-08-04T21:00:00+05:30"
+          "recorded_at": "2026-08-05T11:55:00+05:30"
         }
       ],
       "approvals": [],
