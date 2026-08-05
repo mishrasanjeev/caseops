@@ -11,6 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditResult,
     CalendarEventSync,
@@ -605,6 +606,11 @@ def _hearing_record(hearing: MatterHearing) -> MatterHearingRecord:
         id=hearing.id,
         matter_id=hearing.matter_id,
         hearing_on=hearing.hearing_on,
+        time_status=hearing.time_status,
+        hearing_time=hearing.hearing_time,
+        session_label=hearing.session_label,
+        timezone=hearing.timezone,
+        reminder_policy=hearing.reminder_policy_json,
         forum_name=hearing.forum_name,
         judge_name=hearing.judge_name,
         purpose=hearing.purpose,
@@ -2923,6 +2929,13 @@ def update_matter_hearing(
 
     prior_status = hearing.status
     prior_hearing_on = hearing.hearing_on
+    prior_schedule = (
+        hearing.hearing_on,
+        hearing.time_status,
+        hearing.hearing_time,
+        hearing.session_label,
+        hearing.timezone,
+    )
     if payload.status is not None:
         hearing.status = payload.status
     if payload.outcome_note is not None:
@@ -2943,6 +2956,54 @@ def update_matter_hearing(
                 manual_lock=True,
                 force=True,
             )
+    if "time_status" in requested_hearing_updates:
+        if payload.time_status is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="time_status cannot be null.",
+            )
+        hearing.time_status = payload.time_status
+    if "hearing_time" in requested_hearing_updates:
+        hearing.hearing_time = payload.hearing_time
+    if "session_label" in requested_hearing_updates:
+        hearing.session_label = payload.session_label.strip() if payload.session_label else None
+    if "timezone" in requested_hearing_updates and payload.timezone is not None:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(payload.timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unknown IANA hearing timezone.",
+            ) from exc
+        hearing.timezone = payload.timezone
+    if hearing.time_status == "exact" and hearing.hearing_time is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="hearing_time is required when time_status is exact.",
+        )
+    if hearing.time_status != "exact":
+        hearing.hearing_time = None
+    if hearing.time_status == "session" and not hearing.session_label:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_label is required when time_status is session.",
+        )
+    if hearing.time_status != "session":
+        hearing.session_label = None
+    reminder_policy = dict(hearing.reminder_policy_json or {})
+    reminder_policy.update(
+        {
+            "timezone": hearing.timezone,
+            "schedule_basis": (
+                "exact_time" if hearing.time_status == "exact" else "date_boundary"
+            ),
+            "confirmed_by_membership_id": context.membership.id,
+            "confirmed_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    hearing.reminder_policy_json = reminder_policy
     session.add(hearing)
     session.flush()
 
@@ -2951,7 +3012,13 @@ def update_matter_hearing(
     # the stale old ones; a completed transition just cancels queued
     # rows so the worker doesnt fire a "you have a hearing in 24h"
     # email against a hearing that already happened.
-    rescheduled = payload.hearing_on is not None and payload.hearing_on != prior_hearing_on
+    rescheduled = prior_schedule != (
+        hearing.hearing_on,
+        hearing.time_status,
+        hearing.hearing_time,
+        hearing.session_label,
+        hearing.timezone,
+    )
     completed_transition = hearing.status == "completed" and prior_status != "completed"
     cancelled_transition = hearing.status == "cancelled" and prior_status != "cancelled"
     closed_hearing_changed = hearing.status in _CLOSED_HEARING_STATUSES and (
@@ -2966,20 +3033,14 @@ def update_matter_hearing(
             prior_hearing_on=prior_hearing_on,
         )
     if rescheduled or completed_transition or cancelled_transition:
-        try:
-            from caseops_api.services.hearing_reminders import (
-                cancel_reminders_for_hearing,
-                schedule_reminders_for_hearing,
-            )
+        from caseops_api.services.hearing_reminders import (
+            cancel_reminders_for_hearing,
+            schedule_reminders_for_hearing,
+        )
 
-            cancel_reminders_for_hearing(session, hearing_id=hearing.id)
-            if rescheduled and hearing.status not in {"completed", "cancelled"}:
-                schedule_reminders_for_hearing(session, hearing=hearing)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "hearing_reminders sync on update failed: %s",
-                exc,
-            )
+        cancel_reminders_for_hearing(session, hearing_id=hearing.id)
+        if rescheduled and hearing.status not in {"completed", "cancelled"}:
+            schedule_reminders_for_hearing(session, hearing=hearing)
 
     if cancelled_transition:
         try:
@@ -3647,9 +3708,71 @@ def create_matter_hearing(
         lock_for_update=True,
     )
     _assert_matter_not_disposed(matter, operation="create a hearing")
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        ZoneInfo(payload.timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unknown IANA hearing timezone.",
+        ) from exc
+    recipient_ids = list(dict.fromkeys(payload.reminder_recipient_membership_ids))
+    if not recipient_ids:
+        recipient_ids = [matter.assignee_membership_id or context.membership.id]
+    recipients = [
+        _get_company_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=membership_id,
+        )
+        for membership_id in recipient_ids
+    ]
+    for recipient in recipients:
+        recipient_context = SessionContext(
+            company=context.company,
+            user=recipient.user,
+            membership=recipient,
+        )
+        if not can_access(session, context=recipient_context, matter=matter):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A reminder recipient cannot access this Matter.",
+            )
+    escalation_id = (
+        payload.escalation_membership_id
+        or matter.assignee_membership_id
+        or context.membership.id
+    )
+    _get_company_membership(
+        session,
+        company_id=context.company.id,
+        membership_id=escalation_id,
+    )
+    configured_offsets = payload.reminder_offsets_hours
+    if configured_offsets is None:
+        configured_offsets = list(get_settings().hearing_reminder_offsets_hours or [])
     hearing = MatterHearing(
         matter_id=matter.id,
         hearing_on=payload.hearing_on,
+        time_status=payload.time_status,
+        hearing_time=payload.hearing_time,
+        session_label=payload.session_label.strip() if payload.session_label else None,
+        timezone=payload.timezone,
+        reminder_policy_json={
+            "recipient_membership_ids": recipient_ids,
+            "channels": list(payload.reminder_channels),
+            "offsets_hours": configured_offsets,
+            "timezone": payload.timezone,
+            "escalation_membership_id": escalation_id,
+            "critical": payload.notification_critical,
+            "schedule_basis": (
+                "exact_time" if payload.time_status == "exact" else "date_boundary"
+            ),
+            "date_reminder_local_time": "18:00",
+            "confirmed_by_membership_id": context.membership.id,
+            "confirmed_at": datetime.now(UTC).isoformat(),
+        },
         forum_name=payload.forum_name.strip(),
         judge_name=payload.judge_name.strip() if payload.judge_name else None,
         purpose=payload.purpose.strip(),
@@ -3689,17 +3812,9 @@ def create_matter_hearing(
     # must not block the hearing create — the transaction proceeds
     # even if reminder persistence raises.
     if hearing.status not in _CLOSED_HEARING_STATUSES:
-        try:
-            from caseops_api.services.hearing_reminders import (
-                schedule_reminders_for_hearing,
-            )
+        from caseops_api.services.hearing_reminders import schedule_reminders_for_hearing
 
-            schedule_reminders_for_hearing(session, hearing=hearing)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "hearing_reminders.schedule_reminders_for_hearing failed: %s",
-                exc,
-            )
+        schedule_reminders_for_hearing(session, hearing=hearing)
     session.commit()
     session.refresh(hearing)
     return _hearing_record(hearing)

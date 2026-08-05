@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 from uuid import uuid4
 
@@ -19,9 +19,11 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Time,
     UniqueConstraint,
     false,
     text,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -1952,6 +1954,15 @@ class MatterHearing(Base):
         index=True,
     )
     hearing_on: Mapped[date] = mapped_column(Date, nullable=False)
+    time_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="time_not_published"
+    )
+    hearing_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    session_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="Asia/Kolkata"
+    )
+    reminder_policy_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     forum_name: Mapped[str] = mapped_column(String(255), nullable=False)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     purpose: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -2185,6 +2196,9 @@ class NotificationDeliveryStatus(StrEnum):
     DELIVERED = "delivered"
     RETRY_SCHEDULED = "retry_scheduled"
     BLOCKED = "blocked"
+    SUPPRESSED = "suppressed"
+    BOUNCED = "bounced"
+    CANCELLED = "cancelled"
     DEAD_LETTER = "dead_letter"
 
 
@@ -2210,9 +2224,10 @@ class HearingReminder(Base):
     __table_args__ = (
         UniqueConstraint(
             "hearing_id",
+            "recipient_membership_id",
             "channel",
             "scheduled_for",
-            name="uq_hearing_reminders_channel_time",
+            name="uq_hearing_reminders_recipient_channel_time",
         ),
     )
 
@@ -2339,8 +2354,22 @@ class EmailSuppression(Base):
     # `sg_message_id` of the event that introduced the suppression.
     # Useful for audit + dedupe; nullable for `manual` insertions.
     source_message_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="sendgrid")
+    first_event_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
     last_event_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    recovery_action: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recovered_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    fallback_sent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -3542,6 +3571,12 @@ class NotificationDeliveryIntent(Base):
             "idempotency_key",
             name="uq_notification_delivery_intent_idempotency",
         ),
+        CheckConstraint(
+            "(CASE WHEN recipient_membership_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN recipient_portal_user_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN recipient_external_ref IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_notification_delivery_exactly_one_recipient",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -3550,11 +3585,16 @@ class NotificationDeliveryIntent(Base):
         nullable=False,
         index=True,
     )
-    recipient_membership_id: Mapped[str] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="CASCADE"),
-        nullable=False,
+    recipient_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    recipient_portal_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    recipient_external_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    destination_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
         nullable=True,
@@ -3588,6 +3628,20 @@ class NotificationDeliveryIntent(Base):
         nullable=True,
         index=True,
     )
+    scheduled_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    critical: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    escalation_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    confidentiality_mode: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="minimal"
+    )
     last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     dead_letter_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -3609,6 +3663,19 @@ class NotificationDeliveryIntent(Base):
         nullable=True,
         index=True,
     )
+    superseded_by_intent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recovery_of_intent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider_state_occurred_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -3622,7 +3689,9 @@ class NotificationDeliveryIntent(Base):
     )
 
     company: Mapped[Company] = relationship()
-    recipient_membership: Mapped[CompanyMembership] = relationship()
+    recipient_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[recipient_membership_id]
+    )
     matter: Mapped[Matter | None] = relationship()
     notification_rule: Mapped[NotificationRule | None] = relationship()
     in_app_notification: Mapped[InAppNotification | None] = relationship()
@@ -3638,6 +3707,10 @@ class NotificationDeliveryEvent(Base):
             name="uq_notification_delivery_provider_event",
         ),
         Index("ix_notification_delivery_events_intent_time", "intent_id", "occurred_at"),
+        UniqueConstraint(
+            "company_id", "provider", "idempotency_key",
+            name="uq_notification_delivery_event_idempotency",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -3650,10 +3723,42 @@ class NotificationDeliveryEvent(Base):
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    applied_to_state: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
     error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class HearingReminderDeliveryIntent(Base):
+    """Compatibility lineage from a legacy schedule row to durable delivery truth."""
+
+    __tablename__ = "hearing_reminder_delivery_intents"
+    __table_args__ = (
+        UniqueConstraint("hearing_reminder_id", "intent_id", name="uq_hearing_reminder_intent"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    hearing_reminder_id: Mapped[str] = mapped_column(
+        ForeignKey("hearing_reminders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    intent_id: Mapped[str] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
 

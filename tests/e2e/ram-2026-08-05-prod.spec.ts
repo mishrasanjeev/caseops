@@ -6,6 +6,8 @@ const PROD_API_BASE_URL =
 const COMPANY_SLUG = process.env.CASEOPS_RAM_PROD_SLUG ?? "legal";
 const TESTER_EMAIL =
   process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
+const QA_COMPANY_SLUG = process.env.CASEOPS_QA_SLUG ?? "caseops-qa";
+const QA_OWNER_EMAIL = process.env.CASEOPS_QA_EMAIL ?? "qa-bot@caseops.ai";
 
 type StatuteSummary = {
   id: string;
@@ -42,6 +44,27 @@ async function signIn(page: Page): Promise<void> {
   await page.locator("#company-slug").fill(COMPANY_SLUG);
   await page.locator("#email").fill(TESTER_EMAIL);
   await page.locator("#password").fill(requiredPassword());
+  const login = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/auth/login" &&
+      response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: /^Sign in$/ }).click();
+  expect((await login).status()).toBe(200);
+  await page.waitForURL(new RegExp(`${PROD_BASE_URL}/app(?:[/?]|$)`));
+}
+
+async function signInQa(page: Page): Promise<void> {
+  const password = process.env.CASEOPS_QA_PASSWORD?.trim() ?? "";
+  if (!password) {
+    throw new Error(
+      "CASEOPS_QA_PASSWORD is required for the production notification proof.",
+    );
+  }
+  await page.goto(`${PROD_BASE_URL}/sign-in`);
+  await page.locator("#company-slug").fill(QA_COMPANY_SLUG);
+  await page.locator("#email").fill(QA_OWNER_EMAIL);
+  await page.locator("#password").fill(password);
   const login = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/auth/login" &&
@@ -176,6 +199,83 @@ test.describe("Ram 2026-08-05 deployed statute trust", () => {
         detail.section.exact_source_version!,
       );
     }
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe("Ram 2026-08-05 deployed notification convergence", () => {
+  test.setTimeout(120_000);
+
+  test("IPLF-007C persists a safe in-app intent with usable 360px controls", async ({
+    page,
+  }) => {
+    await signInQa(page);
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(`${PROD_BASE_URL}/app/admin/notifications`);
+
+    await expect(
+      page.getByRole("heading", { name: "Notification delivery and recovery" }),
+    ).toBeVisible();
+    const selfTest = page.getByTestId("notification-self-test");
+    await expect(selfTest).toBeVisible();
+
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/api/notification-preferences/test" &&
+        response.request().method() === "POST",
+    );
+    await selfTest.click();
+    const response = await responsePromise;
+    expect(response.status(), await response.text()).toBe(200);
+    const payload = (await response.json()) as {
+      intent: {
+        id: string;
+        channel: string;
+        status: string;
+        destination: string | null;
+        destination_version: number;
+      };
+      message: string;
+    };
+    expect(payload.intent).toMatchObject({
+      channel: "in_app",
+      status: "delivered",
+      destination: null,
+      destination_version: 1,
+    });
+    expect(payload.message).toContain("without contacting an external provider");
+    await expect(
+      page.getByText(/without contacting an external provider/i),
+    ).toBeVisible();
+
+    const adminResponse = await page.request.get(
+      `${PROD_API_BASE_URL}/api/admin/notifications`,
+    );
+    expect(adminResponse.status(), await adminResponse.text()).toBe(200);
+    const adminPayload = (await adminResponse.json()) as {
+      intents: Array<{ id: string; status: string; event_type: string }>;
+      metrics: { delivered: number };
+    };
+    expect(adminPayload.intents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: payload.intent.id,
+          status: "delivered",
+          event_type: "notification_test",
+        }),
+      ]),
+    );
+    expect(adminPayload.metrics.delivered).toBeGreaterThanOrEqual(1);
+    await expect(
+      page.getByTestId(`notification-intent-${payload.intent.id}`),
+    ).toBeVisible();
     expect(
       await page.evaluate(
         () =>

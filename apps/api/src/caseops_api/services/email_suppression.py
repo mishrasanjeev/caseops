@@ -54,6 +54,7 @@ def is_suppressed(
         select(EmailSuppression).where(
             EmailSuppression.company_id == company_id,
             EmailSuppression.recipient_email == recipient_email.strip().lower(),
+            EmailSuppression.recovered_at.is_(None),
         )
     )
 
@@ -101,6 +102,9 @@ def record_suppression(
         if source_message_id is not None:
             existing.source_message_id = source_message_id
         existing.last_event_at = now
+        existing.recovered_at = None
+        existing.recovered_by_membership_id = None
+        existing.recovery_action = None
         return existing
 
     row = EmailSuppression(
@@ -110,6 +114,7 @@ def record_suppression(
         detail=detail[:500] if detail else None,
         source_message_id=source_message_id,
         last_event_at=now,
+        first_event_at=now,
         created_at=now,
     )
     session.add(row)
@@ -129,8 +134,30 @@ def record_suppression(
     return row
 
 
+def recover_suppression(
+    session: Session,
+    *,
+    suppression: EmailSuppression,
+    recovered_by_membership_id: str,
+    recovery_action: str,
+) -> EmailSuppression:
+    """Deactivate a suppression without deleting its provider evidence."""
+    from datetime import UTC, datetime
+
+    action = " ".join(recovery_action.split())
+    if len(action) < 8:
+        raise ValueError("A specific suppression recovery action is required.")
+    suppression.recovered_at = datetime.now(UTC)
+    suppression.recovered_by_membership_id = recovered_by_membership_id
+    suppression.recovery_action = action[:500]
+    session.add(suppression)
+    session.flush()
+    return suppression
+
+
 __all__ = [
     "is_suppressed",
     "reason_for_event",
+    "recover_suppression",
     "record_suppression",
 ]

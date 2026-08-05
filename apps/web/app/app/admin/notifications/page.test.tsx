@@ -8,6 +8,10 @@ const {
   deleteNotificationRuleMock,
   listAdminNotificationsMock,
   listNotificationRulesMock,
+  previewNotificationRecoveryMock,
+  recoverEmailSuppressionMock,
+  recoverNotificationIntentMock,
+  testCurrentUserNotificationMock,
   updateNotificationRuleMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
@@ -15,6 +19,10 @@ const {
   deleteNotificationRuleMock: vi.fn(),
   listAdminNotificationsMock: vi.fn(),
   listNotificationRulesMock: vi.fn(),
+  previewNotificationRecoveryMock: vi.fn(),
+  recoverEmailSuppressionMock: vi.fn(),
+  recoverNotificationIntentMock: vi.fn(),
+  testCurrentUserNotificationMock: vi.fn(),
   updateNotificationRuleMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
@@ -24,6 +32,10 @@ vi.mock("@/lib/api/endpoints", () => ({
   deleteNotificationRule: deleteNotificationRuleMock,
   listAdminNotifications: listAdminNotificationsMock,
   listNotificationRules: listNotificationRulesMock,
+  previewNotificationRecovery: previewNotificationRecoveryMock,
+  recoverEmailSuppression: recoverEmailSuppressionMock,
+  recoverNotificationIntent: recoverNotificationIntentMock,
+  testCurrentUserNotification: testCurrentUserNotificationMock,
   updateNotificationRule: updateNotificationRuleMock,
 }));
 
@@ -46,6 +58,10 @@ describe("AdminNotificationsPage", () => {
     deleteNotificationRuleMock.mockReset();
     listAdminNotificationsMock.mockReset();
     listNotificationRulesMock.mockReset();
+    previewNotificationRecoveryMock.mockReset();
+    recoverEmailSuppressionMock.mockReset();
+    recoverNotificationIntentMock.mockReset();
+    testCurrentUserNotificationMock.mockReset();
     updateNotificationRuleMock.mockReset();
     useCapabilityMock.mockReset();
     listNotificationRulesMock.mockResolvedValue({
@@ -70,6 +86,19 @@ describe("AdminNotificationsPage", () => {
       total_delivered: 10,
       total_failed: 2,
       reminders: [],
+      intents: [],
+      suppressions: [],
+      metrics: {
+        due: 4,
+        attempted: 12,
+        delivered: 10,
+        suppressed: 1,
+        bounced: 1,
+        failed: 2,
+        fallback: 2,
+        stale_queue: 0,
+        critical_alerts: 1,
+      },
     });
     listNotificationRulesMock.mockResolvedValue({
       durable_delivery: "wtd_5_3_foundation_available",
@@ -91,15 +120,20 @@ describe("AdminNotificationsPage", () => {
       ],
     });
     render(withClient(<AdminNotificationsPage />));
-    expect(await screen.findByText("Hearing reminders")).toBeInTheDocument();
+    expect(await screen.findByText("Notification delivery and recovery")).toBeInTheDocument();
     expect(await screen.findByText("Notification rules")).toBeInTheDocument();
     expect(screen.getByText(/Durable foundation available/i)).toBeInTheDocument();
     expect(screen.getByTestId("notification-rule-create")).toBeInTheDocument();
     expect(screen.getByTestId("notification-rule-rule-1")).toBeInTheDocument();
-    expect(screen.getByText("Queued")).toBeInTheDocument();
-    expect(screen.getByText("Sent")).toBeInTheDocument();
+    expect(screen.getByText("Due")).toBeInTheDocument();
+    expect(screen.getByText("Attempted")).toBeInTheDocument();
     expect(screen.getByText("Delivered")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Suppressed")).toBeInTheDocument();
+    expect(screen.getByText("Bounced")).toBeInTheDocument();
+    expect(screen.getByText("Fallback")).toBeInTheDocument();
+    expect(screen.getByText("Critical alerts")).toBeInTheDocument();
+    expect(screen.getByTestId("notification-self-test")).toBeInTheDocument();
   });
 
   it("does not call the API while waiting for capability resolution", () => {

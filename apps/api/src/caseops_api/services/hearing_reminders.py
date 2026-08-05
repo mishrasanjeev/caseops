@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, time, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -47,18 +48,29 @@ from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
     assert_operational_matter,
 )
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 
 
 def _hearing_start_at(hearing: MatterHearing) -> datetime:
-    """Pin a UTC-aware datetime for the hearing. ``hearing_on`` is a
-    Date; we treat the hearing as starting at 10:00 IST (~04:30 UTC)
-    for reminder purposes. When we add explicit time fields to
-    ``MatterHearing`` this helper becomes a straight read."""
-    return datetime.combine(
-        hearing.hearing_on, time(4, 30), tzinfo=UTC,
-    )
+    """Return the disclosed schedule anchor; never invent a 10:00 hearing time."""
+    try:
+        timezone = ZoneInfo(hearing.timezone or "Asia/Kolkata")
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"Unknown hearing timezone {hearing.timezone!r}.") from exc
+    if hearing.time_status == "exact" and hearing.hearing_time is not None:
+        local_anchor = datetime.combine(hearing.hearing_on, hearing.hearing_time, tzinfo=timezone)
+    else:
+        # Session / unpublished-time reminders use a disclosed date-reminder anchor,
+        # never a represented hearing time. The policy value is persisted and shown
+        # as date-based scheduling evidence.
+        raw_anchor = str(
+            (hearing.reminder_policy_json or {}).get("date_reminder_local_time") or "18:00"
+        )
+        anchor_time = time.fromisoformat(raw_anchor)
+        local_anchor = datetime.combine(hearing.hearing_on, anchor_time, tzinfo=timezone)
+    return local_anchor.astimezone(UTC)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -83,6 +95,24 @@ def _eligible_recipients(
     targets: list[tuple[str | None, str | None]] = []
     seen: set[str] = set()
     matter = hearing.matter
+    policy_ids = list((hearing.reminder_policy_json or {}).get("recipient_membership_ids") or [])
+    if policy_ids:
+        stmt = (
+            select(CompanyMembership)
+            .join(User, CompanyMembership.user_id == User.id)
+            .where(
+                CompanyMembership.company_id == matter.company_id,
+                CompanyMembership.id.in_(policy_ids),
+                CompanyMembership.is_active.is_(True),
+                User.is_active.is_(True),
+            )
+        )
+        by_id = {membership.id: membership for membership in session.scalars(stmt)}
+        return [
+            (membership_id, by_id[membership_id].user.email)
+            for membership_id in policy_ids
+            if membership_id in by_id and by_id[membership_id].user.email
+        ]
     if matter.assignee_membership and matter.assignee_membership.user:
         mid = matter.assignee_membership.id
         email = matter.assignee_membership.user.email
@@ -118,7 +148,8 @@ def schedule_reminders_for_hearing(
     and skip).
     """
     settings = get_settings()
-    offsets = settings.hearing_reminder_offsets_hours or []
+    policy = hearing.reminder_policy_json or {}
+    offsets = policy.get("offsets_hours") or settings.hearing_reminder_offsets_hours or []
     if not offsets:
         return []
     hearing_at = _hearing_start_at(hearing)
@@ -128,6 +159,7 @@ def schedule_reminders_for_hearing(
         return []
 
     created: list[HearingReminder] = []
+    requested_channels = list(policy.get("channels") or [HearingReminderChannel.EMAIL])
     for offset_h in offsets:
         send_at = hearing_at - timedelta(hours=int(offset_h))
         if send_at <= now:
@@ -135,6 +167,8 @@ def schedule_reminders_for_hearing(
             # is already in the past. The sooner offsets can still fire.
             continue
         for membership_id, email in recipients:
+            if HearingReminderChannel.EMAIL not in requested_channels:
+                continue
             reminder = HearingReminder(
                 company_id=hearing.matter.company_id,
                 matter_id=hearing.matter_id,
@@ -155,12 +189,181 @@ def schedule_reminders_for_hearing(
             try:
                 session.add(reminder)
                 session.flush()
-                sp.commit()
                 created.append(reminder)
+                membership = (
+                    session.get(CompanyMembership, membership_id)
+                    if membership_id is not None
+                    else None
+                )
+                if membership is not None and membership.user is not None:
+                    from caseops_api.services.notification_delivery import (
+                        enqueue_notification_delivery_intent,
+                        link_hearing_reminder_intent,
+                    )
+
+                    context = SessionContext(
+                        company=hearing.matter.company,
+                        membership=membership,
+                        user=membership.user,
+                    )
+                    escalation_id = policy.get("escalation_membership_id")
+                    escalation = (
+                        session.get(CompanyMembership, escalation_id)
+                        if escalation_id
+                        else membership
+                    )
+                    source_id = f"{reminder.id}:v1"
+                    external = enqueue_notification_delivery_intent(
+                        session,
+                        context=context,
+                        recipient_membership=membership,
+                        channel=HearingReminderChannel.EMAIL,
+                        event_type="hearing_upcoming",
+                        source_type="hearing_reminder",
+                        source_id=source_id,
+                        matter=hearing.matter,
+                        title="Hearing reminder",
+                        body="A hearing reminder is due. Open CaseOps for the details.",
+                        scheduled_for=send_at,
+                        critical=bool(policy.get("critical", True)),
+                        escalation_membership=escalation,
+                        schedule_source_type="matter_hearing",
+                        schedule_source_id=hearing.id,
+                    )
+                    if external is not None:
+                        link_hearing_reminder_intent(
+                            session,
+                            hearing_reminder_id=reminder.id,
+                            intent_id=external.id,
+                            is_primary=True,
+                        )
+                        if external.fallback_intent_id:
+                            link_hearing_reminder_intent(
+                                session,
+                                hearing_reminder_id=reminder.id,
+                                intent_id=external.fallback_intent_id,
+                                is_primary=False,
+                            )
+                sp.commit()
             except IntegrityError:
                 # Another concurrent create beat us — safe to skip.
                 sp.rollback()
                 continue
+            except Exception:
+                sp.rollback()
+                raise
+        for membership_id, _email in recipients:
+            for channel in requested_channels:
+                if channel in {
+                    HearingReminderChannel.EMAIL,
+                    HearingReminderChannel.IN_APP,
+                }:
+                    continue
+                reminder = HearingReminder(
+                    company_id=hearing.matter.company_id,
+                    matter_id=hearing.matter_id,
+                    hearing_id=hearing.id,
+                    recipient_membership_id=membership_id,
+                    recipient_email=None,
+                    recipient_phone=None,
+                    channel=channel,
+                    scheduled_for=send_at,
+                    status=HearingReminderStatus.QUEUED,
+                )
+                sp = session.begin_nested()
+                try:
+                    session.add(reminder)
+                    session.flush()
+                    membership = session.get(CompanyMembership, membership_id)
+                    if membership is None or membership.user is None:
+                        sp.rollback()
+                        continue
+                    from caseops_api.services.notification_delivery import (
+                        enqueue_notification_delivery_intent,
+                        link_hearing_reminder_intent,
+                    )
+
+                    escalation_id = policy.get("escalation_membership_id")
+                    escalation = (
+                        session.get(CompanyMembership, escalation_id)
+                        if escalation_id
+                        else membership
+                    )
+                    context = SessionContext(
+                        company=hearing.matter.company,
+                        membership=membership,
+                        user=membership.user,
+                    )
+                    intent = enqueue_notification_delivery_intent(
+                        session,
+                        context=context,
+                        recipient_membership=membership,
+                        channel=channel,
+                        event_type="hearing_upcoming",
+                        source_type="hearing_reminder",
+                        source_id=f"{reminder.id}:v1",
+                        matter=hearing.matter,
+                        title="Hearing reminder",
+                        body="A hearing reminder is due. Open CaseOps for the details.",
+                        scheduled_for=send_at,
+                        critical=bool(policy.get("critical", True)),
+                        escalation_membership=escalation,
+                        schedule_source_type="matter_hearing",
+                        schedule_source_id=hearing.id,
+                    )
+                    if intent is not None:
+                        link_hearing_reminder_intent(
+                            session,
+                            hearing_reminder_id=reminder.id,
+                            intent_id=intent.id,
+                            is_primary=True,
+                        )
+                        if intent.fallback_intent_id:
+                            link_hearing_reminder_intent(
+                                session,
+                                hearing_reminder_id=reminder.id,
+                                intent_id=intent.fallback_intent_id,
+                                is_primary=False,
+                            )
+                    sp.commit()
+                    created.append(reminder)
+                except IntegrityError:
+                    sp.rollback()
+                    continue
+                except Exception:
+                    sp.rollback()
+                    raise
+        if requested_channels == [HearingReminderChannel.IN_APP]:
+            from caseops_api.services.notification_delivery import (
+                enqueue_notification_delivery_intent,
+            )
+
+            for membership_id, _email in recipients:
+                membership = session.get(CompanyMembership, membership_id)
+                if membership is None or membership.user is None:
+                    continue
+                context = SessionContext(
+                    company=hearing.matter.company,
+                    membership=membership,
+                    user=membership.user,
+                )
+                enqueue_notification_delivery_intent(
+                    session,
+                    context=context,
+                    recipient_membership=membership,
+                    channel=HearingReminderChannel.IN_APP,
+                    event_type="hearing_upcoming",
+                    source_type="hearing_reminder",
+                    source_id=f"{hearing.id}:{membership.id}:{offset_h}:in_app:v1",
+                    matter=hearing.matter,
+                    title="Hearing reminder",
+                    body="A hearing reminder is due. Open CaseOps for the details.",
+                    scheduled_for=send_at,
+                    critical=True,
+                    escalation_membership=membership,
+                    schedule_source_type="matter_hearing",
+                    schedule_source_id=hearing.id,
+                )
     return created
 
 
@@ -181,6 +384,18 @@ def cancel_reminders_for_hearing(
     )
     for r in pending:
         r.status = HearingReminderStatus.CANCELLED
+    if pending:
+        company_id = pending[0].company_id
+        from caseops_api.services.notification_delivery import (
+            cancel_pending_notification_intents,
+        )
+
+        cancel_pending_notification_intents(
+            session,
+            company_id=company_id,
+            schedule_source_type="matter_hearing",
+            schedule_source_id=hearing_id,
+        )
     return len(pending)
 
 

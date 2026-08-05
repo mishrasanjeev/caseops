@@ -2854,6 +2854,56 @@ export type HearingReminderRecord = {
   delivered_at: string | null;
   created_at: string;
   updated_at: string;
+  intent_ids: string[];
+  delivery_status: string | null;
+  destination_version: number | null;
+  superseded_by_intent_id: string | null;
+  fallback_sent: boolean;
+};
+
+export type NotificationDeliveryIntentRecord = {
+  id: string;
+  channel: string;
+  status: string;
+  event_type: string;
+  source_type: string;
+  source_id: string;
+  scheduled_for: string | null;
+  attempts: number;
+  destination_version: number;
+  destination: string | null;
+  critical: boolean;
+  suppression_reason: string | null;
+  fallback_intent_id: string | null;
+  superseded_by_intent_id: string | null;
+  recovery_of_intent_id: string | null;
+  last_error_redacted: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmailSuppressionRecord = {
+  id: string;
+  provider: string;
+  category: string;
+  affected_address: string;
+  first_occurrence: string;
+  last_occurrence: string;
+  recovery_action: string | null;
+  recovered_at: string | null;
+  fallback_sent: boolean;
+};
+
+export type NotificationMetrics = {
+  due: number;
+  attempted: number;
+  delivered: number;
+  suppressed: number;
+  bounced: number;
+  failed: number;
+  fallback: number;
+  stale_queue: number;
+  critical_alerts: number;
 };
 
 export type HearingReminderListResponse = {
@@ -2862,6 +2912,9 @@ export type HearingReminderListResponse = {
   total_sent: number;
   total_delivered: number;
   total_failed: number;
+  intents: NotificationDeliveryIntentRecord[];
+  suppressions: EmailSuppressionRecord[];
+  metrics: NotificationMetrics | null;
 };
 
 export async function listAdminNotifications(input?: {
@@ -2875,6 +2928,52 @@ export async function listAdminNotifications(input?: {
     ? `/api/admin/notifications?${qs.toString()}`
     : "/api/admin/notifications";
   return apiRequest<HearingReminderListResponse>(path);
+}
+
+export async function testCurrentUserNotification(): Promise<{
+  intent: NotificationDeliveryIntentRecord;
+  message: string;
+}> {
+  return apiRequest("/api/notification-preferences/test", { method: "POST", body: {} });
+}
+
+export async function previewNotificationRecovery(intentId: string): Promise<{
+  original_intent_id: string;
+  recoverable: boolean;
+  requires_changed_destination: boolean;
+  next_destination_version: number;
+  current_status: string;
+  impact: string;
+}> {
+  return apiRequest(`/api/admin/notifications/intents/${intentId}/recovery-preview`);
+}
+
+export async function recoverNotificationIntent(input: {
+  intentId: string;
+  recoveryAction: string;
+  replacementMembershipId?: string | null;
+}): Promise<{ intent: NotificationDeliveryIntentRecord; message: string }> {
+  return apiRequest(`/api/admin/notifications/intents/${input.intentId}/recover`, {
+    method: "POST",
+    body: {
+      recovery_action: input.recoveryAction,
+      replacement_membership_id: input.replacementMembershipId || null,
+    },
+  });
+}
+
+export async function recoverEmailSuppression(input: {
+  suppressionId: string;
+  recoveryAction: string;
+  replacementMembershipId?: string | null;
+}): Promise<EmailSuppressionRecord> {
+  return apiRequest(`/api/admin/notifications/suppressions/${input.suppressionId}/recover`, {
+    method: "POST",
+    body: {
+      recovery_action: input.recoveryAction,
+      replacement_membership_id: input.replacementMembershipId || null,
+    },
+  });
 }
 
 
