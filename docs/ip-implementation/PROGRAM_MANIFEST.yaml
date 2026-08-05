@@ -14,15 +14,15 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-008B",
+    "active_slice": "IPLF-001C",
     "checkpoint": {
       "recorded_at": "2026-08-04T21:05:00+05:30",
       "repository_revision": "95cb866bceb0ac509c23490064eaceefc691bec9",
       "environment": "IPLF-004B is merged at canonical main 4c2ce1c, deployed on API caseops-api-00230-xv5 and web caseops-web-00210-b96 at 100% traffic with migration success and immutable scheduler-job image convergence. Exact production run 30920962309 exposed the unbounded Notice Matter picker and a source-action response mismatch; the picker root-cause fix is PR 160 and production verification remains red until rerun. IPLF-005B exact head 5715f2c is in full CI on PR 158. IPLF-006C application commit 2f36aa3 retains its full local gates. IPLF-007C application commit 95cb866 completes local migration/API/web/real-API mobile verification.",
       "completed_scope": "IPLF-002A and IPLF-002B are production verified; IPLF-003C is merged, deployed, and production verified. IPLF-004A implements opaque canonical source resolution, redirect-time validation, hashed access audit, and the tenant source-defect queue. IPLF-004B completes source report UI/health queueing, protected Matter-document proxying, tenant isolation, and responsive UJ-17 handling. IPLF-005B completes seven explicit research modes, measured corpus/index scope, typed recovery states, frozen committed criteria, explainable result evidence, immutable tenant research reports, and the lawyer-approval-aware golden-query runner. IPLF-006C completes verified-only statute text, full provision provenance, immutable two-person source review, typed link/conflict governance, seed/enrichment non-downgrade, licensed-use controls, truthful coverage, and responsive UJ-15/UJ-48 handling.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-008B",
-      "next_action": "Release IPLF-006C and IPLF-007C in dependency order after exact-head CI and exact-serving production verification, then integrate IPLF-008A and continue at IPLF-008B without imposing an elapsed-time scheduler blocker. Obtain named lawyer approval for the golden-query fixtures and the M0 human program lock without fabricating acceptance.",
+      "next_slice": "IPLF-001C",
+      "next_action": "Release IPLF-006C, IPLF-007C, IPLF-008A, and IPLF-008B in dependency order after exact-head CI and exact-serving production verification. Then reconcile the remaining scheduler IAM/deployment-canary coverage at IPLF-001C before M2, without imposing an elapsed-time blocker or duplicating the canonical scheduler/operator owners.",
       "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
     }
   },
