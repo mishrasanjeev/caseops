@@ -195,7 +195,7 @@ test.describe("Functional QA automation spine", () => {
         ["/app/admin/integrations", /^Integrations$/i],
         ["/app/admin/matter-billing", /Matter billing/i],
         ["/app/admin/microsoft365", /Microsoft 365/i],
-        ["/app/admin/notifications", /Hearing reminders/i],
+        ["/app/admin/notifications", /Notification delivery and recovery/i],
         ["/app/admin/outlook", /Outlook configuration/i],
         ["/app/admin/provider-operations", /Provider operations/i],
         ["/app/admin/roles", /Custom role templates/i],
