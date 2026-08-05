@@ -2364,7 +2364,9 @@ class EmailSuppression(Base):
     recovery_action: Mapped[str | None] = mapped_column(String(500), nullable=True)
     recovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     recovered_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     fallback_sent: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
@@ -3633,7 +3635,9 @@ class NotificationDeliveryIntent(Base):
         Boolean, nullable=False, default=False, server_default=false()
     )
     escalation_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     confidentiality_mode: Mapped[str] = mapped_column(
         String(24), nullable=False, default="minimal"
