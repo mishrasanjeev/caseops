@@ -653,11 +653,14 @@
         "IPLF-008A",
         "IPLF-008B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md",
+        "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md"
+      ]
     },
     {
       "id": "IPLF-019",
@@ -4283,29 +4286,65 @@
       "dependencies": [
         "IPLF-008A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        ".github/workflows/prod-verify.yml",
+        "apps/api/src/caseops_api/api/routes/case_tracking.py",
+        "apps/api/src/caseops_api/schemas/case_tracking.py",
+        "apps/api/src/caseops_api/services/case_tracking.py",
+        "apps/web/app/app/case-tracking/page.tsx",
+        "docs/runbooks/release-signoff-template.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_case_tracking.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md",
+          "revision": "b92d5d9b3d37113232e3ed9c77fbb4756e2c26b4",
+          "environment": "local API, generated OpenAPI, web component/type checks, and production Playwright control-plane validation",
+          "fixtures": "tagged notification-disabled QA bookmark, exact and stale release SHAs, costed provider snapshot/order, untagged bookmark, and 360px case-tracking surface",
+          "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, visible narrow-screen controls, and no overflow",
+          "result": "passed",
+          "recorded_at": "2026-08-05T06:45:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "After IPLF-008A is merged, rebase this slice, pass exact-head CI, merge/deploy, configure the approved QA CNR, and require the dated exact-serving provider/source production test before changing release status."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema migration or backfill; the exact-release canary reuses existing bookmark, operation/snapshot, cost, update/source, and audit owners and may create one notification-disabled tagged QA bookmark."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/runbooks/release-signoff-template.md",
+          "disposition": "updated",
+          "owner": "Engineering/SRE and release approvers",
+          "evidence": "Expanded requirements, ownership, security, test, exact-release, production, documentation, and external-approval sign-off fields without an arbitrary elapsed-time gate"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Exact application revision, canary contract, cost/security boundaries, local gates, rollback, and remaining production proof"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "administrative_exception": {
-        "prd_citation": "PRD Section 25 and the parent epic title",
-        "reviewer": "CaseOps Phase 0 control-plane reconciliation",
-        "reason": "This bounded technical slice has no direct requirement family or journey path; its parent completion slices carry the full reciprocal allocation.",
-        "date": "2026-08-02",
+        "prd_citation": "PRD Sections 12 TRACK-01 through TRACK-14 and 25 IPLF-008",
+        "reviewer": "CaseOps M1 release-control reconciliation",
+        "reason": "This release-proof slice directly covers the TRACK family but does not claim the broader UJ-25 integration-operations or UJ-68 credential-rotation paths, which remain reciprocally allocated to their behavior-owning slices.",
+        "date": "2026-08-05",
         "milestone": "M1"
       }
     },
