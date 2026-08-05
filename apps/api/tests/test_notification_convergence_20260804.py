@@ -12,6 +12,7 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     EmailSuppression,
+    EmailSuppressionReason,
     HearingReminder,
     HearingReminderDeliveryIntent,
     NotificationDeliveryEvent,
@@ -19,6 +20,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.email_suppression import record_suppression
 from caseops_api.services.notification_delivery import (
     apply_notification_provider_event,
     enqueue_notification_delivery_intent,
@@ -73,6 +75,49 @@ def test_iplf_uj_11_normal_self_service_test_and_admin_metrics(
     assert payload["metrics"]["attempted"] == 1
     assert payload["metrics"]["critical_alerts"] == 0
     assert payload["intents"][0]["event_type"] == "notification_test"
+
+
+def test_iplf_req_notif_09_suppression_recovery_route_preserves_evidence(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    headers = auth_headers(str(boot["access_token"]))
+    with get_session_factory()() as session:
+        context = _context(session)
+        suppression = record_suppression(
+            session,
+            company_id=context.company.id,
+            recipient_email="recovered@example.test",
+            reason=EmailSuppressionReason.UNSUBSCRIBE,
+            detail="Provider unsubscribe evidence",
+            source_message_id="sg-007c-recovery",
+        )
+        suppression_id = suppression.id
+        first_event_at = suppression.first_event_at
+        session.commit()
+
+    recovered = client.post(
+        f"/api/admin/notifications/suppressions/{suppression_id}/recover",
+        headers=headers,
+        json={"recovery_action": "Recipient consent was independently reconfirmed"},
+    )
+    assert recovered.status_code == 200, recovered.text
+    payload = recovered.json()
+    assert payload["id"] == suppression_id
+    assert payload["category"] == "unsubscribe"
+    assert payload["affected_address"] == "recovered@example.test"
+    assert payload["recovered_at"] is not None
+    assert payload["recovery_action"] == "Recipient consent was independently reconfirmed"
+
+    with get_session_factory()() as session:
+        persisted = session.get(EmailSuppression, suppression_id)
+        assert persisted is not None
+        persisted_first = persisted.first_event_at
+        if persisted_first.tzinfo is None:
+            persisted_first = persisted_first.replace(tzinfo=UTC)
+        assert persisted_first == first_event_at
+        assert persisted.source_message_id == "sg-007c-recovery"
+        assert persisted.recovered_by_membership_id is not None
 
 
 def test_iplf_req_notif_01_02_17_21_hearing_policy_lineage_and_cancellation(

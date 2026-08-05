@@ -73,6 +73,10 @@ def upgrade() -> None:
         batch_op.alter_column(
             "first_event_at", existing_type=sa.DateTime(timezone=True), nullable=False
         )
+        batch_op.create_index(
+            "ix_email_suppressions_recovered_by_membership_id",
+            ["recovered_by_membership_id"],
+        )
 
     with op.batch_alter_table("notification_delivery_intents") as batch_op:
         batch_op.alter_column(
@@ -157,6 +161,10 @@ def upgrade() -> None:
         )
         batch_op.create_index(
             "ix_notification_delivery_intents_scheduled_for", ["scheduled_for"]
+        )
+        batch_op.create_index(
+            "ix_notification_delivery_intents_escalation_membership_id",
+            ["escalation_membership_id"],
         )
         batch_op.create_index(
             "ix_notification_delivery_intents_superseded_by_intent_id",
@@ -348,6 +356,7 @@ def downgrade() -> None:
     with op.batch_alter_table("notification_delivery_intents") as batch_op:
         batch_op.drop_index("ix_notification_delivery_intents_recovery_of_intent_id")
         batch_op.drop_index("ix_notification_delivery_intents_superseded_by_intent_id")
+        batch_op.drop_index("ix_notification_delivery_intents_escalation_membership_id")
         batch_op.drop_index("ix_notification_delivery_intents_scheduled_for")
         batch_op.drop_index("ix_notification_delivery_intents_recipient_portal_user_id")
         batch_op.drop_constraint("ck_notification_delivery_exactly_one_recipient", type_="check")
@@ -362,6 +371,7 @@ def downgrade() -> None:
             "recipient_membership_id", existing_type=sa.String(36), nullable=False
         )
     with op.batch_alter_table("email_suppressions") as batch_op:
+        batch_op.drop_index("ix_email_suppressions_recovered_by_membership_id")
         for column in (
             "fallback_sent", "recovered_by_membership_id", "recovered_at",
             "recovery_action", "first_event_at", "provider",
