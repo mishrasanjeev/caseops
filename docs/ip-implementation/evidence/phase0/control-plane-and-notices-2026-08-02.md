@@ -224,3 +224,15 @@ No sleep, retry, weakened filter, mocked response, or product-state shortcut
 was introduced. Playwright discovery compiled all three tests in the modified
 file. Exact-head CI and a fresh post-deployment production workflow remain the
 release evidence for this correction.
+
+Fresh post-deployment run `30971023210` then proved the original Notice workflow
+green in 23.3 seconds, including created-record, owner/status persistence,
+filters, multi-Matter behavior, lifecycle continuation, and cleanup. That run
+exposed a separate stale STATUTE-LOOP assertion: after IPLF-006C, the BNS
+section list correctly excludes unverified Section 318, while the historical
+test still required it to appear before checking its hidden body.
+
+The regression now requires Section 318 to be absent from the verified-only
+list and verifies through the controlled detail route that its metadata remains
+available but `section_text` is `null`. This is the intended fail-closed product
+contract, not a skipped or weakened assertion.
