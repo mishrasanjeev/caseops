@@ -255,9 +255,27 @@ def upgrade() -> None:
         "statute_source_conflicts",
         ["section_id"],
     )
+    op.create_index(
+        "ix_statute_source_conflicts_decision_by_membership_id",
+        "statute_source_conflicts",
+        ["decision_by_membership_id"],
+    )
+    op.create_index(
+        "ix_statute_source_conflicts_created_by_membership_id",
+        "statute_source_conflicts",
+        ["created_by_membership_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_statute_source_conflicts_created_by_membership_id",
+        table_name="statute_source_conflicts",
+    )
+    op.drop_index(
+        "ix_statute_source_conflicts_decision_by_membership_id",
+        table_name="statute_source_conflicts",
+    )
     op.drop_index(
         "ix_statute_source_conflicts_section_id",
         table_name="statute_source_conflicts",
