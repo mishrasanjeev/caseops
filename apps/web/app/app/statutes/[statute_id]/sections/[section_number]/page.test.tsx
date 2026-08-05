@@ -109,7 +109,7 @@ describe("StatuteSectionDetailPage", () => {
       child_sections: [],
     });
     render(withClient(<StatuteSectionDetailPage />));
-    expect(await screen.findByText(/Bare text not yet indexed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Verified statutory text unavailable/i)).toBeInTheDocument();
     expect(screen.queryByText(/Unverified legacy cache text/)).not.toBeInTheDocument();
   });
 
@@ -138,7 +138,7 @@ describe("StatuteSectionDetailPage", () => {
     });
     render(withClient(<StatuteSectionDetailPage />));
     expect(
-      await screen.findByText(/Bare text not yet indexed/i),
+      await screen.findByText(/Verified statutory text unavailable/i),
     ).toBeInTheDocument();
   });
 });

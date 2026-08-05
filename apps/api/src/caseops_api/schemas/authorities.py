@@ -9,13 +9,28 @@ from caseops_api.schemas.source_actions import SourceActionRecord
 
 AuthorityForumLevelLiteral = Literal["high_court", "supreme_court"]
 AuthorityDocumentTypeLiteral = Literal["judgment", "order", "practice_direction", "notice"]
-AuthoritySearchModeLiteral = Literal["keyword", "contextual"]
+AuthoritySearchModeLiteral = Literal[
+    "keyword",
+    "contextual",
+    "exact_citation",
+    "party",
+    "court",
+    "judge",
+    "act_section",
+]
 AuthoritySearchOutcomeLiteral = Literal[
     "results_found",
-    "no_results",
+    "no_matching_documents",
+    "corpus_unavailable",
+    "index_stale",
+    "provider_unavailable",
+    "permission_denied",
+    "query_invalid",
+    "request_timed_out",
     "offset_out_of_range",
     "unreadable_filtered",
 ]
+AuthorityIndexStateLiteral = Literal["current", "stale", "unavailable"]
 JudgmentAlertForumLevelLiteral = Literal[
     "lower_court",
     "high_court",
@@ -131,6 +146,7 @@ class AuthoritySearchResult(BaseModel):
     document_type: AuthorityDocumentTypeLiteral
     decision_date: date | None
     case_reference: str | None
+    neutral_citation: str | None = None
     bench_name: str | None
     summary: str
     source: str
@@ -164,8 +180,60 @@ class AuthoritySearchResponse(BaseModel):
     # echoes back the request so the UI can compute Prev/Next visibility.
     total_after_filter: int = 0
     offset: int = 0
-    outcome: AuthoritySearchOutcomeLiteral = "no_results"
+    outcome: AuthoritySearchOutcomeLiteral = "no_matching_documents"
     diagnostics: dict[str, int | bool] = Field(default_factory=dict)
+    corpus_coverage: AuthoritySearchCoverage
+
+
+class AuthoritySearchCoverage(BaseModel):
+    document_count: int = 0
+    chunk_count: int = 0
+    embedded_chunk_count: int = 0
+    forum_counts: dict[str, int] = Field(default_factory=dict)
+    last_ingested_at: datetime | None = None
+    last_indexed_at: datetime | None = None
+    index_state: AuthorityIndexStateLiteral = "unavailable"
+    scope_summary: str
+
+
+class AuthorityResearchReportCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+    query: str = Field(min_length=2, max_length=600)
+    mode: AuthoritySearchModeLiteral = "keyword"
+    result_ids: list[str] = Field(min_length=1, max_length=50)
+    criteria: dict[str, str | int | bool | None] = Field(default_factory=dict)
+
+
+class AuthorityResearchReportResult(BaseModel):
+    authority_document_id: str
+    title: str
+    court_name: str
+    forum_level: str
+    document_type: str
+    decision_date: date | None
+    case_reference: str | None
+    neutral_citation: str | None
+    source: str
+    source_reference: str | None
+    source_action: SourceActionRecord
+
+
+class AuthorityResearchReportRecord(BaseModel):
+    id: str
+    company_id: str
+    created_by_membership_id: str | None
+    name: str
+    query: str
+    mode: AuthoritySearchModeLiteral
+    criteria: dict[str, str | int | bool | None]
+    results: list[AuthorityResearchReportResult]
+    analysis_version: str
+    generated_at: datetime
+    created_at: datetime
+
+
+class AuthorityResearchReportListResponse(BaseModel):
+    reports: list[AuthorityResearchReportRecord]
 
 
 class JudgmentAlertRuleBase(BaseModel):

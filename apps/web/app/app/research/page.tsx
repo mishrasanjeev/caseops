@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Bookmark,
+  FileCheck2,
   LibraryBig,
   Loader2,
   Scale,
@@ -39,7 +40,9 @@ import {
   type AuthorityDocumentType,
   type AuthorityForumLevel,
   type AuthoritySearchMode,
+  type AuthoritySearchOutcome,
   type AuthoritySearchResult,
+  createAuthorityResearchReport,
   createAuthorityAnnotation,
   fetchAuthorityCorpusStats,
   searchAuthorities,
@@ -63,11 +66,12 @@ export default function ResearchPage() {
   const canAnnotate = useCapability("authorities:annotate");
   const searchParams = useSearchParams();
   const initialQuery = searchParams?.get("q")?.trim() ?? "";
+  const initialMode = parseAuthoritySearchMode(searchParams?.get("mode"));
   const [query, setQuery] = useState(initialQuery);
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");
-  const [searchMode, setSearchMode] = useState<AuthoritySearchMode>("keyword");
+  const [searchMode, setSearchMode] = useState<AuthoritySearchMode>(initialMode);
   // PG-110 (2026-05-01): language filter + pagination. Default "en"
   // because the 2026-04-28 ingest sweep dropped the EN-only filter,
   // so without a default users were seeing Garo / Hindi / Tamil
@@ -84,7 +88,7 @@ export default function ResearchPage() {
           courtName: "",
           documentType: "any",
           language: "en",
-          searchMode: "keyword",
+          searchMode: initialMode,
         }
       : null,
   );
@@ -93,8 +97,10 @@ export default function ResearchPage() {
   // state + fire the query if a new ?q= lands while we're on the page.
   useEffect(() => {
     const nextQ = searchParams?.get("q")?.trim() ?? "";
+    const nextMode = parseAuthoritySearchMode(searchParams?.get("mode"));
     if (nextQ && nextQ !== searchCriteria?.query) {
       setQuery(nextQ);
+      setSearchMode(nextMode);
       if (nextQ.length >= 2) {
         setPage(0);
         setSearchCriteria({
@@ -103,7 +109,7 @@ export default function ResearchPage() {
           courtName,
           documentType,
           language,
-          searchMode,
+          searchMode: nextMode,
         });
       }
     }
@@ -173,6 +179,30 @@ export default function ResearchPage() {
     },
   });
 
+  const reportMutation = useMutation({
+    mutationFn: () => {
+      if (!searchCriteria || results.length === 0) {
+        throw new Error("Run a search with results before saving a report.");
+      }
+      return createAuthorityResearchReport({
+        name: `Research: ${searchCriteria.query.slice(0, 160)}`,
+        query: searchCriteria.query,
+        mode: searchCriteria.searchMode,
+        resultIds: results.map((result) => result.authority_document_id),
+        criteria: {
+          forum_level: searchCriteria.forumLevel,
+          court_name: searchCriteria.courtName || null,
+          document_type: searchCriteria.documentType,
+          language: searchCriteria.language,
+          offset: page * PAGE_SIZE,
+        },
+      });
+    },
+    onSuccess: () => toast.success("Research report saved as an immutable snapshot"),
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not save this research report.")),
+  });
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = query.trim();
@@ -195,6 +225,8 @@ export default function ResearchPage() {
   const visibleResults = results.filter((result) => !isUnreadableAuthorityResult(result));
   const contextualPlan = searchQuery.data?.contextual_plan ?? null;
   const coverageNotice = searchQuery.data?.coverage_notice ?? null;
+  const searchOutcome = searchQuery.data?.outcome ?? null;
+  const corpusCoverage = searchQuery.data?.corpus_coverage ?? null;
   const totalAfterFilter = searchQuery.data?.total_after_filter ?? 0;
   const hasSearched = Boolean(searchCriteria?.query);
   const unreadableOnlyResults = results.length > 0 && visibleResults.length === 0;
@@ -268,38 +300,36 @@ export default function ResearchPage() {
                 Mode
               </Label>
               <div
-                className="inline-flex rounded-md border border-[var(--color-line)] bg-white"
+                className="flex w-full min-w-0 flex-wrap rounded-md border border-[var(--color-line)] bg-white sm:w-auto"
                 data-testid="research-mode-toggle"
               >
-                <button
-                  type="button"
-                  onClick={() => setSearchMode("keyword")}
-                  data-testid="research-mode-keyword"
-                  className={`px-3 py-1 text-xs font-medium ${
-                    searchMode === "keyword"
-                      ? "bg-[var(--color-ink)] text-white"
-                      : "text-[var(--color-ink-2)]"
-                  }`}
-                  aria-pressed={searchMode === "keyword"}
-                >
-                  Keyword
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSearchMode("contextual")}
-                  data-testid="research-mode-contextual"
-                  className={`px-3 py-1 text-xs font-medium ${
-                    searchMode === "contextual"
-                      ? "bg-[var(--color-ink)] text-white"
-                      : "text-[var(--color-ink-2)]"
-                  }`}
-                  aria-pressed={searchMode === "contextual"}
-                >
-                  Context
-                </button>
+                {([
+                  ["keyword", "Keyword"],
+                  ["contextual", "Context"],
+                  ["exact_citation", "Citation"],
+                  ["party", "Party"],
+                  ["court", "Court"],
+                  ["judge", "Judge"],
+                  ["act_section", "Act / section"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSearchMode(value)}
+                    data-testid={`research-mode-${value.replace("_", "-")}`}
+                    className={`min-w-0 flex-1 px-3 py-1 text-xs font-medium sm:flex-none ${
+                      searchMode === value
+                        ? "bg-[var(--color-ink)] text-white"
+                        : "text-[var(--color-ink-2)]"
+                    }`}
+                    aria-pressed={searchMode === value}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
               <Search className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
               <Input
                 value={query}
@@ -311,13 +341,14 @@ export default function ResearchPage() {
                 }
                 aria-label="Research query"
                 data-testid="research-query-input"
-                className="flex-1"
+                className="min-w-0 flex-1"
               />
               <Button
                 type="submit"
                 size="sm"
                 disabled={!canSubmitSearch}
                 data-testid="research-query-submit"
+                className="w-full sm:w-auto"
               >
                 {searchQuery.isFetching ? (
                   <>
@@ -428,6 +459,21 @@ export default function ResearchPage() {
         </CardContent>
       </Card>
 
+      {corpusCoverage ? (
+        <div
+          className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-xs text-[var(--color-ink-2)]"
+          data-testid="research-corpus-coverage"
+        >
+          <span className="font-semibold text-[var(--color-ink)]">
+            Corpus scope
+          </span>{" "}
+          {corpusCoverage.scope_summary}. {corpusCoverage.document_count.toLocaleString()} documents; index {corpusCoverage.index_state}.
+          {corpusCoverage.last_ingested_at
+            ? ` Latest ingest ${formatLegalDate(corpusCoverage.last_ingested_at, { day: "2-digit", month: "short", year: "numeric" })}.`
+            : " No completed ingest timestamp is available."}
+        </div>
+      ) : null}
+
       {!canSearch ? (
         <EmptyState
           icon={LibraryBig}
@@ -449,12 +495,8 @@ export default function ResearchPage() {
       ) : searchQuery.isError ? (
         <EmptyState
           icon={Scale}
-          title="Search failed"
-          description={
-            searchQuery.error instanceof ApiError
-              ? searchQuery.error.detail
-              : "Try again in a moment. If this persists, check your connection or report the issue."
-          }
+          title={researchErrorCopy(searchQuery.error).title}
+          description={researchErrorCopy(searchQuery.error).description}
           action={
             <Button
               size="sm"
@@ -468,12 +510,12 @@ export default function ResearchPage() {
       ) : visibleResults.length === 0 ? (
         <EmptyState
           icon={Scale}
-          title="No authorities matched"
+          title={researchOutcomeCopy(searchOutcome, unreadableOnlyResults).title}
           description={
             unreadableOnlyResults
-              ? "Matching records were omitted because their extracted title or text is not readable enough to preview."
+              ? researchOutcomeCopy(searchOutcome, true).description
               : coverageNotice ??
-                "Broaden your filters or rephrase the query. The corpus is still growing."
+                researchOutcomeCopy(searchOutcome, false).description
           }
         />
       ) : (
@@ -513,6 +555,24 @@ export default function ResearchPage() {
               {coverageNotice}
             </div>
           ) : null}
+          <div className="flex w-full min-w-0 flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={reportMutation.isPending}
+              onClick={() => reportMutation.mutate()}
+              data-testid="research-save-report"
+              className="w-full sm:w-auto"
+            >
+              {reportMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <FileCheck2 className="h-4 w-4" aria-hidden />
+              )}
+              Save report
+            </Button>
+          </div>
           <ul className="flex flex-col gap-3" data-testid="research-results">
             {visibleResults.map((result) => (
               <AuthorityCard
@@ -572,6 +632,102 @@ export default function ResearchPage() {
       )}
     </div>
   );
+}
+
+function researchErrorCopy(error: unknown): { title: string; description: string } {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return {
+      title: "Request timed out",
+      description:
+        "The committed query and filters are still here. Retry the same search or narrow its scope.",
+    };
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return {
+      title: "Permission denied",
+      description:
+        "Your account cannot search this source scope. Ask a workspace admin to review authorities:search access.",
+    };
+  }
+  if (error instanceof ApiError && error.status === 422) {
+    return {
+      title: "Query invalid",
+      description:
+        "Review the query and filters, then submit again. Your last committed search has not been replaced.",
+    };
+  }
+  if (error instanceof ApiError && error.status === 503) {
+    return {
+      title: "Provider unavailable",
+      description:
+        "The research provider is temporarily unavailable. Your committed query was preserved; retry later.",
+    };
+  }
+  return {
+    title: "Search failed",
+    description:
+      error instanceof ApiError
+        ? error.detail
+        : "The workspace API could not complete the search. Your committed query was preserved; retry when connectivity is restored.",
+  };
+}
+
+function parseAuthoritySearchMode(value: string | null | undefined): AuthoritySearchMode {
+  const modes: AuthoritySearchMode[] = [
+    "keyword",
+    "contextual",
+    "exact_citation",
+    "party",
+    "court",
+    "judge",
+    "act_section",
+  ];
+  return modes.includes(value as AuthoritySearchMode)
+    ? (value as AuthoritySearchMode)
+    : "keyword";
+}
+
+function researchOutcomeCopy(
+  outcome: AuthoritySearchOutcome | null,
+  unreadableOnlyResults: boolean,
+): { title: string; description: string } {
+  if (unreadableOnlyResults || outcome === "unreadable_filtered") {
+    return {
+      title: "Matching documents are unreadable",
+      description:
+        "Matching records were omitted because their extracted title or text is not readable enough to preview. Review official source records before relying on them.",
+    };
+  }
+  if (outcome === "corpus_unavailable") {
+    return {
+      title: "Corpus unavailable",
+      description: "No searchable authority corpus is available. Retry after corpus health is restored.",
+    };
+  }
+  if (outcome === "index_stale") {
+    return {
+      title: "Index stale",
+      description:
+        "The index is behind corpus evidence, so zero matches is not conclusive. Retry after indexing is reconciled.",
+    };
+  }
+  if (outcome === "provider_unavailable") {
+    return {
+      title: "Provider unavailable",
+      description: "The configured provider is unavailable. Retry the preserved query later.",
+    };
+  }
+  if (outcome === "offset_out_of_range") {
+    return {
+      title: "Page no longer available",
+      description: "The result set changed. Return to the previous page or rerun the search.",
+    };
+  }
+  return {
+    title: "No matching documents",
+    description:
+      "No indexed document matched this committed query and scope. Broaden filters or refine the query.",
+  };
 }
 
 /**
@@ -718,6 +874,10 @@ function AuthorityCard({
             {result.case_reference ? (
               <span className="font-mono">· {result.case_reference}</span>
             ) : null}
+            {result.neutral_citation ? (
+              <span className="font-mono">· {result.neutral_citation}</span>
+            ) : null}
+            <span>· Publisher: {result.source}</span>
             <span>· score {result.score}</span>
           </div>
           {/* PG-006 Phase 1B (2026-05-01) — good-law badge. Renders only

@@ -14,12 +14,12 @@ Generated; do not edit.
 | UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | not_started | not_run | false |
 | UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | not_started | not_run | false |
 | UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035B | 4 | 0 | not_started | not_run | false |
-| UJ-11 | Recover failed or suppressed notification | 3 | IPLF-007A, IPLF-007B, IPLF-007C | 3 | 2 | in_progress | not_run | false |
+| UJ-11 | Recover failed or suppressed notification | 3 | IPLF-007A, IPLF-007B, IPLF-007C | 2 | 3 | implemented | passed | false |
 | UJ-12 | Docket opposition as applicant | 4 | IPLF-040B, IPLF-041B | 4 | 0 | not_started | not_run | false |
 | UJ-13 | Docket opposition as opponent | 4 | IPLF-040B, IPLF-042B | 4 | 0 | not_started | not_run | false |
 | UJ-14 | Classify, name, and file documents | 5 | IPLF-024B, IPLF-036B | 5 | 0 | not_started | not_run | false |
-| UJ-15 | Browse verified Bare Act | 3 | IPLF-006A, IPLF-006B, IPLF-006C | 3 | 1 | in_progress | not_run | false |
-| UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 4 | 1 | in_progress | not_run | false |
+| UJ-15 | Browse verified Bare Act | 3 | IPLF-006A, IPLF-006B, IPLF-006C | 3 | 1 | implemented | passed | false |
+| UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 4 | 2 | implemented | passed | false |
 | UJ-17 | Open judgment or reference source | 4 | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B | 4 | 1 | implemented | passed | false |
 | UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 4 | 0 | not_started | not_run | false |
 | UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 5 | 0 | not_started | not_run | false |
@@ -51,7 +51,7 @@ Generated; do not edit.
 | UJ-45 | Manage customs or anti-counterfeiting action | 5 | IPLF-091B | 5 | 0 | not_started | not_run | false |
 | UJ-46 | Apply or revoke IP ethical-wall access | 5 | IPLF-026B | 5 | 0 | not_started | not_run | false |
 | UJ-47 | Propose, test, activate, and retire legal rule version | 6 | IPLF-023B, IPLF-027B | 6 | 0 | not_started | not_run | false |
-| UJ-48 | Verify, quarantine, or supersede legal source | 6 | IPLF-006A, IPLF-006B, IPLF-006C | 6 | 1 | in_progress | not_run | false |
+| UJ-48 | Verify, quarantine, or supersede legal source | 6 | IPLF-006A, IPLF-006B, IPLF-006C | 6 | 1 | implemented | passed | false |
 | UJ-49 | Onboard IP client/work and clear firm conflict | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
 | UJ-50 | Triage daily docket and workload | 5 | IPLF-039C, IPLF-039H | 5 | 1 | in_progress | not_run | false |
 | UJ-51 | Capture correspondence and client or associate instruction | 9 | IPLF-039B, IPLF-039H | 9 | 1 | in_progress | not_run | false |

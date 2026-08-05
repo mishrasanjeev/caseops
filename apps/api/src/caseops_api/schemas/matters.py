@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -659,6 +659,38 @@ class MatterHearingCreateRequest(BaseModel):
     purpose: str = Field(min_length=2, max_length=255)
     status: Literal["scheduled", "completed", "adjourned", "cancelled"] = "scheduled"
     outcome_note: str | None = Field(default=None, max_length=4000)
+    time_status: Literal["exact", "session", "time_not_published"] = "time_not_published"
+    hearing_time: time | None = None
+    session_label: str | None = Field(default=None, max_length=80)
+    timezone: str = Field(default="Asia/Kolkata", min_length=3, max_length=64)
+    reminder_recipient_membership_ids: list[str] = Field(default_factory=list, max_length=50)
+    reminder_channels: list[Literal["in_app", "email", "sms", "whatsapp"]] = Field(
+        default_factory=lambda: ["in_app", "email"], max_length=4
+    )
+    reminder_offsets_hours: list[int] | None = Field(default=None, max_length=20)
+    escalation_membership_id: str | None = None
+    notification_critical: bool = True
+
+    @model_validator(mode="after")
+    def validate_time_and_notification_plan(self) -> MatterHearingCreateRequest:
+        if self.time_status == "exact" and self.hearing_time is None:
+            raise ValueError("hearing_time is required when time_status is exact")
+        if self.time_status != "exact" and self.hearing_time is not None:
+            raise ValueError("hearing_time is only allowed when time_status is exact")
+        if self.time_status == "session" and not (self.session_label or "").strip():
+            raise ValueError("session_label is required when time_status is session")
+        if self.time_status != "session" and self.session_label is not None:
+            raise ValueError("session_label is only allowed when time_status is session")
+        if len(set(self.reminder_channels)) != len(self.reminder_channels):
+            raise ValueError("reminder_channels cannot contain duplicates")
+        if self.notification_critical and "in_app" not in self.reminder_channels:
+            raise ValueError("Critical hearing reminders must include in_app")
+        if self.reminder_offsets_hours is not None and (
+            not self.reminder_offsets_hours
+            or any(offset <= 0 or offset > 24 * 365 for offset in self.reminder_offsets_hours)
+        ):
+            raise ValueError("reminder_offsets_hours must contain positive bounded offsets")
+        return self
 
 
 class MatterHearingUpdateRequest(BaseModel):
@@ -671,12 +703,21 @@ class MatterHearingUpdateRequest(BaseModel):
     # surprising the lawyer with a missing task is worse than a
     # surprising extra one.
     create_follow_up: bool | None = None
+    time_status: Literal["exact", "session", "time_not_published"] | None = None
+    hearing_time: time | None = None
+    session_label: str | None = Field(default=None, max_length=80)
+    timezone: str | None = Field(default=None, min_length=3, max_length=64)
 
 
 class MatterHearingRecord(BaseModel):
     id: str
     matter_id: str
     hearing_on: date
+    time_status: Literal["exact", "session", "time_not_published"]
+    hearing_time: time | None
+    session_label: str | None
+    timezone: str
+    reminder_policy: dict | None
     forum_name: str
     judge_name: str | None
     purpose: str

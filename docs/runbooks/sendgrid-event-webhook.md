@@ -1,7 +1,7 @@
 # SendGrid Event Webhook — runbook
 
 **Owner:** Operations.
-**Last updated:** 2026-05-09 (BUG-038, Hari 2026-05-09).
+**Last updated:** 2026-08-04 (IPLF-007C).
 **Audience:** Anyone configuring CaseOps to receive SendGrid event
 notifications in production.
 
@@ -30,6 +30,21 @@ the events:
 | `spamreport` | promotes to `failed` | promotes to `bounced` | **yes** (`reason=spam_report`) |
 | `unsubscribe` | no state regression | no state regression | **yes** (`reason=unsubscribe`) |
 | `group_unsubscribe` | no state regression | no state regression | **yes** (`reason=group_unsubscribe`) |
+
+The webhook also appends every matched event to
+`notification_delivery_events`. Its deterministic idempotency key prevents duplicate
+provider callbacks from producing duplicate effects. State projection uses provider
+occurrence time and terminal-state precedence: a late or duplicate `delivered` event
+cannot overwrite `bounced`, `suppressed`, `cancelled`, or `dead_letter`. The event row
+records whether it was applied to the current state, so ignored out-of-order evidence
+remains auditable.
+
+For durable delivery intents, bounce and suppression are distinct states. A critical
+external failure creates an in-app fallback when an eligible membership exists and is
+surfaced in the admin queue and metrics. Recovery is preview-first and creates a new
+destination version linked to the original intent. Permanent-bounce recovery requires
+a different active destination; neither recovery nor suppression clearance rewrites
+the original provider events.
 
 `EmailSuppression` is tenant-scoped: a bounce/unsubscribe in tenant A
 does not block sends in tenant B. The matching row's `company_id`

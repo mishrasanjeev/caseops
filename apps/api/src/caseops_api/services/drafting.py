@@ -1011,7 +1011,15 @@ def generate_draft_version(
             select(_MSR, _StatuteSection, _Statute)
             .join(_StatuteSection, _StatuteSection.id == _MSR.section_id)
             .join(_Statute, _Statute.id == _StatuteSection.statute_id)
-            .where(_MSR.matter_id == matter.id)
+            .where(
+                _MSR.matter_id == matter.id,
+                _StatuteSection.verification_status.in_(
+                    {"verified_official", "verified_licensed"}
+                ),
+                _StatuteSection.source_sha256.is_not(None),
+                _StatuteSection.source_locator_type == "section_deep_link",
+                _StatuteSection.link_health_status == "available",
+            )
             .order_by(_Statute.short_name, _StatuteSection.ordinal)
         ).all()
         statute_refs = [

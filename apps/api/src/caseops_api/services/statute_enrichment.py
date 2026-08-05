@@ -438,6 +438,19 @@ def enrich_section(
                 notes=f"statute_id={section.statute_id} not found",
             )
 
+    if section.verification_status in {
+        "verified_official",
+        "verified_licensed",
+        "quarantined",
+        "retired",
+    }:
+        return EnrichmentResult(
+            section_text=None,
+            source=None,
+            is_provisional=section.is_provisional,
+            notes="reviewed_or_terminal_source_preserved",
+        )
+
     # Try Indian Kanoon first — indiacode.nic.in blocks even headless
     # browsers (Akamai-style anti-bot returning 227-byte denied pages),
     # so kanoon's bare-act HTML is the practical authoritative source.
@@ -447,15 +460,17 @@ def enrich_section(
         statute, section, client=http_client,
     )
     if scraped:
-        section.section_text = scraped
-        section.section_text_source = SOURCE_KANOON
-        section.section_text_fetched_at = datetime.now(UTC)
-        section.is_provisional = False
+        section.editorial_notes = scraped
+        section.source_status = "editorial_candidate"
+        section.verification_status = "unverified"
+        section.is_provisional = True
         session.add(section)
         session.commit()
         return EnrichmentResult(
-            section_text=scraped, source=SOURCE_KANOON,
-            is_provisional=False, notes="kanoon_scrape_ok",
+            section_text=None,
+            source=SOURCE_KANOON,
+            is_provisional=True,
+            notes="kanoon_editorial_note_only",
         )
 
     # Fallback to indiacode (currently bot-blocked, but kept so we can
@@ -468,12 +483,16 @@ def enrich_section(
         section.section_text = scraped
         section.section_text_source = SOURCE_INDIACODE
         section.section_text_fetched_at = datetime.now(UTC)
-        section.is_provisional = False
+        section.source_status = "official_candidate"
+        section.verification_status = "unverified"
+        section.source_locator_type = "act_landing_page"
+        section.is_provisional = True
         session.add(section)
         session.commit()
         return EnrichmentResult(
             section_text=scraped, source=SOURCE_INDIACODE,
-            is_provisional=False, notes="indiacode_scrape_ok",
+            is_provisional=True,
+            notes="indiacode_candidate_requires_review",
         )
 
     if not allow_haiku:
@@ -486,15 +505,17 @@ def enrich_section(
         session, statute, section, company_id=company_id,
     )
     if haiku_text:
-        section.section_text = haiku_text
-        section.section_text_source = SOURCE_HAIKU
-        section.section_text_fetched_at = datetime.now(UTC)
+        section.ai_explanation = haiku_text
+        section.source_status = "ai_generated"
+        section.verification_status = "unverified"
         section.is_provisional = True
         session.add(section)
         session.commit()
         return EnrichmentResult(
-            section_text=haiku_text, source=SOURCE_HAIKU,
-            is_provisional=True, notes=status,
+            section_text=None,
+            source=SOURCE_HAIKU,
+            is_provisional=True,
+            notes=f"{status}_explanation_only",
         )
 
     return EnrichmentResult(

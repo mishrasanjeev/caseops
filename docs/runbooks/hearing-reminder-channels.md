@@ -1,11 +1,10 @@
 # Hearing reminder channels — Twilio SMS + WhatsApp setup
 
 **Owner:** mishra.sanjeev@gmail.com.
-**Status:** SMS via Twilio + WhatsApp via Meta Cloud API are wired
-in code (MOD-TS-007 channel breadth, 2026-04-26) but **disabled by
-default** so a fresh deployment never burns money on a test message.
-This runbook is the procedure to enable each channel when a customer
-needs it.
+**Last updated:** 4 August 2026 (IPLF-007C).
+**Status:** the durable, multi-channel policy and recovery path is implemented.
+External adapters remain fail-closed until their genuine provider, sender/template,
+credential, policy, and QA-recipient gates pass.
 
 ---
 
@@ -16,14 +15,30 @@ needs it.
 | Email | `EMAIL` | **enabled** when `CASEOPS_SENDGRID_API_KEY` + sender configured | SendGrid Web API (`_send_via_sendgrid`) |
 | SMS | `SMS` | disabled | Twilio Messages API (`_send_via_twilio_sms`) |
 | WhatsApp | `WHATSAPP` | disabled | Meta Cloud API (stub — needs template approval) |
-| In-app | `IN_APP` | n/a | Read by the in-app reminder UI, not the worker |
+| In-app | `IN_APP` | available | Durable intent is delivered without an external provider |
 
 When a channel's adapter is disabled or unconfigured, the worker
-**leaves the row at `QUEUED`** (not `FAILED`) with an actionable
-`last_error` pointing the operator at the env vars to set. Flipping
-the gate later drains the backlog without re-scheduling.
+records an explicit durable `blocked` outcome and an actionable redacted error. A
+critical external intent also creates an in-app fallback/companion where an eligible
+membership exists. Provider-disabled work must be recovered through preview plus a
+new destination version; operators do not mutate or silently replay the original
+attempt.
 
-### 1.1 Production Cloud Run job requirements
+### 1.1 Hearing policy and time precision
+
+At confirmation time, persist explicit recipients, channels, offsets, timezone,
+criticality, and escalation memberships. Hearing time is one of:
+
+- `exact`: a local time and valid IANA timezone are required;
+- `session_only`: store the disclosed session label and policy reminder time; or
+- `unpublished`: store that no time is published and the policy reminder time.
+
+Never substitute 10:00 IST for a missing hearing time. The policy default for a
+date-only reminder is 18:00 local time and is represented as policy, not as a hearing
+time. A schedule or recipient-policy change cancels pending child intents and creates
+new versioned work in the same transaction.
+
+### 1.2 Production Cloud Run job requirements
 
 The production scheduler drains email reminders through
 `caseops-reminders-job` on the `caseops-reminders-cadence` Cloud
@@ -171,38 +186,35 @@ CASEOPS_WHATSAPP_TEMPLATE_NAME=caseops-whatsapp-template-name:latest"
 
 ### 3.3 Cost
 
-WhatsApp Cloud API utility-template pricing (India, as of 2026):
-- ~₹0.39 per template message via Meta Cloud API direct.
-- Same cost discipline as SMS — the per-`(hearing_id, channel,
-  scheduled_for)` unique constraint prevents duplicate sends on
-  retry.
+Verify current provider pricing and India-specific rules in the provider console at
+activation time; this repository does not freeze a market-price claim. Idempotency is
+enforced by durable intent key plus destination version, so a retry cannot create a
+second effect for the same version.
 
 ---
 
 ## 4. Why both gates default to `false`
 
-CaseOps user memory `feedback_user_bias_in_recommendations.md`
-combined with the founder-stage "0 customers, can't waste money"
-constraint means **every paid integration must be opt-in**. The
-worker's degradation pattern is:
+Every paid external integration is opt-in. The degradation pattern is:
 
-1. Channel adapter not configured → row stays `QUEUED` with
-   actionable `last_error` (no spend, no data loss).
-2. Operator wires the gate → next worker run drains the backlog.
-3. Adverse provider event (Twilio 4xx, etc.) → row goes `FAILED`
-   with the provider's response captured for triage.
+1. Channel adapter not configured → durable intent becomes `blocked`, with a
+   redacted actionable error and in-app fallback for eligible critical recipients.
+2. Operator resolves the genuine gate, previews recovery, and creates a successor
+   destination version; the original evidence remains immutable.
+3. Adverse provider event → append the provider event, project a typed terminal or
+   retry state, populate tenant suppression when applicable, and alert operators.
 
-Per the cost-discipline rule, the worker **never re-tries an
-already-`SENT` row** even if the recipient hasn't acknowledged —
-delivery confirmation goes through the SendGrid (today) /
-Twilio status callback (when wired).
+The worker never retries an already delivered or terminal-negative intent. Delivery
+confirmation comes from the signed provider callback; out-of-order or duplicate
+callbacks remain evidence but cannot regress terminal state.
 
 ---
 
-## 5. Per-tenant channel preference (future)
+## 5. Per-hearing recipient and channel policy
 
-Today every tenant uses email by default. Per-tenant channel
-preference (e.g. solo lawyer prefers SMS, GC team prefers email +
-in-app) is a future scope on `Company.default_reminder_channel` +
-`CompanyMembership.notification_channels` columns. Not in v1 because
-the value depends on actual customer signal, not speculation.
+The confirmed Matter hearing owns its explicit policy JSON: recipient memberships,
+channels, offsets, escalation memberships, timezone, criticality, and date-only
+reminder time. Recipients must be active, belong to the same company, and retain
+access at dispatch time. The immutable delivery intent snapshots the selected target
+and destination version. A self-service channel test is deliberately in-app only and
+never calls an external provider.
