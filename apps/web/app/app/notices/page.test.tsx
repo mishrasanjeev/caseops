@@ -568,6 +568,7 @@ describe("centralized notice management", () => {
     resolveUpdate(notice({ status: "Under Review" }));
 
     await waitFor(() => expect(status).toBeEnabled());
+    expect(status).toHaveValue("Under Review");
   });
 
   it("submits every standalone metadata family from the create form", async () => {
