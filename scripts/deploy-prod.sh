@@ -169,6 +169,7 @@ gcloud run deploy caseops-api \
   --min-instances "${API_MIN_INSTANCES}" \
   --container api \
   --image "${API_IMAGE}" \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}"
 echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
@@ -177,6 +178,7 @@ echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, co
 echo "--- 5/6 deploy caseops-web ---"
 gcloud run deploy caseops-web \
   --image "${WEB_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA}" \
   --min-instances "${WEB_MIN_INSTANCES}"
 echo "  caseops-web at 100% traffic on ${TAG} (min-instances ${WEB_MIN_INSTANCES})."
 
