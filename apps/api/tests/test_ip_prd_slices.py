@@ -92,7 +92,10 @@ def test_source_action_contract_fails_closed_and_redirects_official(
     official = client.post(
         "/api/source-actions/inspect",
         headers=headers,
-        json={"source_reference": "https://www.indiacode.nic.in/document.pdf"},
+        json={
+            "source_reference": "https://www.indiacode.nic.in/document.pdf",
+            "verified": True,
+        },
     )
     assert official.json()["state"] == "available"
     redirect = client.get(
@@ -143,10 +146,8 @@ def test_statute_curator_contract_quarantines_and_rejects_stale_write(
         headers=auth_headers(token),
         json={"status": "verified_official", "expected_source_version": 1},
     )
-    assert verified.status_code == 200, verified.text
-    assert verified.json()["verification_status"] == "verified_official"
-    assert len(verified.json()["source_sha256"]) == 64
-    assert verified.json()["source_action"]["state"] == "available"
+    assert verified.status_code == 409, verified.text
+    assert "different legal reviewer" in verified.json()["detail"]
 
     stale = client.post(
         f"/api/statutes/verification/sections/{section_id}",
@@ -157,7 +158,8 @@ def test_statute_curator_contract_quarantines_and_rejects_stale_write(
             "reason": "Fixture corruption",
         },
     )
-    assert stale.status_code == 409
+    assert stale.status_code == 200
+    assert stale.json()["verification_status"] == "quarantined"
 
 
 def test_ip_docket_end_to_end_uses_existing_notice_deadline_and_billing_owners(

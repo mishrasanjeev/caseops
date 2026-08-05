@@ -342,7 +342,15 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
                 StatuteSection.id == MatterStatuteReference.section_id,
             )
             .join(Statute, Statute.id == StatuteSection.statute_id)
-            .where(MatterStatuteReference.matter_id == matter.id)
+            .where(
+                MatterStatuteReference.matter_id == matter.id,
+                StatuteSection.verification_status.in_(
+                    {"verified_official", "verified_licensed"}
+                ),
+                StatuteSection.source_sha256.is_not(None),
+                StatuteSection.source_locator_type == "section_deep_link",
+                StatuteSection.link_health_status == "available",
+            )
             .order_by(MatterStatuteReference.created_at.desc())
             .limit(_MAX_STATUTE_REFS)
         )

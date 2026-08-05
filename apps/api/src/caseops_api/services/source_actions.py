@@ -55,6 +55,23 @@ def _is_official_host(hostname: str) -> bool:
     )
 
 
+def is_official_source_reference(source_reference: str | None) -> bool:
+    """Return whether a URL is an approved official HTTPS source reference."""
+
+    reference = (source_reference or "").strip()
+    if not reference:
+        return False
+    parsed = urlsplit(reference)
+    return bool(
+        parsed.scheme.lower() == "https"
+        and parsed.hostname
+        and not parsed.username
+        and not parsed.password
+        and parsed.port in {None, 443}
+        and _is_official_host(parsed.hostname)
+    )
+
+
 def inspect_source_action(
     source_reference: str | None,
     *,
@@ -99,6 +116,12 @@ def inspect_source_action(
             state="unverified",
             source_reference=reference,
             reason="Source host is not verified in the CaseOps legal-source policy.",
+        )
+    if not verified:
+        return SourceActionRecord(
+            state="unverified",
+            source_reference=reference,
+            reason="Source metadata has not completed curator verification.",
         )
     return SourceActionRecord(
         state="available",
@@ -378,7 +401,11 @@ def create_source_link_report(
 
 
 def assert_safe_source_redirect(source_reference: str) -> str:
-    action = inspect_source_action(source_reference)
+    # This helper validates the destination URL itself for the explicit
+    # generic redirect endpoint. Record-level verification is enforced by
+    # ``inspect_resolved_source_target`` before opaque target redirects call
+    # it; an approved official HTTPS host is sufficient at this final hop.
+    action = inspect_source_action(source_reference, verified=True)
     if action.state != "available" or not action.source_reference:
         raise ValueError(action.reason or "Source cannot be opened safely.")
     return action.source_reference

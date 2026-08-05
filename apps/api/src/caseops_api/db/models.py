@@ -10946,6 +10946,31 @@ class Statute(Base):
     enacted_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jurisdiction: Mapped[str] = mapped_column(String(64), nullable=False, default="india")
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    issuing_body: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_category: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="consolidated_statute"
+    )
+    source_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified"
+    )
+    legal_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="enacted"
+    )
+    verification_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified", index=True
+    )
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_retrieved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    exact_source_version: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    history_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="current_text_only"
+    )
+    source_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -10991,6 +11016,9 @@ class StatuteSection(Base):
         String(32),
         nullable=True,
     )
+    editorial_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    case_annotations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     section_text_fetched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -11006,6 +11034,37 @@ class StatuteSection(Base):
     )
     source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_publisher: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    issuing_body: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_category: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="consolidated_statute"
+    )
+    source_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unverified"
+    )
+    legal_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="enacted"
+    )
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amendment_metadata_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    history_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="current_text_only"
+    )
+    exact_source_version: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_locator_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unavailable"
+    )
+    source_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    link_health_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_checked"
+    )
+    link_last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    link_last_error: Mapped[str | None] = mapped_column(String(240), nullable=True)
     source_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_membership_id: Mapped[str | None] = mapped_column(
@@ -11032,6 +11091,102 @@ class StatuteSection(Base):
         default=utcnow,
         onupdate=utcnow,
         nullable=False,
+    )
+
+
+class StatuteSourceVersion(Base):
+    """Immutable candidate/review record for a statute provision source."""
+
+    __tablename__ = "statute_source_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "section_id",
+            "proposed_source_version",
+            name="uq_statute_source_versions_section_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    proposed_source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    candidate_text: Mapped[str] = mapped_column(Text, nullable=False)
+    candidate_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_publisher: Mapped[str] = mapped_column(String(160), nullable=False)
+    issuing_body: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    legal_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_locator_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    exact_source_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amendment_metadata_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    source_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    diff_unified: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    proposed_by_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class StatuteSourceConflict(Base):
+    """Fail-closed record for disputed statute source facts and impact review."""
+
+    __tablename__ = "statute_source_conflicts"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    disputed_facts_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_versions_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    authority_rank_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    affected_records_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    impact_scan_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    decision: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 

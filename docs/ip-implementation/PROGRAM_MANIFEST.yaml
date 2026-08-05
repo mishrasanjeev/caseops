@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-006C",
+    "active_slice": "IPLF-007C",
     "checkpoint": {
-      "recorded_at": "2026-08-04T19:45:00+05:30",
-      "repository_revision": "87d5e67b2ad81e0be6a8a898a0b605c659b69bc4",
-      "environment": "IPLF-003C remains production verified. IPLF-004A merged as canonical main 36aac3a after exact-head CI run 30903784411 passed all eight API coverage shards, aggregate gates, web/security/CodeQL/Postgres/OpenAPI, and full app Playwright. Production migration execution caseops-migrate-job-5sq6g completed; API caseops-api-00229-5h2 and web caseops-web-00209-fmh serve 100% traffic from tag 36aac3a; recurring jobs use API digest sha256:a4b38166; production run 30915519778 passed 55 RAM tests plus 2 notice tests. IPLF-004B exact PR head 0586405 is in fresh CI. IPLF-005B integrated application candidate 87d5e67 is rebased onto that exact source/reporting stack and retains its prior local API, full-web, migration, OpenAPI, locked-build, and dated browser proof.",
-      "completed_scope": "IPLF-002A and IPLF-002B are production verified; IPLF-003C is merged, deployed, and production verified. IPLF-004A implements opaque canonical source resolution, redirect-time validation, hashed access audit, and the tenant source-defect queue. IPLF-004B completes source report UI/health queueing, protected Matter-document proxying, tenant isolation, and responsive UJ-17 handling. IPLF-005B completes seven explicit research modes, measured corpus/index scope, typed recovery states, frozen committed criteria, explainable result evidence, immutable tenant research reports, and the lawyer-approval-aware golden-query runner.",
+      "recorded_at": "2026-08-04T19:50:00+05:30",
+      "repository_revision": "2f36aa31462f651a94b24047bfa0ed1bf1807432",
+      "environment": "IPLF-003C remains production verified. IPLF-004A canonical main 36aac3a passed exact-head CI run 30903784411, deployed through migration execution caseops-migrate-job-5sq6g, and serves on API caseops-api-00229-5h2 plus web caseops-web-00209-fmh at 100% traffic; production run 30915519778 passed 55 RAM and 2 notice tests. IPLF-004B exact head 2d74f10 is in fresh CI. IPLF-005B exact stack head 6c7521a is published on PR 158. IPLF-006C rebased application commit 2f36aa3 retains 196 consolidated API tests, 564 web tests, locked 65-route build, deterministic OpenAPI generation, and the dated 360px UJ-15/UJ-48 browser pass.",
+      "completed_scope": "IPLF-002A and IPLF-002B are production verified; IPLF-003C is merged, deployed, and production verified. IPLF-004A implements opaque canonical source resolution, redirect-time validation, hashed access audit, and the tenant source-defect queue. IPLF-004B completes source report UI/health queueing, protected Matter-document proxying, tenant isolation, and responsive UJ-17 handling. IPLF-005B completes seven explicit research modes, measured corpus/index scope, typed recovery states, frozen committed criteria, explainable result evidence, immutable tenant research reports, and the lawyer-approval-aware golden-query runner. IPLF-006C completes verified-only statute text, full provision provenance, immutable two-person source review, typed link/conflict governance, seed/enrichment non-downgrade, licensed-use controls, truthful coverage, and responsive UJ-15/UJ-48 handling.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-006C",
-      "next_action": "Finish IPLF-004B exact-head CI, merge/deploy and run the strengthened production source proof; then retarget IPLF-005B to canonical main for exact-head CI, merge, migration/deployment, and dated UJ-16 production proof. Obtain named lawyer approval for the three golden-query fixtures without delaying independent technical release work. The M0 human program-lock gate remains pending.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
+      "next_slice": "IPLF-007C",
+      "next_action": "Finish IPLF-004B exact-head CI, merge/deploy and run the strengthened production source proof; then release IPLF-005B and IPLF-006C in dependency order with exact-head CI and dated production proof. Continue independent repository work at IPLF-007C without imposing an elapsed-time scheduler blocker. Obtain named lawyer approval for the three golden-query fixtures and the M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md"
     }
   },
   "milestones": [
@@ -575,12 +575,13 @@
         "IPLF-006B",
         "IPLF-006C"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md"
       ]
     },
     {
@@ -3957,32 +3958,64 @@
       "dependencies": [
         "IPLF-006B"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260804_0003_statute_source_governance.py",
+        "apps/api/src/caseops_api/api/routes/statutes.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/scripts/seed_statutes.py",
+        "apps/api/src/caseops_api/services/drafting.py",
+        "apps/api/src/caseops_api/services/litigation_strategy.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/api/src/caseops_api/services/statute_enrichment.py",
+        "apps/api/src/caseops_api/services/statute_source_governance.py",
+        "apps/web/app/app/statutes/[statute_id]/page.tsx",
+        "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.tsx",
+        "apps/web/app/app/statutes/page.tsx",
+        "apps/web/lib/api/endpoints.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_statute_source_governance.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_statute_enrichment.py",
+        "apps/api/tests/test_litigation_strategy.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_drafting_studio.py",
+        "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.test.tsx",
+        "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md",
+          "revision": "80e60fd757566a29d12b7f6f321cd8fe1794b7f9",
+          "environment": "fresh migrated local API plus locked Next.js 16.3.0 production server; exact-head CI, canonical merge, production migration/deployment, and exact-serving-revision browser proof pending",
+          "fixtures": "isolated law-firm tenant, official India Code provision deep link, Act landing page, unverified and quarantined records, immutable source-version proposals, distinct proposer/reviewer memberships, exact content hash/version, typed link outcomes, conflicting authorities, licensed internal-use policy, seed/enrichment attempts, and 360x800 viewport",
+          "assertions": "full provision provenance, verified-only text/default listing/downstream use, truthful coverage, editorial/case/AI separation, Act versus section link, optimistic immutable two-person approval/rejection, stale/self-review rejection, typed link health, immediate conflict quarantine, controlled supersession, licensed-use restrictions, seed/enrichment non-downgrade, responsive curator controls, and fail-closed reload",
+          "result": "passed",
+          "recorded_at": "2026-08-04T17:22:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Rebase after IPLF-004A, IPLF-004B, and IPLF-005B merge in dependency order; require exact-head CI/security, merge to canonical main, migrate/deploy immutable images, and rerun the dated UJ-15/UJ-48 journey against the exact serving production revisions."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive statute/statute-section provenance, policy, history, and link-health columns plus immutable statute_source_versions and statute_source_conflicts tables. Legacy rows remain fail-closed; no replacement legal text or optimistic verification is introduced by migration."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md",
+          "disposition": "created",
+          "owner": "Engineering/Product/Legal",
+          "evidence": "LEGAL-SRC-01..10 and TRUST-BA-01..12 ownership, trust contract, API/UI, migration/rollback, UJ-15/UJ-48 normal and exceptions, exact local tests, security controls, and honest pre-production state"
+        }
+      ],
+      "allocation_review": "Definition of Ready reviewed against PRD Sections 11.2, 15 UJ-15/UJ-48, 23, 25, and 26. Existing Statute/StatuteSection, source-action/report, AuthorityDocument, drafting, litigation-strategy, capability, and AuditEvent owners remain canonical; immutable source versions/conflicts add evidence without creating a second mutable legal-source owner.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending"
     },
@@ -11960,8 +11993,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12006,8 +12039,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12052,8 +12085,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12098,8 +12131,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12138,8 +12171,8 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12177,8 +12210,8 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12222,8 +12255,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12262,8 +12295,8 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12307,8 +12340,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12353,8 +12386,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12399,8 +12432,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -12445,8 +12478,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -36707,8 +36740,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -38447,8 +38480,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -42654,8 +42687,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -42702,8 +42735,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -42750,8 +42783,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49091,8 +49124,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49139,8 +49172,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49187,8 +49220,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49235,8 +49268,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49283,8 +49316,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49331,8 +49364,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
