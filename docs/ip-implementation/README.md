@@ -29,6 +29,12 @@ CI gates. They authorize no early nullable schema and do not replace the
 behavior-level journeys, mixed-revision proof, deployment evidence, or human
 approval allocated to later slices.
 
+`IP_CAPABILITY_MODEL.md` documents the IPLF-020A extension of the existing
+backend/frontend capability catalogues. Server capability, billing entitlement,
+and safety rollout are independent fail-closed gates; frontend visibility is
+never authorization. All IP flags default off and optional pilot expiries fail
+closed, so deploying the catalogue alone exposes no operational IP feature.
+
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an
 actively maintained program manifest.
