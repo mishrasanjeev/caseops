@@ -125,7 +125,7 @@ def test_validator_rejects_bad_derived_slice_and_empty_unapproved_coverage() -> 
 def test_validator_rejects_status_drift_stale_blocker_and_completed_active_slice() -> None:
     manifest = _manifest()
     requirement = manifest["requirements"][0]
-    requirement["implementation_status"] = "implemented"
+    requirement["implementation_status"] = "not_started"
     active = next(
         row
         for row in manifest["slices"]

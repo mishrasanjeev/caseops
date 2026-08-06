@@ -1,0 +1,480 @@
+{
+  "schema_version": 1,
+  "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
+  "status": "engineering_control_published_human_program_lock_pending",
+  "recorded_at": "2026-08-06",
+  "binding_rule": "Section 11.2 has one canonical state owner. This ledger is a Definition-of-Ready guard, not permission to prebuild later-milestone persistence or to infer human approval.",
+  "adr_refs": [
+    "docs/architecture/decisions/ADR-001-IP-ONE-WRITER-OWNERSHIP.md",
+    "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md",
+    "docs/architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md"
+  ],
+  "new_owners": [
+    {
+      "id": "ip-legal-state",
+      "boundary": "New IP legal facts named by PRD Section 11.1 only; shared operational state remains linked to the Section 11.2 owner."
+    },
+    {
+      "id": "platform-shared-foundations",
+      "boundary": "Neutral cross-domain contracts named by PRD Section 11.3; never private IP control planes."
+    }
+  ],
+  "existing_owners": [
+    {
+      "id": "shared-tasks",
+      "capability": "Tasks/work items",
+      "classification": "EXTEND",
+      "canonical_writer": "MatterTask through the existing Matter task service/routes",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/api/routes/matters.py", "apps/web/app/app/matters/[id]/tasks/page.tsx"],
+      "compatibility_path": "Matter routes remain adapters while target-aware shared commands become the only writer.",
+      "reconciliation": "One task row, status, assignee, completion event, calendar projection, and activity projection per work item.",
+      "retirement_gate": "Retire legacy Matter-only command branches only after backfill, old/new revision, one-writer, rollback, and production E2E evidence.",
+      "earliest_milestone": "M2",
+      "forbidden_components": ["ip_tasks"]
+    },
+    {
+      "id": "matter-timeline",
+      "capability": "Timeline/activity",
+      "classification": "LINK",
+      "canonical_writer": "MatterActivity for Matter operational activity and ip_docket_events for IP legal facts; services/matter_timeline.py composes references",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/matter_timeline.py"],
+      "compatibility_path": "Linked Matter timelines hydrate permitted IP event references without copying state.",
+      "reconciliation": "Every rendered entry resolves to one source owner and immutable source identifier.",
+      "retirement_gate": "No adapter retirement until access-filtered timeline parity and no-copy reconciliation pass.",
+      "earliest_milestone": "M2",
+      "forbidden_components": []
+    },
+    {
+      "id": "shared-hearings",
+      "capability": "Hearings/calendar items",
+      "classification": "EXTEND",
+      "canonical_writer": "MatterHearing, next-hearing provenance, and existing calendar/reminder services",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/next_hearing.py", "apps/api/src/caseops_api/services/hearing_reminders.py", "apps/web/app/app/hearings/page.tsx"],
+      "compatibility_path": "Matter routes remain adapters over target-aware hearing commands.",
+      "reconciliation": "One hearing status, provenance chain, suggestion decision, reminder schedule, and calendar event per hearing.",
+      "retirement_gate": "Matter-only branches retire after company/IP backfill, dual-read parity, rollback, and deployed narrow/mobile E2E.",
+      "earliest_milestone": "M2",
+      "forbidden_components": ["ip_hearings"]
+    },
+    {
+      "id": "operational-deadlines",
+      "capability": "Operational deadlines",
+      "classification": "LINK",
+      "canonical_writer": "MatterDeadline and services/deadlines.py for operational projection; ip_deadlines for legal calculation evidence",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/deadlines.py", "apps/api/src/caseops_api/api/routes/calendar.py"],
+      "compatibility_path": "Existing Today/calendar consumers read the single shared projection; mutations delegate to the IP lifecycle command when linked.",
+      "reconciliation": "Unique legal-deadline-to-operational-row correlation and one-way projection prevent independent due-date/status edits.",
+      "retirement_gate": "Legacy independent mutations retire after correlation, completion, stale-write, rollback, and reload persistence proof.",
+      "earliest_milestone": "M2",
+      "forbidden_components": []
+    },
+    {
+      "id": "matter-intake",
+      "capability": "Intake",
+      "classification": "EXTEND",
+      "canonical_writer": "MatterIntakeRequest and the existing intake service/routes/page",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/intake.py", "apps/api/src/caseops_api/api/routes/intake.py", "apps/web/app/app/intake/page.tsx"],
+      "compatibility_path": "Add typed target/promotion adapters without another queue or status taxonomy.",
+      "reconciliation": "One request identity and promotion history across Matter-only, IP-only, and combined promotion.",
+      "retirement_gate": "No Matter compatibility path retires before M3 migration and production promotion parity.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_intake_records"]
+    },
+    {
+      "id": "firm-conflicts",
+      "capability": "Firm conflicts",
+      "classification": "EXTEND",
+      "canonical_writer": "MatterConflictCheck and services/conflict_checks.py",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/conflict_checks.py", "apps/api/src/caseops_api/api/routes/conflicts.py"],
+      "compatibility_path": "Generalize target/evidence adapters while retaining legacy JSON only through the approved migration window.",
+      "reconciliation": "One reviewer, waiver, result, evidence set, and resolution lifecycle per firm-conflict check.",
+      "retirement_gate": "Legacy evidence shape retires after normalized-row backfill, parity, rollback, and M3 UAT.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_conflict_checks"]
+    },
+    {
+      "id": "identity-teams",
+      "capability": "Clients, KYC, teams, memberships",
+      "classification": "LINK",
+      "canonical_writer": "Client, company membership, Team, and TeamMembership owners",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py"],
+      "compatibility_path": "IP party/responsibility rows reference canonical identities and teams.",
+      "reconciliation": "No copied client, membership, team, KYC, or role state.",
+      "retirement_gate": "Links may be removed only with the owning IP record under lifecycle/data-governance rules.",
+      "earliest_milestone": "M2",
+      "forbidden_components": []
+    },
+    {
+      "id": "record-access",
+      "capability": "Internal access and ethical walls",
+      "classification": "EXTEND",
+      "canonical_writer": "MatterAccessGrant, EthicalWall, and services/matter_access.py",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/matter_access.py"],
+      "compatibility_path": "One target-aware decision function serves Matter, client-policy, and IP records.",
+      "reconciliation": "List/count/search/source/document/AI/export decisions must agree after grants, walls, revocation, and cache invalidation.",
+      "retirement_gate": "Matter-only policy branches retire after adversarial parity and mixed-revision proof.",
+      "earliest_milestone": "M2",
+      "forbidden_components": ["ip_access_grants"]
+    },
+    {
+      "id": "portal-access",
+      "capability": "Portal identity and grants",
+      "classification": "EXTEND",
+      "canonical_writer": "PortalUser, MatterPortalGrant, and existing portal auth/session/routes",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/api/routes/portal.py", "apps/web/app/portal/page.tsx"],
+      "compatibility_path": "Add target-aware grants and scoped publication without a second identity/session stack.",
+      "reconciliation": "One portal identity, session, grant decision, communication, and audit history.",
+      "retirement_gate": "No portal compatibility path changes before the M5 consumer and revocation E2E are ready.",
+      "earliest_milestone": "M5",
+      "forbidden_components": ["ip_portal_grants"]
+    },
+    {
+      "id": "communications-connectors",
+      "capability": "Communications/connectors",
+      "classification": "LINK",
+      "canonical_writer": "Communication plus Microsoft 365, mailbox, inbound-email, Drive, and calendar connector owners",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/communications.py", "apps/api/src/caseops_api/api/routes/communications.py"],
+      "compatibility_path": "Typed company-verified IP links delegate transport and evidence state to existing connectors.",
+      "reconciliation": "One provider envelope/body/calendar/Drive import per dedupe identity.",
+      "retirement_gate": "Link adapters retire only with their IP target; connector evidence remains canonical.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_email_connector"]
+    },
+    {
+      "id": "company-notices",
+      "capability": "Notices and reply workflow",
+      "classification": "EXTEND",
+      "canonical_writer": "CompanyNotice, CompanyNoticeMatterLink, services/notices.py, /api/notices, and /app/notices",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/notices.py", "apps/api/src/caseops_api/api/routes/notices.py", "apps/web/app/app/notices/page.tsx"],
+      "compatibility_path": "Company-matched IP links and immutable document evidence extend the accepted notice register.",
+      "reconciliation": "Exactly one accepted notice and one correlated legal/operational reply deadline.",
+      "retirement_gate": "Replaceable convenience bytes retire only after immutable evidence-link backfill and access parity.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_notices"]
+    },
+    {
+      "id": "notification-delivery",
+      "capability": "Notifications",
+      "classification": "EXTEND",
+      "canonical_writer": "NotificationDeliveryIntent, notification preferences/rules/delivery, and the existing durable workflow adapter",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/notification_delivery.py", "apps/api/src/caseops_api/services/durable_workflows.py"],
+      "compatibility_path": "Add target/source types and immutable recipient snapshots; all sends remain intents.",
+      "reconciliation": "One recipient/channel effect per intent idempotency key with schedule-to-intent lineage.",
+      "retirement_gate": "Any legacy direct-send path retires only after no-dual-send comparison, replay, suppression, and rollback evidence.",
+      "earliest_milestone": "M2",
+      "forbidden_components": ["ip_notification_dispatcher"]
+    },
+    {
+      "id": "document-processing",
+      "capability": "Documents/processing",
+      "classification": "LINK",
+      "canonical_writer": "MatterAttachment storage/chunks plus shared scan, hash, extraction, OCR, and queue services; IP document metadata owns versions and legal links",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/document_storage.py", "apps/api/src/caseops_api/services/document_processing.py", "apps/api/src/caseops_api/services/document_jobs.py"],
+      "compatibility_path": "IP versions reference existing bytes and processing results through typed adapters.",
+      "reconciliation": "Hash/object identity proves no binary or processing-job copy.",
+      "retirement_gate": "No processing adapter retires while any IP version references its canonical object/result.",
+      "earliest_milestone": "M2",
+      "forbidden_components": ["ip_document_processor", "ip_malware_scan_jobs", "ip_ocr_jobs"]
+    },
+    {
+      "id": "matter-billing",
+      "capability": "Billing, time, invoices, payments, spend",
+      "classification": "LINK",
+      "canonical_writer": "Matter billing/time/invoice/payment owners and OutsideCounselSpendRecord; ip_cost_items owns only the IP legal cost fact",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/matter_billing.py", "apps/api/src/caseops_api/api/routes/matter_billing.py"],
+      "compatibility_path": "Unique links reconcile one IP cost fact to an approved billing Matter line/spend record.",
+      "reconciliation": "One amount/accounting-state owner and no double counting across IP, invoice, payment, or spend totals.",
+      "retirement_gate": "Links retire only under correction/supersession with audit evidence; accounting owners remain.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_payment_records", "ip_disbursement_evidence"]
+    },
+    {
+      "id": "legal-sources",
+      "capability": "Legal research and sources",
+      "classification": "EXTEND",
+      "canonical_writer": "Statute, StatuteSection, LegalUpdateSourceRecord, AuthorityDocument, adapters, and source proxy",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/source_actions.py", "apps/api/src/caseops_api/api/routes/source_actions.py"],
+      "compatibility_path": "Shared provenance/open/health contracts extend canonical source records.",
+      "reconciliation": "Every IP source link resolves to one canonical statute/authority/source record or a typed external snapshot, never a copied corpus row.",
+      "retirement_gate": "Compatibility serializers retire after all consumers use the versioned source contract.",
+      "earliest_milestone": "M1",
+      "forbidden_components": ["legal_source_records"]
+    },
+    {
+      "id": "courts-judges",
+      "capability": "Judges/courts",
+      "classification": "LINK",
+      "canonical_writer": "Court/forum and Judge/alias/appointment/projection masters",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/api/routes/courts.py", "apps/web/app/app/courts/page.tsx"],
+      "compatibility_path": "IP proceedings reference existing canonical forum/judge identifiers.",
+      "reconciliation": "Alias resolution and projection rebuilds resolve to one Court/Judge row.",
+      "retirement_gate": "Links retire with the proceeding; court/judge masters remain canonical.",
+      "earliest_milestone": "M2",
+      "forbidden_components": ["ip_court_master"]
+    },
+    {
+      "id": "drafting-ai",
+      "capability": "Drafting/recommendations/AI audit",
+      "classification": "EXTEND",
+      "canonical_writer": "Draft/version/review, DraftingDataExtractionField, Recommendation, ModelRun, TenantAIPolicy, citation, template, and validator owners",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/drafting.py", "apps/api/src/caseops_api/services/recommendations.py", "apps/api/src/caseops_api/api/routes/drafting.py"],
+      "compatibility_path": "Target-aware adapters extend existing state machines to IP docket/document records.",
+      "reconciliation": "One draft/version/review, extraction, recommendation, model run, citation decision, and tenant policy record per action.",
+      "retirement_gate": "Matter-only adapters retire only after M4/M6 contract, access, and rollback evidence.",
+      "earliest_milestone": "M4",
+      "forbidden_components": ["ip_drafting_engine", "ip_recommendation_engine"]
+    },
+    {
+      "id": "bulk-imports",
+      "capability": "Imports",
+      "classification": "REPLACE",
+      "canonical_writer": "Neutral bulk_import_jobs orchestration with typed domain row adapters; legacy Matter/Employee histories remain immutable",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/matter_imports.py", "apps/api/src/caseops_api/services/employee_imports.py", "apps/web/app/app/matters/imports/page.tsx"],
+      "compatibility_path": "Read-only adapters surface legacy jobs; only new operations use the neutral writer until a separately approved migration.",
+      "reconciliation": "One job state/manifest/error/download identity; no dual write or legacy history rewrite.",
+      "retirement_gate": "Legacy creation paths retire only after approved convergence, backfill, row/count/hash parity, rollback, and production history access.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_import_jobs"]
+    },
+    {
+      "id": "court-tracking",
+      "capability": "Court and external-record tracking",
+      "classification": "LINK",
+      "canonical_writer": "TrackedCase, bookmarks/updates/polls, Matter court sync/orders/cause lists, and existing provider contract",
+      "code_refs": ["apps/api/src/caseops_api/db/models.py", "apps/api/src/caseops_api/services/case_tracking.py", "apps/api/src/caseops_api/api/routes/case_tracking.py"],
+      "compatibility_path": "An IP court proceeding references existing tracked-case/Matter evidence; IP-office snapshots remain separate legal facts.",
+      "reconciliation": "CNR/court source events are never copied into IP registry snapshots and IP-office facts are never stored as TrackedCase updates.",
+      "retirement_gate": "Links retire with the IP proceeding without deleting canonical court evidence.",
+      "earliest_milestone": "M2",
+      "forbidden_components": []
+    },
+    {
+      "id": "provider-operations",
+      "capability": "Provider operations/readiness/cost",
+      "classification": "EXTEND",
+      "canonical_writer": "services/provider_operations.py, services/integrations.py, CaseTrackingSupportMatrix, ProviderCostProfile, and existing admin surfaces",
+      "code_refs": ["apps/api/src/caseops_api/services/provider_operations.py", "apps/api/src/caseops_api/services/integrations.py", "apps/api/src/caseops_api/api/routes/provider_operations.py", "apps/web/app/app/admin/provider-operations/page.tsx"],
+      "compatibility_path": "IP adapters register capability, operations, replay, readiness, terms, cost, freshness, and kill switches in existing surfaces.",
+      "reconciliation": "One operation/cost/readiness/support identity per provider action with domain evidence linked by correlation ID.",
+      "retirement_gate": "Adapter registration retires only after provider capability withdrawal and evidence retention obligations pass.",
+      "earliest_milestone": "M5",
+      "forbidden_components": ["ip_provider_operations"]
+    },
+    {
+      "id": "reporting-exports",
+      "capability": "Reporting/exports",
+      "classification": "EXTEND",
+      "canonical_writer": "Existing synchronous report/export patterns; a neutral report job/artifact/delivery contract only after measured background need",
+      "code_refs": ["apps/api/src/caseops_api/services/activity_reports.py", "apps/api/src/caseops_api/services/authority_research_reports.py"],
+      "compatibility_path": "IP query definitions plug into existing synchronous exports; neutral background orchestration is a shared extraction, never IP-only.",
+      "reconciliation": "One artifact, storage policy, download audit, schedule, and delivery effect per report request.",
+      "retirement_gate": "Synchronous compatibility retires only for measured large reports after neutral job parity and rollback proof.",
+      "earliest_milestone": "M3",
+      "forbidden_components": ["ip_report_engine"]
+    }
+  ],
+  "epic_decisions": [
+    {
+      "id": "M2M3-IPLF-019",
+      "epic_id": "IPLF-019",
+      "milestone": "M2",
+      "components": [
+        {"kind": "contract", "name": "ownership-ledger-guard", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "docs/ip-implementation/OWNERSHIP_LEDGER.yaml", "state_boundary": "Governance metadata only; it cannot mutate application state.", "implementation_phase": "M2 Definition of Ready"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-020",
+      "epic_id": "IPLF-020",
+      "milestone": "M2",
+      "components": [
+        {"kind": "contract", "name": "ip-capability-catalog-extension", "classification": "EXTEND", "owner_id": "identity-teams", "canonical_writer": "services/capability_catalog.py and services/capabilities.py", "state_boundary": "Server capability, billing entitlement, and rollout flag remain independent existing controls.", "implementation_phase": "M2 capability slice"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-021",
+      "epic_id": "IPLF-021",
+      "milestone": "M2",
+      "components": [
+        {"kind": "table", "name": "ip_assets", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP asset command service", "state_boundary": "Intellectual asset identity only; client/access/lifecycle remain on the docket anchor.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "trademark_applications", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP application command service", "state_boundary": "Office application facts; canonical lifecycle phase remains on ip_docket_records.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "trademark_application_scopes", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP application scope command service", "state_boundary": "Effective-dated class/specification legal scope only.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "trademark_representations", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP representation command service", "state_boundary": "Immutable representation metadata linked to canonical document bytes.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_proceedings", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP proceeding command service", "state_boundary": "Contested proceeding facts; canonical stage remains on its docket anchor.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_identifiers", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP identifier command service", "state_boundary": "Typed raw/normalized/effective identifier history only.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_parties_and_roles", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP party command service", "state_boundary": "Effective-dated legal party roles linked to canonical Client where applicable.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_relationships", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP relationship command service", "state_boundary": "Typed legal relationships only.", "implementation_phase": "M2 expand"},
+        {"kind": "service", "name": "ip-record-command-service", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_records.py", "state_boundary": "One transactionally locked writer for docket/asset/application/proceeding identity.", "implementation_phase": "M2 expand"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-022",
+      "epic_id": "IPLF-022",
+      "milestone": "M2",
+      "components": [
+        {"kind": "table", "name": "ip_docket_events", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP lifecycle command service", "state_boundary": "Append-only IP legal facts; not MatterActivity, AuditEvent, or outbox state.", "implementation_phase": "M2 expand"},
+        {"kind": "service", "name": "ip-lifecycle-command-service", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_lifecycle.py", "state_boundary": "Dedicated locked transitions update lifecycle/event/audit/outbox atomically.", "implementation_phase": "M2 expand-switch"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-023",
+      "epic_id": "IPLF-023",
+      "milestone": "M2",
+      "components": [
+        {"kind": "table", "name": "ip_deadlines", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP deadline command service", "state_boundary": "Legal calculation/version/responsibility lifecycle; operational projection is not independently editable.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_rule_sets_and_versions", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP rule curation service", "state_boundary": "Versioned legal calculations and company activation policy only.", "implementation_phase": "M2 expand disabled-by-default"},
+        {"kind": "table", "name": "ip_responsibility_assignments", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP responsibility command service", "state_boundary": "Effective-dated IP responsibility evidence linked to canonical memberships/teams.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "legal_working_calendars", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared legal calendar service", "state_boundary": "Neutral jurisdiction/office calendar versions; no private IP calendar owner.", "implementation_phase": "M2 expand"},
+        {"kind": "contract", "name": "ip-to-operational-deadline-projection", "classification": "LINK", "owner_id": "operational-deadlines", "canonical_writer": "services/deadlines.py delegating linked mutations to IP commands", "state_boundary": "One-way due-date/status/assignee projection with unique correlation.", "implementation_phase": "M2 expand-backfill-switch"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-024",
+      "epic_id": "IPLF-024",
+      "milestone": "M2",
+      "components": [
+        {"kind": "table", "name": "ip_documents_and_versions", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP document metadata service", "state_boundary": "Version identity/classification/approval only; bytes and processing remain shared.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_document_links", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP document link service", "state_boundary": "Typed legal-record references only.", "implementation_phase": "M2 expand"},
+        {"kind": "contract", "name": "shared-document-processing-adapter", "classification": "LINK", "owner_id": "document-processing", "canonical_writer": "services/document_storage.py, document_processing.py, and document_jobs.py", "state_boundary": "Reference canonical object/hash/scan/OCR/extraction results without copied binaries or queues.", "implementation_phase": "M2 expand"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-025",
+      "epic_id": "IPLF-025",
+      "milestone": "M2",
+      "components": [
+        {"kind": "contract", "name": "target-aware-work-owner-expansion", "classification": "EXTEND", "owner_id": "shared-tasks", "canonical_writer": "Existing task/hearing/deadline/calendar/notification services under one-writer switch", "state_boundary": "No new mutable task/hearing/operational deadline/reminder state.", "implementation_phase": "M2 expand-backfill-verify-switch"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-026",
+      "epic_id": "IPLF-026",
+      "milestone": "M2",
+      "components": [
+        {"kind": "contract", "name": "target-aware-record-access-policy", "classification": "EXTEND", "owner_id": "record-access", "canonical_writer": "services/matter_access.py generalized behind one decision function", "state_boundary": "No IP grant or ethical-wall state; no portal/access-review/emergency persistence in M2.", "implementation_phase": "M2 expand-backfill-switch"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-027",
+      "epic_id": "IPLF-027",
+      "milestone": "M2",
+      "components": [
+        {"kind": "table", "name": "domain_outbox_events", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared transactional outbox service", "state_boundary": "Domain-event delivery state only; AuditEvent remains evidence and NotificationDeliveryIntent remains recipient/channel effect.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "domain_consumer_effects", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared outbox consumer service", "state_boundary": "Idempotent consumer effect/checkpoint state only.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "idempotency_records", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared idempotency service", "state_boundary": "Request fingerprint/result identity across domains.", "implementation_phase": "M2 expand"},
+        {"kind": "service", "name": "durable-workflow-adapter", "classification": "EXTEND", "owner_id": "notification-delivery", "canonical_writer": "services/durable_workflows.py plus shared outbox consumers", "state_boundary": "Temporal owns configured durable workflows; Cloud Run Jobs own bounded batch/drain execution; no third framework.", "implementation_phase": "M2 expand-switch"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-028",
+      "epic_id": "IPLF-028",
+      "milestone": "M2",
+      "components": [
+        {"kind": "table", "name": "data_retention_policies_and_versions", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared records-governance service", "state_boundary": "Platform-wide policy/version state, not IP-private retention.", "implementation_phase": "M2 expand dry-run-only"},
+        {"kind": "table", "name": "legal_holds_and_items", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared legal-hold service", "state_boundary": "Platform-wide preservation state.", "implementation_phase": "M2 expand dry-run-only"},
+        {"kind": "table", "name": "tenant_data_operations_and_items", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "Shared tenant data-operation service", "state_boundary": "Immutable dry-run/execute manifests and checkpoints; destructive execution remains separately gated.", "implementation_phase": "M2 expand dry-run-only"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-029",
+      "epic_id": "IPLF-029",
+      "milestone": "M2",
+      "components": [
+        {"kind": "contract", "name": "m2-one-writer-reconciliation-gate", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "scripts/ip_ownership_ledger.py and slice-specific reconciliation tests", "state_boundary": "Verification evidence only; it cannot create application state.", "implementation_phase": "M2 release gate"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-030",
+      "epic_id": "IPLF-030",
+      "milestone": "M3",
+      "components": [
+        {"kind": "table", "name": "ip_portfolio_saved_views", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP portfolio query-preference service", "state_boundary": "Personal/team query and column preferences only; no copied asset/application state.", "implementation_phase": "M3 expand"},
+        {"kind": "page", "name": "ip-portfolio-page", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP portfolio query service", "state_boundary": "Read/query/bulk-command UI over canonical M2 records and shared exporters.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-031",
+      "epic_id": "IPLF-031",
+      "milestone": "M3",
+      "components": [
+        {"kind": "route", "name": "manual-ip-record-create-command", "classification": "EXTEND", "owner_id": "ip-legal-state", "canonical_writer": "M2 IP record command service", "state_boundary": "Creates canonical docket/asset/application/identifier rows with collision preview; no parallel aggregate.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-032",
+      "epic_id": "IPLF-032",
+      "milestone": "M3",
+      "components": [
+        {"kind": "table", "name": "bulk_import_jobs", "classification": "REPLACE", "owner_id": "bulk-imports", "canonical_writer": "Neutral bulk import orchestration service", "state_boundary": "Shared job manifest/status/progress/error/download state; typed domain adapters own rows.", "implementation_phase": "M3 expand-switch", "adr_ref": "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md"},
+        {"kind": "table", "name": "ip_import_rows", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP import row adapter", "state_boundary": "Typed staging/validation/commit outcome only; job lifecycle stays neutral.", "implementation_phase": "M3 expand"},
+        {"kind": "page", "name": "shared-import-history-page", "classification": "REPLACE", "owner_id": "bulk-imports", "canonical_writer": "Neutral import history API with legacy read adapters", "state_boundary": "One uploader/history/error-report UI; legacy history remains readable.", "implementation_phase": "M3 switch", "adr_ref": "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-033",
+      "epic_id": "IPLF-033",
+      "milestone": "M3",
+      "components": [
+        {"kind": "page", "name": "ip-application-workspace", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "M2 IP record/lifecycle command and query services", "state_boundary": "Presentation and commands over canonical application/docket/event records.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-034",
+      "epic_id": "IPLF-034",
+      "milestone": "M3",
+      "components": [
+        {"kind": "page", "name": "ip-legal-deadline-workspace", "classification": "LINK", "owner_id": "operational-deadlines", "canonical_writer": "IP legal deadline service with one-way MatterDeadline projection", "state_boundary": "Legal calculation commands delegate operational task/Today/calendar state to shared owners.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-035",
+      "epic_id": "IPLF-035",
+      "milestone": "M3",
+      "components": [
+        {"kind": "page", "name": "ip-hearing-adapter-workspace", "classification": "EXTEND", "owner_id": "shared-hearings", "canonical_writer": "Shared hearing/next-hearing/calendar/reminder services", "state_boundary": "IP route/presentation adapter only; no second hearing, suggestion, reminder, or delivery state.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-036",
+      "epic_id": "IPLF-036",
+      "milestone": "M3",
+      "components": [
+        {"kind": "page", "name": "ip-document-register-page", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "M2 IP document metadata/link service plus shared processing adapters", "state_boundary": "Register/classification/version/approval UI without copied bytes or processing state.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-037",
+      "epic_id": "IPLF-037",
+      "milestone": "M3",
+      "components": [
+        {"kind": "table", "name": "ip_renewal_terms", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP renewal command service", "state_boundary": "Renewal/grace/instruction/filing/acceptance/next-term legal facts only.", "implementation_phase": "M3 expand"},
+        {"kind": "table", "name": "ip_client_instructions", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP client-instruction command service", "state_boundary": "Versioned scope/authority/acknowledgement/supersession evidence; Communication remains channel evidence.", "implementation_phase": "M3 expand"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-038",
+      "epic_id": "IPLF-038",
+      "milestone": "M3",
+      "components": [
+        {"kind": "contract", "name": "ip-report-query-adapters", "classification": "EXTEND", "owner_id": "reporting-exports", "canonical_writer": "Existing synchronous export patterns; neutral background report contract only after measured need", "state_boundary": "Query definitions only; no IP scheduler, artifact store, download audit, or delivery control plane.", "implementation_phase": "M3 release"}
+      ]
+    },
+    {
+      "id": "M2M3-IPLF-039",
+      "epic_id": "IPLF-039",
+      "milestone": "M3",
+      "components": [
+        {"kind": "table", "name": "ip_docket_records", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "Current bounded IP docket anchor linked to Matter; later M2 migration must reconcile it rather than create another anchor.", "implementation_phase": "Deployed tail; preserve and migrate"},
+        {"kind": "table", "name": "ip_trademark_particular_versions", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "Append-only bounded trademark particulars; later canonical application model requires explicit reconciliation.", "implementation_phase": "Deployed tail; preserve and migrate"},
+        {"kind": "table", "name": "company_notice_ip_links", "classification": "LINK", "owner_id": "company-notices", "canonical_writer": "services/notices.py with IP linkage through services/ip_operations.py", "state_boundary": "Link only; CompanyNotice owns notice/reply state.", "implementation_phase": "Deployed tail"},
+        {"kind": "table", "name": "ip_evidence_candidates", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "Review/triage staging only; accepted evidence links to canonical notice/communication/document owners.", "implementation_phase": "Deployed tail"},
+        {"kind": "table", "name": "ip_deadline_coverages", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "Coverage assignment evidence only; it is not the legal calculation or operational deadline state.", "implementation_phase": "Deployed tail"},
+        {"kind": "table", "name": "ip_deadline_incidents", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "Restricted incident evidence only; tasks/deadlines/notifications remain shared owners.", "implementation_phase": "Deployed tail"},
+        {"kind": "table", "name": "ip_title_interests", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "IP title interest legal facts only.", "implementation_phase": "Deployed tail"},
+        {"kind": "table", "name": "ip_related_right_obligations", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_operations.py", "state_boundary": "Related-right obligation facts; operational work remains shared.", "implementation_phase": "Deployed tail"},
+        {"kind": "table", "name": "ip_cost_items", "classification": "LINK", "owner_id": "matter-billing", "canonical_writer": "services/ip_operations.py for legal cost fact; Matter billing for accounting state", "state_boundary": "One IP legal cost amount with optional unique billing Matter reconciliation; never payment/invoice/spend state.", "implementation_phase": "Deployed tail"},
+        {"kind": "route", "name": "ip-operations-bounded-api", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "api/routes/ip_operations.py", "state_boundary": "Bounded current tail APIs; future services must migrate/compose rather than fork them.", "implementation_phase": "Deployed tail"},
+        {"kind": "page", "name": "ip-operations-bounded-page", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "apps/web/app/app/ip/page.tsx", "state_boundary": "Current bounded workflow surface; later M2/M3 pages reuse its API records and capability gating.", "implementation_phase": "Deployed tail"}
+      ]
+    }
+  ]
+}

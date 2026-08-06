@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-019A",
+    "active_slice": "IPLF-019B",
     "checkpoint": {
-      "recorded_at": "2026-08-06T06:50:00+05:30",
-      "repository_revision": "f07cbfa26903b07c3f5878703a43534be2a1c28b",
-      "environment": "Canonical local main and origin/main resolve to f07cbfa26903b07c3f5878703a43534be2a1c28b. IPLF-008B exact-head CI 31059296591, Security 31059296623, and CodeQL 31059296587 passed. Production migration caseops-migrate-job-l8d5t, six-job immutable convergence, API caseops-api-00238-pxr, web caseops-web-00218-lbw, exact API/web identities, and production workflow 31060850360 passed at the same full SHA. The QA CNR DLHC010001232024 passed the fresh provider/source exact-release canary at 360px. IPLF-001C deterministic scheduler reconciliation is integrated locally for its exact-head release gates.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, and IPLF-008B have completed repository-controlled implementation and deployment verification. IPLF-008B closes TRACK-01 through TRACK-14 release proof with a once-per-company/exact-release provider canary, immutable operation/cost/source evidence, protected source download, and visible responsive controls. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "recorded_at": "2026-08-06T12:30:00+05:30",
+      "repository_revision": "e77d078d7409c733d264257c2d24a867641ff731",
+      "environment": "Canonical local main and origin/main resolve to e77d078d7409c733d264257c2d24a867641ff731. IPLF-019A implementation candidate b9a8902dba20d27cc91775f5efa24145163f1fa2 passed 12 focused governance tests, Ruff, exact Section 11.2/M2-M3 ownership validation, the 436/50/68/317 manifest gate, and diff checks; exact-head CI and release remain pending. Production remains on the exact verified IPLF-001C release: API caseops-api-00239-qlt, web caseops-web-00219-rfz, six jobs on API digest sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130, and production workflow 31074879292.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, and IPLF-001C have completed repository-controlled implementation and deployment verification. IPLF-001C closes deterministic scheduler delivery/outcome reconciliation while preserving the provider-spend cap and continuous SLO monitoring. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-019A",
-      "next_action": "Release IPLF-001C through exact-head CI, canonical main, exact-identity deployment, and deterministic production scheduler outcome reconciliation; then implement IPLF-019A. Never impose an arbitrary elapsed-time or seven-day health blocker. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md"
+      "next_slice": "IPLF-019B",
+      "next_action": "Release IPLF-019A through exact-head CI, canonical main, exact-identity production verification, and dated production E2E; then implement IPLF-019B full ARCH-OPS workflow/release proof. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md"
     }
   },
   "milestones": [
@@ -84,7 +84,7 @@
       "deliverable": "Company-scoped IP anchors/legal evidence, rules/workflows/calendars, versioned documents, outbox/idempotency, restricted-record access, and independently migrated shared task/hearing/next-hearing/deadline/calendar/notification owners; registered data classes, holds/export dry run and current recovery proof",
       "exit_criteria": "Ownership ledger implemented with no forbidden duplicate; one-writer reconciliation per shared owner; mixed-revision upgrade/rollback rehearsal; Postgres composite-FK/uniqueness tests; UJ-46/UJ-47/UJ-65/UJ-67/UJ-68; current full-stack restore and tenant-export dry run; cross-company/restricted-record isolation; SME-approved rules/workflows/taxonomy; OpenAPI/UI capability parity. Portal, drafting, assistant, registry sync, report jobs, access review/emergency access and automated purge are explicitly not M2 exit claims",
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -704,7 +704,7 @@
         "IPLF-019A",
         "IPLF-019B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -2906,12 +2906,12 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
-          "revision": "a8406178791d137c8db40f9664b225bcd4241bdc",
-          "environment": "production: application f07cbfa26903b07c3f5878703a43534be2a1c28b; API caseops-api-00238-pxr; web caseops-web-00218-lbw; six jobs on exact digest sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd",
+          "revision": "e77d078d7409c733d264257c2d24a867641ff731",
+          "environment": "production: API caseops-api-00239-qlt; web caseops-web-00219-rfz; six jobs on exact digest sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130; production workflow 31074879292",
           "fixtures": "version-controlled six-job scheduler inventory and production-safe read-only scheduler/execution metadata",
           "assertions": "immutable image, enabled state, cadence, timezone, target, dedicated identity, job-scoped Invoker, recorded attempt, scheduler delivery, latest workload outcome including running/unknown separation, paused legacy compatibility path, and retained fail-closed provider-spend evidence",
           "result": "passed",
-          "recorded_at": "2026-08-06T07:25:00+05:30"
+          "recorded_at": "2026-08-06T11:45:00+05:30"
         }
       ],
       "approvals": [
@@ -2925,7 +2925,7 @@
       "next_actions": [
         "Continue natural execution monitoring as operational SLO evidence, without an elapsed-time release threshold.",
         "Investigate workload failures separately from scheduler delivery drift and preserve the provider-spend cap.",
-        "Begin IPLF-019A after dependency-ordered M1 release verification."
+        "Preserve exact-release scheduler evidence while IPLF-019A proceeds."
       ],
       "data_impact": [
         "No application, tenant, provider, credential, scheduler, or job data is mutated by the read-only audit.",
@@ -4513,38 +4513,88 @@
       "epic_id": "IPLF-019",
       "source_kind": "derived",
       "scope_source": "IPLF-019",
-      "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
+      "primary_behavior": "Publish the exact Section 11.2 ownership matrix as a repository-backed M2/M3 Definition-of-Ready contract, record the import and durable-workflow ADRs, and fail CI on an uncovered or forbidden duplicate table/service/route/page/job/control plane.",
+      "migration_boundary": "No schema or application-data change. The ledger records future expand/backfill/verify/switch boundaries without granting permission to prebuild them.",
+      "release_boundary": "Independent exact-head CI, canonical main merge, exact-identity production release, dated baseline production E2E, and rollback by reverting governance/CI files only.",
       "requirement_ids": [],
       "journey_path_ids": [],
       "ownership": [
         {
-          "classification": "EXTEND",
-          "component": "IPLF-019 canonical scope: Publish the repository-backed ownership ledger and ADRs; prove no proposed M2/M3 table/service/page/job duplicates the Section 11.2 owners.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "classification": "NEW",
+          "component": "Repository-backed Section 11.2 ownership ledger and forbidden-duplicate validator.",
+          "canonical_writer": "docs/ip-implementation/OWNERSHIP_LEDGER.yaml validated by scripts/ip_ownership_ledger.py; application state remains with the ledger-named existing, IP-legal, or neutral shared owner.",
+          "compatibility_path": "The canonical program manifest retains lifecycle/status truth while the ownership ledger adds a binding Definition-of-Ready view; current bounded IP tails remain preserved and explicitly registered.",
+          "retirement_gate": "The guard may be retired only by an approved superseding architecture decision that retains exact Section 11.2 coverage, proposal uniqueness, repository scanning, and one-writer reconciliation."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
+        "docs/architecture/decisions/ADR-001-IP-ONE-WRITER-OWNERSHIP.md",
+        "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md",
+        "docs/architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md",
+        "scripts/ip_ownership_ledger.py",
+        ".github/workflows/ci.yml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_ownership_ledger.py",
+        "python scripts/ip_ownership_ledger.py validate",
+        "python scripts/ip_program_manifest.py validate"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md",
+          "revision": "b9a8902dba20d27cc91775f5efa24145163f1fa2",
+          "environment": "local exact implementation commit on Windows/CPython 3.13 with the locked uv environment in copy mode",
+          "fixtures": "binding PRD Section 11.2 table, canonical 436/50/68/317 manifest, every M2/M3 epic decision, repository source/migration/web/Cloud Run scan roots, and negative duplicate/ADR/status mutations",
+          "assertions": "exact owner order and repository refs, unique complete M2/M3 proposal coverage, allowed classification/state boundaries, committed REPLACE ADRs, no forbidden exact or CamelCase-disguised control plane, generated traceability, and derived parent/program status",
+          "result": "passed",
+          "recorded_at": "2026-08-06T12:30:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Complete focused/full CI, exact-main production release, and attach dated IPLF-019A evidence.",
+        "Proceed to IPLF-019B for the full ARCH-OPS requirement/user-workflow/release-proof scope after IPLF-019A is deployment verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, application row, tenant object, provider, credential, scheduler, or job mutation.",
+        "The ledger records architecture metadata and future just-in-time migration boundaries only."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
+          "disposition": "created",
+          "owner": "Architecture/Data/Engineering",
+          "evidence": "Exact Section 11.2 owners and ordered M2/M3 proposal decisions"
+        },
+        {
+          "artifact": "docs/architecture/decisions/ADR-001-IP-ONE-WRITER-OWNERSHIP.md",
+          "disposition": "created",
+          "owner": "Architecture",
+          "evidence": "One-writer, compatibility, reconciliation, and retirement contract"
+        },
+        {
+          "artifact": "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md",
+          "disposition": "created",
+          "owner": "Architecture/Data",
+          "evidence": "Field-level REPLACE analysis for neutral bulk-import orchestration"
+        },
+        {
+          "artifact": "docs/architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md",
+          "disposition": "created",
+          "owner": "Architecture/SRE",
+          "evidence": "Existing Temporal, Cloud Run Job, outbox, retry, lease, cancellation, and fencing ownership"
+        }
+      ],
+      "allocation_review": "Administrative foundation slice: it implements repository governance and CI only. IPLF-019B retains ARCH-OPS-01 through ARCH-OPS-26 and the full epic release-proof allocation. The M0 named human program-lock approval remains pending and is not inferred.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
