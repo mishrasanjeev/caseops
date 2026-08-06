@@ -1,12 +1,12 @@
 # IPLF-001C Scheduler Delivery and Outcome Reconciliation
 
-**Recorded:** 5 August 2026  
-**Milestone:** M1 — Trust Recovery GA  
-**Implementation revision:** `a8406178791d137c8db40f9664b225bcd4241bdc`  
-**Production application revision audited:** `623ca8f5e88a8110c71cc1c6edca9c951eac7e1a`  
-**Production API revision:** `caseops-api-00232-lls`  
-**Production web revision:** `caseops-web-00212-rh9`  
-**Production API/job image:** `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bb13c057680dec1d0d228306c1e22f4ebb960d5b605369ef30c02bdc4a262fb8`
+**Recorded:** 6 August 2026
+**Milestone:** M1 — Trust Recovery GA
+**Implementation revision:** `a8406178791d137c8db40f9664b225bcd4241bdc`
+**Production application revision audited:** `f07cbfa26903b07c3f5878703a43534be2a1c28b`
+**Production API revision:** `caseops-api-00238-pxr`
+**Production web revision:** `caseops-web-00218-lbw`
+**Production API/job image:** `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd`
 
 ## Outcome
 
@@ -15,9 +15,10 @@ tail. The six canonical schedulers are enabled, target the intended Cloud Run
 jobs, use the dedicated scheduler invoker, have job-scoped `roles/run.invoker`,
 and point at the immutable production image. Every scheduler has a recorded
 attempt with successful Scheduler-to-Cloud-Run delivery. Five latest workloads
-succeeded. The latest authority-metadata workload was correctly invoked and
-then stopped fail-closed on its configured daily provider-spend cap; its
-immediately preceding natural execution completed successfully.
+succeeded. The currently running authority-metadata workload was correctly
+invoked and is reported separately as `running_or_unknown`; it is not
+misrepresented as successful or as IAM drift. The prior spend-cap stop remains
+retained below as historical fail-closed evidence.
 
 There is no fixed seven-day or other elapsed-duration release gate. Release
 proof is exact-image configuration/IAM validation, a bounded delivery/canary
@@ -75,7 +76,29 @@ immutable-image enforcement, Windows gcloud resolution, IAM/image drift,
 successful/failed/missing execution classification, and the important split
 between Scheduler delivery failure and workload failure.
 
-## Dated production audit
+## Current exact-image production audit
+
+After IPLF-008B deployment, the read-only audit was rerun against exact API/job
+digest `sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd`.
+It exited `0` with aggregate `result=pass`: all six scheduler configuration,
+dedicated identity, job-scoped Invoker, immutable image, and Scheduler-delivery
+checks passed.
+
+| Scheduler | Latest execution | Current workload outcome |
+| --- | --- | --- |
+| `caseops-legal-update-sync-midnight` | `caseops-legal-update-sync-vk9gh` | succeeded |
+| `caseops-case-tracking-poll-1630-ist` | `caseops-case-tracking-poll-9nd7j` | succeeded |
+| `caseops-activity-report-0800-ist` | `caseops-activity-report-jvxr9` | succeeded |
+| `caseops-reminders-cadence` | `caseops-reminders-job-hqfkq` | succeeded |
+| `caseops-extract-authority-metadata-daily` | `caseops-extract-authority-metadata-2dn2s` | running_or_unknown |
+| `caseops-db-index-health-weekly` | `caseops-db-index-health-cgvj8` | succeeded |
+
+The audit is deliberately bounded and deterministic. It does not wait seven
+days, force a workload to finish, raise the provider budget, or convert a
+running/unknown workload into a pass. Scheduler delivery and workload outcome
+remain separate fields.
+
+## Prior dated production audit
 
 The following read-only command was run against project
 `perfect-period-305406` and region `asia-south1`:
@@ -173,4 +196,3 @@ regression:
 - The scheduler elapsed-time blocker is closed.
 - M1 and the overall program remain incomplete until the other exact-head
   releases and genuine legal/product acceptance gates are resolved.
-

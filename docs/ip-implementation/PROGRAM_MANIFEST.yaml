@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-019A",
     "checkpoint": {
-      "recorded_at": "2026-08-05T08:05:00+05:30",
-      "repository_revision": "a8406178791d137c8db40f9664b225bcd4241bdc",
-      "environment": "Canonical main 623ca8f5e88a8110c71cc1c6edca9c951eac7e1a serves production on API caseops-api-00232-lls and web caseops-web-00212-rh9; exact production workflow 30965133241 passed. All six recurring jobs are pinned to API digest sha256:bb13c057680dec1d0d228306c1e22f4ebb960d5b605369ef30c02bdc4a262fb8. IPLF-001C read-only audit passed six of six scheduler IAM/config/delivery checks; five latest workloads succeeded and the latest authority workload stopped on the retained provider-spend cap after its preceding natural success. IPLF-006C exact-head CI is running; IPLF-007C, IPLF-008A, and IPLF-008B are stacked behind it.",
-      "completed_scope": "Phase 0 Notices production regression is green. IPLF-001C codifies delivery/outcome audit and closes the obsolete elapsed-time scheduler blocker without weakening IAM, provider-spend, legal, or human gates. IPLF-002A/B, IPLF-003C, IPLF-004A/B, and IPLF-005B have implementation and evidence; IPLF-006C, IPLF-007C, IPLF-008A, and IPLF-008B have complete bounded implementations and follow dependency-ordered exact-head release verification.",
+      "recorded_at": "2026-08-06T06:50:00+05:30",
+      "repository_revision": "f07cbfa26903b07c3f5878703a43534be2a1c28b",
+      "environment": "Canonical local main and origin/main resolve to f07cbfa26903b07c3f5878703a43534be2a1c28b. IPLF-008B exact-head CI 31059296591, Security 31059296623, and CodeQL 31059296587 passed. Production migration caseops-migrate-job-l8d5t, six-job immutable convergence, API caseops-api-00238-pxr, web caseops-web-00218-lbw, exact API/web identities, and production workflow 31060850360 passed at the same full SHA. The QA CNR DLHC010001232024 passed the fresh provider/source exact-release canary at 360px. IPLF-001C deterministic scheduler reconciliation is integrated locally for its exact-head release gates.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, and IPLF-008B have completed repository-controlled implementation and deployment verification. IPLF-008B closes TRACK-01 through TRACK-14 release proof with a once-per-company/exact-release provider canary, immutable operation/cost/source evidence, protected source download, and visible responsive controls. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-019A",
-      "next_action": "Release IPLF-006C, IPLF-007C, IPLF-008A, and IPLF-008B in dependency order after exact-head CI and exact-serving production verification, merge the IPLF-001C reconciliation tooling through the same controls, then implement the M2 ownership ledger at IPLF-019A. No arbitrary elapsed-time blocker applies.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md"
+      "next_action": "Release IPLF-001C through exact-head CI, canonical main, exact-identity deployment, and deterministic production scheduler outcome reconciliation; then implement IPLF-019A. Never impose an arbitrary elapsed-time or seven-day health blocker. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md"
     }
   },
   "milestones": [
@@ -626,7 +626,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
@@ -660,7 +660,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md",
@@ -2907,11 +2907,11 @@
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
           "revision": "a8406178791d137c8db40f9664b225bcd4241bdc",
-          "environment": "production: application 623ca8f5e88a8110c71cc1c6edca9c951eac7e1a; API caseops-api-00232-lls; web caseops-web-00212-rh9; six exact-digest recurring jobs",
+          "environment": "production: application f07cbfa26903b07c3f5878703a43534be2a1c28b; API caseops-api-00238-pxr; web caseops-web-00218-lbw; six jobs on exact digest sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd",
           "fixtures": "version-controlled six-job scheduler inventory and production-safe read-only scheduler/execution metadata",
-          "assertions": "immutable image, enabled state, cadence, timezone, target, dedicated identity, job-scoped Invoker, recorded attempt, scheduler delivery, latest workload outcome, paused legacy compatibility path, fail-closed provider-spend exception",
+          "assertions": "immutable image, enabled state, cadence, timezone, target, dedicated identity, job-scoped Invoker, recorded attempt, scheduler delivery, latest workload outcome including running/unknown separation, paused legacy compatibility path, and retained fail-closed provider-spend evidence",
           "result": "passed",
-          "recorded_at": "2026-08-05T08:05:00+05:30"
+          "recorded_at": "2026-08-06T07:25:00+05:30"
         }
       ],
       "approvals": [
@@ -4292,18 +4292,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
-          "revision": "560d325e95b09452005461443d23cff40160bade",
-          "environment": "local SQLite/API, generated OpenAPI, production web build, real-API Playwright, plus exact-CI route-matrix and FK-index guard repair",
+          "revision": "508327f5e4969b9ec098a613b179f4fe39b92485",
+          "environment": "local SQLite/API and web coverage/build, exact-head CI with PostgreSQL 17 and full app Playwright, plus Google Cloud production migration/jobs/services and dated production Playwright",
           "fixtures": "isolated deterministic law-firm tenants, exact/session-only hearings, SendGrid bounce/delivered events, suppression and recovery destinations",
-          "assertions": "durable lineage, no invented hearing time, permission revalidation, confidentiality, scheduling/cancellation, fallback, monotonic webhook state, idempotency, suppression evidence and authenticated recovery, versioned retry recovery, leading FK indexes, metrics, persistence, and 360px usability",
+          "assertions": "durable lineage, no invented hearing time, permission revalidation, confidentiality, scheduling/cancellation, fallback, monotonic webhook state, idempotency, suppression evidence and authenticated recovery, versioned retry recovery, leading FK indexes, metrics, persistence, successful-intent visibility, settled Notice controls, and 360px usability",
           "result": "passed",
-          "recorded_at": "2026-08-05T11:55:00+05:30"
+          "recorded_at": "2026-08-05T22:15:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Integrate IPLF-005B and IPLF-006C, rebase this revision onto main, pass exact-head CI and PostgreSQL migration gates, then deploy and run the dated production UJ-11 proof without contacting an unapproved external recipient."
+        "Obtain genuine human acceptance and approved external-channel evidence when available; keep all unapproved external adapters fail-closed. Continue repository work at IPLF-008A/IPLF-008B."
       ],
       "data_impact": [
         "Additive hearing policy/time precision, immutable delivery target/version/recovery metadata, provider event idempotency/application metadata, suppression recovery evidence, and hearing-reminder-to-intent lineage; legacy reminder rows are backfilled without dispatch."
@@ -4325,7 +4325,7 @@
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -4368,18 +4368,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md",
-          "revision": "38354616d65e551f921846c606c3390cde0e7782",
-          "environment": "local API, generated OpenAPI, Next.js production build, and GitHub Actions workflow validation",
+          "revision": "cfedd74b852ad90f6c9c295ec57e1bc599f43a84",
+          "environment": "local API/web, exact-head CI with PostgreSQL 17 and app Playwright, plus Google Cloud production migration/jobs/services and exact-serving production Playwright",
           "fixtures": "valid full release SHAs, abbreviated tags, mixed API/web identities, stale expected revision, and local/runtime Cloud Run revision values",
-          "assertions": "fail-closed public identity, exact API/web equality, expected revision equality, exact serving checkout, bounded deployment convergence, no cached web identity, and canonical deploy injection",
+          "assertions": "fail-closed public identity, exact API/web equality, expected revision equality, exact serving checkout, bounded deployment convergence, no cached web identity, canonical deploy injection, immutable job convergence, health, and dated production acceptance",
           "result": "passed",
-          "recorded_at": "2026-08-05T04:50:00+05:30"
+          "recorded_at": "2026-08-06T05:50:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Rebase after preceding M1 slices, run exact-head CI, merge and deploy; require matching API/web release identity and exact-serving production Playwright before changing release status."
+        "Obtain genuine human acceptance when available and continue repository work at IPLF-008B; do not weaken the exact API/web/workflow identity gate."
       ],
       "data_impact": [
         "No schema, backfill, tenant mutation, external provider operation, or legal side effect; only non-secret runtime release identity is published."
@@ -4395,7 +4395,7 @@
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -4463,18 +4463,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md",
-          "revision": "b92d5d9b3d37113232e3ed9c77fbb4756e2c26b4",
-          "environment": "local API, generated OpenAPI, web component/type checks, and production Playwright control-plane validation",
+          "revision": "f07cbfa26903b07c3f5878703a43534be2a1c28b",
+          "environment": "local API/web, exact-head CI with PostgreSQL 17 and app Playwright, plus Google Cloud production migration/jobs/services and exact-serving tracked-case production Playwright",
           "fixtures": "tagged notification-disabled QA bookmark, exact and stale release SHAs, costed provider snapshot/order, untagged bookmark, and 360px case-tracking surface",
-          "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, visible narrow-screen controls, and no overflow",
+          "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, exact serving checkout, visible narrow-screen controls, and no overflow",
           "result": "passed",
-          "recorded_at": "2026-08-05T06:45:00+05:30"
+          "recorded_at": "2026-08-06T06:50:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "After IPLF-008A is merged, rebase this slice, pass exact-head CI, merge/deploy, configure the approved QA CNR, and require the dated exact-serving provider/source production test before changing release status."
+        "Obtain genuine human acceptance and maintain the approved QA/provider/source-term gates; continue repository work at IPLF-001C without weakening exact-serving production proof."
       ],
       "data_impact": [
         "No schema migration or backfill; the exact-release canary reuses existing bookmark, operation/snapshot, cost, update/source, and audit owners and may create one notification-disabled tagged QA bookmark."
@@ -4496,7 +4496,7 @@
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Sections 12 TRACK-01 through TRACK-14 and 25 IPLF-008",
@@ -14780,7 +14780,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001A",
@@ -14833,7 +14833,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001A",
@@ -14871,7 +14871,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -14907,7 +14907,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -14958,7 +14958,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001A",
@@ -14996,7 +14996,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15032,7 +15032,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15068,7 +15068,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15104,7 +15104,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15140,7 +15140,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15176,7 +15176,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15212,7 +15212,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15248,7 +15248,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15297,7 +15297,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001B",
@@ -36689,7 +36689,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-007A",
@@ -42149,7 +42149,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-007A",
@@ -42201,7 +42201,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-007A",
@@ -42253,7 +42253,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-007A",
