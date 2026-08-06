@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.core.settings import get_settings
 from caseops_api.schemas.ip_operations import (
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
@@ -25,7 +26,9 @@ from caseops_api.schemas.ip_operations import (
     IpRelatedRightObligationCompleteRequest,
     IpRelatedRightObligationCreateRequest,
     IpTitleInterestCreateRequest,
+    IpWorkspaceReadinessResponse,
 )
+from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
 from caseops_api.services.ip_operations import (
     add_ip_cost_item,
     add_ip_deadline_coverage,
@@ -49,10 +52,45 @@ from caseops_api.services.ip_operations import (
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
-IpViewer = Annotated[SessionContext, Depends(require_capability("ip:view"))]
+IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
-IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:review"))]
-IpFinance = Annotated[SessionContext, Depends(require_capability("ip:finance"))]
+IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
+IpFinance = Annotated[SessionContext, Depends(require_capability("ip:fees_manage"))]
+
+
+@router.get("/readiness", response_model=IpWorkspaceReadinessResponse)
+async def get_ip_workspace_readiness(
+    context: IpViewer,
+    session: DbSession,
+) -> IpWorkspaceReadinessResponse:
+    decisions = ip_workspace_readiness(
+        session,
+        context=context,
+        settings=get_settings(),
+    )
+    by_id = {decision.feature_id: decision for decision in decisions}
+    return IpWorkspaceReadinessResponse(
+        timezone=context.company.timezone,
+        workspace_available=by_id["workspace_core"].available,
+        manual_docketing_available=by_id["manual_docketing"].available,
+        features=[
+            {
+                "feature_id": decision.feature_id,
+                "available": decision.available,
+                "reason": decision.reason,
+                "owner": decision.owner,
+                "required_capabilities": list(decision.required_capabilities),
+                "missing_capabilities": list(decision.missing_capabilities),
+                "entitlement_key": decision.entitlement_key,
+                "entitled": decision.entitled,
+                "rollout_flag": decision.rollout_flag,
+                "rollout_enabled": decision.rollout_enabled,
+                "rollout_expires_at": decision.rollout_expires_at,
+                "manual_fallback_feature_id": decision.manual_fallback_feature_id,
+            }
+            for decision in decisions
+        ],
+    )
 
 
 @router.get("/dockets", response_model=IpDocketListResponse)

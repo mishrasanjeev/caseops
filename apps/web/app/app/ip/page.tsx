@@ -20,10 +20,12 @@ import {
   createIpDocket,
   discoverIpEvidence,
   fetchIpDockets,
+  fetchIpWorkspaceReadiness,
   reconcileIpCosts,
   reviewIpEvidenceCandidate,
   type IpDocket,
   type IpEvidenceCandidate,
+  type IpFeatureReadiness,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
@@ -32,17 +34,22 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function IpDocketPage() {
   const queryClient = useQueryClient();
-  const canView = useCapability("ip:view");
+  const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
-  const canReview = useCapability("ip:review");
-  const canFinance = useCapability("ip:finance");
+  const canReview = useCapability("ip:approve");
+  const canFinance = useCapability("ip:fees_manage");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  const readiness = useQuery({
+    queryKey: ["ip", "readiness"],
+    queryFn: fetchIpWorkspaceReadiness,
+    enabled: canView,
+  });
   const listing = useQuery({
     queryKey: ["ip", "dockets"],
     queryFn: fetchIpDockets,
-    enabled: canView,
+    enabled: canView && readiness.data?.workspace_available === true,
   });
   const dockets = listing.data?.dockets ?? [];
   const selected = useMemo(
@@ -63,6 +70,31 @@ export default function IpDocketPage() {
     );
   }
 
+  if (readiness.isPending) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-sm">Checking IP workspace readiness…</CardContent>
+      </Card>
+    );
+  }
+
+  if (readiness.isError) {
+    return (
+      <EmptyState
+        title="IP workspace is unavailable"
+        description={apiErrorMessage(
+          readiness.error,
+          "Readiness could not be verified, so IP operations remain disabled.",
+        )}
+        action={<Button onClick={() => readiness.refetch()}>Retry readiness check</Button>}
+      />
+    );
+  }
+
+  if (!readiness.data.workspace_available) {
+    return <IpReadinessGate features={readiness.data.features} timezone={readiness.data.timezone} />;
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
@@ -77,6 +109,10 @@ export default function IpDocketPage() {
           ) : null
         }
       />
+
+      {readiness.data.features.some((feature) => !feature.available) ? (
+        <IpAutomationReadiness features={readiness.data.features} />
+      ) : null}
 
       {showCreate && canWrite ? (
         <CreateTrademarkCard
@@ -138,6 +174,91 @@ export default function IpDocketPage() {
         </div>
       )}
     </div>
+  );
+}
+
+const READINESS_REASON: Record<IpFeatureReadiness["reason"], string> = {
+  available: "Available",
+  unknown_feature: "Feature is not in the approved catalogue",
+  missing_capability: "Your role does not include the required capability",
+  missing_entitlement: "The workspace plan does not include this feature",
+  rollout_disabled: "The safety rollout has not been enabled",
+  rollout_expired: "The approved pilot window has expired",
+};
+
+function IpReadinessGate({
+  features,
+  timezone,
+}: {
+  features: IpFeatureReadiness[];
+  timezone: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        eyebrow="Intellectual property"
+        title="IP workspace setup"
+        description="Operational records stay hidden until server capability, plan entitlement, and safety rollout are all ready."
+      />
+      <Card className="min-w-0">
+        <CardHeader><CardTitle as="h2">Readiness checks</CardTitle></CardHeader>
+        <CardContent className="flex min-w-0 flex-col gap-3">
+          <p className="text-sm text-[var(--color-mute)]">Workspace timezone: {timezone}</p>
+          {features.map((feature) => (
+            <div
+              key={feature.feature_id}
+              className="flex min-w-0 w-full flex-col gap-2 rounded-lg border border-[var(--color-line)] p-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between"
+              data-testid={`ip-readiness-${feature.feature_id}`}
+            >
+              <div className="min-w-0">
+                <div className="break-words font-semibold">{feature.feature_id.replaceAll("_", " ")}</div>
+                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                  {READINESS_REASON[feature.reason]} · owner {feature.owner}
+                </div>
+              </div>
+              <span className={feature.available ? "text-sm font-semibold text-emerald-700" : "text-sm font-semibold text-amber-700"}>
+                {feature.available ? "Ready" : "Disabled"}
+              </span>
+              {!feature.available && feature.manual_fallback_feature_id ? (
+                <div className="w-full break-words text-xs text-[var(--color-mute)]">
+                  Manual fallback: {feature.manual_fallback_feature_id.replaceAll("_", " ")}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function IpAutomationReadiness({ features }: { features: IpFeatureReadiness[] }) {
+  const blocked = features.filter((feature) => !feature.available);
+  return (
+    <Card className="min-w-0">
+      <CardHeader><CardTitle as="h2">Automation readiness</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-2">
+        {blocked.map((feature) => (
+          <div
+            key={feature.feature_id}
+            className="flex min-w-0 w-full flex-col gap-1 rounded-md bg-[var(--color-bg-2)] p-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between"
+            data-testid={`ip-automation-${feature.feature_id}`}
+          >
+            <div className="min-w-0 break-words text-sm font-semibold">
+              {feature.feature_id.replaceAll("_", " ")}
+            </div>
+            <div className="min-w-0 break-words text-xs text-[var(--color-mute)] sm:text-right">
+              Disabled · {READINESS_REASON[feature.reason]} · owner {feature.owner}
+            </div>
+            {feature.manual_fallback_feature_id ? (
+              <div className="w-full break-words text-xs text-[var(--color-mute)]">
+                Manual fallback remains {feature.manual_fallback_feature_id.replaceAll("_", " ")}.
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 

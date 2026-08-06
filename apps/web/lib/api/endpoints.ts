@@ -7999,6 +7999,38 @@ export type IpCostReconciliationReport = {
   checksum_sha256: string;
 };
 
+export type IpFeatureReadiness = {
+  feature_id: string;
+  available: boolean;
+  reason:
+    | "available"
+    | "unknown_feature"
+    | "missing_capability"
+    | "missing_entitlement"
+    | "rollout_disabled"
+    | "rollout_expired";
+  owner: string;
+  required_capabilities: string[];
+  missing_capabilities: string[];
+  entitlement_key: string | null;
+  entitled: boolean;
+  rollout_flag: string | null;
+  rollout_enabled: boolean;
+  rollout_expires_at: string | null;
+  manual_fallback_feature_id: string | null;
+};
+
+export type IpWorkspaceReadiness = {
+  timezone: string;
+  workspace_available: boolean;
+  manual_docketing_available: boolean;
+  features: IpFeatureReadiness[];
+};
+
+export async function fetchIpWorkspaceReadiness(): Promise<IpWorkspaceReadiness> {
+  return apiRequest("/api/ip/readiness");
+}
+
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
   return apiRequest("/api/ip/dockets");
 }

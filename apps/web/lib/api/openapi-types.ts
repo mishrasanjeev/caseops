@@ -3999,6 +3999,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Workspace Readiness */
+        get: operations["get_ip_workspace_readiness_api_ip_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/reports/docket-control": {
         parameters: {
             query?: never;
@@ -16789,6 +16806,36 @@ export interface components {
             /** Duplicate Count */
             duplicate_count: number;
         };
+        /** IpFeatureReadinessRecord */
+        IpFeatureReadinessRecord: {
+            /** Available */
+            available: boolean;
+            /** Entitled */
+            entitled: boolean;
+            /** Entitlement Key */
+            entitlement_key: string | null;
+            /** Feature Id */
+            feature_id: string;
+            /** Manual Fallback Feature Id */
+            manual_fallback_feature_id: string | null;
+            /** Missing Capabilities */
+            missing_capabilities: string[];
+            /** Owner */
+            owner: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired";
+            /** Required Capabilities */
+            required_capabilities: string[];
+            /** Rollout Enabled */
+            rollout_enabled: boolean;
+            /** Rollout Expires At */
+            rollout_expires_at: string | null;
+            /** Rollout Flag */
+            rollout_flag: string | null;
+        };
         /** IpNoticeLinkCreateRequest */
         IpNoticeLinkCreateRequest: {
             /** Accepted Effect */
@@ -16940,6 +16987,17 @@ export interface components {
             recordal_status: string;
             /** Related Docket Id */
             related_docket_id: string | null;
+        };
+        /** IpWorkspaceReadinessResponse */
+        IpWorkspaceReadinessResponse: {
+            /** Features */
+            features: components["schemas"]["IpFeatureReadinessRecord"][];
+            /** Manual Docketing Available */
+            manual_docketing_available: boolean;
+            /** Timezone */
+            timezone: string;
+            /** Workspace Available */
+            workspace_available: boolean;
         };
         /** JudgeAliasListResponse */
         JudgeAliasListResponse: {
@@ -34884,6 +34942,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_workspace_readiness_api_ip_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWorkspaceReadinessResponse"];
                 };
             };
         };

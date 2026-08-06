@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from sqlalchemy.orm import Session
+
 from caseops_api.core.settings import Settings
+from caseops_api.services.session_context import SessionContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,4 +252,30 @@ def evaluate_ip_feature(
         rollout_enabled=rollout_enabled,
         rollout_expires_at=expiry,
         manual_fallback_feature_id=feature.manual_fallback_feature_id,
+    )
+
+
+def ip_workspace_readiness(
+    session: Session,
+    *,
+    context: SessionContext,
+    settings: Settings,
+    now: datetime | None = None,
+) -> tuple[IPFeatureDecision, ...]:
+    """Return tenant/member-specific readiness without mutating billing state."""
+
+    from caseops_api.services.capabilities import resolve_membership_capabilities
+    from caseops_api.services.saas_billing import current_entitlements_for_company
+
+    capabilities = resolve_membership_capabilities(session, context.membership)
+    entitlements = current_entitlements_for_company(session, context.company.id)
+    return tuple(
+        evaluate_ip_feature(
+            feature.feature_id,
+            granted_capabilities=capabilities,
+            entitlements=entitlements,
+            settings=settings,
+            now=now,
+        )
+        for feature in IP_FEATURES
     )

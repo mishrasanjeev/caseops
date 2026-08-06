@@ -63,7 +63,7 @@ const NAV: NavItem[] = [
     label: "IP docket",
     icon: BookOpenCheck,
     section: "work",
-    requiresCapability: "ip:view",
+    requiresCapability: "ip:read",
   },
   { href: "/app/notices", label: "Notices", icon: Bell, section: "work" },
   {
