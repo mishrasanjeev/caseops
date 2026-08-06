@@ -102,7 +102,10 @@ or contract decision. The associated decisions are:
   for neutral bulk-import orchestration and immutable legacy-history adapters;
   and
 - [ADR-003](architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md) for
-  the Temporal/Cloud Run Job/transactional-outbox runtime boundary.
+  the Temporal/Cloud Run Job/transactional-outbox runtime boundary; and
+- [ADR-004](architecture/decisions/ADR-004-ARCH-OPS-SHARED-CONTRACTS.md) for
+  bulk selection, idempotency, async state, signed cursors, provider adapters,
+  mixed-revision migrations, bounded queries, and capability layering.
 
 `scripts/ip_ownership_ledger.py validate` is a required CI gate. It checks the
 ledger against the exact PRD Section 11.2 capability order, requires coverage
@@ -110,6 +113,16 @@ for every M2/M3 epic, validates current code-owner references and replacement
 ADRs, and scans source/migrations/web/Cloud Run configuration for forbidden
 duplicate identifiers and IP-private notification, provider, report, or
 connector control planes.
+
+The [ARCH-OPS contract](ip-implementation/ARCH_OPS_CONTRACT.yaml) maps all 26
+binding architecture requirements to a named owner, enforcement rule, and
+committed implementation reference. The versioned
+[IP event catalogue](ip-implementation/IP_EVENT_CATALOG.yaml) keeps audit
+evidence distinct from domain projection events. CI runs
+`scripts/ip_arch_ops_contract.py validate` to reject missing requirements,
+unknown owners, missing artifacts, incomplete event schemas, and duplicate
+catalogue names. These repository controls do not infer later journey or human
+acceptance; each behavior slice must still prove its allocated runtime paths.
 
 The ledger is a Definition-of-Ready control. It does not authorize prebuilding
 later-milestone nullable targets and does not substitute for the named M0 human
