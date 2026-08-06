@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-001C",
+    "active_slice": "IPLF-019A",
     "checkpoint": {
-      "recorded_at": "2026-08-06T05:55:00+05:30",
-      "repository_revision": "cfedd74b852ad90f6c9c295ec57e1bc599f43a84",
-      "environment": "Canonical local main and origin/main resolve to cfedd74b852ad90f6c9c295ec57e1bc599f43a84. IPLF-008A exact-head CI 31055900146, Security 31055899861, and CodeQL 31055900081 passed. Production migration caseops-migrate-job-w4jdl, immutable job convergence, API caseops-api-00237-npj, web caseops-web-00217-ntj, exact API/web release identities, and production workflow 31057580789 passed at the same full SHA. IPLF-008B production-safe tracked-case smoke implementation is integrated locally for its exact-head release gates.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, and IPLF-008A have completed their repository-controlled implementation and deployment verification. IPLF-008A closes the stale/mixed production verification race by binding API, web, workflow source, and expected release to one exact 40-character SHA before Playwright. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "recorded_at": "2026-08-06T06:50:00+05:30",
+      "repository_revision": "f07cbfa26903b07c3f5878703a43534be2a1c28b",
+      "environment": "Canonical local main and origin/main resolve to f07cbfa26903b07c3f5878703a43534be2a1c28b. IPLF-008B exact-head CI 31059296591, Security 31059296623, and CodeQL 31059296587 passed. Production migration caseops-migrate-job-l8d5t, six-job immutable convergence, API caseops-api-00238-pxr, web caseops-web-00218-lbw, exact API/web identities, and production workflow 31060850360 passed at the same full SHA. The QA CNR DLHC010001232024 passed the fresh provider/source exact-release canary at 360px. IPLF-001C deterministic scheduler reconciliation is integrated locally for its exact-head release gates.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, and IPLF-008B have completed repository-controlled implementation and deployment verification. IPLF-008B closes TRACK-01 through TRACK-14 release proof with a once-per-company/exact-release provider canary, immutable operation/cost/source evidence, protected source download, and visible responsive controls. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-001C",
-      "next_action": "Release IPLF-008B through exact-head CI, canonical main, exact-identity deployment, and its tracked-case production-safe smoke; then release IPLF-001C with deterministic scheduler outcome reconciliation. Never impose an arbitrary elapsed-time or seven-day health blocker. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md"
+      "next_slice": "IPLF-019A",
+      "next_action": "Release IPLF-001C through exact-head CI, canonical main, exact-identity deployment, and deterministic production scheduler outcome reconciliation; then implement IPLF-019A. Never impose an arbitrary elapsed-time or seven-day health blocker. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md"
     }
   },
   "milestones": [
@@ -51,8 +51,8 @@
       "deliverable": "Source links, Bare Acts quarantine/provenance, search diagnostics, notification convergence start/observability, scheduler IAM/health/replay",
       "exit_criteria": "Exact deployed scheduler/job revision and IAM/config drift checks pass; bounded canaries prove every required job can be invoked by its configured scheduler identity; source-link E2E; UJ-48; no unverified statute presented; suppressed critical reminder produces visible fallback. Natural-run health remains monitored operational evidence but is not a release-duration blocker",
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "epic_ids": [
@@ -72,6 +72,7 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ]
@@ -338,13 +339,14 @@
         "IPLF-001B",
         "IPLF-001C"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
-        "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
+        "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md"
       ]
     },
     {
@@ -658,7 +660,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-008A/release-2026-08-05.md",
@@ -2708,8 +2710,15 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "not_required",
       "acceptance_status": "pending",
+      "not_required_approval": {
+        "prd_citation": "PRD Section 25 IPLF-001A read-only audit boundary",
+        "reviewer": "CaseOps Phase 0 control-plane reconciliation",
+        "reason": "IPLF-001A is a read-only production/IaC audit with no runtime artifact to deploy; IPLF-001B owns the resulting mutation and exact production release.",
+        "date": "2026-08-05",
+        "milestone": "M1"
+      },
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-001A",
       "primary_behavior": "Read-only production/IaC drift audit for all required schedulers, jobs, service accounts, targets, image digests, timezones, and last successes. Produce evidence and exact remediation plan.",
@@ -2842,14 +2851,14 @@
     },
     {
       "id": "IPLF-001C",
-      "title": "Remaining PRD behavior and exception coverage: Repair and codify scheduler IAM/deployment canary.",
+      "title": "Reconcile and codify scheduler delivery and workload-outcome audit without an elapsed-time gate.",
       "milestone_id": "M1",
       "epic_id": "IPLF-001",
       "source_kind": "derived",
       "scope_source": "IPLF-001",
-      "primary_behavior": "Remaining PRD behavior and exception coverage",
-      "migration_boundary": "No schema change. AuthorityDocument and authority annotation persistence remain canonical; this slice adds response serialization and UI rendering only.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
+      "primary_behavior": "Prove canonical scheduler-to-job delivery and report the latest workload outcome separately, preserving fail-closed cost controls and continuous SLO monitoring without an arbitrary duration blocker.",
+      "migration_boundary": "No schema, application data, provider, credential, scheduler, or job mutation. The slice extends read-only repository release tooling and evidence only.",
+      "release_boundary": "Exact-head CI for the audit tooling plus dated read-only production verification against the exact serving image; no runtime rollout is required by the tooling change.",
       "requirement_ids": [
         "TRACK-01",
         "TRACK-02",
@@ -2870,38 +2879,82 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-001 canonical scope: Repair and codify scheduler IAM/deployment canary.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "component": "Cloud Scheduler and Cloud Run recurring-job delivery/outcome evidence.",
+          "canonical_writer": "infra/cloudrun/scheduler-inventory.json interpreted by scripts/scheduler_inventory.py and invoked by scripts/deploy-prod.sh.",
+          "compatibility_path": "Existing job commands, runtime identities, secrets, resources, provider budgets, and application owners are unchanged; the paused midnight case-tracking scheduler remains the recoverable rollback path.",
+          "retirement_gate": "No scheduler is deleted by this slice; the compatibility scheduler remains paused unless the documented rollback is exercised."
         }
       ],
       "dependencies": [
         "IPLF-001B"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "approvals": [],
+      "implementation_refs": [
+        "infra/cloudrun/scheduler-inventory.json",
+        "scripts/scheduler_inventory.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
+          "revision": "a8406178791d137c8db40f9664b225bcd4241bdc",
+          "environment": "production: application f07cbfa26903b07c3f5878703a43534be2a1c28b; API caseops-api-00238-pxr; web caseops-web-00218-lbw; six jobs on exact digest sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd",
+          "fixtures": "version-controlled six-job scheduler inventory and production-safe read-only scheduler/execution metadata",
+          "assertions": "immutable image, enabled state, cadence, timezone, target, dedicated identity, job-scoped Invoker, recorded attempt, scheduler delivery, latest workload outcome including running/unknown separation, paused legacy compatibility path, and retained fail-closed provider-spend evidence",
+          "result": "passed",
+          "recorded_at": "2026-08-06T07:25:00+05:30"
+        }
+      ],
+      "approvals": [
+        {
+          "scope": "Remove the arbitrary seven-day blocker, complete scheduler reconciliation, test end to end, document, and release",
+          "approved_by": "repository owner in this Codex session",
+          "approved_at": "2026-08-02"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Continue natural execution monitoring as operational SLO evidence, without an elapsed-time release threshold.",
+        "Investigate workload failures separately from scheduler delivery drift and preserve the provider-spend cap.",
+        "Begin IPLF-019A after dependency-ordered M1 release verification."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No application, tenant, provider, credential, scheduler, or job data is mutated by the read-only audit.",
+        "Output is bounded to resource names, timestamps, immutable image, configuration state, and aggregate execution outcome."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Exact-image scheduler delivery/outcome audit, safety exception adjudication, and rollback"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
+          "disposition": "updated",
+          "owner": "Engineering/SRE",
+          "evidence": "Removed stale observation-window blocker and linked current reconciliation"
+        }
+      ],
+      "allocation_review": "Derived reconciliation slice preserves the parent scheduler scope and canonical owners. The administrative exception remains appropriate because this release-control tail introduces no separate user journey.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
-        "reason": "This bounded technical slice has no direct requirement family or journey path; its parent completion slices carry the full reciprocal allocation.",
-        "date": "2026-08-02",
+        "reason": "This bounded release-control slice shares the parent TRACK requirement family but introduces no separate end-user journey; the parent behavior slices carry reciprocal journey-path allocation.",
+        "date": "2026-08-05",
         "milestone": "M1"
       }
     },
@@ -4410,18 +4463,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md",
-          "revision": "b92d5d9b3d37113232e3ed9c77fbb4756e2c26b4",
-          "environment": "local API, generated OpenAPI, web component/type checks, production Playwright control-plane validation, and integration with deployment-verified canonical main cfedd74b852ad90f6c9c295ec57e1bc599f43a84",
+          "revision": "f07cbfa26903b07c3f5878703a43534be2a1c28b",
+          "environment": "local API/web, exact-head CI with PostgreSQL 17 and app Playwright, plus Google Cloud production migration/jobs/services and exact-serving tracked-case production Playwright",
           "fixtures": "tagged notification-disabled QA bookmark, exact and stale release SHAs, costed provider snapshot/order, untagged bookmark, and 360px case-tracking surface",
-          "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, visible narrow-screen controls, and no overflow",
+          "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, exact serving checkout, visible narrow-screen controls, and no overflow",
           "result": "passed",
-          "recorded_at": "2026-08-06T05:55:00+05:30"
+          "recorded_at": "2026-08-06T06:50:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "After IPLF-008A is merged, rebase this slice, pass exact-head CI, merge/deploy, configure the approved QA CNR, and require the dated exact-serving provider/source production test before changing release status."
+        "Obtain genuine human acceptance and maintain the approved QA/provider/source-term gates; continue repository work at IPLF-001C without weakening exact-serving production proof."
       ],
       "data_impact": [
         "No schema migration or backfill; the exact-release canary reuses existing bookmark, operation/snapshot, cost, update/source, and audit owners and may create one notification-disabled tagged QA bookmark."
@@ -4443,7 +4496,7 @@
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Sections 12 TRACK-01 through TRACK-14 and 25 IPLF-008",
@@ -14725,9 +14778,9 @@
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001A",
@@ -14778,9 +14831,9 @@
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001A",
@@ -14816,9 +14869,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -14852,9 +14905,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -14903,9 +14956,9 @@
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001A",
@@ -14941,9 +14994,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -14977,9 +15030,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15013,9 +15066,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15049,9 +15102,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15085,9 +15138,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15121,9 +15174,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15157,9 +15210,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15193,9 +15246,9 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001C",
@@ -15242,9 +15295,9 @@
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-001B",

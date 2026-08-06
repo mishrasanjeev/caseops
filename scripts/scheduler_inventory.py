@@ -195,7 +195,11 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
                 "--quiet",
             ]
         )
-        action = "update" if scheduler_exists(scheduler, project=project, location=location) else "create"
+        action = (
+            "update"
+            if scheduler_exists(scheduler, project=project, location=location)
+            else "create"
+        )
         run_gcloud(
             [
                 "scheduler",
@@ -229,7 +233,9 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
         inventory, project=project, region=region, expected_image=image
     )
     if errors:
-        raise InventoryError("refusing legacy pause; canonical drift remains:\n- " + "\n- ".join(errors))
+        raise InventoryError(
+            "refusing legacy pause; canonical drift remains:\n- " + "\n- ".join(errors)
+        )
     for scheduler in inventory.get("legacy_schedulers_to_pause", []):
         if scheduler_exists(scheduler, project=project, location=location):
             run_gcloud(
@@ -254,6 +260,7 @@ def inspect_live(
     project: str,
     region: str,
     expected_image: str,
+    audit_attempts: bool = False,
 ) -> tuple[list[str], dict[str, Any]]:
     errors: list[str] = []
     location = inventory["location"]
@@ -305,6 +312,26 @@ def inspect_live(
             ],
             expect_json=True,
         )
+        executions: list[dict[str, Any]] = []
+        if audit_attempts:
+            executions = run_gcloud(
+                [
+                    "run",
+                    "jobs",
+                    "executions",
+                    "list",
+                    "--job",
+                    run_job_name,
+                    "--region",
+                    region,
+                    "--project",
+                    project,
+                    "--sort-by=~metadata.creationTimestamp",
+                    "--limit=1",
+                    "--format=json",
+                ],
+                expect_json=True,
+            )
         target = scheduler.get("httpTarget", {})
         actual_image = (
             run_job.get("spec", {})
@@ -329,28 +356,78 @@ def inspect_live(
                 for binding in policy.get("bindings", [])
             ),
         }
+        scheduler_status = scheduler.get("status") or {}
+        last_attempt = str(scheduler.get("lastAttemptTime") or "")
+        if audit_attempts:
+            checks["natural_or_canary_attempt"] = bool(last_attempt)
+            checks["scheduler_delivery"] = not scheduler_status.get("code")
         for check, passed in checks.items():
             if not passed:
                 errors.append(f"{scheduler_name}: {check} drift")
-        summaries.append(
-            {
-                "scheduler": scheduler_name,
-                "run_job": run_job_name,
-                "state": str(scheduler.get("state", "")),
-                "schedule": str(scheduler.get("schedule", "")),
-                "time_zone": str(scheduler.get("timeZone", "")),
-                "identity": str(actual_member or ""),
-                "image": str(actual_image),
-                "configuration": "pass" if all(checks.values()) else "fail",
-            }
-        )
+        summary = {
+            "scheduler": scheduler_name,
+            "run_job": run_job_name,
+            "state": str(scheduler.get("state", "")),
+            "schedule": str(scheduler.get("schedule", "")),
+            "time_zone": str(scheduler.get("timeZone", "")),
+            "identity": str(actual_member or ""),
+            "image": str(actual_image),
+            "configuration": "pass" if all(checks.values()) else "fail",
+        }
+        if audit_attempts:
+            summary.update(
+                {
+                    "last_attempt": last_attempt,
+                    "scheduler_delivery": (
+                        "pass" if not scheduler_status.get("code") else "fail"
+                    ),
+                    "latest_execution": summarize_execution(executions),
+                }
+            )
+        summaries.append(summary)
     return errors, {"jobs": summaries, "result": "pass" if not errors else "fail"}
+
+
+def summarize_execution(executions: object) -> dict[str, str]:
+    """Return a bounded operational result without treating a job failure as IAM drift."""
+    if not isinstance(executions, list) or not executions:
+        return {"name": "", "created_at": "", "completed_at": "", "outcome": "missing"}
+    execution = executions[0]
+    if not isinstance(execution, dict):
+        return {"name": "", "created_at": "", "completed_at": "", "outcome": "unknown"}
+    metadata = execution.get("metadata") or {}
+    status = execution.get("status") or {}
+    conditions = status.get("conditions") or []
+    completed = next(
+        (
+            condition
+            for condition in conditions
+            if isinstance(condition, dict) and condition.get("type") == "Completed"
+        ),
+        {},
+    )
+    condition_status = str(completed.get("status") or "").lower()
+    if status.get("succeededCount") or condition_status == "true":
+        outcome = "succeeded"
+    elif status.get("failedCount") or condition_status == "false":
+        outcome = "failed"
+    else:
+        outcome = "running_or_unknown"
+    return {
+        "name": str(metadata.get("name") or ""),
+        "created_at": str(metadata.get("creationTimestamp") or ""),
+        "completed_at": str(status.get("completionTime") or ""),
+        "outcome": outcome,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", choices=("validate", "reconcile", "verify"), nargs="?", default="validate"
+        "command",
+        choices=("validate", "reconcile", "verify", "audit"),
+        nargs="?",
+        default="validate",
     )
     parser.add_argument("--inventory", type=Path, default=DEFAULT_INVENTORY)
     parser.add_argument("--project")
@@ -365,11 +442,15 @@ def main(argv: list[str] | None = None) -> int:
         project = args.project or inventory["production_project"]
         region = args.region or inventory["location"]
         if not args.image:
-            raise InventoryError("--image is required for reconcile and verify")
+            raise InventoryError("--image is required for reconcile, verify, and audit")
         if args.command == "reconcile":
             reconcile(inventory, project=project, region=region, image=args.image)
         errors, summary = inspect_live(
-            inventory, project=project, region=region, expected_image=args.image
+            inventory,
+            project=project,
+            region=region,
+            expected_image=args.image,
+            audit_attempts=args.command == "audit",
         )
         print(json.dumps(summary, indent=2, sort_keys=True))
         if errors:

@@ -4,9 +4,9 @@ Generated; do not edit.
 
 | Slice | Source | Parent | Milestone | Requirements | Journey paths | Implementation | Verification | Release | Acceptance |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| IPLF-001A | prd_explicit | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-05 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL | implemented | passed | ready_for_review | pending |
+| IPLF-001A | prd_explicit | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-05 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL | implemented | passed | not_required | pending |
 | IPLF-001B | prd_explicit | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-05, TRACK-14 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | implemented | passed | deployment_verified | pending |
-| IPLF-001C | derived | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 |  | not_started | not_run | blocked | pending |
+| IPLF-001C | derived | IPLF-001 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 |  | implemented | passed | deployment_verified | pending |
 | IPLF-002A | derived | IPLF-002 | M1 |  |  | implemented | passed | deployment_verified | pending |
 | IPLF-002B | derived | IPLF-002 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-003A | prd_explicit | IPLF-003 | M1 | TRUST-RSCH-01, TRUST-RSCH-03, TRUST-RSCH-07 | UJ-17-EXC-01, UJ-17-EXC-02, UJ-17-EXC-03, UJ-17-NORMAL | implemented | passed | deployment_verified | pending |
@@ -23,7 +23,7 @@ Generated; do not edit.
 | IPLF-007B | prd_explicit | IPLF-007 | M1 | NOTIF-03, NOTIF-07, NOTIF-09, NOTIF-10, NOTIF-15, NOTIF-20, NOTIF-24 | UJ-11-EXC-01, UJ-11-EXC-02, UJ-11-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-007C | derived | IPLF-007 | M1 | NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05, NOTIF-06, NOTIF-07, NOTIF-08, NOTIF-09, NOTIF-10, NOTIF-11, NOTIF-12, NOTIF-13, NOTIF-14, NOTIF-15, NOTIF-16, NOTIF-17, NOTIF-18, NOTIF-19, NOTIF-20, NOTIF-21, NOTIF-22, NOTIF-23, NOTIF-24 | UJ-11-EXC-01, UJ-11-EXC-02, UJ-11-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-008A | derived | IPLF-008 | M1 |  |  | implemented | passed | deployment_verified | pending |
-| IPLF-008B | derived | IPLF-008 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 |  | implemented | passed | blocked | pending |
+| IPLF-008B | derived | IPLF-008 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 |  | implemented | passed | deployment_verified | pending |
 | IPLF-019A | derived | IPLF-019 | M2 |  |  | not_started | not_run | blocked | pending |
 | IPLF-019B | derived | IPLF-019 | M2 | ARCH-OPS-01, ARCH-OPS-02, ARCH-OPS-03, ARCH-OPS-04, ARCH-OPS-05, ARCH-OPS-06, ARCH-OPS-07, ARCH-OPS-08, ARCH-OPS-09, ARCH-OPS-10, ARCH-OPS-11, ARCH-OPS-12, ARCH-OPS-13, ARCH-OPS-14, ARCH-OPS-15, ARCH-OPS-16, ARCH-OPS-17, ARCH-OPS-18, ARCH-OPS-19, ARCH-OPS-20, ARCH-OPS-21, ARCH-OPS-22, ARCH-OPS-23, ARCH-OPS-24, ARCH-OPS-25, ARCH-OPS-26 |  | not_started | not_run | blocked | pending |
 | IPLF-020A | derived | IPLF-020 | M2 |  |  | not_started | not_run | blocked | pending |

@@ -15,3 +15,8 @@ docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:88
 24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:244
 24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:444
 24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:540
+
+# 2026-08-06 IPLF-001C retarget: exact false positive on a public immutable
+# container digest recorded in the program checkpoint. This suppresses only the
+# historical fingerprint; new generic-key findings remain blocking.
+706d2c7e3af1bbbdf3d68259f38631b3d2565a15:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21

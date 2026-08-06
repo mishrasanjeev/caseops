@@ -35,6 +35,7 @@ def test_validator_rejects_unapproved_not_required_and_forbidden_owner() -> None
     manifest = _manifest()
     active = next(row for row in manifest["slices"] if row["id"] == "IPLF-001A")
     active["release_status"] = "not_required"
+    active.pop("not_required_approval", None)
     active["ownership"].append(
         {
             "classification": "NEW",
