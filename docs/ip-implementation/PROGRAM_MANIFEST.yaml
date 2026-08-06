@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-019A",
+    "active_slice": "IPLF-019B",
     "checkpoint": {
-      "recorded_at": "2026-08-06T06:50:00+05:30",
+      "recorded_at": "2026-08-06T12:30:00+05:30",
       "repository_revision": "e77d078d7409c733d264257c2d24a867641ff731",
-      "environment": "Canonical local main and origin/main resolve to e77d078d7409c733d264257c2d24a867641ff731. IPLF-001C exact-head CI 31073005581, Security 31073005601, and CodeQL 31073005553 passed. Production migration caseops-migrate-job-t6fm7, six-job immutable convergence on API digest sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130, API caseops-api-00239-qlt, web caseops-web-00219-rfz, exact API/web identities, and production workflow 31074879292 passed at the same full SHA. The bounded scheduler audit passed six of six delivery/configuration checks without an elapsed-time blocker; five latest natural workloads succeeded and the authority job remains truthfully running_or_unknown.",
+      "environment": "Canonical local main and origin/main resolve to e77d078d7409c733d264257c2d24a867641ff731. IPLF-019A implementation candidate b9a8902dba20d27cc91775f5efa24145163f1fa2 passed 12 focused governance tests, Ruff, exact Section 11.2/M2-M3 ownership validation, the 436/50/68/317 manifest gate, and diff checks; exact-head CI and release remain pending. Production remains on the exact verified IPLF-001C release: API caseops-api-00239-qlt, web caseops-web-00219-rfz, six jobs on API digest sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130, and production workflow 31074879292.",
       "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, and IPLF-001C have completed repository-controlled implementation and deployment verification. IPLF-001C closes deterministic scheduler delivery/outcome reconciliation while preserving the provider-spend cap and continuous SLO monitoring. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-019A",
-      "next_action": "Implement IPLF-019A repository-backed Section 11.2 ownership ledger, ADRs, and forbidden-duplicate CI enforcement; then release it through exact-head CI, canonical main, exact-identity production verification, and proceed to IPLF-019B. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md"
+      "next_slice": "IPLF-019B",
+      "next_action": "Release IPLF-019A through exact-head CI, canonical main, exact-identity production verification, and dated production E2E; then implement IPLF-019B full ARCH-OPS workflow/release proof. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md"
     }
   },
   "milestones": [
@@ -4541,8 +4541,20 @@
         "python scripts/ip_ownership_ledger.py validate",
         "python scripts/ip_program_manifest.py validate"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md",
+          "revision": "b9a8902dba20d27cc91775f5efa24145163f1fa2",
+          "environment": "local exact implementation commit on Windows/CPython 3.13 with the locked uv environment in copy mode",
+          "fixtures": "binding PRD Section 11.2 table, canonical 436/50/68/317 manifest, every M2/M3 epic decision, repository source/migration/web/Cloud Run scan roots, and negative duplicate/ADR/status mutations",
+          "assertions": "exact owner order and repository refs, unique complete M2/M3 proposal coverage, allowed classification/state boundaries, committed REPLACE ADRs, no forbidden exact or CamelCase-disguised control plane, generated traceability, and derived parent/program status",
+          "result": "passed",
+          "recorded_at": "2026-08-06T12:30:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
@@ -4580,9 +4592,9 @@
         }
       ],
       "allocation_review": "Administrative foundation slice: it implements repository governance and CI only. IPLF-019B retains ARCH-OPS-01 through ARCH-OPS-26 and the full epic release-proof allocation. The M0 named human program-lock approval remains pending and is not inferred.",
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
