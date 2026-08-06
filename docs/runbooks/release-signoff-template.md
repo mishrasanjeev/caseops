@@ -6,6 +6,46 @@
 - Target commit: `abcdef1`
 - Deployed build fingerprint URL: `https://...` or `not available`
 - Verdict: `GO` | `GO with caveat` | `NO-GO`
+- Program verdict: `PROGRAM INCOMPLETE` | `PROGRAM INCOMPLETE - REPOSITORY WORK COMPLETE, EXTERNAL ACCEPTANCE PENDING` | `PROGRAM COMPLETE`
+
+## PRD Traceability and Definition of Ready
+
+- Milestone / epic / slice:
+- Requirement IDs and acceptance facets:
+- Journey IDs and normal/exception path IDs:
+- Actor, capability, and tenant/data scope:
+- Dependencies and milestone exit criteria:
+- Expected automated, UAT, legal, provider, security, and production evidence:
+- Canonical manifest row and evidence path:
+
+## Ownership and Overlap Review
+
+| Component / record / route / page / job | Decision (`NEW/EXTEND/LINK/REPLACE`) | Canonical writer | Existing overlap searched | Compatibility / retirement gate |
+| --- | --- | --- | --- | --- |
+| | | | | |
+
+- Forbidden-duplicate audit result:
+- One-writer reconciliation result:
+- Shared Matter/platform owner preserved:
+
+## Data, Schema, Capability, and Migration Review
+
+- Data classes and sensitivity:
+- Schema diff or explicit `no schema change`:
+- Capability catalogue / API / UI parity diff:
+- Expand/backfill/verify/switch/contract plan or `not applicable`:
+- Mixed-revision compatibility evidence:
+- Backfill dry run, reconciliation, restartability, and row counts:
+- Rollback/roll-forward and committed-event preservation:
+- Production migration head before / after:
+
+## Threat and Abuse Review
+
+- Tenant isolation and restricted-record tests:
+- CSRF/SSRF/source-boundary/webhook/upload/redirect tests as applicable:
+- Replay, stale-write, race, idempotency, quota, cost, and poison-record tests:
+- Prompt injection, inaccessible citation, and model/provider failure tests as applicable:
+- Secrets/logs/screenshots checked for sensitive data:
 
 ## Scope
 
@@ -15,10 +55,16 @@
 
 ## Build Identity
 
-- Expected commit:
-- Observed commit or build id:
-- Proof:
-- If exact commit identity cannot be proven, state that explicitly here.
+- Expected full 40-character commit:
+- Checkout used by production tests:
+- API `/api/build` release SHA and Cloud Run revision:
+- Web `/api/release-identity` release SHA and Cloud Run revision:
+- API/web image digests and immutable job image:
+- Migration execution ID:
+- Scheduler/job identity, target, cadence, timezone, permission, and canary proof:
+- Traffic allocation:
+- Proof links:
+- If exact API + web + checked-out test-source equality cannot be proven, verdict is `NO-GO`.
 
 ## Checks
 
@@ -45,6 +91,60 @@
 | Terminal entry paths | create/import/generic PATCH denial | pass/fail/not-applicable | Terminal states and aliases are reachable only through the dedicated lifecycle service |
 | Regression discovery | normal local + production Playwright configs | pass/fail | New dated specs are selected; no unregistered allowlist entry |
 | Deployed user workflow | committed `tests/e2e/*.spec.ts` on observed build | pass/fail/skipped | Name the exact spec/test and result; local-only evidence is insufficient |
+| Exact API/web release identity | `/api/build` + `/api/release-identity` + test checkout | pass/fail | All three are the expected full SHA; abbreviated tags do not count |
+| Case-tracking release canary | approved QA bookmark `/release-smoke` | pass/fail/not-applicable | One idempotent, costed operation for this exact SHA; fresh success/no-change outcome |
+| Protected source open | tracked-case update source proxy | pass/fail/not-applicable | API-origin path, provider boundary, bearer proxy, non-empty attachment, audit |
+| Narrow responsive actions | dated 360px Playwright | pass/fail/not-applicable | Every grouped action/link visible and in viewport; DOM presence alone does not count |
+
+## Test Inventory and Results
+
+| Boundary | Exact command / run | Tests selected | Passed | Failed | Skipped | Evidence |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Focused unit / integration | | | | | | |
+| Full API shards and coverage | | | | | | |
+| PostgreSQL / migration | | | | | | |
+| Full web / typecheck / build | | | | | | |
+| Local desktop + narrow E2E | | | | | | |
+| Exact deployed production E2E | | | | | | |
+
+Required-path skips, `.only`, quarantine markers, stale fixtures, and hidden
+allow-list omissions must be listed as failures unless the PRD explicitly permits
+the exclusion.
+
+## User-Visible and Documentation Evidence
+
+- Desktop screenshot references (sanitized):
+- Narrow/mobile screenshot references (sanitized):
+- Product Guide/help/search corpus updates:
+- API/OpenAPI/generated client updates:
+- Runbook/release notes/public docs/landing/pricing/`llms*.txt` updates:
+- Public claim reconciliation result:
+- Screenshot omission rationale when the production surface cannot be captured safely:
+
+## External Approval and Fail-Closed State
+
+| Gate | Exact version / fixture / provider | Human owner | Evidence | Status | Fail-closed behavior |
+| --- | --- | --- | --- | --- | --- |
+| Legal rules/forms/fees/source policy | | | | pending/approved/not-applicable | |
+| Provider terms/credentials/sender/template | | | | pending/approved/not-applicable | |
+| Security/privacy/data | | | | pending/approved/not-applicable | |
+| Product/pilot/UAT | | | | pending/approved/not-applicable | |
+
+No Codex-authored checkbox or elapsed observation period substitutes for required
+human approval. Natural scheduler history is monitored operational evidence, not
+an arbitrary release-duration blocker.
+
+## Production Acceptance
+
+- Dated production test file and exact test title:
+- QA tenant / synthetic fixture (no credential or real-client data):
+- Fresh mutation/read-back and cleanup:
+- Desktop result:
+- 360px result including every grouped action/link:
+- Provider/source-open result:
+- Production workflow URL and conclusion:
+- Post-test persistence/reload result:
+- No real legal filing, service, payment, closure, or unapproved message occurred:
 
 ## Caveats
 

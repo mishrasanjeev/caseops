@@ -221,6 +221,19 @@ class CaseTrackingRefreshResponse(BaseModel):
     delivery_status: Literal["in_app_only"] = "in_app_only"
 
 
+class CaseTrackingReleaseSmokeRequest(BaseModel):
+    release_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+
+
+class CaseTrackingReleaseSmokeResponse(BaseModel):
+    release_sha: str
+    operation_id: str
+    response_class: Literal["success", "no_change"]
+    bookmark: CaseTrackingBookmarkRecord
+    source_update: CaseTrackingUpdateRecord
+    reused: bool = False
+
+
 class CaseTrackingPollRunRecord(BaseModel):
     id: str
     company_id: str | None

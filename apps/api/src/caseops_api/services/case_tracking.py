@@ -39,6 +39,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingPollRunRecord,
     CaseTrackingProviderStatusResponse,
     CaseTrackingRefreshResponse,
+    CaseTrackingReleaseSmokeResponse,
     CaseTrackingSearchRequest,
     CaseTrackingSearchResponse,
     CaseTrackingSearchResultRecord,
@@ -266,6 +267,7 @@ def _new_operation(
     tracked_case: TrackedCase,
     operation_type: str,
     poll_run_id: str | None = None,
+    correlation_id: str | None = None,
 ) -> TrackedCaseProviderOperation:
     automatic_retry: TrackedCaseProviderOperation | None = None
     if operation_type == "scheduled":
@@ -322,7 +324,7 @@ def _new_operation(
         ),
         provider=tracked_case.provider,
         operation_type="retry" if automatic_retry is not None else operation_type,
-        correlation_id=uuid4().hex,
+        correlation_id=correlation_id or uuid4().hex,
         status="running",
         attempts=(automatic_retry.attempts + 1 if automatic_retry is not None else 1),
         max_attempts=(automatic_retry.max_attempts if automatic_retry is not None else 3),
@@ -1620,6 +1622,9 @@ def refresh_bookmark(
     context: SessionContext,
     bookmark_id: str,
     provider: CaseTrackingProvider | None = None,
+    operation_type: str = "manual",
+    correlation_id: str | None = None,
+    enforce_manual_limit: bool = True,
 ) -> CaseTrackingRefreshResponse:
     bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
     tracked_case = bookmark.tracked_case
@@ -1649,19 +1654,21 @@ def refresh_bookmark(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot refresh case tracking for a disposed matter.",
             )
-    from caseops_api.services.saas_billing import assert_manual_refresh_limit
+    if enforce_manual_limit:
+        from caseops_api.services.saas_billing import assert_manual_refresh_limit
 
-    assert_manual_refresh_limit(
-        session,
-        context=context,
-        tracked_case_id=tracked_case.id,
-    )
+        assert_manual_refresh_limit(
+            session,
+            context=context,
+            tracked_case_id=tracked_case.id,
+        )
     tracked_case.last_provider_refresh_requested_at = _now()
     operation = _new_operation(
         session,
         context=context,
         tracked_case=tracked_case,
-        operation_type="manual",
+        operation_type=operation_type,
+        correlation_id=correlation_id,
     )
     try:
         active_provider = provider or get_case_tracking_provider()
@@ -1734,17 +1741,168 @@ def refresh_bookmark(
             "currency": operation.currency,
         },
     )
-    from caseops_api.services.saas_billing import record_manual_refresh_usage
+    if enforce_manual_limit:
+        from caseops_api.services.saas_billing import record_manual_refresh_usage
 
-    record_manual_refresh_usage(
-        session,
-        context=context,
-        tracked_case_id=tracked_case.id,
-    )
+        record_manual_refresh_usage(
+            session,
+            context=context,
+            tracked_case_id=tracked_case.id,
+        )
     session.commit()
     return CaseTrackingRefreshResponse(
         bookmark=_bookmark_record(session, bookmark),
         created_updates=[_update_record(update, bookmark_id=bookmark.id) for update in created],
+    )
+
+
+def _release_smoke_source_update(
+    session: Session,
+    *,
+    bookmark: TrackedCaseBookmark,
+) -> TrackedCaseUpdate:
+    source_update = session.scalar(
+        select(TrackedCaseUpdate)
+        .where(
+            TrackedCaseUpdate.company_id == bookmark.company_id,
+            TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
+            TrackedCaseUpdate.source_url.is_not(None),
+        )
+        .order_by(TrackedCaseUpdate.created_at.desc())
+        .limit(1)
+    )
+    if source_update is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The release-smoke fixture has no provider source document; "
+                "production release proof remains incomplete."
+            ),
+        )
+    return source_update
+
+
+def _release_smoke_response(
+    session: Session,
+    *,
+    bookmark: TrackedCaseBookmark,
+    operation: TrackedCaseProviderOperation,
+    release_sha: str,
+    reused: bool,
+) -> CaseTrackingReleaseSmokeResponse:
+    if operation.response_class not in {"success", "no_change"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The exact-release canary did not complete successfully; review "
+                "the correlated provider operation before replay."
+            ),
+        )
+    source_update = _release_smoke_source_update(session, bookmark=bookmark)
+    return CaseTrackingReleaseSmokeResponse(
+        release_sha=release_sha,
+        operation_id=operation.id,
+        response_class=operation.response_class,
+        bookmark=_bookmark_record(session, bookmark),
+        source_update=_update_record(source_update, bookmark_id=bookmark.id),
+        reused=reused,
+    )
+
+
+def run_release_smoke(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark_id: str,
+    release_sha: str,
+    provider: CaseTrackingProvider | None = None,
+) -> CaseTrackingReleaseSmokeResponse:
+    """Run at most one provider canary per company and exact deployed release."""
+    configured_sha = (get_settings().release_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", configured_sha) or configured_sha != release_sha:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Release-smoke SHA does not match the exact serving API revision.",
+        )
+    bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+    tracked_case = bookmark.tracked_case
+    if (tracked_case.metadata_json or {}).get("release_smoke_fixture") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Release smoke is restricted to an explicitly approved QA fixture.",
+        )
+    # Serialize the check-and-create section on the fixture. This makes the
+    # provider-cost promise true even if two operators dispatch the same
+    # release workflow concurrently; the second transaction observes the
+    # first transaction's correlated operation after this lock is released.
+    session.scalar(
+        select(TrackedCase)
+        .where(
+            TrackedCase.id == tracked_case.id,
+            TrackedCase.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    correlation_id = f"release:{release_sha}"
+    existing = session.scalar(
+        select(TrackedCaseProviderOperation).where(
+            TrackedCaseProviderOperation.company_id == context.company.id,
+            TrackedCaseProviderOperation.correlation_id == correlation_id,
+        )
+    )
+    if existing is not None:
+        if existing.tracked_case_id != tracked_case.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This release canary is already bound to another QA fixture.",
+            )
+        return _release_smoke_response(
+            session,
+            bookmark=bookmark,
+            operation=existing,
+            release_sha=release_sha,
+            reused=True,
+        )
+
+    refresh_bookmark(
+        session,
+        context=context,
+        bookmark_id=bookmark_id,
+        provider=provider,
+        operation_type="canary",
+        correlation_id=correlation_id,
+        enforce_manual_limit=False,
+    )
+    operation = session.scalar(
+        select(TrackedCaseProviderOperation).where(
+            TrackedCaseProviderOperation.company_id == context.company.id,
+            TrackedCaseProviderOperation.correlation_id == correlation_id,
+        )
+    )
+    if operation is None:  # pragma: no cover - transaction invariant
+        raise RuntimeError("release canary operation was not persisted")
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.release_smoke",
+        target_type="tracked_case_bookmark",
+        target_id=bookmark.id,
+        matter_id=bookmark.matter_id,
+        metadata={
+            "release_sha": release_sha,
+            "operation_id": operation.id,
+            "response_class": operation.response_class,
+            "cost_minor": operation.cost_minor,
+            "currency": operation.currency,
+        },
+    )
+    session.commit()
+    return _release_smoke_response(
+        session,
+        bookmark=bookmark,
+        operation=operation,
+        release_sha=release_sha,
+        reused=False,
     )
 
 

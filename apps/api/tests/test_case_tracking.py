@@ -613,6 +613,124 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
         assert intents[0].event_type == "case_tracking.new_order"
 
 
+def test_exact_release_smoke_is_qa_only_costed_and_idempotent(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    release_sha = "a" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", release_sha)
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-side-token")
+    get_settings.cache_clear()
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    token = _bootstrap(client)
+    headers = auth_headers(token)
+    create = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=headers,
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010012342026",
+            "case_number": "WP(C) 1/2026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Approved release smoke fixture",
+            "notification_enabled": True,
+            "metadata": {"release_smoke_fixture": True},
+        },
+    )
+    assert create.status_code == 201, create.text
+    bookmark_id = create.json()["id"]
+
+    first = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
+        headers=headers,
+        json={"release_sha": release_sha},
+    )
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert body["release_sha"] == release_sha
+    assert body["response_class"] == "success"
+    assert body["reused"] is False
+    assert body["bookmark"]["tracked_case"]["freshness_status"] == "fresh"
+    assert body["bookmark"]["tracked_case"]["last_provider_successful_at"]
+    assert body["source_update"]["source_url"].startswith(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/updates/"
+    )
+    assert "provider.example" not in json.dumps(body)
+
+    second = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
+        headers=headers,
+        json={"release_sha": release_sha},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["reused"] is True
+    assert second.json()["operation_id"] == body["operation_id"]
+    assert provider.refresh_calls == ["DLHC010012342026"]
+
+    stale = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
+        headers=headers,
+        json={"release_sha": "b" * 40},
+    )
+    assert stale.status_code == 409
+    assert "serving API revision" in stale.json()["detail"]
+
+    with get_session_factory()() as session:
+        operation = session.scalar(
+            select(TrackedCaseProviderOperation).where(
+                TrackedCaseProviderOperation.id == body["operation_id"]
+            )
+        )
+        assert operation is not None
+        assert operation.operation_type == "canary"
+        assert operation.correlation_id == f"release:{release_sha}"
+        assert operation.metadata_json["cost_disclosed"] is True
+        audits = list(
+            session.scalars(
+                select(AuditEvent).where(AuditEvent.action == "case_tracking.release_smoke")
+            )
+        )
+        assert len(audits) == 1
+
+
+def test_release_smoke_rejects_an_untagged_bookmark(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    release_sha = "c" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", release_sha)
+    get_settings.cache_clear()
+    token = _bootstrap(client)
+    headers = auth_headers(token)
+    create = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=headers,
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010099992026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Ordinary client bookmark",
+        },
+    )
+    assert create.status_code == 201, create.text
+    response = client.post(
+        f"/api/case-tracking/bookmarks/{create.json()['id']}/release-smoke",
+        headers=headers,
+        json={"release_sha": release_sha},
+    )
+    assert response.status_code == 403
+    assert "approved QA fixture" in response.json()["detail"]
+
+
 def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(
     client: TestClient,
     monkeypatch,
