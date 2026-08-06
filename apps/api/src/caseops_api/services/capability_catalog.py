@@ -13,9 +13,7 @@ _ALL_FEE_EARNERS = frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL})
 _STAFF = frozenset({_OWNER, _ADMIN, _PARTNER})
 _OWNER_ADMIN = frozenset({_OWNER, _ADMIN})
 _OWNER_ONLY = frozenset({_OWNER})
-_ALL_AUTHENTICATED = frozenset(
-    {_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL, _VIEWER}
-)
+_ALL_AUTHENTICATED = frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL, _VIEWER})
 CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # --- matter and workspace core ---
     "matters:create": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
@@ -63,9 +61,24 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "calendar:view": _ALL_AUTHENTICATED,
     "calendar:sync": _ALL_FEE_EARNERS,
     "notifications:manage": _OWNER_ADMIN,
-    # --- intellectual property operations ---
-    "ip:view": _ALL_AUTHENTICATED,
+    # --- intellectual property operations (PRD Section 2.2) ---
+    "ip:read": _ALL_AUTHENTICATED,
     "ip:write": _ALL_FEE_EARNERS,
+    "ip:import": _OWNER_ADMIN,
+    "ip:approve": _STAFF,
+    "ip:filing_prepare": _ALL_FEE_EARNERS,
+    "ip:filing_confirm": _STAFF,
+    "ip:fees_view": _STAFF,
+    "ip:fees_manage": _OWNER_ADMIN,
+    "ip:rules_propose": _OWNER_ADMIN,
+    "ip:rules_activate": _STAFF,
+    "ip:taxonomy_admin": _OWNER_ADMIN,
+    "ip:registry_sync": _OWNER_ADMIN,
+    "ip:watch_manage": _OWNER_ADMIN,
+    # Compatibility aliases for the bounded pre-PRD IP tail. New routes and
+    # role templates use the canonical names above; these remain until custom
+    # role backfill and mixed-revision proof allow their explicit retirement.
+    "ip:view": _ALL_AUTHENTICATED,
     "ip:review": _STAFF,
     "ip:finance": _STAFF,
     # --- court sync --- ops action, not for paralegals

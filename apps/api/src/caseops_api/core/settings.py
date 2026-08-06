@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import lru_cache
 
 from pydantic import AnyHttpUrl, Field, model_validator
@@ -125,6 +126,28 @@ class Settings(BaseSettings):
     billing_llm_cost_minor_per_credit: int = Field(default=100, ge=0)
     billing_payment_gateway_fee_bps: int = Field(default=200, ge=0)
     billing_storage_cost_minor_per_gb_month: int = Field(default=100, ge=0)
+
+    # IPLF-020A: independent IP rollout-safety flags. Authorization and plan
+    # entitlement are evaluated separately; these default off so a deploy
+    # cannot expose a provider/automation feature merely because the role has
+    # its capability. Optional expiries make temporary pilot flags observable
+    # and fail-closed once their approved window ends.
+    ip_workspace_enabled: bool = Field(default=False)
+    ip_workspace_rollout_expires_at: datetime | None = Field(default=None)
+    ip_registry_sync_enabled: bool = Field(default=False)
+    ip_registry_sync_rollout_expires_at: datetime | None = Field(default=None)
+    ip_deadline_automation_enabled: bool = Field(default=False)
+    ip_deadline_automation_rollout_expires_at: datetime | None = Field(default=None)
+    ip_notification_automation_enabled: bool = Field(default=False)
+    ip_notification_automation_rollout_expires_at: datetime | None = Field(default=None)
+    ip_filing_operations_enabled: bool = Field(default=False)
+    ip_filing_operations_rollout_expires_at: datetime | None = Field(default=None)
+    ip_watch_enabled: bool = Field(default=False)
+    ip_watch_rollout_expires_at: datetime | None = Field(default=None)
+    ip_costs_enabled: bool = Field(default=False)
+    ip_costs_rollout_expires_at: datetime | None = Field(default=None)
+    ip_rule_governance_enabled: bool = Field(default=False)
+    ip_rule_governance_rollout_expires_at: datetime | None = Field(default=None)
 
     # Hearing reminders (MOD-TS-007 Sprint T first slice — dark-
     # launched on 2026-04-22). Rows accumulate in ``hearing_reminders``
