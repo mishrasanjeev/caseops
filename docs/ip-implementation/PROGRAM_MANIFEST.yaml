@@ -4411,11 +4411,11 @@
         {
           "ref": "docs/ip-implementation/evidence/m1/IPLF-008B/release-2026-08-05.md",
           "revision": "b92d5d9b3d37113232e3ed9c77fbb4756e2c26b4",
-          "environment": "local API, generated OpenAPI, web component/type checks, and production Playwright control-plane validation",
+          "environment": "local API, generated OpenAPI, web component/type checks, production Playwright control-plane validation, and integration with deployment-verified canonical main cfedd74b852ad90f6c9c295ec57e1bc599f43a84",
           "fixtures": "tagged notification-disabled QA bookmark, exact and stale release SHAs, costed provider snapshot/order, untagged bookmark, and 360px case-tracking surface",
           "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, visible narrow-screen controls, and no overflow",
           "result": "passed",
-          "recorded_at": "2026-08-05T06:45:00+05:30"
+          "recorded_at": "2026-08-06T05:55:00+05:30"
         }
       ],
       "approvals": [],
