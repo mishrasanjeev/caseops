@@ -83,7 +83,37 @@ These are intentionally lightweight at the moment, but the architecture expects 
 - a dedicated worker can drain queued jobs independently of API traffic
 - stale jobs can be recovered and requeued
 - scheduled maintenance can enqueue retries for `needs_ocr` or `failed` files and reindex older indexed files
-- this maps cleanly to `Cloud Run jobs`, a worker service on `Cloud Run`, or later `Temporal` activities
+- bounded batch/drain work runs as exact-image `Cloud Run Jobs`
+- configured multi-step durable workflows use the existing typed `Temporal`
+  adapter; transactional domain handoff uses the neutral outbox/consumer-effect
+  contract defined by ADR-003
+
+## IP ownership and one-writer boundary
+
+PRD Section 11.2 is binding architecture, not a table-name suggestion. The
+repository-backed [IP ownership ledger](ip-implementation/OWNERSHIP_LEDGER.yaml)
+records every existing owner and every M2/M3 table, service, route, page, job,
+or contract decision. The associated decisions are:
+
+- [ADR-001](architecture/decisions/ADR-001-IP-ONE-WRITER-OWNERSHIP.md) for
+  `NEW`/`EXTEND`/`LINK`/`REPLACE`, one-writer reconciliation, and just-in-time
+  shared-owner expansion;
+- [ADR-002](architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md)
+  for neutral bulk-import orchestration and immutable legacy-history adapters;
+  and
+- [ADR-003](architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md) for
+  the Temporal/Cloud Run Job/transactional-outbox runtime boundary.
+
+`scripts/ip_ownership_ledger.py validate` is a required CI gate. It checks the
+ledger against the exact PRD Section 11.2 capability order, requires coverage
+for every M2/M3 epic, validates current code-owner references and replacement
+ADRs, and scans source/migrations/web/Cloud Run configuration for forbidden
+duplicate identifiers and IP-private notification, provider, report, or
+connector control planes.
+
+The ledger is a Definition-of-Ready control. It does not authorize prebuilding
+later-milestone nullable targets and does not substitute for the named M0 human
+program-lock approval.
 
 ## AI Architecture
 

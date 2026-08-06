@@ -2,11 +2,11 @@
 
 **Recorded:** 6 August 2026
 **Milestone:** M1 — Trust Recovery GA
-**Implementation revision:** `a8406178791d137c8db40f9664b225bcd4241bdc`
-**Production application revision audited:** `f07cbfa26903b07c3f5878703a43534be2a1c28b`
-**Production API revision:** `caseops-api-00238-pxr`
-**Production web revision:** `caseops-web-00218-lbw`
-**Production API/job image:** `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd`
+**Validated implementation head:** `88c49d64d3255e9a9b3f6298bddb90d63b3c6eca`
+**Canonical main / production application revision:** `e77d078d7409c733d264257c2d24a867641ff731`
+**Production API revision:** `caseops-api-00239-qlt`
+**Production web revision:** `caseops-web-00219-rfz`
+**Production API/job image:** `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130`
 
 ## Outcome
 
@@ -58,7 +58,7 @@ provider, or delivery mutation.
 
 ## Automated verification
 
-From the exact implementation revision:
+From the implementation candidate, followed by exact-head GitHub Actions:
 
 ```text
 uv --directory apps/api run pytest tests/test_scheduler_inventory.py -q
@@ -69,6 +69,11 @@ All checks passed!
 
 python scripts/scheduler_inventory.py validate
 scheduler inventory valid: 6 recurring jobs
+
+CI 31073005581: passed at 88c49d64d3255e9a9b3f6298bddb90d63b3c6eca
+Security 31073005601: passed
+CodeQL 31073005553: passed
+Pull request 165: merged to main as e77d078d7409c733d264257c2d24a867641ff731
 ```
 
 The tests cover inventory completeness, duplicate/mutable policy rejection,
@@ -78,8 +83,9 @@ between Scheduler delivery failure and workload failure.
 
 ## Current exact-image production audit
 
-After IPLF-008B deployment, the read-only audit was rerun against exact API/job
-digest `sha256:497a2066552fc3c3c43e69dcfe31922349d86407f5bd7364e8ef99c129cc5ddd`.
+After the canonical IPLF-001C deployment, the read-only audit was rerun against
+exact API/job digest
+`sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130`.
 It exited `0` with aggregate `result=pass`: all six scheduler configuration,
 dedicated identity, job-scoped Invoker, immutable image, and Scheduler-delivery
 checks passed.
@@ -88,8 +94,8 @@ checks passed.
 | --- | --- | --- |
 | `caseops-legal-update-sync-midnight` | `caseops-legal-update-sync-vk9gh` | succeeded |
 | `caseops-case-tracking-poll-1630-ist` | `caseops-case-tracking-poll-9nd7j` | succeeded |
-| `caseops-activity-report-0800-ist` | `caseops-activity-report-jvxr9` | succeeded |
-| `caseops-reminders-cadence` | `caseops-reminders-job-hqfkq` | succeeded |
+| `caseops-activity-report-0800-ist` | `caseops-activity-report-q4l5p` | succeeded |
+| `caseops-reminders-cadence` | `caseops-reminders-job-jmfgl` | succeeded |
 | `caseops-extract-authority-metadata-daily` | `caseops-extract-authority-metadata-2dn2s` | running_or_unknown |
 | `caseops-db-index-health-weekly` | `caseops-db-index-health-cgvj8` | succeeded |
 
@@ -145,15 +151,21 @@ This is a workload safety outcome requiring normal cost/SLO monitoring. It is
 not an IAM, target, image, Scheduler-delivery, or deployment failure and does
 not justify weakening the spend cap.
 
-## Production availability and prior exact release proof
+## Exact production release proof
 
-- `https://api.caseops.ai/api/health` returned HTTP `200` on 5 August 2026.
-- Exact production workflow run `30965133241` for application revision
-  `623ca8f5e88a8110c71cc1c6edca9c951eac7e1a` succeeded.
-- The run recorded 54 RAM passes with four intentional environment skips and
-  two of two Notice workflow passes.
-- API and web served 100 percent intended traffic on the revisions named at
-  the top of this record, and all six jobs were pinned to the same API digest.
+- API Cloud Build `2fe4f512-abeb-4380-b58b-bc1b937085d7` produced immutable
+  digest `sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130`.
+- Web Cloud Build `11783dcd-f90c-409d-ad16-bb1e6ee11a49` produced immutable
+  digest `sha256:fe2d4d8165085dd068367896eecfa8658f7672884c8c8ece11f3818e031fa120`.
+- Migration execution `caseops-migrate-job-t6fm7` completed successfully.
+- API `caseops-api-00239-qlt` and web `caseops-web-00219-rfz` served 100 percent
+  of intended traffic, and all six recurring jobs used the exact API digest.
+- Independent served-release verification returned the full SHA
+  `e77d078d7409c733d264257c2d24a867641ff731`, those exact revisions, health
+  `{"status":"ok"}`, the expected ClamAV sidecar, and no stale revision.
+- Exact production workflow `31074879292` waited for that API/web identity,
+  checked out the same full SHA, and passed: 57 RAM tests, four intentional
+  environment skips, and two of two Notice workflow tests.
 
 Health is cited only as availability evidence; the audit and exact workflow are
 the behavior/configuration evidence.
@@ -189,10 +201,10 @@ regression:
 
 - IPLF-001C implementation: `implemented`.
 - IPLF-001C verification: `passed` locally and against production configuration.
-- IPLF-001C release: `deployment_verified` for the audited scheduler behavior;
-  the repository tooling still follows exact-head CI and normal merge controls.
+- IPLF-001C release: `deployment_verified` on canonical `main`, the exact
+  production application/job image, and exact-release production E2E.
 - IPLF-001C acceptance: `pending` because program-level human acceptance is not
   manufactured by this engineering record.
 - The scheduler elapsed-time blocker is closed.
-- M1 and the overall program remain incomplete until the other exact-head
-  releases and genuine legal/product acceptance gates are resolved.
+- M1 and the overall program remain incomplete until genuine legal/product
+  acceptance gates and all later milestone requirements are resolved.
