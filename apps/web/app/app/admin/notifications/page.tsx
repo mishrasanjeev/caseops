@@ -425,6 +425,53 @@ export default function AdminNotificationsPage() {
         <CardContent className="flex min-w-0 flex-col gap-4 pt-5">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-[var(--color-ink)]">
+              Recent delivery intents
+            </h2>
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Durable recipient snapshots and channel outcomes, newest first.
+            </p>
+          </div>
+          {(query.data?.intents ?? []).length === 0 ? (
+            <EmptyState
+              icon={Bell}
+              title="No delivery intents"
+              description="Scheduled or self-service notification intents will appear here."
+            />
+          ) : (
+            <ul className="flex min-w-0 flex-col divide-y divide-[var(--color-line)]">
+              {(query.data?.intents ?? []).map((intent) => (
+                <li
+                  key={intent.id}
+                  className="flex min-w-0 flex-col gap-2 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between"
+                  data-testid={`notification-intent-${intent.id}`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <Badge tone={deliveryTone(intent.status)}>{intent.status}</Badge>
+                      {intent.critical ? <Badge tone="warning">critical</Badge> : null}
+                      <span className="break-words text-sm font-medium text-[var(--color-ink)]">
+                        {intent.event_type.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                    <p className="mt-1 break-all text-xs text-[var(--color-mute)]">
+                      {intent.channel} · {intent.destination ?? "No external destination"} ·
+                      destination v{intent.destination_version}
+                    </p>
+                  </div>
+                  <span className="break-all text-xs text-[var(--color-mute)]">
+                    {formatWhen(intent.updated_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex min-w-0 flex-col gap-4 pt-5">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-[var(--color-ink)]">
               Failed and suppressed delivery recovery
             </h2>
             <p className="mt-1 text-xs text-[var(--color-mute)]">
@@ -474,7 +521,7 @@ export default function AdminNotificationsPage() {
                   <li
                     key={intent.id}
                     className="flex min-w-0 flex-col gap-3 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between"
-                    data-testid={`notification-intent-${intent.id}`}
+                    data-testid={`notification-recovery-intent-${intent.id}`}
                   >
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
