@@ -370,3 +370,52 @@ This third candidate still requires independent PR gates, merge to canonical
 `main`, exact-revision deployment, HTTPS identity verification, and a fresh
 run of the same dated production workflow. IPLF-022A remains short of
 `deployment_verified` until that exact production run passes.
+
+## Final exact-revision release acceptance
+
+The parent-lifecycle repair was published as candidate
+`d99da43b89010ea5f40b7c4ff7dc27b32d577b55` in pull request `#185`.
+Every independent gate passed on that exact candidate:
+
+- CI run `31267547501`: API Ruff and governance validators, all eight API
+  coverage shards, aggregate per-area coverage, PostgreSQL/pgvector, web
+  typecheck/Vitest/build, and Playwright passed;
+- Security run `31267547499` passed; and
+- CodeQL run `31267547507` passed for Actions, Python, and
+  JavaScript/TypeScript.
+
+The PR merged to canonical `main` as
+`01361f499fdad42bc95884fadcdbfff7e9cafc0a`; local `main` and `origin/main`
+were verified at the same SHA. The exact production release recorded:
+
+| Evidence | Exact value |
+| --- | --- |
+| API Cloud Build | `c54ca0ab-7f92-4ada-8682-d5a0cf358c53` |
+| Web Cloud Build | `7c103f78-5db9-40b7-addf-0b9ce0dc2f4e` |
+| API image digest | `sha256:7438133f141cb59085f63c9a0d0544fd711c25a76f16030bcc74eaf168185dde` |
+| Web image digest | `sha256:c16d8051f7959c4906c5d40731e316ab6babcc6d68e7a1d29cf7c241e42d5b0a` |
+| Migration execution | `caseops-migrate-job-wwl4b`, successful |
+| API revision | `caseops-api-00254-pq4`, 100% traffic |
+| Web revision | `caseops-web-00234-dwd`, 100% traffic |
+
+All six recurring jobs were reconciled to the immutable API digest and their
+checked-in identity, schedule, timezone, and enabled state. The health sweep
+passed, and ClamAV remained present with immediate two-second startup probing.
+Independent HTTPS verification returned the exact full release SHA and both
+serving revisions.
+
+Production workflow `31268892105` checked out that exact serving release and
+passed in 25 minutes 23 seconds. Both the complete dated RAM batch and the
+Notice module passed. Current-revision request logs for synthetic Matter
+`e4f3ceef-2ffe-4018-8974-81b41a8c67f9` recorded:
+
+| Notice upload | Result | Latency |
+| --- | --- | ---: |
+| Received notice | HTTP 200 | 0.417412085 s |
+| Reply document | HTTP 200 | 0.755888145 s |
+| Sent notice | HTTP 200 | 0.336074321 s |
+
+This closes both production lock defects with same-spec, exact-revision proof.
+IPLF-022A is `deployment_verified`. Overall IP-program status remains
+`PROGRAM INCOMPLETE`: IPLF-022B and later slices, reciprocal ownership work,
+and genuine human/provider/legal approvals remain outstanding.

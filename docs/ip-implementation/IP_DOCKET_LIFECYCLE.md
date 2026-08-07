@@ -2,10 +2,11 @@
 
 Last updated: 7 August 2026
 
-Implementation slice: `IPLF-022A`
+Implementation slices: `IPLF-022A` foundation and `IPLF-022B` user workflow
 
-Status: repository implementation and local verification complete; independent
-CI, canonical-main release, exact production verification, and human acceptance
+Status: repository implementation and local verification complete through
+IPLF-022B at `08ae3ecd0a8eedd3d5f2bc2e994b48732fddfaf1`; independent CI,
+canonical-main release, exact production verification, and human acceptance
 remain pending.
 
 ## Ownership boundary
@@ -80,6 +81,14 @@ history-preserving recovery/export.
 No feature flag, provider integration, notification, filing, fee, external
 message, or production legal automation is enabled by this foundation slice.
 
+IPLF-022B exposes separate impact-preview and transition endpoints plus the
+capability-gated web workflow. Preview enumerates downstream impacts and
+unresolved exception codes without mutation. Commit repeats the calculation
+under the parent locks, requires exact exception acknowledgements, preserves
+client-report and linked-Matter handling, and records final disposition as a
+separate report dimension. See `IP_PROSECUTION_WORKFLOW.md` for the complete
+event, application-phase, checklist, reporting, and UI contract.
+
 ## Verification map
 
 - `test_ip_lifecycle_service.py`: append sequence/history, correction,
@@ -94,4 +103,5 @@ message, or production legal automation is enabled by this foundation slice.
   single-head migration controls.
 
 Detailed dated evidence is recorded in
-`docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md`.
+`docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md` and
+`docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md`.

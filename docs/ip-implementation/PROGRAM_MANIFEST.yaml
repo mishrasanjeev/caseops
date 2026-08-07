@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-022B",
+    "active_slice": "IPLF-023A",
     "checkpoint": {
-      "recorded_at": "2026-08-08T17:30:00+05:30",
-      "repository_revision": "be3e0cf3cf7e2d72245c412de60c46a67e61bf5f",
-      "environment": "IPLF-021B is deployment-verified at canonical main 63bc7587af4a5c3157462c6f668707cc8a08db9c, API caseops-api-00250-jzl, web caseops-web-00230-8ff, successful migration caseops-migrate-job-dc9bp, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31255101441. IPLF-022A is restacked on that release with additive Alembic head 20260807_0003 and remains dark pending independent CI and production release.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, and IPLF-021B have completed repository-controlled implementation and deployment verification. IPLF-022A has complete repository implementation pending fresh restacked verification, independent CI, merge, deploy, and dated production proof. IP-ID-01..08 remain in_progress because reciprocal IPLF-031B is not implemented. IP-PROS-01..12 and UJ-06/UJ-53 remain assigned to IPLF-022B. Human acceptance and external-provider approvals remain genuine pending gates.",
+      "recorded_at": "2026-08-08T23:10:00+05:30",
+      "repository_revision": "f82ff8e",
+      "environment": "IPLF-022A is deployment-verified at canonical main 01361f499fdad42bc95884fadcdbfff7e9cafc0a, API caseops-api-00254-pq4, web caseops-web-00234-dwd, successful migration caseops-migrate-job-wwl4b, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31268892105. IPLF-022B is restacked on that accepted release with additive Alembic head 20260807_0004 and is undergoing fresh verification before independent review and production release.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, and IPLF-022A have completed repository-controlled implementation and deployment verification. IPLF-022B has complete repository implementation pending fresh restacked verification, independent CI, merge, deploy, and dated production proof. Reciprocal IP-PROS-01..12 and UJ-06/UJ-53 remain program-incomplete until IPLF-033B. Human acceptance and external-provider approvals remain genuine pending gates.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-022B",
-      "next_action": "Verify and release IPLF-022A serially through independent checks, canonical main, exact production identity, migration, scheduler, and dated acceptance proof; then implement and release IPLF-022B without enabling unapproved legal automations.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md"
+      "next_slice": "IPLF-023A",
+      "next_action": "Verify and release IPLF-022B serially through independent checks, canonical main, exact production identity, migration, scheduler, and dated acceptance proof; then implement IPLF-023A without enabling unapproved legal automations.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
     }
   },
   "milestones": [
@@ -727,7 +727,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md",
@@ -790,12 +790,13 @@
         "IPLF-022A",
         "IPLF-022B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ]
     },
     {
@@ -4779,19 +4780,19 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md",
-          "revision": "edbbabbb47debf97aebb1da665ab67eede23f1f9",
-          "environment": "local exact implementation commit rebased on released IPLF-019B main, Windows/CPython 3.13 and Node/npm with repository lockfiles",
+          "revision": "509ba80d7848d6f331d249752b4c3d3318159fc2",
+          "environment": "local locked verification plus production API caseops-api-00242-xsf and web caseops-web-00222-42t at 100% traffic, successful migration caseops-migrate-job-2l7h6, and exact-serving production workflow 31138391073",
           "fixtures": "exact PRD Section 2.2 role matrix plus synthetic capability, entitlement, rollout-flag, expiry, legacy-alias, and unknown-feature cases",
-          "assertions": "13 canonical capabilities, frontend/backend parity, explicit fail-closed entitlement parsing, independent reason/owner/expiry, dark defaults, automated-feature manual fallback, custom-role/import compatibility, and existing IP/role-admin UI behavior",
+          "assertions": "13 canonical capabilities, frontend/backend parity, explicit fail-closed entitlement parsing, independent reason/owner/expiry, dark defaults, automated-feature manual fallback, custom-role/import compatibility, existing IP/role-admin UI behavior, canonical-main identity, exact API/web serving revisions, and dated production Playwright",
           "result": "passed",
-          "recorded_at": "2026-08-07T12:00:00+05:30"
+          "recorded_at": "2026-08-07T07:30:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release this rebased additive contract through independent CI, canonical main, exact production identity verification, and dated production E2E.",
-        "Keep every IP entitlement and rollout flag disabled until IPLF-020B proves the UJ-01 readiness workflow; do not infer M0 or legal acceptance."
+        "Release IPLF-020B through the same independent CI, canonical-main, exact-production, and dated acceptance controls.",
+        "Keep every IP entitlement and rollout flag disabled until an authorized tenant pilot is approved; do not infer M0 or legal acceptance."
       ],
       "data_impact": [
         "No schema, backfill, tenant row, provider, credential, scheduler, notification, filing, fee, or client data mutation.",
@@ -4820,7 +4821,7 @@
       "allocation_review": "Administrative M2 contract slice: exact PRD Section 2.2 capability/role matrix and ARCH-OPS-12 independent authorization, entitlement, and rollout gates. IPLF-020B retains UJ-01 readiness endpoint/UI and deployed user-path proof.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -5154,7 +5155,8 @@
         "apps/api/tests/test_migration_order.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m2/IPLF-022A/production-attachment-scan-hotfix-2026-08-08.md"
       ],
       "evidence_metadata": [
         {
@@ -5165,13 +5167,22 @@
           "assertions": "append-only sequence/history, candidate and correction rules, tenant/target guards, parent-before-child locks, atomic lifecycle/audit, terminal suppression, stale rejection, controlled reopen, no child resurrection, Matter compatibility, migration rollback/re-upgrade, and FK indexes",
           "result": "passed",
           "recorded_at": "2026-08-08T17:30:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-022A/production-attachment-scan-hotfix-2026-08-08.md",
+          "revision": "01361f499fdad42bc95884fadcdbfff7e9cafc0a",
+          "environment": "Canonical production API caseops-api-00254-pq4 and web caseops-web-00234-dwd at 100% traffic, immutable API digest sha256:7438133f141cb59085f63c9a0d0544fd711c25a76f16030bcc74eaf168185dde, successful migration caseops-migrate-job-wwl4b, six reconciled scheduler bindings, and exact-serving workflow 31268892105",
+          "fixtures": "Synthetic caseops-qa RAM and Notice workflows, including received-notice, reply-document, and sent-notice uploads",
+          "assertions": "independent CI/Security/CodeQL, exact main identity, production migration, immutable scheduler configuration, ClamAV guard, exact HTTPS identity, complete RAM batch, Notice received/reply/sent/filter journey, and bounded upload latencies",
+          "result": "passed",
+          "recorded_at": "2026-08-08T23:10:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release serially after deployment-verified IPLF-021B through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact production identity, deterministic scheduler audit, and dated acceptance proof.",
-        "Implement IPLF-022B user workflows and all allocated IP-PROS/UJ-06/UJ-53 normal and exception paths without enabling unapproved external legal effects."
+        "Keep the deployment-verified lifecycle foundation enabled only through the existing capability/readiness controls and preserve fail-closed parent/child transaction boundaries.",
+        "Release IPLF-022B user workflows and allocated IP-PROS/UJ-06/UJ-53 normal and exception paths without enabling unapproved external legal effects."
       ],
       "data_impact": [
         "Additive Alembic head 20260807_0003 creates append-only tenant IP legal events and lifecycle anchor fields, normalizing only existing archived activity flags; it creates no inferred historical event.",
@@ -5185,7 +5196,7 @@
       "allocation_review": "M2 foundation slice reviewed against PRD Sections 11.2, 23 UJ-06/UJ-53, and 25. It establishes the append-only legal event and fail-closed lifecycle writer while IPLF-022B retains every direct IP-PROS requirement and user journey path.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -5242,33 +5253,77 @@
       "dependencies": [
         "IPLF-022A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260807_0004_application_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/ip_lifecycle.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_20260807_application_lifecycle_migration.py",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-01-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+          "revision": "f82ff8ea4ffa8cd2a9ebf7ff88e3d52e223c6e66",
+          "environment": "Restacked on deployment-verified main 01361f499fdad42bc95884fadcdbfff7e9cafc0a; Windows CPython 3.13, Node 24, Next.js 16.3.0, locked dependencies, ephemeral SQLite migrations, and synthetic IP/Matter/browser fixtures",
+          "fixtures": "Synthetic companies, entitlements, tenant configuration, dockets, applications, manual/registry events, corrections, reconciliations, deadline incidents, downstream impacts, successors, and Matter-linked operational children",
+          "assertions": "preview before commit, immutable history, phase/version concurrency, registry candidates, correction/reconciliation, backdated recalculation, checklist/report distinctions, terminal suppression, controlled restoration/reopen, blocker acknowledgement, successor transfer, persistence, and every grouped action visible at 360px",
+          "result": "passed",
+          "recorded_at": "2026-08-08T23:20:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Restack onto the serially released IPLF-022A main, pass independent CI/Security/CodeQL and PostgreSQL migration checks, merge to canonical main, deploy, verify the exact serving revisions, and run the dated read-only production Playwright specification.",
+        "Continue IPLF-023A while preserving the reciprocal IPLF-033B ownership of the remaining trademark-specific IP-PROS and UJ-06/UJ-53 program depth."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive Alembic head 20260807_0004 adds application is_active/lifecycle_version fields and deterministically normalizes existing refused/abandoned rows without inventing legal events.",
+        "Event and lifecycle commands append history and atomically update versioned parent state; terminal transition neutralizes operational children, and controlled reopen/restoration does not resurrect them."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md",
+          "disposition": "created",
+          "owner": "Product IP/Engineering/Legal QA",
+          "evidence": "Prosecution event, lifecycle, evidence-checklist, reconciliation, and rollback contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/IP_DOCKET_LIFECYCLE.md",
+          "disposition": "updated",
+          "owner": "Product IP/Engineering",
+          "evidence": "Application lifecycle and user-workflow boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+          "disposition": "created",
+          "owner": "Engineering/QA/Release Engineering",
+          "evidence": "Exact implementation, test, security, rollout, rollback, and pending-release evidence"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program Control Plane",
+          "evidence": "IPLF-022A production closure and IPLF-022B implementation traceability"
+        }
+      ],
+      "allocation_review": "M2 completion slice reviewed against PRD Sections 11.2, 23 UJ-06/UJ-53, and 25. IPLF-022B implements the shared prosecution/lifecycle workflow and all directly allocated preview, correction, reconciliation, terminal-state, reporting, exception, and responsive paths. IP-PROS-01..12 and both journeys remain program-incomplete because IPLF-033B is a reciprocal owner of later trademark-specific depth.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -6670,6 +6725,8 @@
       ],
       "implementation_refs": [],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
         "planned:IPLF-UJ-06-EXC-03",
@@ -16221,8 +16278,12 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-01",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16234,9 +16295,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16255,8 +16318,12 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-02",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16268,9 +16335,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16289,8 +16358,12 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-03",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16302,9 +16375,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16323,8 +16398,12 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-04",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16336,9 +16415,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16357,8 +16438,12 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-05",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16370,9 +16455,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16391,8 +16478,14 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/web/app/app/ip/page.tsx",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "planned:IPLF-REQ-IP-PROS-06",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16404,9 +16497,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16425,8 +16520,12 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-07",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16438,9 +16537,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16459,8 +16560,14 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260807_0004_application_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_20260807_application_lifecycle_migration.py",
         "planned:IPLF-REQ-IP-PROS-08",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16472,9 +16579,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16493,8 +16602,14 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/web/app/app/ip/page.tsx",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/web/app/app/ip/page.test.tsx",
         "planned:IPLF-REQ-IP-PROS-09",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16506,9 +16621,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16527,8 +16644,14 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/web/app/app/ip/page.tsx",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/web/app/app/ip/page.test.tsx",
         "planned:IPLF-REQ-IP-PROS-10",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16540,9 +16663,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16561,8 +16686,13 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-REQ-IP-PROS-11",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16574,9 +16704,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -16595,8 +16727,14 @@
         "UJ-06",
         "UJ-53"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/web/app/app/ip/page.tsx",
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/web/app/app/ip/page.test.tsx",
         "planned:IPLF-REQ-IP-PROS-12",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
@@ -16608,9 +16746,11 @@
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -36920,13 +37060,17 @@
         "IP-PROS-12"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "planned:IPLF-UJ-06-EXC-01",
         "planned:IPLF-UJ-06-EXC-02",
         "planned:IPLF-UJ-06-EXC-03",
         "planned:IPLF-UJ-06-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -39726,14 +39870,19 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "planned:IPLF-UJ-53-EXC-01",
         "planned:IPLF-UJ-53-EXC-02",
         "planned:IPLF-UJ-53-EXC-03",
         "planned:IPLF-UJ-53-EXC-04",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -41858,10 +42007,14 @@
         "IP-PROS-12"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "planned:IPLF-UJ-06-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -41893,10 +42046,13 @@
         "IP-PROS-12"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-UJ-06-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -41928,10 +42084,13 @@
         "IP-PROS-12"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-UJ-06-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -41963,10 +42122,13 @@
         "IP-PROS-12"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-UJ-06-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -52800,10 +52962,15 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "planned:IPLF-UJ-53-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -52912,10 +53079,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
         "planned:IPLF-UJ-53-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -53024,10 +53195,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
         "planned:IPLF-UJ-53-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -53136,10 +53311,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
         "planned:IPLF-UJ-53-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -53248,10 +53427,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
         "planned:IPLF-UJ-53-EXC-04"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
