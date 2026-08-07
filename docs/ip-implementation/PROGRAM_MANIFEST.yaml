@@ -16,13 +16,13 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-020B",
     "checkpoint": {
-      "recorded_at": "2026-08-06T22:03:00+05:30",
-      "repository_revision": "452551f3e4ef7afc153cc95377fc141ae104af76",
-      "environment": "IPLF-020A implementation revision 452551f3e4ef7afc153cc95377fc141ae104af76 passes the exact Section 2.2 capability matrix, independent capability/entitlement/rollout/expiry contract, 22 focused API tests, 4 focused web tests, API Ruff, web typecheck, and diff checks. It remains stacked on IPLF-019B candidate 22462d697484c3aadbb623660075e7aab3dce638 and is not released out of order. Production still serves IPLF-019A merge b4faddab0603af0cc519b1ffca2c92196c3bfd0e on API caseops-api-00240-ds5 and web caseops-web-00220-jfv.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, and IPLF-019A have completed repository-controlled implementation and deployment verification. IPLF-019B and IPLF-020A have complete repository implementation and local verification, with serial independent CI and production release pending. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "recorded_at": "2026-08-07T12:00:00+05:30",
+      "repository_revision": "edbbabbb47debf97aebb1da665ab67eede23f1f9",
+      "environment": "IPLF-020A implementation revision edbbabbb47debf97aebb1da665ab67eede23f1f9 is rebased on deployment-verified IPLF-019B canonical main a5ac2fe96ba53bdb812fb19b89ccbdcfaa9554b1 and passes 76 API compatibility tests, 13 web tests, API Ruff, web typecheck, and diff checks. Production serves IPLF-019B on API caseops-api-00241-wt8 and web caseops-web-00221-fzw with successful exact-serving production Playwright run 31134019957.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, and IPLF-019B have completed repository-controlled implementation and deployment verification. IPLF-020A has complete repository implementation and local verification on released main, with independent CI and production release pending. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-020B",
-      "next_action": "Release IPLF-019B and then IPLF-020A serially through exact-head independent CI, canonical main, exact-identity production verification, and dated production E2E; implement IPLF-020B readiness endpoint/UI and UJ-01 paths without prematurely activating IP entitlements or flags. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "next_action": "Release IPLF-020A through exact-head independent CI, canonical main, exact-identity production verification, deterministic scheduler audit, and dated production E2E; then release the already implemented IPLF-020B readiness endpoint/UI and UJ-01 paths without prematurely activating IP entitlements or flags. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
       "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md"
     }
   },
@@ -4680,19 +4680,19 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md",
-          "revision": "17ebc4f2f7d5125f070584d73e686cc7f93610ce",
-          "environment": "local exact implementation commit on Windows/CPython 3.13 with the locked uv environment in copy mode",
+          "revision": "a5ac2fe96ba53bdb812fb19b89ccbdcfaa9554b1",
+          "environment": "local exact implementation commit plus independent CI/Security/CodeQL/PostgreSQL, canonical main, Google Cloud production migration/API/web, deterministic natural scheduler audit, and exact-serving production Playwright",
           "fixtures": "exact ARCH-OPS-01..26 manifest family, Section 11.2 ownership ledger, all M2/M3 proposals, stable audit/domain event catalogues, missing requirement/ref mutations, and incomplete/duplicate event mutations",
           "assertions": "exact ordered requirement coverage, named owner and committed enforcement ref per control, versioned event payload metadata, no duplicate audit/domain names, one-writer repository scan, and exact 436/50/68/317 program traceability",
           "result": "passed",
-          "recorded_at": "2026-08-06T21:30:00+05:30"
+          "recorded_at": "2026-08-07T06:15:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release the exact IPLF-019B candidate through CI/Security/CodeQL, canonical main, production identity verification, and dated production E2E.",
-        "Proceed to IPLF-020A only after IPLF-019B deployment verification; do not infer M0 human approval or UJ-47/UJ-67 completion."
+        "Proceed to IPLF-020A after IPLF-019B deployment verification; do not infer M0 human approval or UJ-47/UJ-67 completion.",
+        "Maintain the exact-revision production and deterministic scheduler gates without adding an arbitrary elapsed-time blocker."
       ],
       "data_impact": [
         "No schema, tenant row, provider, credential, scheduler, job, or external legal operation is mutated.",
@@ -4771,18 +4771,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md",
-          "revision": "452551f3e4ef7afc153cc95377fc141ae104af76",
-          "environment": "local exact implementation commit on Windows/CPython 3.13 and Node/npm with repository lockfiles",
+          "revision": "edbbabbb47debf97aebb1da665ab67eede23f1f9",
+          "environment": "local exact implementation commit rebased on released IPLF-019B main, Windows/CPython 3.13 and Node/npm with repository lockfiles",
           "fixtures": "exact PRD Section 2.2 role matrix plus synthetic capability, entitlement, rollout-flag, expiry, legacy-alias, and unknown-feature cases",
           "assertions": "13 canonical capabilities, frontend/backend parity, explicit fail-closed entitlement parsing, independent reason/owner/expiry, dark defaults, automated-feature manual fallback, custom-role/import compatibility, and existing IP/role-admin UI behavior",
           "result": "passed",
-          "recorded_at": "2026-08-06T22:03:00+05:30"
+          "recorded_at": "2026-08-07T12:00:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "After IPLF-019B deployment verification, rebase and release this exact additive contract through independent CI, canonical main, exact production identity verification, and dated production E2E.",
+        "Release this rebased additive contract through independent CI, canonical main, exact production identity verification, and dated production E2E.",
         "Keep every IP entitlement and rollout flag disabled until IPLF-020B proves the UJ-01 readiness workflow; do not infer M0 or legal acceptance."
       ],
       "data_impact": [
