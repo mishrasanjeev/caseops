@@ -27,7 +27,7 @@ Generated; do not edit.
 | IPLF-019A | derived | IPLF-019 | M2 |  |  | implemented | passed | ready_for_review | pending |
 | IPLF-019B | derived | IPLF-019 | M2 | ARCH-OPS-01, ARCH-OPS-02, ARCH-OPS-03, ARCH-OPS-04, ARCH-OPS-05, ARCH-OPS-06, ARCH-OPS-07, ARCH-OPS-08, ARCH-OPS-09, ARCH-OPS-10, ARCH-OPS-11, ARCH-OPS-12, ARCH-OPS-13, ARCH-OPS-14, ARCH-OPS-15, ARCH-OPS-16, ARCH-OPS-17, ARCH-OPS-18, ARCH-OPS-19, ARCH-OPS-20, ARCH-OPS-21, ARCH-OPS-22, ARCH-OPS-23, ARCH-OPS-24, ARCH-OPS-25, ARCH-OPS-26 |  | implemented | passed | deployment_verified | pending |
 | IPLF-020A | derived | IPLF-020 | M2 |  |  | implemented | passed | ready_for_review | pending |
-| IPLF-020B | derived | IPLF-020 | M2 |  | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | implemented | passed | ready_for_review | pending |
+| IPLF-020B | derived | IPLF-020 | M2 |  | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-021A | derived | IPLF-021 | M2 |  |  | implemented | passed | ready_for_review | pending |
 | IPLF-021B | derived | IPLF-021 | M2 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-07, IP-ID-08 | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | not_started | not_run | blocked | pending |
 | IPLF-022A | derived | IPLF-022 | M2 |  |  | not_started | not_run | blocked | pending |
