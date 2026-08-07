@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-021A",
+    "active_slice": "IPLF-021B",
     "checkpoint": {
-      "recorded_at": "2026-08-07T10:10:00+05:30",
-      "repository_revision": "e47c9137eca87d8ea206451b5f42880c39425a07",
-      "environment": "IPLF-020B production assertion passed on exact main 6d7a4fcc43096ba1a23e0902bb7e2801b556a51e serving API caseops-api-00244-7l2 and web caseops-web-00224-7z2 after successful migration, immutable scheduler convergence, health, ClamAV, and public identity. Full workflow 31146475554 then failed a separate IPLF-007C notification UI cache race after 56 RAM passes and four expected skips; the persisted intent was present in the API but absent from the stale visible list. Correction e47c9137eca87d8ea206451b5f42880c39425a07 inserts the committed response into the active cache before authoritative refetch and passes its timing regression plus typecheck.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, and IPLF-020A have completed repository-controlled implementation and deployment verification. IPLF-020B is implemented, independently CI-verified, migrated, and its exact deployed fail-closed assertion passes, but remains release-incomplete until the notification correction is independently released and one full dated RAM plus Notice workflow is green. UJ-01 remains in_progress through reciprocal IPLF-021B. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "recorded_at": "2026-08-07T15:10:00+05:30",
+      "repository_revision": "4e841bd",
+      "environment": "IPLF-021A implementation 4e841bd57058db130acc90b25a5d362025195a48 is restacked on canonical main 17ff3daca16e337fdc5a0dd2bec2a68712dde0c6 and passes 22 focused/adjacent core and migration tests, API Ruff, and the 436/68/317 manifest validator. IPLF-020B is deployment-verified on that exact production release: API caseops-api-00245-fdt, web caseops-web-00225-7xv, migration caseops-migrate-job-7gfls, six immutable scheduler bindings, and workflow 31149819331 with 56 RAM passes and 2 Notice passes. No IP entitlement or rollout flag is enabled.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, and IPLF-020B have completed repository-controlled implementation and deployment verification. IPLF-021A has complete repository implementation and renewed local verification on canonical IPLF-020B main; independent CI, merge, deploy, and production verification remain pending. UJ-01 and IP-ID-01..08 remain in_progress through reciprocal IPLF-021B. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-021A",
-      "next_action": "Independently release notification cache correction e47c9137eca87d8ea206451b5f42880c39425a07, deploy the exact merge SHA, and require the complete RAM plus Notice workflow to pass without enabling IP entitlements or rollout flags; then release the already implemented IPLF-021A and IPLF-021B serially. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-020B/production-verification-closure-2026-08-07.md"
+      "next_slice": "IPLF-021B",
+      "next_action": "Independently release IPLF-021A through CI, canonical main, migration, exact production identity, scheduler inventory, and dated acceptance; follow with IPLF-021B without activating production IP entitlements or rollout flags. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md"
     }
   },
   "milestones": [
@@ -755,11 +755,13 @@
         "IPLF-021A",
         "IPLF-021B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md"
+      ]
     },
     {
       "id": "IPLF-022",
@@ -4883,12 +4885,20 @@
           "assertions": "authenticated tenant-specific readiness, read-only billing resolution, canonical capability guards, no operational fetch on red workspace, visible reasons/owners, isolated automation blocking, manual docketing fallback, and OpenAPI parity",
           "result": "passed",
           "recorded_at": "2026-08-07T04:32:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-020B/production-verification-closure-2026-08-07.md",
+          "revision": "17ff3daca16e337fdc5a0dd2bec2a68712dde0c6",
+          "environment": "production API caseops-api-00245-fdt, web caseops-web-00225-7xv, migration caseops-migrate-job-7gfls, six recurring jobs, and GitHub Actions workflow 31149819331",
+          "fixtures": "dedicated caseops-qa tenant, fail-closed IP readiness, 360px responsive assertion, safe in-app notification intent, and Notice module synthetic upload/reply/sent/filter records",
+          "assertions": "exact public API/web SHA, 100% traffic, immutable image digests, successful migration, scheduler identity/target/cadence/timezone/image convergence, dark IP readiness, visible notification intent, and full RAM plus Notice workflow with 56 RAM passes, 2 Notice passes, five documented fixture/state-dependent RAM skips, and no failed required path",
+          "result": "passed",
+          "recorded_at": "2026-08-07T15:10:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release notification cache correction e47c9137eca87d8ea206451b5f42880c39425a07 through independent checks, canonical main, exact production verification, and one green complete RAM plus Notice workflow before recording IPLF-020B deployment_verified.",
         "Complete UJ-01 jurisdiction, office, taxonomy, rule, provider-test, and allowlist persistence in reciprocal slice IPLF-021B; keep all four paths in_progress until that proof exists."
       ],
       "data_impact": [
@@ -4912,7 +4922,7 @@
       "allocation_review": "IPLF-020B completes the capability/readiness API and responsive presentation contribution to UJ-01. IPLF-021B remains reciprocal owner of persisted workspace configuration and provider/source test state, so UJ-01 normal and exception paths remain in_progress.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -4944,23 +4954,60 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260807_0001_ip_core_records.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_records.py",
+        "apps/api/src/caseops_api/services/ip_records.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_core_records.py",
+        "apps/api/tests/test_20260807_ip_core_migration.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/api/tests/test_ip_prd_slices.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md",
+          "revision": "4e841bd57058db130acc90b25a5d362025195a48",
+          "environment": "local exact implementation commit on Windows/CPython 3.13 with ephemeral SQLite full-chain and rollback/re-upgrade databases",
+          "fixtures": "empty ephemeral migration databases and synthetic identifier normalization, ownership, correction-history, and filed-phase cases",
+          "assertions": "eight tenant-scoped core IP tables, canonical docket/client anchors, migration head/order/rollback/re-upgrade, raw plus normalized identifiers without unsafe collision merge, typed owner constraints, correction history, filed-phase invariant, and existing IP regression",
+          "result": "passed",
+          "recorded_at": "2026-08-07T10:55:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "After exact production workflow 31149819331 passes, release this expand-only schema through independent checks, exact PostgreSQL migration proof, canonical main, production identity, scheduler inventory, and dated acceptance verification.",
+        "Implement IPLF-021B commands, reconciliation, persisted UJ-01 configuration, and dated responsive acceptance before enabling any IP rollout flag or declaring IP-ID-01..08 passed."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive Alembic head 20260807_0001 creates eight empty tenant-scoped IP record tables and a supporting clients(id, company_id) unique constraint; it performs no row backfill, inference, traffic switch, or destructive mutation.",
+        "All new records remain dark and unused until IPLF-021B command/reconciliation paths are independently released; no entitlement or rollout flag is enabled."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md",
+          "disposition": "created",
+          "owner": "Engineering/Data/QA/Release Engineering",
+          "evidence": "Exact implementation revision, table/ownership contract, identifier invariants, migration test, expand-only data boundary, rollback, and serial release dependency"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program Control",
+          "evidence": "IPLF-021A implementation/test/evidence references and truthful ready-for-review state; IPLF-021B remains active"
+        }
+      ],
+      "allocation_review": "Administrative M2 expand-contract slice matching the signed M2M3-IPLF-021 ownership ledger. IPLF-021B remains reciprocal owner of IP-ID-01..08, commands, reconciliation, persisted UJ-01 configuration, user workflow, and deployed path proof.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

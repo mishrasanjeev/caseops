@@ -3,10 +3,10 @@
 ## Verdict
 
 `PROGRAM INCOMPLETE`. IPLF-020B's repository implementation, independent CI,
-migration-aware deployments, immutable-image convergence, and intended dark
-production behavior are proven. The slice is not yet marked
-`deployment_verified` because the complete dated production workflow must be
-green on one exact serving commit. No failed run is waived.
+migration-aware deployments, immutable-image convergence, intended dark
+production behavior, and complete dated production workflow are proven. The
+slice is `deployment_verified` on exact serving commit
+`17ff3daca16e337fdc5a0dd2bec2a68712dde0c6`. No failed run was waived.
 
 This record also documents a production-suite regression in the pre-existing
 IPLF-007C notification surface discovered by the second IPLF-020B verification
@@ -108,13 +108,37 @@ git diff --check
 passed
 ```
 
-## Remaining release gate
+## Final exact release and green production gate
 
-The notification correction must pass independent CI, merge to canonical
-`main`, deploy through `scripts/deploy-prod.sh` as one exact new SHA, converge
-all recurring jobs to that image, pass public identity verification, and pass
-both the complete RAM and Notice production suites. Only then may IPLF-020B be
-recorded as `deployment_verified` and the serial IPLF-021A release begin.
+The notification correction passed all required PR #174 CI, Security, CodeQL,
+PostgreSQL, OpenAPI, web build, and application Playwright checks and merged to
+canonical `main` as
+`17ff3daca16e337fdc5a0dd2bec2a68712dde0c6`. Local `main` and `origin/main`
+resolved to that same commit before deployment.
+
+The canonical deployment completed with:
+
+- migration execution `caseops-migrate-job-7gfls`: 1/1 succeeded;
+- API revision `caseops-api-00245-fdt` at 100% traffic, immutable digest
+  `sha256:a95bee2183eae0243a457a7bfabc7ce52b47f2c5985e46fba1ed2e54a3ce3c43`;
+- web revision `caseops-web-00225-7xv` at 100% traffic, immutable digest
+  `sha256:7138e0fa4954a23b9e0ba8cef924b664511fa1c3381f93d893620d4d61995473`;
+- all six recurring jobs pinned to the exact API digest with canonical
+  identities, targets, schedules, timezones, and enabled states;
+- public API/web release identity, API health, web smoke, and ClamAV sidecar
+  verification: passed.
+
+Production workflow `31149819331` checked out the exact serving commit and
+completed successfully. The RAM batch passed 56 tests with five documented
+fixture/state-dependent skips in 15.3 minutes. The independently configured
+Notice module then passed 2/2 tests in 21 seconds, including received notice,
+reply document, sent notice, filtering, persistence, and cleanup. The IPLF-007C
+notification test that had exposed the cache race passed in this RAM batch.
+
+IPLF-020B is therefore `deployment_verified`. UJ-01 remains `in_progress`
+because reciprocal IPLF-021B owns persisted workspace configuration and
+provider/source test state; no IP entitlement, rollout flag, registry
+automation, deadline automation, or notification automation was enabled.
 
 This evidence does not claim M0 human approval, lawyer approval of legal
 fixtures, provider approval, enabled IP production operations, complete UJ-01,

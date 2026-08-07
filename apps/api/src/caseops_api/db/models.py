@@ -8468,6 +8468,7 @@ class Client(Base):
             "client_type",
             name="uq_clients_tenant_name_type",
         ),
+        UniqueConstraint("id", "company_id", name="uq_clients_id_company"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -12474,6 +12475,322 @@ class IpDocketRecord(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpAsset(Base):
+    __tablename__ = "ip_assets"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_asset_docket_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_asset_id_company"),
+        UniqueConstraint("company_id", "docket_id", name="uq_ip_asset_company_docket"),
+        Index("ix_ip_assets_company_kind", "company_id", "asset_kind"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    asset_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TrademarkApplication(Base):
+    __tablename__ = "trademark_applications"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_tm_application_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["asset_id", "company_id"],
+            ["ip_assets.id", "ip_assets.company_id"],
+            name="fk_tm_application_asset_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_tm_application_id_company"),
+        Index("ix_tm_applications_company_phase", "company_id", "filing_phase"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    asset_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    office: Mapped[str] = mapped_column(String(80), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
+    filing_phase: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    source_pending_identifier_allocation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TrademarkApplicationScope(Base):
+    __tablename__ = "trademark_application_scopes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_tm_scope_application_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "effective_until IS NULL OR effective_until >= effective_from",
+            name="ck_tm_scope_effective_range",
+        ),
+        UniqueConstraint(
+            "application_id",
+            "class_number",
+            "effective_from",
+            name="uq_tm_scope_application_class_effective",
+        ),
+        Index("ix_tm_scopes_company_application", "company_id", "application_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    class_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    specification: Mapped[str] = mapped_column(Text, nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class TrademarkRepresentation(Base):
+    __tablename__ = "trademark_representations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_tm_representation_application_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("application_id", "version", name="uq_tm_representation_version"),
+        Index("ix_tm_representations_company_application", "company_id", "application_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    representation_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    display_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    document_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpProceeding(Base):
+    __tablename__ = "ip_proceedings"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_proceeding_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_proceeding_application_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_proceeding_id_company"),
+        Index("ix_ip_proceedings_company_kind", "company_id", "proceeding_kind"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    proceeding_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    side: Mapped[str] = mapped_column(String(24), nullable=False)
+    office: Mapped[str] = mapped_column(String(80), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
+    stage: Mapped[str] = mapped_column(String(40), nullable=False, default="draft")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpIdentifier(Base):
+    __tablename__ = "ip_identifiers"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_identifier_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_identifier_application_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["proceeding_id", "company_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id"],
+            name="fk_ip_identifier_proceeding_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(application_id IS NOT NULL AND proceeding_id IS NULL) OR "
+            "(application_id IS NULL AND proceeding_id IS NOT NULL)",
+            name="ck_ip_identifier_single_owner",
+        ),
+        CheckConstraint(
+            "effective_until IS NULL OR effective_until >= effective_from",
+            name="ck_ip_identifier_effective_range",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_identifier_id_company"),
+        Index(
+            "ix_ip_identifiers_company_search",
+            "company_id",
+            "identifier_kind",
+            "normalized_value",
+        ),
+        Index("ix_ip_identifiers_company_docket", "company_id", "docket_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    identifier_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    raw_value: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_value: Mapped[str] = mapped_column(String(160), nullable=False)
+    office: Mapped[str] = mapped_column(String(80), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reconciliation_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="confirmed"
+    )
+    supersedes_identifier_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_identifiers.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    correction_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpPartyAndRole(Base):
+    __tablename__ = "ip_parties_and_roles"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_party_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "company_id"],
+            ["clients.id", "clients.company_id"],
+            name="fk_ip_party_client_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "effective_until IS NULL OR effective_until >= effective_from",
+            name="ck_ip_party_effective_range",
+        ),
+        Index("ix_ip_parties_company_docket", "company_id", "docket_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    client_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    party_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpRelationship(Base):
+    __tablename__ = "ip_relationships"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_relationship_source_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["target_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_relationship_target_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "source_docket_id <> target_docket_id",
+            name="ck_ip_relationship_distinct_dockets",
+        ),
+        CheckConstraint(
+            "effective_until IS NULL OR effective_until >= effective_from",
+            name="ck_ip_relationship_effective_range",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_docket_id",
+            "target_docket_id",
+            "relationship_kind",
+            "effective_from",
+            name="uq_ip_relationship_effective",
+        ),
+        Index("ix_ip_relationships_company_source", "company_id", "source_docket_id"),
+        Index("ix_ip_relationships_company_target", "company_id", "target_docket_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    target_docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    relationship_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 
