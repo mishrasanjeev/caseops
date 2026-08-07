@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-023A",
+    "active_slice": "IPLF-023B",
     "checkpoint": {
-      "recorded_at": "2026-08-08T23:10:00+05:30",
-      "repository_revision": "f82ff8e",
-      "environment": "IPLF-022A is deployment-verified at canonical main 01361f499fdad42bc95884fadcdbfff7e9cafc0a, API caseops-api-00254-pq4, web caseops-web-00234-dwd, successful migration caseops-migrate-job-wwl4b, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31268892105. IPLF-022B is restacked on that accepted release with additive Alembic head 20260807_0004 and is undergoing fresh verification before independent review and production release.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, and IPLF-022A have completed repository-controlled implementation and deployment verification. IPLF-022B has complete repository implementation pending fresh restacked verification, independent CI, merge, deploy, and dated production proof. Reciprocal IP-PROS-01..12 and UJ-06/UJ-53 remain program-incomplete until IPLF-033B. Human acceptance and external-provider approvals remain genuine pending gates.",
+      "recorded_at": "2026-08-09T07:38:00+05:30",
+      "repository_revision": "fe10fae",
+      "environment": "IPLF-022B and its notification production-gate correction are deployment-verified at canonical main 35aa37fa740136d0adcf0f1eca62654fb03bf0b6, API caseops-api-00256-s8b, web caseops-web-00236-zfm, successful migration caseops-migrate-job-695jf, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31288756334. IPLF-023A is restacked on that accepted release at additive Alembic head 20260807_0005 and is undergoing fresh verification before independent review and production release.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, and IPLF-022B have completed repository-controlled implementation and deployment verification. IPLF-023A adds the neutral working-calendar, immutable rule-version, legal calculation, responsibility, and unique one-way operational-deadline correlation foundation; it is restacked for fresh verification without enabling auto-confirm, reminders, calendar writes, providers, filings, or legal effects. Direct CAL-OPS/IP-DL/RULE-GOV requirements and journeys remain incomplete pending IPLF-023B and reciprocal M3 owners. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-023A",
-      "next_action": "Verify and release IPLF-022B serially through independent checks, canonical main, exact production identity, migration, scheduler, and dated acceptance proof; then implement IPLF-023A without enabling unapproved legal automations.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+      "next_slice": "IPLF-023B",
+      "next_action": "Verify and release IPLF-023A serially through independent checks, canonical main, exact production identity, migration, scheduler inventory, and dated acceptance proof; then implement IPLF-023B without enabling unapproved legal automation. Obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md"
     }
   },
   "milestones": [
@@ -845,11 +845,13 @@
         "IPLF-023A",
         "IPLF-023B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md"
+      ]
     },
     {
       "id": "IPLF-024",
@@ -5348,23 +5350,52 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260807_0005_ip_deadline_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/ip_deadlines.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260807_ip_deadline_foundation_migration.py",
+        "apps/api/tests/test_ip_deadline_foundation.py",
+        "apps/api/tests/test_ip_core_records.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_ip_prosecution_workflow.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md",
+          "revision": "c520b59495fe093945a4b52280a3d76f74c65836",
+          "environment": "Windows CPython 3.13, locked uv environment, ephemeral SQLite migration chain and deterministic legal-calendar fixtures",
+          "fixtures": "Synthetic rule/calendar version identifiers, official holiday and weekend dates, uncertain/conflicting triggers, independent proposer/reviewer/legal-approver identities, and primary/backup responsibility evidence",
+          "assertions": "canonical ownership, unique one-way MatterDeadline correlation, reproducible calculation inputs/trace, no manufactured precision, independent two-approver fixture gate, critical coverage gate, actor snapshots, and migration rollback/re-upgrade",
+          "result": "passed",
+          "recorded_at": "2026-08-07T08:35:27+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Release serially after IPLF-022B through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact production identity, scheduler inventory, and dated acceptance proof.",
+        "Implement IPLF-023B authenticated proposal, activation, impact, calculation, confirmation, override, recalculation, completion, exception, operational-projection, responsive UI, and dated E2E paths without enabling unapproved automation."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive Alembic head 20260807_0005 creates neutral shared calendar/version, IP rule/version/policy, legal deadline, and effective-dated responsibility evidence tables; it does not backfill, infer, or mutate existing legal dates.",
+        "The only operational deadline bridge is a nullable unique matter_deadline_id plus the existing source_ref contract. This slice creates no projections, reminders, calendar events, notifications, provider calls, filings, or legal effects."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_DEADLINE_RULE_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md",
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml"
+      ],
+      "allocation_review": "M2 foundation slice reviewed against PRD Sections 11.2, 13.6, 13.15, 23, and 25. It establishes immutable legal calculation/rule/calendar/responsibility evidence and a one-way adapter boundary while IPLF-023B retains every direct CAL-OPS, IP-DL, RULE-GOV, and journey path allocation.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
