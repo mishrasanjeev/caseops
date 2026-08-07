@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-022A",
+    "active_slice": "IPLF-022B",
     "checkpoint": {
-      "recorded_at": "2026-08-07T16:10:00+05:30",
-      "repository_revision": "2a70ed4",
-      "environment": "IPLF-021B implementation 2a70ed450df991ca6b285cadf4d94f23bd74201e is restacked on canonical IPLF-021A main 8c94974724e9116e3c0ac9bbb203b2769ab7ad58 and passes 95 API/governance/migration tests, 6 responsive web tests, typecheck, Ruff, ownership, ARCH-OPS, manifest, and diff gates. IPLF-021A is deployment-verified on production API caseops-api-00246-74t and web caseops-web-00226-6cc after migration caseops-migrate-job-4x65f, six immutable scheduler bindings, and green workflow 31168883659. No IP entitlement or rollout flag is enabled.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, and IPLF-021A have completed repository-controlled implementation and deployment verification. IPLF-021B has complete repository implementation and renewed local verification on that base; independent CI, merge, deploy, and production verification remain pending. IP-ID-01..08 remain in_progress because reciprocal IPLF-031B is not implemented. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "recorded_at": "2026-08-08T17:30:00+05:30",
+      "repository_revision": "4e9cd12",
+      "environment": "IPLF-021B is deployment-verified at canonical main 63bc7587af4a5c3157462c6f668707cc8a08db9c, API caseops-api-00250-jzl, web caseops-web-00230-8ff, successful migration caseops-migrate-job-dc9bp, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31255101441. IPLF-022A is restacked on that release with additive Alembic head 20260807_0003 and remains dark pending independent CI and production release.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, and IPLF-021B have completed repository-controlled implementation and deployment verification. IPLF-022A has complete repository implementation pending fresh restacked verification, independent CI, merge, deploy, and dated production proof. IP-ID-01..08 remain in_progress because reciprocal IPLF-031B is not implemented. IP-PROS-01..12 and UJ-06/UJ-53 remain assigned to IPLF-022B. Human acceptance and external-provider approvals remain genuine pending gates.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-022A",
-      "next_action": "Independently release IPLF-021B through CI, canonical main, migration, exact production identity, scheduler inventory, and dated acceptance without enabling production IP entitlements or automations. Continue with IPLF-022A after that serial gate.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+      "next_slice": "IPLF-022B",
+      "next_action": "Verify and release IPLF-022A serially through independent checks, canonical main, exact production identity, migration, scheduler, and dated acceptance proof; then implement and release IPLF-022B without enabling unapproved legal automations.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md"
     }
   },
   "milestones": [
@@ -790,11 +790,13 @@
         "IPLF-022A",
         "IPLF-022B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md"
+      ]
     },
     {
       "id": "IPLF-023",
@@ -5136,23 +5138,55 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260807_0003_ip_docket_events_lifecycle.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/matters.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260807_ip_lifecycle_migration.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_matter_lifecycle.py",
+        "apps/api/tests/test_schema_fk_indexes.py",
+        "apps/api/tests/test_migration_order.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md",
+          "revision": "597188529dbb6406c867e42b694fa59e378d5787",
+          "environment": "Windows CPython 3.13, locked uv copy-mode environment, ephemeral SQLite migrations and synthetic IP/Matter fixtures",
+          "fixtures": "Synthetic tenant memberships, active/terminal dockets, registry/manual events, corrections, lifecycle versions, operational coverage/obligations/shared deadlines, and Matter disposal",
+          "assertions": "append-only sequence/history, candidate and correction rules, tenant/target guards, parent-before-child locks, atomic lifecycle/audit, terminal suppression, stale rejection, controlled reopen, no child resurrection, Matter compatibility, migration rollback/re-upgrade, and FK indexes",
+          "result": "passed",
+          "recorded_at": "2026-08-07T09:00:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Release serially after IPLF-020A, IPLF-020B, IPLF-021A, and IPLF-021B through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact production identity, deterministic scheduler audit, and dated acceptance proof.",
+        "Implement IPLF-022B user workflows and all allocated IP-PROS/UJ-06/UJ-53 normal and exception paths without enabling unapproved external legal effects."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive Alembic head 20260807_0003 creates append-only tenant IP legal events and lifecycle anchor fields, normalizing only existing archived activity flags; it creates no inferred historical event.",
+        "Terminal transitions atomically neutralize existing operational coverage, open obligations, and their shared open deadlines; controlled reopen never resurrects them. No provider, filing, fee, notification, or external effect is enabled."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_DOCKET_LIFECYCLE.md",
+        "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md",
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml"
+      ],
+      "allocation_review": "M2 foundation slice reviewed against PRD Sections 11.2, 23 UJ-06/UJ-53, and 25. It establishes the append-only legal event and fail-closed lifecycle writer while IPLF-022B retains every direct IP-PROS requirement and user journey path.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
