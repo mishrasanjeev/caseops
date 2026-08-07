@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -166,5 +166,64 @@ describe("AdminNotificationsPage", () => {
     render(withClient(<AdminNotificationsPage />));
     expect(listAdminNotificationsMock).not.toHaveBeenCalled();
     expect(listNotificationRulesMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the committed self-test intent before authoritative refetch completes", async () => {
+    useCapabilityMock.mockReturnValue(true);
+    const initial = {
+      total_queued: 0,
+      total_sent: 0,
+      total_delivered: 0,
+      total_failed: 0,
+      reminders: [],
+      intents: [],
+      suppressions: [],
+      metrics: {
+        due: 0,
+        attempted: 0,
+        delivered: 0,
+        suppressed: 0,
+        bounced: 0,
+        failed: 0,
+        fallback: 0,
+        stale_queue: 0,
+        critical_alerts: 0,
+      },
+    };
+    listAdminNotificationsMock.mockResolvedValueOnce(initial).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    testCurrentUserNotificationMock.mockResolvedValue({
+      intent: {
+        id: "intent-committed",
+        attempts: 1,
+        channel: "in_app",
+        created_at: "2026-08-07T04:22:14Z",
+        critical: false,
+        destination: null,
+        destination_version: 1,
+        event_type: "notification_test",
+        fallback_intent_id: null,
+        last_error_redacted: null,
+        recovery_of_intent_id: null,
+        scheduled_for: "2026-08-07T04:22:14Z",
+        source_id: "membership-1",
+        source_type: "self_service_test",
+        status: "delivered",
+        superseded_by_intent_id: null,
+        suppression_reason: null,
+        updated_at: "2026-08-07T04:22:15Z",
+      },
+      message: "In-app test delivered without contacting an external provider.",
+    });
+
+    render(withClient(<AdminNotificationsPage />));
+    await screen.findByText("No delivery intents");
+    fireEvent.click(screen.getByTestId("notification-self-test"));
+
+    expect(await screen.findByTestId("notification-intent-intent-committed")).toHaveTextContent(
+      /delivered.*notification test.*in_app.*No external destination/i,
+    );
+    expect(screen.getByText("Delivered").parentElement).toHaveTextContent("1");
   });
 });
