@@ -4867,7 +4867,8 @@
       "test_refs": [
         "apps/api/tests/test_ip_readiness.py::test_ip_readiness_requires_authentication",
         "apps/api/tests/test_ip_readiness.py::test_ip_readiness_is_tenant_scoped_observable_and_side_effect_free",
-        "apps/web/app/app/ip/page.test.tsx"
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-020B/release-2026-08-07.md"
@@ -4875,8 +4876,8 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-020B/release-2026-08-07.md",
-          "revision": "0eb7dc5fbf08ba21d89abf60a46131bca511341d",
-          "environment": "local exact implementation commit on Windows/CPython 3.13 and Node/npm with repository lockfiles",
+          "revision": "7274df488a83e1fa96bd5a6d47ce16da98f493a0",
+          "environment": "restacked local implementation on deployment-verified main 509ba80d7848d6f331d249752b4c3d3318159fc2, Windows/CPython 3.13 and Node/npm with repository lockfiles",
           "fixtures": "synthetic tenant/membership, absent and explicit entitlement/rollout states, 360px viewport, disabled registry automation, manual fallback, and existing IP docket actions",
           "assertions": "authenticated tenant-specific readiness, read-only billing resolution, canonical capability guards, no operational fetch on red workspace, visible reasons/owners, isolated automation blocking, manual docketing fallback, and OpenAPI parity",
           "result": "passed",
@@ -4886,7 +4887,7 @@
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release IPLF-019B, IPLF-020A, and then this candidate serially through independent checks and exact production verification.",
+        "Release this candidate through independent checks, canonical main, exact production verification, and dated production Playwright.",
         "Complete UJ-01 jurisdiction, office, taxonomy, rule, provider-test, and allowlist persistence in reciprocal slice IPLF-021B; keep all four paths in_progress until that proof exists."
       ],
       "data_impact": [

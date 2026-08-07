@@ -38,6 +38,10 @@ export const e2eEnv: Record<string, string> = {
   CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: toPosixPath(documentCachePath),
   CASEOPS_AUTH_RATE_LIMIT_ENABLED: "false",
   CASEOPS_CASE_TRACKING_ENABLED: "true",
+  // Synthetic E2E companies receive an explicit fixture entitlement in the
+  // dated IP suite. Keep the independent rollout dimension explicit too;
+  // production flags and billing state are never changed by this harness.
+  CASEOPS_IP_WORKSPACE_ENABLED: "true",
   CASEOPS_CASE_TRACKING_PROVIDER: "ecourtsindia",
   CASEOPS_ECOURTSINDIA_API_BASE_URL: "https://provider.example",
   CASEOPS_ECOURTSINDIA_API_TOKEN: "e2e-provider-token",
