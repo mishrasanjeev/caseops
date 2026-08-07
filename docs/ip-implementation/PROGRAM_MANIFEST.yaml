@@ -16,13 +16,13 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-022A",
     "checkpoint": {
-      "recorded_at": "2026-08-07T16:00:00+05:30",
+      "recorded_at": "2026-08-07T16:10:00+05:30",
       "repository_revision": "2a70ed4",
-      "environment": "IPLF-021B is restacked on canonical IPLF-021A main 8c94974724e9116e3c0ac9bbb203b2769ab7ad58; renewed verification is pending. IPLF-021A serves exact production API caseops-api-00246-74t and web caseops-web-00226-6cc after migration caseops-migrate-job-4x65f and six immutable scheduler bindings; dated production workflow 31168883659 is running. No IP entitlement or rollout flag is enabled.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, and IPLF-020B have completed repository-controlled implementation and deployment verification. IPLF-021A is on canonical main and exact production revisions with its dated workflow running. IPLF-021B has complete repository implementation restacked on that base; renewed local verification, independent CI, merge, deploy, and production verification remain pending. IP-ID-01..08 remain in_progress because reciprocal IPLF-031B is not implemented. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "environment": "IPLF-021B implementation 2a70ed450df991ca6b285cadf4d94f23bd74201e is restacked on canonical IPLF-021A main 8c94974724e9116e3c0ac9bbb203b2769ab7ad58 and passes 95 API/governance/migration tests, 6 responsive web tests, typecheck, Ruff, ownership, ARCH-OPS, manifest, and diff gates. IPLF-021A is deployment-verified on production API caseops-api-00246-74t and web caseops-web-00226-6cc after migration caseops-migrate-job-4x65f, six immutable scheduler bindings, and green workflow 31168883659. No IP entitlement or rollout flag is enabled.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, and IPLF-021A have completed repository-controlled implementation and deployment verification. IPLF-021B has complete repository implementation and renewed local verification on that base; independent CI, merge, deploy, and production verification remain pending. IP-ID-01..08 remain in_progress because reciprocal IPLF-031B is not implemented. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-022A",
-      "next_action": "Finish IPLF-021A dated production workflow 31168883659, then independently release IPLF-021B through renewed tests, CI, canonical main, migration, exact production identity, scheduler inventory, and dated acceptance without enabling production IP entitlements or automations. Continue with IPLF-022A after that serial gate.",
+      "next_action": "Independently release IPLF-021B through CI, canonical main, migration, exact production identity, scheduler inventory, and dated acceptance without enabling production IP entitlements or automations. Continue with IPLF-022A after that serial gate.",
       "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
     }
   },
@@ -4979,12 +4979,20 @@
           "assertions": "eight tenant-scoped core IP tables, canonical docket/client anchors, migration head/order/rollback/re-upgrade, raw plus normalized identifiers without unsafe collision merge, typed owner constraints, correction history, filed-phase invariant, and existing IP regression",
           "result": "passed",
           "recorded_at": "2026-08-07T10:55:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md",
+          "revision": "8c94974724e9116e3c0ac9bbb203b2769ab7ad58",
+          "environment": "production API caseops-api-00246-74t, web caseops-web-00226-6cc, migration caseops-migrate-job-4x65f, six recurring jobs, and GitHub Actions workflow 31168883659",
+          "fixtures": "dedicated caseops-qa tenant and full dated RAM plus Notice production suites",
+          "assertions": "exact public SHA, additive migration, immutable images, 100% traffic, scheduler identity/target/cadence/timezone/image convergence, health, ClamAV, 56 RAM passes, 2 Notice passes, and five documented fixture/state-dependent skips",
+          "result": "passed",
+          "recorded_at": "2026-08-07T16:10:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "After exact production workflow 31149819331 passes, release this expand-only schema through independent checks, exact PostgreSQL migration proof, canonical main, production identity, scheduler inventory, and dated acceptance verification.",
         "Implement IPLF-021B commands, reconciliation, persisted UJ-01 configuration, and dated responsive acceptance before enabling any IP rollout flag or declaring IP-ID-01..08 passed."
       ],
       "data_impact": [
@@ -5008,7 +5016,7 @@
       "allocation_review": "Administrative M2 expand-contract slice matching the signed M2M3-IPLF-021 ownership ledger. IPLF-021B remains reciprocal owner of IP-ID-01..08, commands, reconciliation, persisted UJ-01 configuration, user workflow, and deployed path proof.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -5077,7 +5085,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
-          "revision": "ac941c0eeede3599f39417c6606ce22fe870a6ff",
+          "revision": "2a70ed450df991ca6b285cadf4d94f23bd74201e",
           "environment": "Windows CPython 3.13, repository Node/npm lockfiles, ephemeral SQLite, Vitest/jsdom, synthetic IP fixtures",
           "fixtures": "Synthetic tenants, memberships, dockets, trademark records, identifier variants, workspace policies, and safe dry-run provider references only",
           "assertions": "IP-ID-01..08 contribution, UJ-01 normal/three exceptions, tenant and restricted access, optimistic concurrency, audit, migration rollback/re-upgrade, responsive visible controls, generated API contract, and governance validators",
