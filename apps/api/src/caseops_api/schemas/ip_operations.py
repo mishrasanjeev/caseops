@@ -6,6 +6,35 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class IpFeatureReadinessRecord(BaseModel):
+    feature_id: str
+    available: bool
+    reason: Literal[
+        "available",
+        "unknown_feature",
+        "missing_capability",
+        "missing_entitlement",
+        "rollout_disabled",
+        "rollout_expired",
+    ]
+    owner: str
+    required_capabilities: list[str]
+    missing_capabilities: list[str]
+    entitlement_key: str | None
+    entitled: bool
+    rollout_flag: str | None
+    rollout_enabled: bool
+    rollout_expires_at: datetime | None
+    manual_fallback_feature_id: str | None
+
+
+class IpWorkspaceReadinessResponse(BaseModel):
+    timezone: str
+    workspace_available: bool
+    manual_docketing_available: bool
+    features: list[IpFeatureReadinessRecord]
+
+
 class TrademarkClassScope(BaseModel):
     class_number: int = Field(ge=1, le=45)
     specification: str = Field(min_length=3, max_length=4000)

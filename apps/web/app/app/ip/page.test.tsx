@@ -3,13 +3,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchIpDocketsMock, useCapabilityMock } = vi.hoisted(() => ({
+const { fetchIpDocketsMock, fetchIpWorkspaceReadinessMock, useCapabilityMock } = vi.hoisted(() => ({
   fetchIpDocketsMock: vi.fn(),
+  fetchIpWorkspaceReadinessMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDockets: fetchIpDocketsMock,
+  fetchIpWorkspaceReadiness: fetchIpWorkspaceReadinessMock,
   createIpDocket: vi.fn(),
   addIpTitleInterest: vi.fn(),
   addIpCostItem: vi.fn(),
@@ -41,8 +43,15 @@ function withClient(children: ReactNode) {
 describe("IpDocketPage", () => {
   beforeEach(() => {
     fetchIpDocketsMock.mockReset();
+    fetchIpWorkspaceReadinessMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
+    fetchIpWorkspaceReadinessMock.mockResolvedValue({
+      timezone: "Asia/Calcutta",
+      workspace_available: true,
+      manual_docketing_available: true,
+      features: [],
+    });
     fetchIpDocketsMock.mockResolvedValue({ dockets: [], count: 0 });
   });
 
@@ -63,6 +72,99 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
     expect(screen.getByText("IP docket access required")).toBeInTheDocument();
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
+  });
+
+  it("hides operational records and explains each failed readiness gate on narrow mobile", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    fetchIpWorkspaceReadinessMock.mockResolvedValue({
+      timezone: "Asia/Kolkata",
+      workspace_available: false,
+      manual_docketing_available: false,
+      features: [
+        {
+          feature_id: "workspace_core",
+          available: false,
+          reason: "missing_entitlement",
+          owner: "product-ip",
+          required_capabilities: ["ip:read"],
+          missing_capabilities: [],
+          entitlement_key: "ip_workspace",
+          entitled: false,
+          rollout_flag: "ip_workspace_enabled",
+          rollout_enabled: false,
+          rollout_expires_at: null,
+          manual_fallback_feature_id: null,
+        },
+        {
+          feature_id: "registry_sync",
+          available: false,
+          reason: "rollout_disabled",
+          owner: "integrations",
+          required_capabilities: ["ip:registry_sync"],
+          missing_capabilities: [],
+          entitlement_key: "ip_registry_sync",
+          entitled: true,
+          rollout_flag: "ip_registry_sync_enabled",
+          rollout_enabled: false,
+          rollout_expires_at: null,
+          manual_fallback_feature_id: "manual_docketing",
+        },
+      ],
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("heading", { name: "IP workspace setup" })).toBeVisible();
+    expect(screen.getByText("The workspace plan does not include this feature · owner product-ip")).toBeVisible();
+    expect(screen.getByText("The safety rollout has not been enabled · owner integrations")).toBeVisible();
+    expect(screen.getByText("Manual fallback: manual docketing")).toBeVisible();
+    expect(fetchIpDocketsMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "New trademark" })).not.toBeInTheDocument();
+  });
+
+  it("keeps manual docketing available while a provider automation is disabled", async () => {
+    fetchIpWorkspaceReadinessMock.mockResolvedValue({
+      timezone: "Asia/Kolkata",
+      workspace_available: true,
+      manual_docketing_available: true,
+      features: [
+        {
+          feature_id: "workspace_core",
+          available: true,
+          reason: "available",
+          owner: "product-ip",
+          required_capabilities: ["ip:read"],
+          missing_capabilities: [],
+          entitlement_key: "ip_workspace",
+          entitled: true,
+          rollout_flag: "ip_workspace_enabled",
+          rollout_enabled: true,
+          rollout_expires_at: null,
+          manual_fallback_feature_id: null,
+        },
+        {
+          feature_id: "registry_sync",
+          available: false,
+          reason: "rollout_disabled",
+          owner: "integrations",
+          required_capabilities: ["ip:registry_sync"],
+          missing_capabilities: [],
+          entitlement_key: "ip_registry_sync",
+          entitled: true,
+          rollout_flag: "ip_registry_sync_enabled",
+          rollout_enabled: false,
+          rollout_expires_at: null,
+          manual_fallback_feature_id: "manual_docketing",
+        },
+      ],
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByText("No IP records yet")).toBeVisible();
+    expect(screen.getByRole("button", { name: "New trademark" })).toBeVisible();
+    expect(screen.getByText("registry sync")).toBeVisible();
+    expect(screen.getByText("Manual fallback remains manual docketing.")).toBeVisible();
   });
 
   it("renders every grouped operational action at a narrow viewport", async () => {

@@ -1,11 +1,46 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { apiBaseUrl } from "./support/env";
+import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 
 const PASSWORD = "IpDocketProof2026!";
 
 function unique(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function grantSyntheticIpEntitlement(companyId: string): void {
+  const python =
+    process.platform === "win32"
+      ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
+      : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
+  const script = [
+    "import os",
+    "from caseops_api.db.models import BillingSubscription",
+    "from caseops_api.db.session import get_session_factory",
+    "session = get_session_factory()()",
+    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'], status='manual_active', segment='law_firm', source='playwright_fixture', externally_billable=False, entitlement_overrides_json={'ip_workspace': True}))",
+    "session.commit()",
+    "session.close()",
+  ].join("; ");
+  const result = spawnSync(python, ["-c", script], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...e2eEnv,
+      CASEOPS_E2E_COMPANY_ID: companyId,
+      PYTHONPATH: [path.join(repoRoot, "apps", "api", "src"), process.env.PYTHONPATH]
+        .filter(Boolean)
+        .join(path.delimiter),
+    },
+  });
+  expect(
+    result.status,
+    `Could not grant the synthetic IP entitlement.\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+  ).toBe(0);
 }
 
 async function bootstrap(api: APIRequestContext, slug: string): Promise<{ token: string; membershipId: string }> {
@@ -21,6 +56,7 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<{ token:
   });
   expect(response.status()).toBe(200);
   const body = await response.json();
+  grantSyntheticIpEntitlement(body.company.id as string);
   return { token: body.access_token as string, membershipId: body.membership.id as string };
 }
 

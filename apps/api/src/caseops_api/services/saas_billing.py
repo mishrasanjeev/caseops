@@ -383,6 +383,21 @@ def resolve_entitlements(session: Session, subscription: BillingSubscription) ->
     return entitlements
 
 
+def current_entitlements_for_company(session: Session, company_id: str) -> dict[str, Any]:
+    """Resolve existing effective entitlements without creating billing state.
+
+    Authorization/readiness checks must be side-effect free. A company without
+    an existing subscription therefore has no entitlements and fails closed;
+    the explicit billing bootstrap/current-state workflow remains the owner of
+    grandfathered subscription creation.
+    """
+
+    subscription = _latest_subscription(session, company_id)
+    if subscription is None or subscription.status not in ACTIVE_SUBSCRIPTION_STATUSES:
+        return {}
+    return resolve_entitlements(session, subscription)
+
+
 def _storage_used_bytes(session: Session, company_id: str) -> int:
     matter_attachment_bytes = session.scalar(
         select(func.coalesce(func.sum(MatterAttachment.size_bytes), 0))
@@ -402,9 +417,7 @@ def _active_matter_count(session: Session, company_id: str) -> int:
         select(func.count(Matter.id)).where(
             Matter.company_id == company_id,
             Matter.is_active.is_(True),
-            Matter.status.in_(
-                [MatterStatus.INTAKE, MatterStatus.ACTIVE, MatterStatus.ON_HOLD]
-            ),
+            Matter.status.in_([MatterStatus.INTAKE, MatterStatus.ACTIVE, MatterStatus.ON_HOLD]),
         )
     )
     return int(value or 0)
@@ -567,8 +580,7 @@ def grant_included_monthly_credits(
     existing = session.scalar(
         select(BillingCreditLedger.id).where(
             BillingCreditLedger.company_id == subscription.company_id,
-            BillingCreditLedger.event_type
-            == BillingCreditLedgerEventType.INCLUDED_MONTHLY_GRANT,
+            BillingCreditLedger.event_type == BillingCreditLedgerEventType.INCLUDED_MONTHLY_GRANT,
             BillingCreditLedger.source_object_type == "billing_subscription_period",
             BillingCreditLedger.source_object_id == source_id,
         )
@@ -1047,9 +1059,7 @@ def _create_or_update_profit_rollup(
         )
         session.add(row)
     row.gross_revenue_minor = (row.gross_revenue_minor or 0) + checkout.amount_minor
-    row.recognized_revenue_minor = (
-        row.recognized_revenue_minor or 0
-    ) + checkout.amount_minor
+    row.recognized_revenue_minor = (row.recognized_revenue_minor or 0) + checkout.amount_minor
     row.tax_collected_minor = (row.tax_collected_minor or 0) + checkout.tax_amount_minor
     row.payment_gateway_cost_minor = (row.payment_gateway_cost_minor or 0) + gateway_cost
     row.total_variable_cost_minor = (
@@ -1811,8 +1821,7 @@ def statement_csv(session: Session, *, context: SessionContext) -> bytes:
         ("ai_credit_balance", current["usage"].ai_credits_remaining, ""),
     ]
     rows.extend(
-        ("invoice", invoice.invoice_number, invoice.total_amount_minor)
-        for invoice in invoices
+        ("invoice", invoice.invoice_number, invoice.total_amount_minor) for invoice in invoices
     )
     rows.extend(("credit", row.event_type, row.delta) for row in ledger[:50])
     return csv_bytes(["kind", "reference", "amount_or_delta"], rows)
@@ -2142,10 +2151,10 @@ def handle_billing_provider_event(
         return False, result.provider_order_id, False
     previous_status = order.status
     apply_billing_payment_result(session, order=order, result=result, event_source="webhook")
-    if (
-        previous_status == BillingPaymentOrderStatus.PAID
-        and result.status not in {"paid", "refunded"}
-    ):
+    if previous_status == BillingPaymentOrderStatus.PAID and result.status not in {
+        "paid",
+        "refunded",
+    }:
         event.processing_status = "ignored_out_of_order"
     else:
         event.processing_status = "processed"
@@ -2534,15 +2543,10 @@ def platform_profit_report(session: Session) -> list[dict[str, Any]]:
         session.execute(
             select(BillingProfitRollup, Company.name)
             .join(Company, BillingProfitRollup.company_id == Company.id, isouter=True)
-            .order_by(
-                BillingProfitRollup.period_start.desc(), BillingProfitRollup.company_id.asc()
-            )
+            .order_by(BillingProfitRollup.period_start.desc(), BillingProfitRollup.company_id.asc())
         )
     )
-    return [
-        _profit_rollup_record(row, company_name=company_name)
-        for row, company_name in rows
-    ]
+    return [_profit_rollup_record(row, company_name=company_name) for row, company_name in rows]
 
 
 def platform_company_profitability(session: Session) -> list[dict[str, Any]]:

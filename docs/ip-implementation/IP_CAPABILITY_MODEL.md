@@ -77,6 +77,26 @@ allowlist, and dated acceptance evidence pass. Immediate rollback is the
 feature's flag; code rollback is safe because existing aliases remain and no
 persisted representation changed.
 
+## Tenant readiness API and user-visible gate
+
+IPLF-020B exposes `GET /api/ip/readiness` to authenticated members with
+`ip:read`. The response is tenant- and membership-specific, side-effect free,
+and includes every independent decision field. It never creates a billing
+account or grandfathered subscription while checking access.
+
+The `/app/ip` page reads readiness before requesting any docket record. If
+workspace core is red, no operational API request is issued and the user sees
+the disabled reason, owner, timezone, and any manual fallback. When workspace
+core and manual docketing are green but an automation such as registry sync is
+red, manual docketing remains available and the affected automation is visibly
+labelled disabled with its reason. The cards are full-width, shrinkable, and
+wrapping on narrow mobile.
+
+Existing IP routes and navigation now use canonical capability names. The old
+names remain catalogue aliases solely for mixed revisions and custom-role
+backfill. Generated OpenAPI TypeScript types are regenerated whenever the
+readiness contract changes.
+
 ## Source of truth
 
 - Backend role catalogue: `apps/api/src/caseops_api/services/capability_catalog.py`
