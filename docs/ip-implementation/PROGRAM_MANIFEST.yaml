@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-019B",
+    "active_slice": "IPLF-020A",
     "checkpoint": {
       "recorded_at": "2026-08-06T12:30:00+05:30",
-      "repository_revision": "e77d078d7409c733d264257c2d24a867641ff731",
-      "environment": "Canonical local main and origin/main resolve to e77d078d7409c733d264257c2d24a867641ff731. IPLF-019A implementation candidate b9a8902dba20d27cc91775f5efa24145163f1fa2 passed 12 focused governance tests, Ruff, exact Section 11.2/M2-M3 ownership validation, the 436/50/68/317 manifest gate, and diff checks; exact-head CI and release remain pending. Production remains on the exact verified IPLF-001C release: API caseops-api-00239-qlt, web caseops-web-00219-rfz, six jobs on API digest sha256:bbbf4c7955a3e03ede7188f87571203bc4327f42e3ec797544dd6c3d5dad1130, and production workflow 31074879292.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, and IPLF-001C have completed repository-controlled implementation and deployment verification. IPLF-001C closes deterministic scheduler delivery/outcome reconciliation while preserving the provider-spend cap and continuous SLO monitoring. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "repository_revision": "17ebc4f2f7d5125f070584d73e686cc7f93610ce",
+      "environment": "IPLF-019B implementation revision 17ebc4f2f7d5125f070584d73e686cc7f93610ce passes the exact ARCH-OPS-01..26 contract, Section 11.2 ownership scan, 436/50/68/317 manifest gate, 41 focused tests, Ruff, and diff checks. Exact-head CI and release remain pending. Production serves IPLF-019A merge b4faddab0603af0cc519b1ffca2c92196c3bfd0e on API caseops-api-00240-ds5 and web caseops-web-00220-jfv; all six jobs use API digest sha256:2154bacaa5873413ad7aead11d5d00ceecf68f89faa8167cbfd18df06f61e26b.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, and IPLF-019A have completed repository-controlled implementation and deployment verification. IPLF-019B implements the full repository ARCH-OPS control publication; its release remains pending. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-019B",
-      "next_action": "Release IPLF-019A through exact-head CI, canonical main, exact-identity production verification, and dated production E2E; then implement IPLF-019B full ARCH-OPS workflow/release proof. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md"
+      "next_slice": "IPLF-020A",
+      "next_action": "Release IPLF-019B through exact-head CI, canonical main, exact-identity production verification, and dated production E2E; then implement IPLF-020A through the existing capability catalogues. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
     }
   },
   "milestones": [
@@ -704,11 +704,14 @@
         "IPLF-019A",
         "IPLF-019B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019A/release-2026-08-06.md",
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ]
     },
     {
       "id": "IPLF-020",
@@ -4558,8 +4561,8 @@
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete focused/full CI, exact-main production release, and attach dated IPLF-019A evidence.",
-        "Proceed to IPLF-019B for the full ARCH-OPS requirement/user-workflow/release-proof scope after IPLF-019A is deployment verified."
+        "Preserve the exact release evidence and one-writer guard while later slices add just-in-time behavior.",
+        "Proceed through IPLF-019B and IPLF-020A without inferring M0 human program-lock approval."
       ],
       "data_impact": [
         "No schema, application row, tenant object, provider, credential, scheduler, or job mutation.",
@@ -4655,23 +4658,70 @@
       "dependencies": [
         "IPLF-019A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
+        "docs/architecture/decisions/ADR-004-ARCH-OPS-SHARED-CONTRACTS.md",
+        "scripts/ip_arch_ops_contract.py",
+        "scripts/ip_ownership_ledger.py",
+        ".github/workflows/ci.yml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_arch_ops_contract.py",
+        "apps/api/tests/test_ip_ownership_ledger.py",
+        "python scripts/ip_arch_ops_contract.py validate",
+        "python scripts/ip_ownership_ledger.py validate",
+        "python scripts/ip_program_manifest.py validate"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md",
+          "revision": "17ebc4f2f7d5125f070584d73e686cc7f93610ce",
+          "environment": "local exact implementation commit on Windows/CPython 3.13 with the locked uv environment in copy mode",
+          "fixtures": "exact ARCH-OPS-01..26 manifest family, Section 11.2 ownership ledger, all M2/M3 proposals, stable audit/domain event catalogues, missing requirement/ref mutations, and incomplete/duplicate event mutations",
+          "assertions": "exact ordered requirement coverage, named owner and committed enforcement ref per control, versioned event payload metadata, no duplicate audit/domain names, one-writer repository scan, and exact 436/50/68/317 program traceability",
+          "result": "passed",
+          "recorded_at": "2026-08-06T21:30:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Release the exact IPLF-019B candidate through CI/Security/CodeQL, canonical main, production identity verification, and dated production E2E.",
+        "Proceed to IPLF-020A only after IPLF-019B deployment verification; do not infer M0 human approval or UJ-47/UJ-67 completion."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, tenant row, provider, credential, scheduler, job, or external legal operation is mutated.",
+        "The published controls are admission and CI rules for later just-in-time behavior slices."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+          "disposition": "created",
+          "owner": "Architecture/Engineering",
+          "evidence": "Exact ARCH-OPS-01..26 owner, control, enforcement, and repository-reference mapping"
+        },
+        {
+          "artifact": "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+          "disposition": "created",
+          "owner": "Architecture/Security/Data",
+          "evidence": "Stable versioned audit-action/domain-event schemas with purpose separation"
+        },
+        {
+          "artifact": "docs/architecture/decisions/ADR-004-ARCH-OPS-SHARED-CONTRACTS.md",
+          "disposition": "created",
+          "owner": "Architecture/SRE",
+          "evidence": "Bulk, idempotency, async, cursor, provider, migration, performance, and capability admission rules"
+        }
+      ],
+      "allocation_review": "Administrative ARCH-OPS publication slice: repository controls implement the parent epic's ownership/release-proof scope. UJ-47/UJ-67 behavior remains allocated to its actual rule/migration slices and is not inferred here; named M0 human approval remains pending.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -35149,7 +35199,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-01",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35164,11 +35217,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-01]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35188,7 +35244,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-02",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35203,11 +35262,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-02]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35227,7 +35289,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-03",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35242,11 +35307,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-03]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35266,7 +35334,11 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-04",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35281,11 +35353,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-04]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35305,7 +35380,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-05",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35320,11 +35398,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-05]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35344,7 +35425,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-06",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35359,11 +35443,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-06]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35383,7 +35470,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-07",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35398,11 +35488,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-07]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35422,7 +35515,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-08",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35437,11 +35533,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-08]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35461,7 +35560,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-09",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35476,11 +35578,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-09]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35500,7 +35605,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-10",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35515,11 +35623,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-10]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35539,7 +35650,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-11",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35554,11 +35668,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-11]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35578,7 +35695,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-12",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35593,11 +35713,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-12]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35617,7 +35740,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-13",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35632,11 +35758,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-13]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35656,7 +35785,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-14",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35671,11 +35803,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-14]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35695,7 +35830,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-15",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35710,11 +35848,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-15]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35734,7 +35875,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-16",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35749,11 +35893,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-16]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35773,7 +35920,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-17",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35788,11 +35938,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-17]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35812,7 +35965,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-18",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35827,11 +35983,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-18]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35851,7 +36010,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-19",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35866,11 +36028,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-19]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35890,7 +36055,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-20",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35905,11 +36073,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-20]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35929,7 +36100,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-21",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35944,11 +36118,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-21]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -35968,7 +36145,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-22",
         "planned:IPLF-UJ-47-EXC-01",
@@ -35983,11 +36163,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-22]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -36007,7 +36190,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-23",
         "planned:IPLF-UJ-47-EXC-01",
@@ -36022,11 +36208,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-23]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -36046,7 +36235,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-24",
         "planned:IPLF-UJ-47-EXC-01",
@@ -36061,11 +36253,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-24]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -36085,7 +36280,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-25",
         "planned:IPLF-UJ-47-EXC-01",
@@ -36100,11 +36298,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-25]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -36124,7 +36325,10 @@
         "UJ-47",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml"
+      ],
       "test_refs": [
         "planned:IPLF-REQ-ARCH-OPS-26",
         "planned:IPLF-UJ-47-EXC-01",
@@ -36139,11 +36343,14 @@
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-NORMAL",
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-26]"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",

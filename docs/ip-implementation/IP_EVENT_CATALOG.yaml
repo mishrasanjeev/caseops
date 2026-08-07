@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "status": "stable_names_v1_no_runtime_emission_claimed",
+  "purpose_boundary": "Audit actions are immutable evidence of actor decisions. Domain events are idempotent projection inputs. A producer may write both atomically but consumers must never treat one as the other.",
+  "confidentiality_values": ["internal", "confidential", "privileged"],
+  "audit_actions": [
+    {
+      "name": "ip.architecture.owner_decision.published",
+      "version": 1,
+      "owner": "architecture",
+      "confidentiality": "internal",
+      "idempotency_key": "tenant_id:epic_id:decision_version",
+      "consumers": ["audit-evidence", "compliance-export"],
+      "retention": "tenant audit policy; never shorter than the legal-record retention applying to the decision",
+      "payload_schema": {"required": ["tenant_id", "epic_id", "decision", "decision_version", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip.architecture.duplicate_owner.rejected",
+      "version": 1,
+      "owner": "architecture",
+      "confidentiality": "internal",
+      "idempotency_key": "repository_revision:component_name:control_version",
+      "consumers": ["audit-evidence", "security-review"],
+      "retention": "repository and CI evidence retention policy",
+      "payload_schema": {"required": ["repository_revision", "component_name", "existing_owner", "control_version", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip.legal_state.lifecycle_decision.recorded",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "privileged",
+      "idempotency_key": "tenant_id:target_type:target_id:lifecycle_version",
+      "consumers": ["audit-evidence", "access-filtered-timeline"],
+      "retention": "legal record retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "target_type", "target_id", "from_state", "to_state", "lifecycle_version", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip.cost.evidence_link.recorded",
+      "version": 1,
+      "owner": "matter-billing",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:ip_cost_item_id:evidence_type:evidence_id",
+      "consumers": ["audit-evidence", "billing-reconciliation"],
+      "retention": "financial and legal record retention policy",
+      "payload_schema": {"required": ["tenant_id", "ip_cost_item_id", "evidence_type", "evidence_id", "actor_id", "occurred_at", "correlation_id"]}
+    }
+  ],
+  "domain_events": [
+    {
+      "name": "ip.legal_state.lifecycle_changed",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "privileged",
+      "idempotency_key": "tenant_id:target_type:target_id:lifecycle_version",
+      "consumers": ["ip-portfolio-projection", "operational-deadline-projection", "notification-intent-adapter"],
+      "retention": "outbox retention followed by immutable legal event retention",
+      "payload_schema": {"required": ["tenant_id", "target_type", "target_id", "from_state", "to_state", "lifecycle_version", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip.docket_event.recorded",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "privileged",
+      "idempotency_key": "tenant_id:ip_docket_event_id:event_version",
+      "consumers": ["access-filtered-timeline", "deadline-calculation-adapter"],
+      "retention": "legal record retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "ip_docket_event_id", "target_id", "event_type", "event_version", "source_evidence_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip.deadline.calculation_committed",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "privileged",
+      "idempotency_key": "tenant_id:ip_deadline_id:calculation_version",
+      "consumers": ["operational-deadline-projection", "notification-intent-adapter"],
+      "retention": "legal record retention including exact rule/engine/source inputs",
+      "payload_schema": {"required": ["tenant_id", "ip_deadline_id", "target_id", "due_at", "rule_version_id", "engine_version", "calculation_version", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "bulk_import.operation_state_changed",
+      "version": 1,
+      "owner": "bulk-import",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:bulk_import_job_id:operation_version",
+      "consumers": ["bulk-operation-status", "audit-evidence"],
+      "retention": "data-operation retention; result evidence follows target retention",
+      "payload_schema": {"required": ["tenant_id", "bulk_import_job_id", "from_state", "to_state", "operation_version", "safe_counts", "occurred_at", "correlation_id"]}
+    }
+  ]
+}

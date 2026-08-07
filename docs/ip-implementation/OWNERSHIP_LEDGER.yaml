@@ -7,7 +7,8 @@
   "adr_refs": [
     "docs/architecture/decisions/ADR-001-IP-ONE-WRITER-OWNERSHIP.md",
     "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md",
-    "docs/architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md"
+    "docs/architecture/decisions/ADR-003-DURABLE-ASYNC-WORKFLOW-OWNER.md",
+    "docs/architecture/decisions/ADR-004-ARCH-OPS-SHARED-CONTRACTS.md"
   ],
   "new_owners": [
     {

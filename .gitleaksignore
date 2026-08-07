@@ -20,3 +20,8 @@ docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:88
 # container digest recorded in the program checkpoint. This suppresses only the
 # historical fingerprint; new generic-key findings remain blocking.
 706d2c7e3af1bbbdf3d68259f38631b3d2565a15:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21
+
+# 2026-08-07 IPLF-019B release evidence: exact false positive on the same
+# public Cloud Run container digest copied into the next program checkpoint.
+# The suppression is fingerprint-specific; any new generic-key finding fails.
+a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21

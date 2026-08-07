@@ -16,8 +16,18 @@ From the repository root:
 
 ```powershell
 python scripts/ip_program_manifest.py validate
+python scripts/ip_ownership_ledger.py validate
+python scripts/ip_arch_ops_contract.py validate
 python scripts/ip_program_manifest.py generate
 ```
+
+`OWNERSHIP_LEDGER.yaml` is the binding PRD Section 11.2 one-writer registry for
+all M2/M3 proposals. `ARCH_OPS_CONTRACT.yaml` publishes the exact
+ARCH-OPS-01..26 control mapping, and `IP_EVENT_CATALOG.yaml` publishes stable
+versioned audit-action and domain-event schemas. Their validators are required
+CI gates. They authorize no early nullable schema and do not replace the
+behavior-level journeys, mixed-revision proof, deployment evidence, or human
+approval allocated to later slices.
 
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an
