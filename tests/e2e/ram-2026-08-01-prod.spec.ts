@@ -28,51 +28,51 @@ async function signIn(page: Page): Promise<void> {
 test.describe("Ram 2026-08-01 deployed IP slices", () => {
   test.setTimeout(120_000);
 
-  test("exact production revision exposes the permission-scoped IP docket at desktop and 360px", async ({
+  test("exact production revision keeps the unentitled IP workspace fail-closed at desktop and 360px", async ({
     page,
   }) => {
     await signIn(page);
+    const docketRequests: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/ip/dockets") {
+        docketRequests.push(request.url());
+      }
+    });
+    const readinessRequest = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/ip/readiness" &&
+        response.request().method() === "GET",
+    );
     await page.goto(`${PROD_BASE_URL}/app/ip`);
-    await expect(page.getByRole("heading", { name: "Trademark docket" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "New trademark" })).toBeVisible();
+    const readinessResponse = await readinessRequest;
+    expect(readinessResponse.status()).toBe(200);
+    const readiness = (await readinessResponse.json()) as {
+      workspace_available: boolean;
+      features: Array<{ feature_id: string; available: boolean; reason: string }>;
+    };
+    expect(readiness.workspace_available).toBe(false);
+    expect(readiness.features.some((feature) => feature.feature_id === "workspace_core")).toBe(true);
 
-    const workspace = page.getByTestId("ip-docket-workspace");
-    const emptyState = page.getByText("No IP records yet", { exact: true });
-    await expect(workspace.or(emptyState)).toBeVisible({ timeout: 30_000 });
-    if (await emptyState.isVisible()) {
-      await page.getByRole("button", { name: "New trademark" }).click();
-      await page.getByLabel("Docket title").fill("Production E2E trademark");
-      await page.getByLabel("Word mark").fill("CASEOPS QA");
-      await page.getByLabel("Goods / services specification").fill("Quality-assurance software services");
-      await page.getByLabel("Applicant").fill("CaseOps QA Bot");
-      await page.getByLabel("Representation evidence reference").fill("qa:prod-e2e-2026-08-01");
-      await page.getByRole("button", { name: "Validate and create" }).click();
-      await expect(workspace).toBeVisible({ timeout: 30_000 });
-    }
+    await expect(page.getByRole("heading", { name: "IP workspace setup" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Readiness checks" })).toBeVisible();
+    await expect(page.getByTestId("ip-readiness-workspace_core")).toContainText("Disabled");
+    await expect(page.getByRole("button", { name: "New trademark" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Trademark docket" })).toHaveCount(0);
+    expect(docketRequests).toEqual([]);
 
     await page.setViewportSize({ width: 360, height: 800 });
     await page.reload();
-    const create = page.getByRole("button", { name: "New trademark" });
-    await expect(create).toBeVisible();
-    const box = await create.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(360);
-
-    for (const name of [
-      "Matter evidence intake",
-      "Deadline continuity",
-      "Related rights and obligations",
-      "IP cost evidence",
-    ]) {
-      const operationalSurface = page.getByRole("heading", { name });
-      await operationalSurface.scrollIntoViewIfNeeded();
-      await expect(operationalSurface).toBeVisible();
+    await expect(page.getByRole("heading", { name: "IP workspace setup" })).toBeVisible();
+    for (const feature of readiness.features) {
+      const row = page.getByTestId(`ip-readiness-${feature.feature_id}`);
+      await row.scrollIntoViewIfNeeded();
+      await expect(row).toBeVisible();
+      const box = await row.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
     }
-
-    await create.scrollIntoViewIfNeeded();
-    await create.click();
-    await expect(page.getByRole("heading", { name: "New trademark particulars" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Validate and create" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New trademark" })).toHaveCount(0);
+    expect(docketRequests).toEqual([]);
   });
 });
