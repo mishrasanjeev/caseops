@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from caseops_api.schemas.ip_records import IpWorkspaceConfigurationStatusResponse
+
 
 class IpFeatureReadinessRecord(BaseModel):
     feature_id: str
@@ -16,6 +18,9 @@ class IpFeatureReadinessRecord(BaseModel):
         "missing_entitlement",
         "rollout_disabled",
         "rollout_expired",
+        "workspace_not_configured",
+        "tenant_disabled",
+        "readiness_test_failed",
     ]
     owner: str
     required_capabilities: list[str]
@@ -32,6 +37,7 @@ class IpWorkspaceReadinessResponse(BaseModel):
     timezone: str
     workspace_available: bool
     manual_docketing_available: bool
+    configuration_status: IpWorkspaceConfigurationStatusResponse
     features: list[IpFeatureReadinessRecord]
 
 

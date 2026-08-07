@@ -12794,6 +12794,110 @@ class IpRelationship(Base):
     )
 
 
+class IpWorkspaceConfiguration(Base):
+    __tablename__ = "ip_workspace_configurations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workspace_config_updater_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["provider_terms_accepted_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workspace_config_terms_actor_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["escalation_owner_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workspace_config_escalation_owner_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_workspace_config_id_company"),
+        UniqueConstraint("company_id", name="uq_ip_workspace_config_company"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    enabled_asset_types_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    jurisdictions_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    offices_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    holiday_calendar_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    working_day_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    document_taxonomy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    event_catalog_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    deadline_rule_versions_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    notification_channels_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    critical_event_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    escalation_owner_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    provider_keys_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    provider_terms_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provider_terms_accepted_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    provider_terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    enabled_automations_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    workspace_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpWorkspaceTestResult(Base):
+    __tablename__ = "ip_workspace_test_results"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["configuration_id", "company_id"],
+            ["ip_workspace_configurations.id", "ip_workspace_configurations.company_id"],
+            name="fk_ip_workspace_test_config_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["performed_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workspace_test_actor_company",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_ip_workspace_tests_company_config",
+            "company_id",
+            "configuration_id",
+            "config_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    configuration_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    test_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    feature_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provider_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    details_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    performed_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    performed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class IpTrademarkParticularVersion(Base):
     __tablename__ = "ip_trademark_particular_versions"
     __table_args__ = (

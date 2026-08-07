@@ -3726,6 +3726,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/applications/{application_id}/filing-phase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Trademark Application Phase */
+        patch: operations["patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch"];
+        trace?: never;
+    };
     "/api/ip/deadline-coverages/bulk-reassign": {
         parameters: {
             query?: never;
@@ -3770,6 +3787,57 @@ export interface paths {
         };
         /** Get Ip Docket Record */
         get: operations["get_ip_docket_record_api_ip_dockets__docket_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Trademark Application */
+        post: operations["post_trademark_application_api_ip_dockets__docket_id__applications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Asset */
+        post: operations["post_ip_asset_api_ip_dockets__docket_id__assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/core-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Core Records */
+        get: operations["get_ip_docket_core_records_api_ip_dockets__docket_id__core_records_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3914,6 +3982,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/identifiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Identifier */
+        post: operations["post_ip_identifier_api_ip_dockets__docket_id__identifiers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/identifiers/{identifier_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Identifier Correction */
+        post: operations["post_ip_identifier_correction_api_ip_dockets__docket_id__identifiers__identifier_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/notice-links": {
         parameters: {
             query?: never;
@@ -3925,6 +4027,23 @@ export interface paths {
         put?: never;
         /** Post Ip Notice Link */
         post: operations["post_ip_notice_link_api_ip_dockets__docket_id__notice_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Proceeding */
+        post: operations["post_ip_proceeding_api_ip_dockets__docket_id__proceedings_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3999,6 +4118,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/identifiers/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Identifier Search */
+        get: operations["get_ip_identifier_search_api_ip_identifiers_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/readiness": {
         parameters: {
             query?: never;
@@ -4027,6 +4163,58 @@ export interface paths {
         get: operations["get_ip_docket_control_report_api_ip_reports_docket_control_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/workspace/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Workspace Configuration */
+        get: operations["get_ip_workspace_configuration_api_ip_workspace_configuration_get"];
+        /** Put Ip Workspace Configuration */
+        put: operations["put_ip_workspace_configuration_api_ip_workspace_configuration_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/workspace/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Workspace Enablement */
+        post: operations["post_ip_workspace_enablement_api_ip_workspace_enable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/workspace/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Workspace Test */
+        post: operations["post_ip_workspace_test_api_ip_workspace_tests_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16370,6 +16558,72 @@ export interface components {
              */
             updated_at: string;
         };
+        /** IpApplicationNumberCreate */
+        IpApplicationNumberCreate: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /**
+             * Is Primary
+             * @default true
+             */
+            is_primary: boolean;
+            /** Raw Value */
+            raw_value: string;
+            /** Source */
+            source: string;
+        };
+        /** IpAssetCreateRequest */
+        IpAssetCreateRequest: {
+            /**
+             * Asset Kind
+             * @default trademark
+             * @constant
+             */
+            asset_kind: "trademark";
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Title */
+            title: string;
+        };
+        /** IpAssetResponse */
+        IpAssetResponse: {
+            /** Asset Kind */
+            asset_kind: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Id */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** IpCoreRecordResponse */
+        IpCoreRecordResponse: {
+            /** Applications */
+            applications: components["schemas"]["TrademarkApplicationResponse"][];
+            /** Assets */
+            assets: components["schemas"]["IpAssetResponse"][];
+            /** Identifiers */
+            identifiers: components["schemas"]["IpIdentifierResponse"][];
+            /** Proceedings */
+            proceedings: components["schemas"]["IpProceedingResponse"][];
+        };
         /** IpCostItemCreateRequest */
         IpCostItemCreateRequest: {
             /** Amount Minor */
@@ -16826,7 +17080,7 @@ export interface components {
              * Reason
              * @enum {string}
              */
-            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired";
+            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed";
             /** Required Capabilities */
             required_capabilities: string[];
             /** Rollout Enabled */
@@ -16835,6 +17089,123 @@ export interface components {
             rollout_expires_at: string | null;
             /** Rollout Flag */
             rollout_flag: string | null;
+        };
+        /** IpIdentifierCorrectionCreate */
+        IpIdentifierCorrectionCreate: {
+            /** Application Id */
+            application_id?: string | null;
+            /** Correction Reason */
+            correction_reason: string;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /**
+             * Identifier Kind
+             * @enum {string}
+             */
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "appeal" | "court";
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /** Proceeding Id */
+            proceeding_id?: string | null;
+            /** Raw Value */
+            raw_value: string;
+            /** Source */
+            source: string;
+            /** Supersedes Identifier Id */
+            supersedes_identifier_id: string;
+        };
+        /** IpIdentifierCreate */
+        IpIdentifierCreate: {
+            /** Application Id */
+            application_id?: string | null;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /**
+             * Identifier Kind
+             * @enum {string}
+             */
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "appeal" | "court";
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /** Proceeding Id */
+            proceeding_id?: string | null;
+            /** Raw Value */
+            raw_value: string;
+            /** Source */
+            source: string;
+        };
+        /** IpIdentifierMutationResponse */
+        IpIdentifierMutationResponse: {
+            /** Duplicate Candidates */
+            duplicate_candidates?: components["schemas"]["IpIdentifierResponse"][];
+            identifier: components["schemas"]["IpIdentifierResponse"];
+        };
+        /** IpIdentifierResponse */
+        IpIdentifierResponse: {
+            /** Application Id */
+            application_id: string | null;
+            /** Correction Reason */
+            correction_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until: string | null;
+            /** Id */
+            id: string;
+            /** Identifier Kind */
+            identifier_kind: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Normalized Value */
+            normalized_value: string;
+            /** Office */
+            office: string;
+            /** Proceeding Id */
+            proceeding_id: string | null;
+            /** Raw Value */
+            raw_value: string;
+            /** Reconciliation Status */
+            reconciliation_status: string;
+            /** Source */
+            source: string;
+            /** Supersedes Identifier Id */
+            supersedes_identifier_id: string | null;
         };
         /** IpNoticeLinkCreateRequest */
         IpNoticeLinkCreateRequest: {
@@ -16863,6 +17234,61 @@ export interface components {
             link_kind: string;
             /** Notice Id */
             notice_id: string;
+        };
+        /** IpProceedingCreateRequest */
+        IpProceedingCreateRequest: {
+            /** Application Id */
+            application_id?: string | null;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /**
+             * Proceeding Kind
+             * @enum {string}
+             */
+            proceeding_kind: "opposition" | "rectification" | "appeal" | "court";
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "applicant" | "opponent" | "claimant" | "respondent" | "other";
+            /**
+             * Stage
+             * @default draft
+             */
+            stage: string;
+        };
+        /** IpProceedingResponse */
+        IpProceedingResponse: {
+            /** Application Id */
+            application_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Id */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /** Proceeding Kind */
+            proceeding_kind: string;
+            /** Side */
+            side: string;
+            /** Stage */
+            stage: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
         };
         /** IpRelatedRightObligationCompleteRequest */
         IpRelatedRightObligationCompleteRequest: {
@@ -16988,8 +17414,131 @@ export interface components {
             /** Related Docket Id */
             related_docket_id: string | null;
         };
+        /** IpWorkspaceConfigurationResponse */
+        IpWorkspaceConfigurationResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Critical Event Policy Json */
+            critical_event_policy_json: {
+                [key: string]: unknown;
+            };
+            /** Deadline Rule Versions Json */
+            deadline_rule_versions_json: {
+                [key: string]: string;
+            };
+            /** Document Taxonomy Version */
+            document_taxonomy_version: string;
+            /** Enabled Asset Types Json */
+            enabled_asset_types_json: string[];
+            /** Enabled Automations Json */
+            enabled_automations_json: string[];
+            /** Escalation Owner Membership Id */
+            escalation_owner_membership_id: string;
+            /** Event Catalog Version */
+            event_catalog_version: string;
+            /** Holiday Calendar Key */
+            holiday_calendar_key: string;
+            /** Id */
+            id: string;
+            /** Jurisdictions Json */
+            jurisdictions_json: string[];
+            /** Notification Channels Json */
+            notification_channels_json: string[];
+            /** Offices Json */
+            offices_json: string[];
+            /** Provider Keys Json */
+            provider_keys_json: string[];
+            /** Provider Terms Accepted At */
+            provider_terms_accepted_at: string | null;
+            /** Provider Terms Accepted By Membership Id */
+            provider_terms_accepted_by_membership_id: string | null;
+            /** Provider Terms Version */
+            provider_terms_version: string | null;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+            /** Working Day Policy Json */
+            working_day_policy_json: {
+                [key: string]: unknown;
+            };
+            /** Workspace Enabled */
+            workspace_enabled: boolean;
+        };
+        /** IpWorkspaceConfigurationStatusResponse */
+        IpWorkspaceConfigurationStatusResponse: {
+            configuration: components["schemas"]["IpWorkspaceConfigurationResponse"] | null;
+            /** Enablement Blockers */
+            enablement_blockers: string[];
+            /** Ready For Manual Docketing */
+            ready_for_manual_docketing: boolean;
+            /** Tests */
+            tests: components["schemas"]["IpWorkspaceTestResultResponse"][];
+        };
+        /** IpWorkspaceConfigurationUpsertRequest */
+        IpWorkspaceConfigurationUpsertRequest: {
+            /**
+             * Accept Provider Terms
+             * @default false
+             */
+            accept_provider_terms: boolean;
+            /** Critical Event Policy */
+            critical_event_policy: {
+                [key: string]: unknown;
+            };
+            /** Deadline Rule Versions */
+            deadline_rule_versions: {
+                [key: string]: string;
+            };
+            /** Document Taxonomy Version */
+            document_taxonomy_version: string;
+            /** Enabled Asset Types */
+            enabled_asset_types: "trademark"[];
+            /** Escalation Owner Membership Id */
+            escalation_owner_membership_id: string;
+            /** Event Catalog Version */
+            event_catalog_version: string;
+            /** Expected Version */
+            expected_version?: number | null;
+            /** Holiday Calendar Key */
+            holiday_calendar_key: string;
+            /** Jurisdictions */
+            jurisdictions: string[];
+            /** Notification Channels */
+            notification_channels: ("in_app" | "email")[];
+            /** Offices */
+            offices: string[];
+            /** Provider Keys */
+            provider_keys?: string[];
+            /** Provider Terms Version */
+            provider_terms_version?: string | null;
+            /** Timezone */
+            timezone: string;
+            /** Working Day Policy */
+            working_day_policy: {
+                [key: string]: unknown;
+            };
+        };
+        /** IpWorkspaceEnableRequest */
+        IpWorkspaceEnableRequest: {
+            /** Enabled Automations */
+            enabled_automations?: ("registry_sync" | "deadline_automation" | "notification_automation")[];
+            /** Expected Config Version */
+            expected_config_version: number;
+        };
         /** IpWorkspaceReadinessResponse */
         IpWorkspaceReadinessResponse: {
+            configuration_status: components["schemas"]["IpWorkspaceConfigurationStatusResponse"];
             /** Features */
             features: components["schemas"]["IpFeatureReadinessRecord"][];
             /** Manual Docketing Available */
@@ -16998,6 +17547,50 @@ export interface components {
             timezone: string;
             /** Workspace Available */
             workspace_available: boolean;
+        };
+        /** IpWorkspaceTestResultResponse */
+        IpWorkspaceTestResultResponse: {
+            /** Config Version */
+            config_version: number;
+            /** Configuration Id */
+            configuration_id: string;
+            /** Details Json */
+            details_json: {
+                [key: string]: unknown;
+            };
+            /** Failure Code */
+            failure_code: string | null;
+            /** Feature Id */
+            feature_id: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Performed At
+             * Format: date-time
+             */
+            performed_at: string;
+            /** Performed By Membership Id */
+            performed_by_membership_id: string;
+            /** Provider Key */
+            provider_key: string | null;
+            /** Status */
+            status: string;
+            /** Test Kind */
+            test_kind: string;
+        };
+        /** IpWorkspaceTestRunRequest */
+        IpWorkspaceTestRunRequest: {
+            /** Expected Config Version */
+            expected_config_version: number;
+            /** Feature Id */
+            feature_id?: ("registry_sync" | "deadline_automation" | "notification_automation") | null;
+            /** Provider Key */
+            provider_key?: string | null;
+            /**
+             * Test Kind
+             * @enum {string}
+             */
+            test_kind: "connection" | "notification" | "source_open" | "deadline_calculation";
         };
         /** JudgeAliasListResponse */
         JudgeAliasListResponse: {
@@ -26749,6 +27342,78 @@ export interface components {
             /** Response Class */
             response_class?: string | null;
         };
+        /** TrademarkApplicationCreateRequest */
+        TrademarkApplicationCreateRequest: {
+            application_number?: components["schemas"]["IpApplicationNumberCreate"] | null;
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Filing Phase
+             * @default draft
+             * @enum {string}
+             */
+            filing_phase: "draft" | "pre_filing" | "filed";
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /**
+             * Source Pending Identifier Allocation
+             * @default false
+             */
+            source_pending_identifier_allocation: boolean;
+        };
+        /** TrademarkApplicationMutationResponse */
+        TrademarkApplicationMutationResponse: {
+            application: components["schemas"]["TrademarkApplicationResponse"];
+            /** Duplicate Candidates */
+            duplicate_candidates?: components["schemas"]["IpIdentifierResponse"][];
+            identifier: components["schemas"]["IpIdentifierResponse"] | null;
+        };
+        /** TrademarkApplicationPhaseUpdateRequest */
+        TrademarkApplicationPhaseUpdateRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /**
+             * Filing Phase
+             * @enum {string}
+             */
+            filing_phase: "draft" | "pre_filing" | "filed";
+            /**
+             * Source Pending Identifier Allocation
+             * @default false
+             */
+            source_pending_identifier_allocation: boolean;
+        };
+        /** TrademarkApplicationResponse */
+        TrademarkApplicationResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Id */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /** Source Pending Identifier Allocation */
+            source_pending_identifier_allocation: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
         /** TrademarkClassScope */
         TrademarkClassScope: {
             /** Class Number */
@@ -34378,6 +35043,41 @@ export interface operations {
             };
         };
     };
+    patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrademarkApplicationPhaseUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrademarkApplicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post: {
         parameters: {
             query?: never;
@@ -34482,6 +35182,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_trademark_application_api_ip_dockets__docket_id__applications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrademarkApplicationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrademarkApplicationMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_asset_api_ip_dockets__docket_id__assets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpAssetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpAssetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_core_records_api_ip_dockets__docket_id__core_records_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoreRecordResponse"];
                 };
             };
             /** @description Validation Error */
@@ -34770,6 +35571,77 @@ export interface operations {
             };
         };
     };
+    post_ip_identifier_api_ip_dockets__docket_id__identifiers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpIdentifierCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpIdentifierMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_identifier_correction_api_ip_dockets__docket_id__identifiers__identifier_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                identifier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpIdentifierCorrectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpIdentifierMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_notice_link_api_ip_dockets__docket_id__notice_links_post: {
         parameters: {
             query?: never;
@@ -34792,6 +35664,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_proceeding_api_ip_dockets__docket_id__proceedings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpProceedingCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpProceedingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -34946,6 +35853,37 @@ export interface operations {
             };
         };
     };
+    get_ip_identifier_search_api_ip_identifiers_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpIdentifierResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_workspace_readiness_api_ip_readiness_get: {
         parameters: {
             query?: never;
@@ -34982,6 +35920,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketControlReport"];
+                };
+            };
+        };
+    };
+    get_ip_workspace_configuration_api_ip_workspace_configuration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWorkspaceConfigurationStatusResponse"];
+                };
+            };
+        };
+    };
+    put_ip_workspace_configuration_api_ip_workspace_configuration_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWorkspaceConfigurationUpsertRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWorkspaceConfigurationStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_workspace_enablement_api_ip_workspace_enable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWorkspaceEnableRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWorkspaceConfigurationStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_workspace_test_api_ip_workspace_tests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWorkspaceTestRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWorkspaceTestResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BadgeIndianRupee, FileCheck2, Plus, Scale } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -19,16 +20,22 @@ import {
   completeIpRelatedRightObligation,
   createIpDocket,
   discoverIpEvidence,
+  enableIpWorkspace,
   fetchIpDockets,
   fetchIpWorkspaceReadiness,
   reconcileIpCosts,
   reviewIpEvidenceCandidate,
+  runIpWorkspaceTest,
+  saveIpWorkspaceConfiguration,
   type IpDocket,
   type IpEvidenceCandidate,
   type IpFeatureReadiness,
+  type IpWorkspaceConfigurationStatus,
+  type IpWorkspaceTestResult,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
+import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -38,6 +45,8 @@ export default function IpDocketPage() {
   const canWrite = useCapability("ip:write");
   const canReview = useCapability("ip:approve");
   const canFinance = useCapability("ip:fees_manage");
+  const canConfigure = useCapability("ip:taxonomy_admin");
+  const session = useSession();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -92,7 +101,18 @@ export default function IpDocketPage() {
   }
 
   if (!readiness.data.workspace_available) {
-    return <IpReadinessGate features={readiness.data.features} timezone={readiness.data.timezone} />;
+    return (
+      <IpReadinessGate
+        features={readiness.data.features}
+        timezone={readiness.data.timezone}
+        configurationStatus={readiness.data.configuration_status}
+        canConfigure={canConfigure}
+        currentMembershipId={session.context?.membership.id ?? null}
+        onChanged={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["ip", "readiness"] });
+        }}
+      />
+    );
   }
 
   return (
@@ -184,14 +204,25 @@ const READINESS_REASON: Record<IpFeatureReadiness["reason"], string> = {
   missing_entitlement: "The workspace plan does not include this feature",
   rollout_disabled: "The safety rollout has not been enabled",
   rollout_expired: "The approved pilot window has expired",
+  workspace_not_configured: "Tenant setup has not been saved",
+  tenant_disabled: "Tenant enablement has not passed",
+  readiness_test_failed: "The latest required readiness test has not passed",
 };
 
 function IpReadinessGate({
   features,
   timezone,
+  configurationStatus,
+  canConfigure,
+  currentMembershipId,
+  onChanged,
 }: {
   features: IpFeatureReadiness[];
   timezone: string;
+  configurationStatus?: IpWorkspaceConfigurationStatus;
+  canConfigure: boolean;
+  currentMembershipId: string | null;
+  onChanged: () => Promise<void>;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -228,7 +259,277 @@ function IpReadinessGate({
           ))}
         </CardContent>
       </Card>
+      {canConfigure ? (
+        <IpWorkspaceSetupCard
+          status={configurationStatus}
+          currentMembershipId={currentMembershipId}
+          onChanged={onChanged}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function IpWorkspaceSetupCard({
+  status,
+  currentMembershipId,
+  onChanged,
+}: {
+  status?: IpWorkspaceConfigurationStatus;
+  currentMembershipId: string | null;
+  onChanged: () => Promise<void>;
+}) {
+  const configuration = status?.configuration ?? null;
+  const [jurisdiction, setJurisdiction] = useState(
+    configuration?.jurisdictions_json[0] ?? "IN",
+  );
+  const [office, setOffice] = useState(configuration?.offices_json[0] ?? "IP India");
+  const [timezone, setTimezone] = useState(configuration?.timezone ?? "Asia/Kolkata");
+  const [holidayCalendar, setHolidayCalendar] = useState(
+    configuration?.holiday_calendar_key ?? "IN-CENTRAL-2026",
+  );
+  const [providerKey, setProviderKey] = useState(
+    configuration?.provider_keys_json[0] ?? "",
+  );
+  const [acceptTerms, setAcceptTerms] = useState(
+    configuration?.provider_terms_accepted_at != null,
+  );
+  const [automations, setAutomations] = useState({
+    registry_sync: configuration?.enabled_automations_json.includes("registry_sync") ?? false,
+    deadline_automation:
+      configuration?.enabled_automations_json.includes("deadline_automation") ?? false,
+    notification_automation:
+      configuration?.enabled_automations_json.includes("notification_automation") ?? false,
+  });
+  const escalationOwner =
+    configuration?.escalation_owner_membership_id ?? currentMembershipId ?? "";
+
+  const save = useMutation({
+    mutationFn: () =>
+      saveIpWorkspaceConfiguration({
+        expectedVersion: configuration?.version ?? null,
+        jurisdiction,
+        office,
+        timezone,
+        holidayCalendarKey: holidayCalendar,
+        escalationOwnerMembershipId: escalationOwner,
+        providerKey,
+        acceptProviderTerms: acceptTerms,
+      }),
+    onSuccess: async () => {
+      toast.success("IP workspace configuration saved; prior tests and enablement were reset.");
+      await onChanged();
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not save IP workspace configuration.")),
+  });
+  const test = useMutation({
+    mutationFn: (testKind: IpWorkspaceTestResult["test_kind"]) => {
+      if (!configuration) throw new Error("Save the configuration before running tests.");
+      return runIpWorkspaceTest({
+        version: configuration.version,
+        testKind,
+        providerKey:
+          testKind === "connection" || testKind === "source_open"
+            ? providerKey || null
+            : null,
+      });
+    },
+    onSuccess: async (result) => {
+      if (result.status === "passed") toast.success(`${result.test_kind} test passed.`);
+      else toast.error(`${result.test_kind} failed: ${result.failure_code ?? "unknown failure"}.`);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Readiness test could not run.")),
+  });
+  const enable = useMutation({
+    mutationFn: (includeAutomations: boolean) => {
+      if (!configuration) throw new Error("Save the configuration before enabling.");
+      const enabledAutomations = includeAutomations
+        ? (Object.entries(automations)
+            .filter(([, enabled]) => enabled)
+            .map(([feature]) => feature) as Array<
+            "registry_sync" | "deadline_automation" | "notification_automation"
+          >)
+        : [];
+      return enableIpWorkspace({ version: configuration.version, enabledAutomations });
+    },
+    onSuccess: async (result) => {
+      toast.success(
+        result.configuration?.enabled_automations_json.length
+          ? "IP workspace and tested automations enabled for this tenant."
+          : "Manual IP workspace enabled; provider automation remains disabled.",
+      );
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "IP workspace is not ready.")),
+  });
+
+  const tests = status?.tests ?? [];
+  const latest = new Map<string, IpWorkspaceTestResult>();
+  tests.forEach((row) => {
+    if (!latest.has(row.test_kind)) latest.set(row.test_kind, row);
+  });
+
+  return (
+    <Card className="min-w-0" data-testid="ip-workspace-configuration">
+      <CardHeader><CardTitle as="h2">Configure pilot workspace</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-5">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <Field label="Enabled asset type">
+            <Input value="Trademark" disabled aria-label="Enabled asset type" />
+          </Field>
+          <Field label="Jurisdiction">
+            <Input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)} />
+          </Field>
+          <Field label="Office">
+            <Input value={office} onChange={(event) => setOffice(event.target.value)} />
+          </Field>
+          <Field label="IANA timezone">
+            <Input value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+          </Field>
+          <Field label="Holiday calendar">
+            <Input
+              value={holidayCalendar}
+              onChange={(event) => setHolidayCalendar(event.target.value)}
+            />
+          </Field>
+          <Field label="Permitted registry provider (optional)">
+            <Input value={providerKey} onChange={(event) => setProviderKey(event.target.value)} />
+          </Field>
+        </div>
+
+        <div className="rounded-lg border border-[var(--color-line)] p-3 text-sm">
+          <div className="font-semibold">Seeded governance contract</div>
+          <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+            Taxonomy ip-taxonomy-2026.1 · event catalogue ip-events-v1 · jurisdiction rule
+            2026.1 · Monday–Friday working policy · in-app notification · 30-minute critical
+            escalation.
+          </div>
+        </div>
+
+        <label className="flex min-w-0 items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={acceptTerms}
+            onChange={(event) => setAcceptTerms(event.target.checked)}
+            disabled={!providerKey.trim()}
+          />
+          <span className="min-w-0 break-words">
+            Accept provider attribution and cost terms version 2026.1. No credential is stored
+            here; secrets remain in server-side integration settings.
+          </span>
+        </label>
+
+        <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => save.mutate()}
+            disabled={
+              !jurisdiction.trim() ||
+              !office.trim() ||
+              !timezone.trim() ||
+              !holidayCalendar.trim() ||
+              !escalationOwner ||
+              (Boolean(providerKey.trim()) && !acceptTerms) ||
+              save.isPending
+            }
+          >
+            Save configuration
+          </Button>
+          <Link
+            href="/app/admin/roles"
+            className="w-full rounded-md border border-[var(--color-line)] px-3 py-2 text-center text-sm font-semibold sm:w-auto"
+          >
+            Map IP roles
+          </Link>
+          <Link
+            href="/app/admin/teams"
+            className="w-full rounded-md border border-[var(--color-line)] px-3 py-2 text-center text-sm font-semibold sm:w-auto"
+          >
+            Configure pilot teams
+          </Link>
+          <Link
+            href="/app/admin/integrations"
+            className="w-full rounded-md border border-[var(--color-line)] px-3 py-2 text-center text-sm font-semibold sm:w-auto"
+          >
+            Configure provider secrets
+          </Link>
+        </div>
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {([
+            ["connection", "Test provider connection"],
+            ["source_open", "Test source open"],
+            ["notification", "Test notification (dry run)"],
+            ["deadline_calculation", "Test sample deadline"],
+          ] as const).map(([kind, label]) => {
+            const result = latest.get(kind);
+            return (
+              <div key={kind} className="flex min-w-0 flex-col gap-2 rounded-md bg-[var(--color-bg-2)] p-3">
+                <div className="break-words text-xs text-[var(--color-mute)]">
+                  {result ? `${result.status}${result.failure_code ? ` · ${result.failure_code}` : ""}` : "Not run"}
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  variant="secondary"
+                  onClick={() => test.mutate(kind)}
+                  disabled={
+                    !configuration ||
+                    ((kind === "connection" || kind === "source_open") && !providerKey.trim()) ||
+                    test.isPending
+                  }
+                >
+                  {label}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+
+        <fieldset className="min-w-0 rounded-lg border border-[var(--color-line)] p-3">
+          <legend className="px-1 text-sm font-semibold">Affected automation only</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {(Object.keys(automations) as Array<keyof typeof automations>).map((feature) => (
+              <label key={feature} className="flex min-w-0 items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={automations[feature]}
+                  onChange={(event) =>
+                    setAutomations((current) => ({ ...current, [feature]: event.target.checked }))
+                  }
+                />
+                <span className="break-words">{feature.replaceAll("_", " ")}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {status?.enablement_blockers.length ? (
+          <div className="break-words text-xs text-amber-800" data-testid="ip-setup-blockers">
+            Current blockers: {status.enablement_blockers.join(", ")}
+          </div>
+        ) : null}
+        <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            className="w-full sm:w-auto"
+            variant="secondary"
+            onClick={() => enable.mutate(false)}
+            disabled={!configuration || enable.isPending}
+          >
+            Enable manual workspace
+          </Button>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => enable.mutate(true)}
+            disabled={!configuration || enable.isPending}
+          >
+            Enable selected tested automations
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
