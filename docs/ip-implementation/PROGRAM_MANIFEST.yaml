@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-020A",
+    "active_slice": "IPLF-020B",
     "checkpoint": {
-      "recorded_at": "2026-08-06T12:30:00+05:30",
-      "repository_revision": "17ebc4f2f7d5125f070584d73e686cc7f93610ce",
-      "environment": "IPLF-019B implementation revision 17ebc4f2f7d5125f070584d73e686cc7f93610ce passes the exact ARCH-OPS-01..26 contract, Section 11.2 ownership scan, 436/50/68/317 manifest gate, 41 focused tests, Ruff, and diff checks. Exact-head CI and release remain pending. Production serves IPLF-019A merge b4faddab0603af0cc519b1ffca2c92196c3bfd0e on API caseops-api-00240-ds5 and web caseops-web-00220-jfv; all six jobs use API digest sha256:2154bacaa5873413ad7aead11d5d00ceecf68f89faa8167cbfd18df06f61e26b.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, and IPLF-019A have completed repository-controlled implementation and deployment verification. IPLF-019B implements the full repository ARCH-OPS control publication; its release remains pending. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "recorded_at": "2026-08-07T12:00:00+05:30",
+      "repository_revision": "edbbabbb47debf97aebb1da665ab67eede23f1f9",
+      "environment": "IPLF-020A implementation revision edbbabbb47debf97aebb1da665ab67eede23f1f9 is rebased on deployment-verified IPLF-019B canonical main a5ac2fe96ba53bdb812fb19b89ccbdcfaa9554b1 and passes 76 API compatibility tests, 13 web tests, API Ruff, web typecheck, and diff checks. Production serves IPLF-019B on API caseops-api-00241-wt8 and web caseops-web-00221-fzw with successful exact-serving production Playwright run 31134019957.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, and IPLF-019B have completed repository-controlled implementation and deployment verification. IPLF-020A has complete repository implementation and local verification on released main, with independent CI and production release pending. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-020A",
-      "next_action": "Release IPLF-019B through exact-head CI, canonical main, exact-identity production verification, and dated production E2E; then implement IPLF-020A through the existing capability catalogues. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+      "next_slice": "IPLF-020B",
+      "next_action": "Release IPLF-020A through exact-head independent CI, canonical main, exact-identity production verification, deterministic scheduler audit, and dated production E2E; then release the already implemented IPLF-020B readiness endpoint/UI and UJ-01 paths without prematurely activating IP entitlements or flags. Obtain named lawyer approval for golden-query fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md"
     }
   },
   "milestones": [
@@ -725,7 +725,7 @@
         "IPLF-020A",
         "IPLF-020B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -4680,19 +4680,19 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md",
-          "revision": "17ebc4f2f7d5125f070584d73e686cc7f93610ce",
-          "environment": "local exact implementation commit on Windows/CPython 3.13 with the locked uv environment in copy mode",
+          "revision": "a5ac2fe96ba53bdb812fb19b89ccbdcfaa9554b1",
+          "environment": "local exact implementation commit plus independent CI/Security/CodeQL/PostgreSQL, canonical main, Google Cloud production migration/API/web, deterministic natural scheduler audit, and exact-serving production Playwright",
           "fixtures": "exact ARCH-OPS-01..26 manifest family, Section 11.2 ownership ledger, all M2/M3 proposals, stable audit/domain event catalogues, missing requirement/ref mutations, and incomplete/duplicate event mutations",
           "assertions": "exact ordered requirement coverage, named owner and committed enforcement ref per control, versioned event payload metadata, no duplicate audit/domain names, one-writer repository scan, and exact 436/50/68/317 program traceability",
           "result": "passed",
-          "recorded_at": "2026-08-06T21:30:00+05:30"
+          "recorded_at": "2026-08-07T06:15:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release the exact IPLF-019B candidate through CI/Security/CodeQL, canonical main, production identity verification, and dated production E2E.",
-        "Proceed to IPLF-020A only after IPLF-019B deployment verification; do not infer M0 human approval or UJ-47/UJ-67 completion."
+        "Proceed to IPLF-020A after IPLF-019B deployment verification; do not infer M0 human approval or UJ-47/UJ-67 completion.",
+        "Maintain the exact-revision production and deterministic scheduler gates without adding an arbitrary elapsed-time blocker."
       ],
       "data_impact": [
         "No schema, tenant row, provider, credential, scheduler, job, or external legal operation is mutated.",
@@ -4753,23 +4753,66 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/capability_catalog.py",
+        "apps/api/src/caseops_api/services/ip_capability_catalog.py",
+        "apps/api/src/caseops_api/core/settings.py",
+        "apps/api/.env.example",
+        "apps/web/lib/capabilities.ts",
+        "docs/ip-implementation/IP_CAPABILITY_MODEL.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_capability_catalog.py",
+        "apps/web/lib/capabilities.test.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md",
+          "revision": "edbbabbb47debf97aebb1da665ab67eede23f1f9",
+          "environment": "local exact implementation commit rebased on released IPLF-019B main, Windows/CPython 3.13 and Node/npm with repository lockfiles",
+          "fixtures": "exact PRD Section 2.2 role matrix plus synthetic capability, entitlement, rollout-flag, expiry, legacy-alias, and unknown-feature cases",
+          "assertions": "13 canonical capabilities, frontend/backend parity, explicit fail-closed entitlement parsing, independent reason/owner/expiry, dark defaults, automated-feature manual fallback, custom-role/import compatibility, and existing IP/role-admin UI behavior",
+          "result": "passed",
+          "recorded_at": "2026-08-07T12:00:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Release this rebased additive contract through independent CI, canonical main, exact production identity verification, and dated production E2E.",
+        "Keep every IP entitlement and rollout flag disabled until IPLF-020B proves the UJ-01 readiness workflow; do not infer M0 or legal acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, backfill, tenant row, provider, credential, scheduler, notification, filing, fee, or client data mutation.",
+        "Existing membership roles, billing entitlement resolution, environment Settings, and frontend presentation catalogue are extended without creating duplicate owners."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_CAPABILITY_MODEL.md",
+          "disposition": "created",
+          "owner": "Architecture/Security/Product IP",
+          "evidence": "Independent server capability, billing entitlement, safety rollout, expiry, reason, owner, alias, and rollback contract"
+        },
+        {
+          "artifact": "apps/api/.env.example",
+          "disposition": "updated",
+          "owner": "Release Engineering",
+          "evidence": "All eight dark-default rollout flags and their optional expiry settings"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-020A/release-2026-08-06.md",
+          "disposition": "created",
+          "owner": "Engineering/QA/Release Engineering",
+          "evidence": "Exact implementation revision, synthetic fixture scope, assertions, commands, results, rollback, and serial release state"
+        }
+      ],
+      "allocation_review": "Administrative M2 contract slice: exact PRD Section 2.2 capability/role matrix and ARCH-OPS-12 independent authorization, entitlement, and rollout gates. IPLF-020B retains UJ-01 readiness endpoint/UI and deployed user-path proof.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

@@ -69,6 +69,20 @@ export type Capability =
   | "calendar:view"
   | "calendar:sync"
   | "notifications:manage"
+  // intellectual property (PRD Section 2.2 canonical capabilities)
+  | "ip:read"
+  | "ip:import"
+  | "ip:approve"
+  | "ip:filing_prepare"
+  | "ip:filing_confirm"
+  | "ip:fees_view"
+  | "ip:fees_manage"
+  | "ip:rules_propose"
+  | "ip:rules_activate"
+  | "ip:taxonomy_admin"
+  | "ip:registry_sync"
+  | "ip:watch_manage"
+  // bounded-tail compatibility aliases; retire after custom-role backfill
   | "ip:view"
   | "ip:write"
   | "ip:review"
@@ -138,8 +152,10 @@ const FEE_EARNER: Capability[] = [
   "hearing_packs:generate",
   "calendar:view",
   "calendar:sync",
+  "ip:read",
   "ip:view",
   "ip:write",
+  "ip:filing_prepare",
   "ai:generate",
   "authorities:search",
   "authorities:annotate",
@@ -189,6 +205,10 @@ const STAFF: Capability[] = [
   "drafts:finalize",
   "hearing_packs:review",
   "court_sync:run",
+  "ip:approve",
+  "ip:filing_confirm",
+  "ip:fees_view",
+  "ip:rules_activate",
   "ip:review",
   "ip:finance",
   "authorities:ingest",
@@ -219,6 +239,12 @@ const GOVERNANCE: Capability[] = [
   "portal:invite",
   "portal:manage_grants",
   "notifications:manage",
+  "ip:import",
+  "ip:fees_manage",
+  "ip:rules_propose",
+  "ip:taxonomy_admin",
+  "ip:registry_sync",
+  "ip:watch_manage",
 ];
 
 // Owner-only caps.
@@ -230,6 +256,7 @@ const VIEWER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "clients:view",
   "communications:view",
   "calendar:view",
+  "ip:read",
   "ip:view",
 ]);
 
