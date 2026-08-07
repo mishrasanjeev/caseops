@@ -25,7 +25,10 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
+    IpDeadlineCoverage,
+    IpDocketEvent,
     IpDocketRecord,
+    IpRelatedRightObligation,
     Matter,
     MatterActivity,
     MatterAttachment,
@@ -2246,13 +2249,86 @@ def _neutralize_disposed_matter_operations(
                 IpDocketRecord.company_id == context.company.id,
                 IpDocketRecord.matter_id == matter.id,
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
-            )
+            ).with_for_update()
         )
     )
+    neutralized_ip_coverages = 0
+    neutralized_ip_obligations = 0
     for docket in ip_dockets:
+        next_sequence = (
+            session.scalar(
+                select(func.max(IpDocketEvent.sequence)).where(
+                    IpDocketEvent.company_id == docket.company_id,
+                    IpDocketEvent.docket_id == docket.id,
+                )
+            )
+            or 0
+        ) + 1
+        session.add(
+            IpDocketEvent(
+                company_id=docket.company_id,
+                docket_id=docket.id,
+                sequence=next_sequence,
+                event_kind="lifecycle_transition",
+                source="system",
+                source_reference=f"matter:{matter.id}",
+                effective_at=now,
+                entered_at=now,
+                responsible_membership_id=context.membership.id,
+                entered_by_membership_id=context.membership.id,
+                reason="Parent Matter disposed.",
+                evidence_refs_json=[f"matter:{matter.id}"],
+                document_refs_json=[],
+                resulting_deadline_refs_json=[],
+                before_phase=docket.status,
+                after_phase="archived",
+                candidate_status="confirmed",
+                payload_json={"matter_lifecycle_version": matter.lifecycle_version + 1},
+            )
+        )
         docket.status = "archived"
+        docket.is_active = False
+        docket.lifecycle_version += 1
+        docket.lifecycle_effective_at = now
+        docket.lifecycle_reason = "Parent Matter disposed."
+        docket.lifecycle_outcome = "archived_with_parent"
+        docket.lifecycle_source = "matter_lifecycle"
+        docket.lifecycle_evidence_ref = f"matter:{matter.id}"
         docket.archived_by_matter_disposal = True
         docket.updated_at = now
+
+        coverages = list(
+            session.scalars(
+                select(IpDeadlineCoverage).where(
+                    IpDeadlineCoverage.company_id == docket.company_id,
+                    IpDeadlineCoverage.docket_id == docket.id,
+                    IpDeadlineCoverage.coverage_status.notin_(
+                        ("inactive_lifecycle", "completed")
+                    ),
+                )
+            )
+        )
+        for coverage in coverages:
+            coverage.coverage_status = "inactive_lifecycle"
+            coverage.calendar_projection_status = "inactive_lifecycle"
+            coverage.updated_at = now
+        neutralized_ip_coverages += len(coverages)
+
+        obligations = list(
+            session.scalars(
+                select(IpRelatedRightObligation).where(
+                    IpRelatedRightObligation.company_id == docket.company_id,
+                    IpRelatedRightObligation.docket_id == docket.id,
+                    IpRelatedRightObligation.status.notin_(
+                        ("completed", "cancelled_lifecycle")
+                    ),
+                )
+            )
+        )
+        for obligation in obligations:
+            obligation.status = "cancelled_lifecycle"
+            obligation.updated_at = now
+        neutralized_ip_obligations += len(obligations)
 
     # Include children neutralized by an earlier disposal or the upgrade-time
     # legacy-data repair, not only rows cancelled in this invocation. Otherwise
@@ -2327,6 +2403,8 @@ def _neutralize_disposed_matter_operations(
         "blocked_notification_deliveries": len(delivery_intents),
         "rejected_next_hearing_suggestions": len(suggestions),
         "archived_ip_dockets": len(ip_dockets),
+        "neutralized_ip_coverages": neutralized_ip_coverages,
+        "neutralized_ip_obligations": neutralized_ip_obligations,
     }
 
 

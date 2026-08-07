@@ -62,7 +62,7 @@ def test_ip_workspace_migration_upgrades_downgrades_and_reupgrades(
     assert not WORKSPACE_TABLES.intersection(tables)
     assert head == "20260807_0001"
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260807_0002")
     tables, indexes, head = _schema(database_url)
     assert WORKSPACE_TABLES.issubset(tables)
     assert "ix_ip_workspace_tests_company_config" in indexes
@@ -73,7 +73,7 @@ def test_ip_workspace_migration_upgrades_downgrades_and_reupgrades(
     assert not WORKSPACE_TABLES.intersection(tables)
     assert head == "20260807_0001"
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260807_0002")
     tables, indexes, head = _schema(database_url)
     assert WORKSPACE_TABLES.issubset(tables)
     assert "ix_ip_workspace_tests_company_config" in indexes
