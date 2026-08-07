@@ -520,6 +520,14 @@ def update_trademark_application_phase(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Trademark application not found.")
+    if not row.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Terminal trademark applications are immutable; use a dedicated "
+                "prosecution lifecycle event."
+            ),
+        )
     if row.version != payload.expected_version:
         raise HTTPException(status_code=409, detail="Application version changed; reload.")
     row.source_pending_identifier_allocation = payload.source_pending_identifier_allocation

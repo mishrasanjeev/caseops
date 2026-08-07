@@ -1,26 +1,40 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   enableIpWorkspaceMock,
+  fetchIpCoreRecordsMock,
   fetchIpDocketsMock,
+  fetchIpProsecutionWorkspaceMock,
   fetchIpWorkspaceReadinessMock,
+  previewIpDocketEventMock,
+  previewIpDocketLifecycleMock,
   runIpWorkspaceTestMock,
   saveIpWorkspaceConfigurationMock,
+  appendIpDocketEventMock,
+  transitionIpDocketLifecycleMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
+  fetchIpCoreRecordsMock: vi.fn(),
   fetchIpDocketsMock: vi.fn(),
+  fetchIpProsecutionWorkspaceMock: vi.fn(),
   fetchIpWorkspaceReadinessMock: vi.fn(),
+  previewIpDocketEventMock: vi.fn(),
+  previewIpDocketLifecycleMock: vi.fn(),
   runIpWorkspaceTestMock: vi.fn(),
   saveIpWorkspaceConfigurationMock: vi.fn(),
+  appendIpDocketEventMock: vi.fn(),
+  transitionIpDocketLifecycleMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDockets: fetchIpDocketsMock,
+  fetchIpCoreRecords: fetchIpCoreRecordsMock,
+  fetchIpProsecutionWorkspace: fetchIpProsecutionWorkspaceMock,
   fetchIpWorkspaceReadiness: fetchIpWorkspaceReadinessMock,
   enableIpWorkspace: enableIpWorkspaceMock,
   runIpWorkspaceTest: runIpWorkspaceTestMock,
@@ -34,6 +48,10 @@ vi.mock("@/lib/api/endpoints", () => ({
   addIpRelatedRightObligation: vi.fn(),
   completeIpRelatedRightObligation: vi.fn(),
   reconcileIpCosts: vi.fn(),
+  previewIpDocketEvent: previewIpDocketEventMock,
+  appendIpDocketEvent: appendIpDocketEventMock,
+  previewIpDocketLifecycle: previewIpDocketLifecycleMock,
+  transitionIpDocketLifecycle: transitionIpDocketLifecycleMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -42,6 +60,10 @@ vi.mock("@/lib/capabilities", () => ({
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("@/lib/use-session", () => ({
+  useSession: () => ({ context: { membership: { id: "membership-1" } } }),
 }));
 
 import IpDocketPage from "@/app/app/ip/page";
@@ -56,7 +78,13 @@ function withClient(children: ReactNode) {
 describe("IpDocketPage", () => {
   beforeEach(() => {
     fetchIpDocketsMock.mockReset();
+    fetchIpCoreRecordsMock.mockReset();
+    fetchIpProsecutionWorkspaceMock.mockReset();
     fetchIpWorkspaceReadinessMock.mockReset();
+    previewIpDocketEventMock.mockReset();
+    previewIpDocketLifecycleMock.mockReset();
+    appendIpDocketEventMock.mockReset();
+    transitionIpDocketLifecycleMock.mockReset();
     enableIpWorkspaceMock.mockReset();
     runIpWorkspaceTestMock.mockReset();
     saveIpWorkspaceConfigurationMock.mockReset();
@@ -69,6 +97,29 @@ describe("IpDocketPage", () => {
       features: [],
     });
     fetchIpDocketsMock.mockResolvedValue({ dockets: [], count: 0 });
+    fetchIpCoreRecordsMock.mockResolvedValue({ assets: [], applications: [], proceedings: [], identifiers: [] });
+    fetchIpProsecutionWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1", lifecycle_status: "active", lifecycle_version: 0,
+      current_phase: "draft", registry_freshness: "not_configured",
+      data_quality_gaps: [], unconfirmed_deadline_refs: [], conflicting_event_ids: [],
+      events: [], operational_completion_count: 0, filing_evidence_count: 0,
+      registry_acceptance_count: 0, final_disposition_count: 0,
+    });
+    previewIpDocketEventMock.mockResolvedValue({
+      docket_id: "ip-1", lifecycle_version: 0, current_phase: "draft",
+      proposed_phase: "formalities", backdated: false, recalculation_required: false,
+      duplicate_candidate_ids: [], checklist: [{ category: "document", key: "document_evidence", label: "Supporting document", required: true, satisfied: true, evidence_refs: ["attachment:document-1"] }],
+      unresolved_exception_codes: [], operational_effects_are_proposals: true, filing_claimed: false,
+    });
+    appendIpDocketEventMock.mockResolvedValue({ id: "event-1" });
+    previewIpDocketLifecycleMock.mockResolvedValue({
+      docket_id: "ip-1", from_status: "active", to_status: "closed",
+      expected_lifecycle_version: 0,
+      impacts: [{ impact_kind: "incident", record_id: "incident-1", current_state: "open", proposed_outcome: "retain_restricted_history", blocking: true, blocker_code: "open_deadline_incident:incident-1" }],
+      blocker_codes: ["open_deadline_incident:incident-1"],
+      requires_exception_acknowledgement: true, reopen_without_child_resurrection: false,
+    });
+    transitionIpDocketLifecycleMock.mockResolvedValue({ status: "closed" });
   });
 
   it("renders the authorized empty state and working create form", async () => {
@@ -259,6 +310,9 @@ describe("IpDocketPage", () => {
       dockets: [{
         id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
         title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: false,
+        is_active: true, lifecycle_version: 0, lifecycle_effective_at: null,
+        lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
+        lifecycle_evidence_ref: null, successor_docket_id: null,
         current_version: 1, created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
         current_particulars: { form_key: "TM-A", form_version: "2026.1", readiness_status: "ready", classes_json: [{ class_number: 9, specification: "Software" }] },
         notice_links: [], deadline_incidents: [], title_interests: [], cost_items: [], related_right_obligations: [],
@@ -276,5 +330,53 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Transfer covered deadlines" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Add recordal obligation" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reconcile with Matter billing" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Preview prosecution event" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Record prosecution event" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Preview lifecycle impact" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Apply lifecycle transition" })).toBeVisible();
+  });
+
+  it("requires a current preview before recording an event or acknowledged lifecycle impact", async () => {
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [{
+        id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
+        title: "CASEOPS", primary_identifier: "TM-1", status: "active", is_active: true,
+        lifecycle_version: 0, lifecycle_effective_at: null, lifecycle_reason: null,
+        lifecycle_outcome: null, lifecycle_source: null, lifecycle_evidence_ref: null,
+        successor_docket_id: null, restricted: false, current_version: 1,
+        created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
+        current_particulars: { form_key: "TM-A", form_version: "2026.1", readiness_status: "ready", classes_json: [{ class_number: 9, specification: "Software" }] },
+        notice_links: [], evidence_candidates: [], deadline_coverages: [], deadline_incidents: [],
+        title_interests: [], related_right_obligations: [], cost_items: [],
+      }],
+      count: 1,
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    const prosecution = await screen.findByTestId("ip-prosecution-workspace");
+    const record = within(prosecution).getByRole("button", { name: "Record prosecution event" });
+    expect(record).toBeDisabled();
+    fireEvent.change(within(prosecution).getByLabelText("Reason"), { target: { value: "Reviewed official event evidence." } });
+    fireEvent.change(within(prosecution).getByLabelText("Evidence reference"), { target: { value: "attachment:evidence-1" } });
+    fireEvent.change(within(prosecution).getByLabelText("Document reference"), { target: { value: "attachment:document-1" } });
+    fireEvent.click(within(prosecution).getByRole("button", { name: "Preview prosecution event" }));
+    expect(await within(prosecution).findByTestId("ip-event-preview")).toHaveTextContent("Preview only");
+    expect(record).toBeEnabled();
+    fireEvent.click(record);
+    await waitFor(() => expect(appendIpDocketEventMock).toHaveBeenCalledTimes(1));
+
+    const lifecycle = screen.getByTestId("ip-lifecycle-workflow");
+    const apply = within(lifecycle).getByRole("button", { name: "Apply lifecycle transition" });
+    fireEvent.change(within(lifecycle).getByLabelText("Reason"), { target: { value: "Client instructed closure." } });
+    fireEvent.change(within(lifecycle).getByLabelText("Outcome"), { target: { value: "closed" } });
+    fireEvent.change(within(lifecycle).getByLabelText("Evidence reference"), { target: { value: "attachment:closure-1" } });
+    fireEvent.click(within(lifecycle).getByRole("button", { name: "Preview lifecycle impact" }));
+    expect(await within(lifecycle).findByTestId("ip-lifecycle-preview")).toHaveTextContent("acknowledgement required");
+    expect(apply).toBeDisabled();
+    fireEvent.click(within(lifecycle).getByRole("checkbox", { name: /reviewed and acknowledge/i }));
+    expect(apply).toBeEnabled();
+    fireEvent.click(apply);
+    await waitFor(() => expect(transitionIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
   });
 });

@@ -26,6 +26,7 @@ IpCandidateStatus = Literal["candidate", "confirmed", "reconciled", "rejected"]
 
 class IpDocketEventCreateRequest(BaseModel):
     expected_lifecycle_version: int = Field(ge=0)
+    expected_application_version: int | None = Field(default=None, ge=1)
     application_id: str | None = None
     proceeding_id: str | None = None
     event_kind: IpEventKind
@@ -59,7 +60,34 @@ class IpDocketEventCreateRequest(BaseModel):
             raise ValueError("Reconciled events require an explicit decision.")
         if self.reconciliation_decision and not self.reconciles_event_id:
             raise ValueError("A reconciliation decision requires a candidate event.")
+        if self.application_id and self.expected_application_version is None:
+            raise ValueError("Application events require the expected application version.")
+        if not self.application_id and self.expected_application_version is not None:
+            raise ValueError("Application version is only valid for an application event.")
         return self
+
+
+class IpChecklistItem(BaseModel):
+    category: Literal["fact", "form", "fee", "document", "approval", "exception"]
+    key: str
+    label: str
+    required: bool
+    satisfied: bool
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class IpDocketEventPreviewResponse(BaseModel):
+    docket_id: str
+    lifecycle_version: int
+    current_phase: str
+    proposed_phase: str | None
+    backdated: bool
+    recalculation_required: bool
+    duplicate_candidate_ids: list[str]
+    checklist: list[IpChecklistItem]
+    unresolved_exception_codes: list[str]
+    operational_effects_are_proposals: Literal[True] = True
+    filing_claimed: Literal[False] = False
 
 
 class IpDocketEventResponse(BaseModel):
@@ -103,6 +131,10 @@ class IpLifecycleTransitionRequest(BaseModel):
     source: str = Field(min_length=2, max_length=80)
     evidence_ref: str = Field(min_length=2, max_length=512)
     successor_docket_id: str | None = None
+    acknowledged_exception_codes: list[str] = Field(default_factory=list, max_length=100)
+    second_approver_membership_id: str | None = None
+    client_report_handling: Literal["retain", "exclude", "successor"] = "retain"
+    linked_matter_handling: Literal["retain", "reviewed", "not_linked"] = "retain"
 
     @model_validator(mode="after")
     def validate_transition_contract(self) -> IpLifecycleTransitionRequest:
@@ -111,3 +143,57 @@ class IpLifecycleTransitionRequest(BaseModel):
         if self.to_status != "transferred" and self.successor_docket_id is not None:
             raise ValueError("A successor docket is only valid for transfer.")
         return self
+
+
+class IpLifecycleImpactRow(BaseModel):
+    impact_kind: Literal[
+        "coverage",
+        "obligation",
+        "deadline",
+        "incident",
+        "proceeding",
+        "recordal",
+        "matter",
+        "successor",
+    ]
+    record_id: str
+    current_state: str
+    proposed_outcome: str
+    blocking: bool = False
+    blocker_code: str | None = None
+
+
+class IpLifecyclePreviewResponse(BaseModel):
+    docket_id: str
+    from_status: str
+    to_status: str
+    expected_lifecycle_version: int
+    impacts: list[IpLifecycleImpactRow]
+    blocker_codes: list[str]
+    requires_exception_acknowledgement: bool
+    reopen_without_child_resurrection: bool
+
+
+class IpLifecycleTransitionResponse(BaseModel):
+    docket_id: str
+    status: str
+    is_active: bool
+    lifecycle_version: int
+    successor_docket_id: str | None
+    event: IpDocketEventResponse
+
+
+class IpProsecutionWorkspaceResponse(BaseModel):
+    docket_id: str
+    lifecycle_status: str
+    lifecycle_version: int
+    current_phase: str
+    registry_freshness: Literal["not_configured", "candidate_pending", "current"]
+    data_quality_gaps: list[str]
+    unconfirmed_deadline_refs: list[str]
+    conflicting_event_ids: list[str]
+    events: list[IpDocketEventResponse]
+    operational_completion_count: int
+    filing_evidence_count: int
+    registry_acceptance_count: int
+    final_disposition_count: int

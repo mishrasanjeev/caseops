@@ -16,18 +16,25 @@ import {
   addIpCostItem,
   addIpRelatedRightObligation,
   addIpTitleInterest,
+  appendIpDocketEvent,
   bulkReassignIpCoverage,
   completeIpRelatedRightObligation,
   createIpDocket,
   discoverIpEvidence,
   enableIpWorkspace,
+  fetchIpCoreRecords,
   fetchIpDockets,
+  fetchIpProsecutionWorkspace,
   fetchIpWorkspaceReadiness,
+  previewIpDocketEvent,
+  previewIpDocketLifecycle,
   reconcileIpCosts,
   reviewIpEvidenceCandidate,
   runIpWorkspaceTest,
   saveIpWorkspaceConfiguration,
+  transitionIpDocketLifecycle,
   type IpDocket,
+  type IpDocketEventInput,
   type IpEvidenceCandidate,
   type IpFeatureReadiness,
   type IpWorkspaceConfigurationStatus,
@@ -186,8 +193,10 @@ export default function IpDocketPage() {
           {selected ? (
             <DocketWorkspace
               docket={selected}
+              canWrite={canWrite}
               canReview={canReview}
               canFinance={canFinance}
+              currentMembershipId={session.context?.membership.id ?? null}
               onChanged={refresh}
             />
           ) : null}
@@ -619,13 +628,17 @@ function CreateTrademarkCard({ onCreated }: { onCreated: (docket: IpDocket) => v
 
 function DocketWorkspace({
   docket,
+  canWrite,
   canReview,
   canFinance,
+  currentMembershipId,
   onChanged,
 }: {
   docket: IpDocket;
+  canWrite: boolean;
   canReview: boolean;
   canFinance: boolean;
+  currentMembershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
   const classes = docket.current_particulars.classes_json;
@@ -652,6 +665,13 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <ProsecutionCard
+          docket={docket}
+          enabled={canWrite}
+          currentMembershipId={currentMembershipId}
+          onChanged={onChanged}
+        />
+        <LifecycleCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <EvidenceCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <CoverageCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <TitleCard docket={docket} enabled={canReview} onChanged={onChanged} />
@@ -668,6 +688,246 @@ function DocketWorkspace({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+const EVENT_KINDS = [
+  "filing",
+  "formalities",
+  "examination_report",
+  "response",
+  "show_cause_hearing",
+  "acceptance",
+  "publication",
+  "registration",
+  "renewal",
+  "refusal",
+  "abandonment",
+  "restoration",
+] as const;
+
+function localDateTimeValue() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function ProsecutionCard({
+  docket,
+  enabled,
+  currentMembershipId,
+  onChanged,
+}: {
+  docket: IpDocket;
+  enabled: boolean;
+  currentMembershipId: string | null;
+  onChanged: () => Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const prosecution = useQuery({
+    queryKey: ["ip", "prosecution", docket.id],
+    queryFn: () => fetchIpProsecutionWorkspace(docket.id),
+  });
+  const core = useQuery({
+    queryKey: ["ip", "core-records", docket.id],
+    queryFn: () => fetchIpCoreRecords(docket.id),
+  });
+  const application = core.data?.applications[0] ?? null;
+  const [eventKind, setEventKind] = useState<(typeof EVENT_KINDS)[number]>("formalities");
+  const [effectiveAt, setEffectiveAt] = useState(localDateTimeValue);
+  const [reason, setReason] = useState("");
+  const [evidenceRef, setEvidenceRef] = useState("");
+  const [documentRef, setDocumentRef] = useState("");
+  const eventInput: IpDocketEventInput | null = currentMembershipId && effectiveAt
+    ? {
+        lifecycleVersion: docket.lifecycle_version,
+        applicationId: application?.id ?? null,
+        applicationVersion: application?.version ?? null,
+        eventKind,
+        effectiveAt: new Date(effectiveAt).toISOString(),
+        responsibleMembershipId: currentMembershipId,
+        reason,
+        evidenceRefs: evidenceRef.trim() ? [evidenceRef.trim()] : [],
+        documentRefs: documentRef.trim() ? [documentRef.trim()] : [],
+      }
+    : null;
+  const inputSignature = JSON.stringify(eventInput);
+  const [previewedSignature, setPreviewedSignature] = useState<string | null>(null);
+  const preview = useMutation({
+    mutationFn: () => previewIpDocketEvent(docket.id, eventInput!),
+    onSuccess: () => setPreviewedSignature(inputSignature),
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not preview the prosecution event.")),
+  });
+  const commit = useMutation({
+    mutationFn: () => appendIpDocketEvent(docket.id, eventInput!),
+    onSuccess: async () => {
+      toast.success("Prosecution event recorded in the immutable timeline.");
+      setPreviewedSignature(null);
+      preview.reset();
+      setReason("");
+      setEvidenceRef("");
+      setDocumentRef("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ip", "prosecution", docket.id] }),
+        queryClient.invalidateQueries({ queryKey: ["ip", "core-records", docket.id] }),
+        onChanged(),
+      ]);
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record the prosecution event.")),
+  });
+  const valid = Boolean(eventInput && reason.trim().length >= 5 && effectiveAt);
+  const previewCurrent = previewedSignature === inputSignature ? preview.data : undefined;
+
+  return (
+    <Card className="min-w-0" data-testid="ip-prosecution-workspace">
+      <CardHeader><CardTitle as="h3">Prosecution events</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
+        {prosecution.isPending ? <p className="text-sm">Loading prosecution timeline…</p> : null}
+        {prosecution.isError ? <p className="text-sm text-red-700">Prosecution data is unavailable; event entry remains fail-closed.</p> : null}
+        {prosecution.data ? (
+          <>
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+              <Metric label="Current phase" value={prosecution.data.current_phase.replaceAll("_", " ")} icon={Scale} />
+              <Metric label="Registry freshness" value={prosecution.data.registry_freshness.replaceAll("_", " ")} icon={FileCheck2} />
+            </div>
+            <div className="grid min-w-0 grid-cols-2 gap-2 text-xs">
+              <div>Operational completion: <strong>{prosecution.data.operational_completion_count}</strong></div>
+              <div>Filing evidence: <strong>{prosecution.data.filing_evidence_count}</strong></div>
+              <div>Registry acceptance: <strong>{prosecution.data.registry_acceptance_count}</strong></div>
+              <div>Final disposition: <strong>{prosecution.data.final_disposition_count}</strong></div>
+            </div>
+            {prosecution.data.data_quality_gaps.length || prosecution.data.unconfirmed_deadline_refs.length ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+                Review required: {[...prosecution.data.data_quality_gaps, ...prosecution.data.unconfirmed_deadline_refs].join(", ")}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        {enabled ? (
+          <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
+            <Field label="Event type">
+              <select className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={eventKind} onChange={(event) => setEventKind(event.target.value as typeof eventKind)}>
+                {EVENT_KINDS.map((kind) => <option key={kind} value={kind}>{kind.replaceAll("_", " ")}</option>)}
+              </select>
+            </Field>
+            <Field label="Effective date and time"><Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></Field>
+            <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+            <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} placeholder="attachment:…" /></Field>
+            <Field label="Document reference"><Input value={documentRef} onChange={(event) => setDocumentRef(event.target.value)} placeholder="attachment:…" /></Field>
+            <p className="text-xs text-[var(--color-mute)]">A checklist or operational task is not filing evidence and never proves registry acceptance.</p>
+            <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview prosecution event</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => commit.mutate()} disabled={!previewCurrent || commit.isPending}>Record prosecution event</Button>
+            </div>
+          </form>
+        ) : <p className="text-xs text-[var(--color-mute)]">IP write permission is required to record an event.</p>}
+
+        {previewCurrent ? (
+          <div className="rounded-md border border-[var(--color-line)] p-3 text-xs" data-testid="ip-event-preview">
+            <div className="font-semibold">Preview only · {previewCurrent.current_phase} → {previewCurrent.proposed_phase ?? "unchanged"}</div>
+            <div className="mt-1">Backdated recalculation: {previewCurrent.recalculation_required ? "required" : "not required"}</div>
+            <ul className="mt-2 grid gap-1">
+              {previewCurrent.checklist.map((item) => <li key={item.key}>{item.satisfied ? "✓" : "○"} {item.label}</li>)}
+            </ul>
+          </div>
+        ) : null}
+
+        {prosecution.data?.events.length ? (
+          <ol className="grid min-w-0 gap-2" aria-label="Prosecution event timeline">
+            {prosecution.data.events.map((event) => (
+              <li key={event.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-xs">
+                <strong>#{event.sequence} {event.event_kind.replaceAll("_", " ")}</strong>
+                <div className="mt-1 break-words">{event.source} · {new Date(event.effective_at).toLocaleString()} · {event.before_phase ?? "—"} → {event.after_phase ?? "—"}</div>
+              </li>
+            ))}
+          </ol>
+        ) : <p className="text-xs text-[var(--color-mute)]">No prosecution events have been recorded.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LifecycleCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
+  const [toStatus, setToStatus] = useState<"abandoned" | "transferred" | "retired" | "closed">("closed");
+  const [effectiveAt, setEffectiveAt] = useState(localDateTimeValue);
+  const [reason, setReason] = useState("");
+  const [outcome, setOutcome] = useState("");
+  const [evidenceRef, setEvidenceRef] = useState("");
+  const [successorDocketId, setSuccessorDocketId] = useState("");
+  const [secondApproverMembershipId, setSecondApproverMembershipId] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const lifecycleInput = {
+    lifecycleVersion: docket.lifecycle_version,
+    toStatus,
+    effectiveAt: effectiveAt ? new Date(effectiveAt).toISOString() : "",
+    reason,
+    outcome,
+    evidenceRef,
+    successorDocketId: successorDocketId || null,
+    secondApproverMembershipId: secondApproverMembershipId || null,
+    linkedMatterHandling: docket.matter_id ? "reviewed" as const : "not_linked" as const,
+  };
+  const inputSignature = JSON.stringify(lifecycleInput);
+  const [previewedSignature, setPreviewedSignature] = useState<string | null>(null);
+  const preview = useMutation({
+    mutationFn: () => previewIpDocketLifecycle(docket.id, lifecycleInput),
+    onSuccess: () => { setPreviewedSignature(inputSignature); setAcknowledged(false); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not preview lifecycle impact.")),
+  });
+  const previewCurrent = previewedSignature === inputSignature ? preview.data : undefined;
+  const transition = useMutation({
+    mutationFn: () => transitionIpDocketLifecycle(docket.id, {
+      ...lifecycleInput,
+      acknowledgedExceptionCodes: acknowledged ? previewCurrent?.blocker_codes ?? [] : [],
+    }),
+    onSuccess: async () => { toast.success("Docket lifecycle transition recorded."); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not apply lifecycle transition.")),
+  });
+  const valid = reason.trim().length >= 5 && outcome.trim().length >= 2 && evidenceRef.trim().length >= 2 && (toStatus !== "transferred" || Boolean(successorDocketId));
+  const blockersAcknowledged = !previewCurrent?.requires_exception_acknowledgement || acknowledged;
+
+  return (
+    <Card className="min-w-0" data-testid="ip-lifecycle-workflow">
+      <CardHeader><CardTitle as="h3">Close, transfer, or retire</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <p className="text-xs text-[var(--color-mute)]">The dedicated transition locks the parent, records immutable evidence, and prevents generic updates or child work from reopening a terminal docket.</p>
+        {enabled ? (
+          <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
+            <Field label="Transition">
+              <select className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={toStatus} onChange={(event) => setToStatus(event.target.value as typeof toStatus)}>
+                <option value="closed">Close</option><option value="abandoned">Abandon</option><option value="retired">Retire</option><option value="transferred">Transfer</option>
+              </select>
+            </Field>
+            <Field label="Effective date and time"><Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></Field>
+            <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+            <Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field>
+            <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></Field>
+            {toStatus === "transferred" ? <Field label="Successor docket ID"><Input value={successorDocketId} onChange={(event) => setSuccessorDocketId(event.target.value)} /></Field> : null}
+            <Field label="Second approver membership ID (optional)"><Input value={secondApproverMembershipId} onChange={(event) => setSecondApproverMembershipId(event.target.value)} /></Field>
+            <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview lifecycle impact</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => transition.mutate()} disabled={!previewCurrent || !blockersAcknowledged || transition.isPending}>Apply lifecycle transition</Button>
+            </div>
+          </form>
+        ) : <p className="text-xs text-[var(--color-mute)]">IP review permission is required for lifecycle transitions.</p>}
+        {previewCurrent ? (
+          <div className="rounded-md border border-[var(--color-line)] p-3 text-xs" data-testid="ip-lifecycle-preview">
+            <div className="font-semibold">Impact preview · {previewCurrent.from_status} → {previewCurrent.to_status}</div>
+            <ul className="mt-2 grid gap-1">
+              {previewCurrent.impacts.map((impact) => <li key={`${impact.impact_kind}-${impact.record_id}`} className="break-words">{impact.impact_kind}: {impact.current_state} → {impact.proposed_outcome}{impact.blocking ? " · acknowledgement required" : ""}</li>)}
+            </ul>
+            {previewCurrent.requires_exception_acknowledgement ? (
+              <label className="mt-3 flex min-w-0 items-start gap-2">
+                <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+                <span>I reviewed and acknowledge every listed lifecycle blocker.</span>
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

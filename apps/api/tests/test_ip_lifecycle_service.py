@@ -229,10 +229,11 @@ def test_event_commands_reject_stale_registry_and_cross_tenant_targets(
                 session,
                 context=context,
                 docket_id=first_docket["id"],
-                payload=_manual_event(
-                    membership_id=membership_id,
-                    application_id=application.json()["application"]["id"],
-                ),
+                    payload=_manual_event(
+                        membership_id=membership_id,
+                        application_id=application.json()["application"]["id"],
+                        expected_application_version=1,
+                    ),
             )
         assert tenant_error.value.status_code == 422
 
@@ -314,6 +315,7 @@ def test_lifecycle_transition_is_fail_closed_and_reopen_does_not_revive_children
                 outcome="closed",
                 source="lawyer_review",
                 evidence_ref="attachment:closure-instruction-1",
+                linked_matter_handling="reviewed",
             ),
         )
         assert terminal.is_active is False
@@ -341,6 +343,7 @@ def test_lifecycle_transition_is_fail_closed_and_reopen_does_not_revive_children
                     outcome="reopened",
                     source="lawyer_review",
                     evidence_ref="attachment:stale-reopen",
+                    linked_matter_handling="reviewed",
                 ),
             )
         assert stale_transition.value.status_code == 409
@@ -368,6 +371,7 @@ def test_lifecycle_transition_is_fail_closed_and_reopen_does_not_revive_children
                 outcome="reopened",
                 source="lawyer_review",
                 evidence_ref="attachment:reopen-approval-1",
+                linked_matter_handling="reviewed",
             ),
         )
         assert reopened.is_active is True

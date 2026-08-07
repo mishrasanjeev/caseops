@@ -141,6 +141,8 @@ class TrademarkApplicationResponse(BaseModel):
     office: str
     jurisdiction: str
     filing_phase: str
+    is_active: bool
+    lifecycle_version: int
     source_pending_identifier_allocation: bool
     version: int
     created_at: datetime

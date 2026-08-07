@@ -7905,6 +7905,14 @@ export type IpDocket = {
   title: string;
   primary_identifier: string | null;
   status: string;
+  is_active: boolean;
+  lifecycle_version: number;
+  lifecycle_effective_at: string | null;
+  lifecycle_reason: string | null;
+  lifecycle_outcome: string | null;
+  lifecycle_source: string | null;
+  lifecycle_evidence_ref: string | null;
+  successor_docket_id: string | null;
   restricted: boolean;
   current_version: number;
   current_particulars: IpTrademarkParticularVersion;
@@ -7947,6 +7955,147 @@ export type IpDocket = {
   }>;
   created_at: string;
   updated_at: string;
+};
+
+export type TrademarkApplication = {
+  id: string;
+  docket_id: string;
+  asset_id: string;
+  office: string;
+  jurisdiction: string;
+  filing_phase: string;
+  is_active: boolean;
+  lifecycle_version: number;
+  source_pending_identifier_allocation: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpCoreRecords = {
+  assets: Array<Record<string, unknown>>;
+  applications: TrademarkApplication[];
+  proceedings: Array<Record<string, unknown>>;
+  identifiers: Array<Record<string, unknown>>;
+};
+
+export type IpDocketEvent = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  sequence: number;
+  application_id: string | null;
+  proceeding_id: string | null;
+  event_kind: string;
+  source: string;
+  source_reference: string | null;
+  effective_at: string;
+  entered_at: string;
+  responsible_membership_id: string;
+  entered_by_membership_id: string;
+  reason: string | null;
+  evidence_refs_json: string[];
+  document_refs_json: string[];
+  resulting_stage: string | null;
+  resulting_deadline_refs_json: string[];
+  before_phase: string | null;
+  after_phase: string | null;
+  candidate_status: string;
+  supersedes_event_id: string | null;
+  correction_reason: string | null;
+  reconciles_event_id: string | null;
+  reconciliation_decision: string | null;
+  payload_json: Record<string, unknown>;
+  created_at: string;
+};
+
+export type IpDocketEventInput = {
+  lifecycleVersion: number;
+  applicationId?: string | null;
+  applicationVersion?: number | null;
+  eventKind: string;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  reason: string;
+  evidenceRefs: string[];
+  documentRefs: string[];
+};
+
+export type IpDocketEventPreview = {
+  docket_id: string;
+  lifecycle_version: number;
+  current_phase: string;
+  proposed_phase: string | null;
+  backdated: boolean;
+  recalculation_required: boolean;
+  duplicate_candidate_ids: string[];
+  checklist: Array<{
+    category: string;
+    key: string;
+    label: string;
+    required: boolean;
+    satisfied: boolean;
+    evidence_refs: string[];
+  }>;
+  unresolved_exception_codes: string[];
+  operational_effects_are_proposals: true;
+  filing_claimed: false;
+};
+
+export type IpProsecutionWorkspace = {
+  docket_id: string;
+  lifecycle_status: string;
+  lifecycle_version: number;
+  current_phase: string;
+  registry_freshness: "not_configured" | "candidate_pending" | "current";
+  data_quality_gaps: string[];
+  unconfirmed_deadline_refs: string[];
+  conflicting_event_ids: string[];
+  events: IpDocketEvent[];
+  operational_completion_count: number;
+  filing_evidence_count: number;
+  registry_acceptance_count: number;
+  final_disposition_count: number;
+};
+
+export type IpLifecycleInput = {
+  lifecycleVersion: number;
+  toStatus: "ready" | "abandoned" | "transferred" | "retired" | "closed";
+  effectiveAt: string;
+  reason: string;
+  outcome: string;
+  evidenceRef: string;
+  successorDocketId?: string | null;
+  acknowledgedExceptionCodes?: string[];
+  secondApproverMembershipId?: string | null;
+  linkedMatterHandling: "retain" | "reviewed" | "not_linked";
+};
+
+export type IpLifecyclePreview = {
+  docket_id: string;
+  from_status: string;
+  to_status: string;
+  expected_lifecycle_version: number;
+  impacts: Array<{
+    impact_kind: string;
+    record_id: string;
+    current_state: string;
+    proposed_outcome: string;
+    blocking: boolean;
+    blocker_code: string | null;
+  }>;
+  blocker_codes: string[];
+  requires_exception_acknowledgement: boolean;
+  reopen_without_child_resurrection: boolean;
+};
+
+export type IpLifecycleTransition = {
+  docket_id: string;
+  status: string;
+  is_active: boolean;
+  lifecycle_version: number;
+  successor_docket_id: string | null;
+  event: IpDocketEvent;
 };
 
 export type IpEvidenceCandidate = {
@@ -8148,6 +8297,90 @@ export async function enableIpWorkspace(input: {
 
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
   return apiRequest("/api/ip/dockets");
+}
+
+export async function fetchIpCoreRecords(docketId: string): Promise<IpCoreRecords> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/core-records`);
+}
+
+export async function fetchIpProsecutionWorkspace(
+  docketId: string,
+): Promise<IpProsecutionWorkspace> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/prosecution`);
+}
+
+function ipDocketEventBody(input: IpDocketEventInput) {
+  return {
+    expected_lifecycle_version: input.lifecycleVersion,
+    expected_application_version: input.applicationVersion ?? null,
+    application_id: input.applicationId ?? null,
+    event_kind: input.eventKind,
+    source: "manual",
+    effective_at: input.effectiveAt,
+    responsible_membership_id: input.responsibleMembershipId,
+    reason: input.reason,
+    evidence_refs: input.evidenceRefs,
+    document_refs: input.documentRefs,
+    candidate_status: "confirmed",
+    payload: { deadlines_confirmed: false },
+  };
+}
+
+export async function previewIpDocketEvent(
+  docketId: string,
+  input: IpDocketEventInput,
+): Promise<IpDocketEventPreview> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/events/preview`, {
+    method: "POST",
+    body: ipDocketEventBody(input),
+  });
+}
+
+export async function appendIpDocketEvent(
+  docketId: string,
+  input: IpDocketEventInput,
+): Promise<IpDocketEvent> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/events`, {
+    method: "POST",
+    body: ipDocketEventBody(input),
+  });
+}
+
+function ipLifecycleBody(input: IpLifecycleInput) {
+  return {
+    expected_lifecycle_version: input.lifecycleVersion,
+    to_status: input.toStatus,
+    effective_at: input.effectiveAt,
+    reason: input.reason,
+    outcome: input.outcome,
+    source: "manual_review",
+    evidence_ref: input.evidenceRef,
+    successor_docket_id: input.successorDocketId ?? null,
+    acknowledged_exception_codes: input.acknowledgedExceptionCodes ?? [],
+    second_approver_membership_id: input.secondApproverMembershipId ?? null,
+    client_report_handling: input.toStatus === "transferred" ? "successor" : "retain",
+    linked_matter_handling: input.linkedMatterHandling,
+  };
+}
+
+export async function previewIpDocketLifecycle(
+  docketId: string,
+  input: IpLifecycleInput,
+): Promise<IpLifecyclePreview> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/lifecycle/preview`, {
+    method: "POST",
+    body: ipLifecycleBody(input),
+  });
+}
+
+export async function transitionIpDocketLifecycle(
+  docketId: string,
+  input: IpLifecycleInput,
+): Promise<IpLifecycleTransition> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/lifecycle`, {
+    method: "POST",
+    body: ipLifecycleBody(input),
+  });
 }
 
 export async function createIpDocket(input: {

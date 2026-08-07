@@ -6,6 +6,15 @@ from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.core.settings import get_settings
+from caseops_api.schemas.ip_lifecycle import (
+    IpDocketEventCreateRequest,
+    IpDocketEventPreviewResponse,
+    IpDocketEventResponse,
+    IpLifecyclePreviewResponse,
+    IpLifecycleTransitionRequest,
+    IpLifecycleTransitionResponse,
+    IpProsecutionWorkspaceResponse,
+)
 from caseops_api.schemas.ip_operations import (
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
@@ -49,6 +58,14 @@ from caseops_api.schemas.ip_records import (
     TrademarkApplicationResponse,
 )
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
+from caseops_api.services.ip_lifecycle import (
+    append_ip_docket_event,
+    get_ip_prosecution_workspace,
+    list_ip_docket_events,
+    preview_ip_docket_event,
+    preview_ip_docket_lifecycle,
+    transition_ip_docket_lifecycle,
+)
 from caseops_api.services.ip_operations import (
     add_ip_cost_item,
     add_ip_deadline_coverage,
@@ -251,6 +268,124 @@ async def get_ip_docket_record(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return get_ip_docket(session, context=context, docket_id=docket_id)
+
+
+@router.get(
+    "/dockets/{docket_id}/prosecution",
+    response_model=IpProsecutionWorkspaceResponse,
+)
+async def get_ip_docket_prosecution_workspace(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpProsecutionWorkspaceResponse:
+    return get_ip_prosecution_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/events",
+    response_model=list[IpDocketEventResponse],
+)
+async def get_ip_docket_events(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> list[IpDocketEventResponse]:
+    return [
+        IpDocketEventResponse.model_validate(row)
+        for row in list_ip_docket_events(
+            session,
+            context=context,
+            docket_id=docket_id,
+        )
+    ]
+
+
+@router.post(
+    "/dockets/{docket_id}/events/preview",
+    response_model=IpDocketEventPreviewResponse,
+)
+async def post_ip_docket_event_preview(
+    docket_id: str,
+    payload: IpDocketEventCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketEventPreviewResponse:
+    return preview_ip_docket_event(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/events",
+    response_model=IpDocketEventResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_docket_event(
+    docket_id: str,
+    payload: IpDocketEventCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketEventResponse:
+    return IpDocketEventResponse.model_validate(
+        append_ip_docket_event(
+            session,
+            context=context,
+            docket_id=docket_id,
+            payload=payload,
+        )
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/lifecycle/preview",
+    response_model=IpLifecyclePreviewResponse,
+)
+async def post_ip_docket_lifecycle_preview(
+    docket_id: str,
+    payload: IpLifecycleTransitionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpLifecyclePreviewResponse:
+    return preview_ip_docket_lifecycle(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/lifecycle",
+    response_model=IpLifecycleTransitionResponse,
+)
+async def post_ip_docket_lifecycle_transition(
+    docket_id: str,
+    payload: IpLifecycleTransitionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpLifecycleTransitionResponse:
+    docket, event = transition_ip_docket_lifecycle(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+    return IpLifecycleTransitionResponse(
+        docket_id=docket.id,
+        status=docket.status,
+        is_active=docket.is_active,
+        lifecycle_version=docket.lifecycle_version,
+        successor_docket_id=docket.successor_docket_id,
+        event=IpDocketEventResponse.model_validate(event),
+    )
 
 
 @router.get(
