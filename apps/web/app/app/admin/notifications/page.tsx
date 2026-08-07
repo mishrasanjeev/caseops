@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import {
   createNotificationRule,
   deleteNotificationRule,
+  type HearingReminderListResponse,
   type HearingReminderRecord,
   type HearingReminderStatus,
   listAdminNotifications,
@@ -152,6 +153,29 @@ export default function AdminNotificationsPage() {
   const testMutation = useMutation({
     mutationFn: testCurrentUserNotification,
     onSuccess: async (result) => {
+      queryClient.setQueriesData<HearingReminderListResponse>(
+        { queryKey: ["admin", "notifications"] },
+        (current) => {
+          if (!current) return current;
+          const alreadyPresent = current.intents.some(
+            (intent) => intent.id === result.intent.id,
+          );
+          if (alreadyPresent) return current;
+          return {
+            ...current,
+            intents: [
+              result.intent,
+              ...current.intents.filter((intent) => intent.id !== result.intent.id),
+            ],
+            metrics: current.metrics
+              ? {
+                  ...current.metrics,
+                  delivered: current.metrics.delivered + 1,
+                }
+              : current.metrics,
+          };
+        },
+      );
       toast.success(result.message);
       await queryClient.invalidateQueries({ queryKey: ["admin", "notifications"] });
     },
