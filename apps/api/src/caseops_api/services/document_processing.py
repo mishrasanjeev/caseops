@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -326,7 +327,10 @@ def index_matter_attachment(attachment: MatterAttachment) -> None:
 
 
 def embed_matter_attachment_chunks(
-    session: Session, attachment: MatterAttachment
+    session: Session,
+    attachment: MatterAttachment,
+    *,
+    before_flush: Callable[[], None] | None = None,
 ) -> int:
     """Populate embedding_* columns on the attachment's chunks.
 
@@ -361,6 +365,12 @@ def embed_matter_attachment_chunks(
             attachment.id, exc,
         )
         return 0
+
+    # The provider call above can be arbitrarily slow. Callers that need a
+    # parent-row lifecycle lock may acquire it here, after the external work
+    # but before any ORM or pgvector write is flushed.
+    if before_flush is not None:
+        before_flush()
 
     now = utcnow()
     from caseops_api.services.corpus_ingest import (

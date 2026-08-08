@@ -424,7 +424,11 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         return
 
     try:
-        assert_operational_matter(session, matter=attachment.matter)
+        assert_operational_matter(
+            session,
+            matter=attachment.matter,
+            lock_for_write=False,
+        )
     except MatterNotOperationalError:
         _mark_job_failed(
             session,
@@ -433,20 +437,35 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         )
         return
 
-    # Delete prior chunks before recreating identical chunk indexes on a
-    # retry/reindex.  A newly uploaded attachment has no prior chunks, so do
-    # not open a write transaction before the external parse/embed work.
-    if attachment.chunks:
-        attachment.chunks.clear()
-        session.flush()
+    # Replacing the relationship also deletes prior chunks for retry/reindex,
+    # but deliberately leave that mutation unflushed until the external
+    # parse/embed work has finished and the parent lifecycle row is locked.
     index_matter_attachment(attachment)
-    # Embedding can call an external provider. Keep the new attachment and
-    # chunk mutations unflushed until that call returns so the worker cannot
-    # hold the attachment row lock while a reply/supporting upload needs to
-    # update the parent notice. embed_matter_attachment_chunks performs its
-    # own flush immediately before the pgvector UPDATE when PostgreSQL ids
-    # are required. Best-effort provider failure still leaves lexical chunks.
-    embed_matter_attachment_chunks(session, attachment)
+
+    parent_locked_for_persist = False
+
+    def lock_operational_parent_for_persist() -> None:
+        nonlocal parent_locked_for_persist
+        if parent_locked_for_persist:
+            return
+        # The attachment and replacement chunks are dirty at this point.
+        # Suppress autoflush so the lifecycle row is checked and locked before
+        # any child write becomes visible.
+        with session.no_autoflush:
+            assert_operational_matter(session, matter=attachment.matter)
+        parent_locked_for_persist = True
+
+    # Keep the attachment, chunks, and Matter row unlocked throughout the
+    # external embedding call. PostgreSQL embedding writes require a flush,
+    # so the hook acquires/rechecks the lifecycle lock immediately beforehand.
+    # Best-effort provider failure still leaves lexical chunks, protected by
+    # the explicit lock immediately below.
+    embed_matter_attachment_chunks(
+        session,
+        attachment,
+        before_flush=lock_operational_parent_for_persist,
+    )
+    lock_operational_parent_for_persist()
     job.processed_char_count = attachment.extracted_char_count
     job.error_message = attachment.extraction_error
     job.completed_at = utcnow()

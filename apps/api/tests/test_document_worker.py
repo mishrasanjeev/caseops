@@ -152,7 +152,7 @@ def test_scheduled_reprocessing_retry_can_be_drained_by_worker(
         assert attachment.extracted_char_count > 0
 
 
-def test_initial_processing_provider_phase_does_not_lock_attachment_row(
+def test_initial_processing_provider_phase_does_not_lock_matter_or_attachment_rows(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -211,17 +211,22 @@ def test_initial_processing_provider_phase_does_not_lock_attachment_row(
                 attachment = concurrent_session.get(MatterAttachment, attachment_id)
                 assert attachment is not None
                 attachment.notice_reply_sent = True
+                matter = concurrent_session.get(Matter, matter_id)
+                assert matter is not None
+                matter.description = "Concurrent upload-like parent write completed."
                 concurrent_session.commit()
         except BaseException as exc:  # noqa: BLE001 - surface thread failures in test
             concurrent_errors.append(exc)
         finally:
             concurrent_finished.set()
 
-    def embedding_provider_phase(_session, _attachment) -> int:
+    def embedding_provider_phase(_session, _attachment, *, before_flush=None) -> int:
         thread = Thread(target=update_parent_while_provider_is_running, daemon=True)
         concurrent_threads.append(thread)
         thread.start()
         provider_observation["concurrent_commit_completed"] = concurrent_finished.wait(2)
+        if before_flush is not None:
+            before_flush()
         return 0
 
     monkeypatch.setattr(
@@ -241,8 +246,93 @@ def test_initial_processing_provider_phase_does_not_lock_attachment_row(
         job = session.get(DocumentProcessingJob, job_id)
         assert attachment is not None
         assert attachment.notice_reply_sent is True
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.description == "Concurrent upload-like parent write completed."
         assert job is not None
         assert job.status == DocumentProcessingJobStatus.COMPLETED
+
+
+def test_provider_result_is_not_persisted_when_matter_is_disposed_during_call(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    created = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Dispose during provider call",
+            "matter_code": "WORKER-DISPOSE-RACE-001",
+            "practice_area": "Litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert created.status_code == 200, created.text
+    matter_id = created.json()["id"]
+    uploaded = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("dispose-race.txt", b"Original extracted content", "text/plain")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    attachment_id = uploaded.json()["id"]
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        attachment = session.get(MatterAttachment, attachment_id)
+        assert attachment is not None
+        original_text = attachment.extracted_text
+        job = session.scalar(
+            select(DocumentProcessingJob)
+            .where(
+                DocumentProcessingJob.attachment_id == attachment_id,
+                DocumentProcessingJob.target_type
+                == DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            )
+            .order_by(DocumentProcessingJob.queued_at.desc())
+        )
+        assert job is not None
+        job.status = DocumentProcessingJobStatus.QUEUED
+        job.error_message = None
+        job.started_at = None
+        job.completed_at = None
+        session.commit()
+        job_id = job.id
+
+    def dispose_then_finish_provider(_session, attachment, *, before_flush=None) -> int:
+        attachment.extracted_text = "This result must roll back."
+        with session_factory() as concurrent_session:
+            matter = concurrent_session.get(Matter, matter_id)
+            assert matter is not None
+            matter.status = "disposed"
+            matter.is_active = False
+            concurrent_session.commit()
+        if before_flush is not None:
+            before_flush()
+        return 0
+
+    monkeypatch.setattr(
+        "caseops_api.services.document_jobs.embed_matter_attachment_chunks",
+        dispose_then_finish_provider,
+    )
+
+    run_document_processing_job(job_id)
+
+    with session_factory() as session:
+        matter = session.get(Matter, matter_id)
+        attachment = session.get(MatterAttachment, attachment_id)
+        job = session.get(DocumentProcessingJob, job_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert attachment is not None
+        assert attachment.extracted_text == original_text
+        assert job is not None
+        assert job.status == DocumentProcessingJobStatus.FAILED
+        assert "disposed" in (job.error_message or "").lower()
 
 
 def test_disposed_matter_document_job_never_indexes_embeds_or_requeues(
