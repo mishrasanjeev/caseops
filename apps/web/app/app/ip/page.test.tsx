@@ -3,15 +3,28 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchIpDocketsMock, fetchIpWorkspaceReadinessMock, useCapabilityMock } = vi.hoisted(() => ({
+const {
+  enableIpWorkspaceMock,
+  fetchIpDocketsMock,
+  fetchIpWorkspaceReadinessMock,
+  runIpWorkspaceTestMock,
+  saveIpWorkspaceConfigurationMock,
+  useCapabilityMock,
+} = vi.hoisted(() => ({
+  enableIpWorkspaceMock: vi.fn(),
   fetchIpDocketsMock: vi.fn(),
   fetchIpWorkspaceReadinessMock: vi.fn(),
+  runIpWorkspaceTestMock: vi.fn(),
+  saveIpWorkspaceConfigurationMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDockets: fetchIpDocketsMock,
   fetchIpWorkspaceReadiness: fetchIpWorkspaceReadinessMock,
+  enableIpWorkspace: enableIpWorkspaceMock,
+  runIpWorkspaceTest: runIpWorkspaceTestMock,
+  saveIpWorkspaceConfiguration: saveIpWorkspaceConfigurationMock,
   createIpDocket: vi.fn(),
   addIpTitleInterest: vi.fn(),
   addIpCostItem: vi.fn(),
@@ -44,6 +57,9 @@ describe("IpDocketPage", () => {
   beforeEach(() => {
     fetchIpDocketsMock.mockReset();
     fetchIpWorkspaceReadinessMock.mockReset();
+    enableIpWorkspaceMock.mockReset();
+    runIpWorkspaceTestMock.mockReset();
+    saveIpWorkspaceConfigurationMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchIpWorkspaceReadinessMock.mockResolvedValue({
@@ -165,6 +181,76 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "New trademark" })).toBeVisible();
     expect(screen.getByText("registry sync")).toBeVisible();
     expect(screen.getByText("Manual fallback remains manual docketing.")).toBeVisible();
+  });
+
+  it("renders the complete setup and isolated-automation actions on narrow mobile", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    fetchIpWorkspaceReadinessMock.mockResolvedValue({
+      timezone: "Asia/Kolkata",
+      workspace_available: false,
+      manual_docketing_available: false,
+      configuration_status: {
+        configuration: {
+          id: "config-1",
+          version: 1,
+          enabled_asset_types_json: ["trademark"],
+          jurisdictions_json: ["IN"],
+          offices_json: ["IP India"],
+          timezone: "Asia/Kolkata",
+          holiday_calendar_key: "test-calendar",
+          working_day_policy_json: { working_weekdays: [0, 1, 2, 3, 4] },
+          document_taxonomy_version: "ip-taxonomy-2026.1",
+          event_catalog_version: "ip-events-v1",
+          deadline_rule_versions_json: { IN: "2026.1" },
+          notification_channels_json: ["in_app"],
+          critical_event_policy_json: { escalation_after_minutes: 30 },
+          escalation_owner_membership_id: "membership-1",
+          provider_keys_json: [],
+          provider_terms_version: null,
+          provider_terms_accepted_by_membership_id: null,
+          provider_terms_accepted_at: null,
+          enabled_automations_json: [],
+          workspace_enabled: false,
+          updated_by_membership_id: "membership-1",
+          created_at: "2026-08-07T00:00:00Z",
+          updated_at: "2026-08-07T00:00:00Z",
+        },
+        tests: [],
+        ready_for_manual_docketing: true,
+        enablement_blockers: [],
+      },
+      features: [{
+        feature_id: "workspace_core",
+        available: false,
+        reason: "tenant_disabled",
+        owner: "product-ip",
+        required_capabilities: ["ip:read"],
+        missing_capabilities: [],
+        entitlement_key: "ip_workspace",
+        entitled: true,
+        rollout_flag: "ip_workspace_enabled",
+        rollout_enabled: true,
+        rollout_expires_at: null,
+        manual_fallback_feature_id: null,
+      }],
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("heading", { name: "Configure pilot workspace" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Map IP roles" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Configure pilot teams" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Configure provider secrets" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Test provider connection" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Test source open" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Test notification (dry run)" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Test sample deadline" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Enable manual workspace" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Enable selected tested automations" }),
+    ).toBeVisible();
+    expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 
   it("renders every grouped operational action at a narrow viewport", async () => {

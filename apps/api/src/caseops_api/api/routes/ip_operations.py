@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.core.settings import get_settings
@@ -28,6 +28,26 @@ from caseops_api.schemas.ip_operations import (
     IpTitleInterestCreateRequest,
     IpWorkspaceReadinessResponse,
 )
+from caseops_api.schemas.ip_records import (
+    IpAssetCreateRequest,
+    IpAssetResponse,
+    IpCoreRecordResponse,
+    IpIdentifierCorrectionCreate,
+    IpIdentifierCreate,
+    IpIdentifierMutationResponse,
+    IpIdentifierResponse,
+    IpProceedingCreateRequest,
+    IpProceedingResponse,
+    IpWorkspaceConfigurationStatusResponse,
+    IpWorkspaceConfigurationUpsertRequest,
+    IpWorkspaceEnableRequest,
+    IpWorkspaceTestResultResponse,
+    IpWorkspaceTestRunRequest,
+    TrademarkApplicationCreateRequest,
+    TrademarkApplicationMutationResponse,
+    TrademarkApplicationPhaseUpdateRequest,
+    TrademarkApplicationResponse,
+)
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
 from caseops_api.services.ip_operations import (
     add_ip_cost_item,
@@ -49,6 +69,22 @@ from caseops_api.services.ip_operations import (
     review_ip_evidence_candidate,
     verify_ip_deadline_incident,
 )
+from caseops_api.services.ip_records import (
+    correct_ip_identifier,
+    create_ip_asset,
+    create_ip_identifier,
+    create_ip_proceeding,
+    create_trademark_application,
+    list_ip_core_records,
+    search_ip_identifiers,
+    update_trademark_application_phase,
+)
+from caseops_api.services.ip_workspace import (
+    enable_ip_workspace,
+    get_ip_workspace_configuration_status,
+    run_ip_workspace_test,
+    upsert_ip_workspace_configuration,
+)
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -56,6 +92,10 @@ IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
 IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
 IpFinance = Annotated[SessionContext, Depends(require_capability("ip:fees_manage"))]
+IpWorkspaceAdmin = Annotated[
+    SessionContext,
+    Depends(require_capability("ip:taxonomy_admin")),
+]
 
 
 @router.get("/readiness", response_model=IpWorkspaceReadinessResponse)
@@ -68,16 +108,38 @@ async def get_ip_workspace_readiness(
         context=context,
         settings=get_settings(),
     )
-    by_id = {decision.feature_id: decision for decision in decisions}
-    return IpWorkspaceReadinessResponse(
-        timezone=context.company.timezone,
-        workspace_available=by_id["workspace_core"].available,
-        manual_docketing_available=by_id["manual_docketing"].available,
-        features=[
+    configuration_status = get_ip_workspace_configuration_status(session, context=context)
+    configuration = configuration_status.configuration
+    features: list[dict[str, object]] = []
+    for decision in decisions:
+        available = decision.available
+        reason = decision.reason
+        if available:
+            if configuration is None:
+                available = False
+                reason = "workspace_not_configured"
+            elif not configuration.workspace_enabled:
+                available = False
+                reason = "tenant_disabled"
+            elif decision.feature_id in {
+                "registry_sync",
+                "deadline_automation",
+                "notification_automation",
+            }:
+                if decision.feature_id not in configuration.enabled_automations_json:
+                    available = False
+                    reason = "tenant_disabled"
+                elif any(
+                    blocker.startswith(f"{decision.feature_id}:")
+                    for blocker in configuration_status.enablement_blockers
+                ):
+                    available = False
+                    reason = "readiness_test_failed"
+        features.append(
             {
                 "feature_id": decision.feature_id,
-                "available": decision.available,
-                "reason": decision.reason,
+                "available": available,
+                "reason": reason,
                 "owner": decision.owner,
                 "required_capabilities": list(decision.required_capabilities),
                 "missing_capabilities": list(decision.missing_capabilities),
@@ -88,9 +150,80 @@ async def get_ip_workspace_readiness(
                 "rollout_expires_at": decision.rollout_expires_at,
                 "manual_fallback_feature_id": decision.manual_fallback_feature_id,
             }
-            for decision in decisions
-        ],
+        )
+    by_id = {feature["feature_id"]: feature for feature in features}
+    return IpWorkspaceReadinessResponse(
+        timezone=context.company.timezone,
+        workspace_available=bool(by_id["workspace_core"]["available"]),
+        manual_docketing_available=bool(by_id["manual_docketing"]["available"]),
+        configuration_status=configuration_status,
+        features=features,
     )
+
+
+@router.get(
+    "/workspace/configuration",
+    response_model=IpWorkspaceConfigurationStatusResponse,
+)
+async def get_ip_workspace_configuration(
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpWorkspaceConfigurationStatusResponse:
+    return get_ip_workspace_configuration_status(session, context=context)
+
+
+@router.put(
+    "/workspace/configuration",
+    response_model=IpWorkspaceConfigurationStatusResponse,
+)
+async def put_ip_workspace_configuration(
+    payload: IpWorkspaceConfigurationUpsertRequest,
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpWorkspaceConfigurationStatusResponse:
+    return upsert_ip_workspace_configuration(session, context=context, payload=payload)
+
+
+@router.post(
+    "/workspace/tests",
+    response_model=IpWorkspaceTestResultResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_workspace_test(
+    payload: IpWorkspaceTestRunRequest,
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpWorkspaceTestResultResponse:
+    return IpWorkspaceTestResultResponse.model_validate(
+        run_ip_workspace_test(session, context=context, payload=payload)
+    )
+
+
+@router.post(
+    "/workspace/enable",
+    response_model=IpWorkspaceConfigurationStatusResponse,
+)
+async def post_ip_workspace_enablement(
+    payload: IpWorkspaceEnableRequest,
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpWorkspaceConfigurationStatusResponse:
+    return enable_ip_workspace(session, context=context, payload=payload)
+
+
+@router.get(
+    "/identifiers/search",
+    response_model=list[IpIdentifierResponse],
+)
+async def get_ip_identifier_search(
+    context: IpViewer,
+    session: DbSession,
+    query: Annotated[str, Query(alias="q", min_length=1, max_length=160)],
+) -> list[IpIdentifierResponse]:
+    return [
+        IpIdentifierResponse.model_validate(row)
+        for row in search_ip_identifiers(session, context=context, query=query)
+    ]
 
 
 @router.get("/dockets", response_model=IpDocketListResponse)
@@ -118,6 +251,157 @@ async def get_ip_docket_record(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return get_ip_docket(session, context=context, docket_id=docket_id)
+
+
+@router.get(
+    "/dockets/{docket_id}/core-records",
+    response_model=IpCoreRecordResponse,
+)
+async def get_ip_docket_core_records(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpCoreRecordResponse:
+    return IpCoreRecordResponse.model_validate(
+        list_ip_core_records(session, context=context, docket_id=docket_id)
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/assets",
+    response_model=IpAssetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_asset(
+    docket_id: str,
+    payload: IpAssetCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpAssetResponse:
+    return IpAssetResponse.model_validate(
+        create_ip_asset(session, context=context, docket_id=docket_id, payload=payload)
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/applications",
+    response_model=TrademarkApplicationMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_trademark_application(
+    docket_id: str,
+    payload: TrademarkApplicationCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> TrademarkApplicationMutationResponse:
+    application, identifier, duplicates = create_trademark_application(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+    return TrademarkApplicationMutationResponse(
+        application=TrademarkApplicationResponse.model_validate(application),
+        identifier=(
+            IpIdentifierResponse.model_validate(identifier) if identifier is not None else None
+        ),
+        duplicate_candidates=[
+            IpIdentifierResponse.model_validate(row) for row in duplicates
+        ],
+    )
+
+
+@router.patch(
+    "/applications/{application_id}/filing-phase",
+    response_model=TrademarkApplicationResponse,
+)
+async def patch_trademark_application_phase(
+    application_id: str,
+    payload: TrademarkApplicationPhaseUpdateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> TrademarkApplicationResponse:
+    return TrademarkApplicationResponse.model_validate(
+        update_trademark_application_phase(
+            session,
+            context=context,
+            application_id=application_id,
+            payload=payload,
+        )
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings",
+    response_model=IpProceedingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_proceeding(
+    docket_id: str,
+    payload: IpProceedingCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpProceedingResponse:
+    return IpProceedingResponse.model_validate(
+        create_ip_proceeding(
+            session,
+            context=context,
+            docket_id=docket_id,
+            payload=payload,
+        )
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/identifiers",
+    response_model=IpIdentifierMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_identifier(
+    docket_id: str,
+    payload: IpIdentifierCreate,
+    context: IpWriter,
+    session: DbSession,
+) -> IpIdentifierMutationResponse:
+    identifier, duplicates = create_ip_identifier(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+    return IpIdentifierMutationResponse(
+        identifier=IpIdentifierResponse.model_validate(identifier),
+        duplicate_candidates=[
+            IpIdentifierResponse.model_validate(row) for row in duplicates
+        ],
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/identifiers/{identifier_id}/corrections",
+    response_model=IpIdentifierMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_identifier_correction(
+    docket_id: str,
+    identifier_id: str,
+    payload: IpIdentifierCorrectionCreate,
+    context: IpWriter,
+    session: DbSession,
+) -> IpIdentifierMutationResponse:
+    identifier, duplicates = correct_ip_identifier(
+        session,
+        context=context,
+        docket_id=docket_id,
+        identifier_id=identifier_id,
+        payload=payload,
+    )
+    return IpIdentifierMutationResponse(
+        identifier=IpIdentifierResponse.model_validate(identifier),
+        duplicate_candidates=[
+            IpIdentifierResponse.model_validate(row) for row in duplicates
+        ],
+    )
 
 
 @router.post("/dockets/{docket_id}/versions", response_model=IpDocketRecordResponse)

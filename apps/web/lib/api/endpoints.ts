@@ -8008,7 +8008,10 @@ export type IpFeatureReadiness = {
     | "missing_capability"
     | "missing_entitlement"
     | "rollout_disabled"
-    | "rollout_expired";
+    | "rollout_expired"
+    | "workspace_not_configured"
+    | "tenant_disabled"
+    | "readiness_test_failed";
   owner: string;
   required_capabilities: string[];
   missing_capabilities: string[];
@@ -8020,15 +8023,127 @@ export type IpFeatureReadiness = {
   manual_fallback_feature_id: string | null;
 };
 
+export type IpWorkspaceConfiguration = {
+  id: string;
+  version: number;
+  enabled_asset_types_json: string[];
+  jurisdictions_json: string[];
+  offices_json: string[];
+  timezone: string;
+  holiday_calendar_key: string;
+  working_day_policy_json: Record<string, unknown>;
+  document_taxonomy_version: string;
+  event_catalog_version: string;
+  deadline_rule_versions_json: Record<string, string>;
+  notification_channels_json: string[];
+  critical_event_policy_json: Record<string, unknown>;
+  escalation_owner_membership_id: string;
+  provider_keys_json: string[];
+  provider_terms_version: string | null;
+  provider_terms_accepted_by_membership_id: string | null;
+  provider_terms_accepted_at: string | null;
+  enabled_automations_json: string[];
+  workspace_enabled: boolean;
+  updated_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpWorkspaceTestResult = {
+  id: string;
+  configuration_id: string;
+  config_version: number;
+  test_kind: "connection" | "notification" | "source_open" | "deadline_calculation";
+  feature_id: "registry_sync" | "deadline_automation" | "notification_automation";
+  provider_key: string | null;
+  status: "passed" | "failed";
+  failure_code: string | null;
+  details_json: Record<string, unknown>;
+  performed_by_membership_id: string;
+  performed_at: string;
+};
+
+export type IpWorkspaceConfigurationStatus = {
+  configuration: IpWorkspaceConfiguration | null;
+  tests: IpWorkspaceTestResult[];
+  ready_for_manual_docketing: boolean;
+  enablement_blockers: string[];
+};
+
 export type IpWorkspaceReadiness = {
   timezone: string;
   workspace_available: boolean;
   manual_docketing_available: boolean;
+  configuration_status?: IpWorkspaceConfigurationStatus;
   features: IpFeatureReadiness[];
 };
 
 export async function fetchIpWorkspaceReadiness(): Promise<IpWorkspaceReadiness> {
   return apiRequest("/api/ip/readiness");
+}
+
+export async function saveIpWorkspaceConfiguration(input: {
+  expectedVersion: number | null;
+  jurisdiction: string;
+  office: string;
+  timezone: string;
+  holidayCalendarKey: string;
+  escalationOwnerMembershipId: string;
+  providerKey: string;
+  acceptProviderTerms: boolean;
+}): Promise<IpWorkspaceConfigurationStatus> {
+  const providerKeys = input.providerKey.trim() ? [input.providerKey.trim()] : [];
+  return apiRequest("/api/ip/workspace/configuration", {
+    method: "PUT",
+    body: {
+      expected_version: input.expectedVersion,
+      enabled_asset_types: ["trademark"],
+      jurisdictions: [input.jurisdiction.trim()],
+      offices: [input.office.trim()],
+      timezone: input.timezone.trim(),
+      holiday_calendar_key: input.holidayCalendarKey.trim(),
+      working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
+      document_taxonomy_version: "ip-taxonomy-2026.1",
+      event_catalog_version: "ip-events-v1",
+      deadline_rule_versions: { [input.jurisdiction.trim()]: "2026.1" },
+      notification_channels: ["in_app"],
+      critical_event_policy: { escalation_after_minutes: 30 },
+      escalation_owner_membership_id: input.escalationOwnerMembershipId.trim(),
+      provider_keys: providerKeys,
+      provider_terms_version: providerKeys.length ? "2026.1" : null,
+      accept_provider_terms: input.acceptProviderTerms,
+    },
+  });
+}
+
+export async function runIpWorkspaceTest(input: {
+  version: number;
+  testKind: IpWorkspaceTestResult["test_kind"];
+  providerKey?: string | null;
+}): Promise<IpWorkspaceTestResult> {
+  return apiRequest("/api/ip/workspace/tests", {
+    method: "POST",
+    body: {
+      expected_config_version: input.version,
+      test_kind: input.testKind,
+      provider_key: input.providerKey ?? null,
+    },
+  });
+}
+
+export async function enableIpWorkspace(input: {
+  version: number;
+  enabledAutomations: Array<
+    "registry_sync" | "deadline_automation" | "notification_automation"
+  >;
+}): Promise<IpWorkspaceConfigurationStatus> {
+  return apiRequest("/api/ip/workspace/enable", {
+    method: "POST",
+    body: {
+      expected_config_version: input.version,
+      enabled_automations: input.enabledAutomations,
+    },
+  });
 }
 
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {

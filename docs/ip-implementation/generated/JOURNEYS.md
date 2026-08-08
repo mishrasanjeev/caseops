@@ -4,7 +4,7 @@ Generated; do not edit.
 
 | Journey | Title | Atomic paths | Slices | Tests | Evidence | Implementation | Verification | Verified |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| UJ-01 | Configure IP workspace | 4 | IPLF-020B, IPLF-021B | 6 | 1 | in_progress | not_run | false |
+| UJ-01 | Configure IP workspace | 4 | IPLF-020B, IPLF-021B | 6 | 2 | implemented | passed | false |
 | UJ-02 | Import existing trademark portfolio | 5 | IPLF-032B | 5 | 0 | not_started | not_run | false |
 | UJ-03 | Create trademark application manually | 3 | IPLF-031B, IPLF-039A, IPLF-039H | 3 | 1 | in_progress | not_run | false |
 | UJ-04 | Find and work from portfolio listing | 4 | IPLF-030B | 4 | 0 | not_started | not_run | false |

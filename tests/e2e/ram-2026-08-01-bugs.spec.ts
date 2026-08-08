@@ -43,6 +43,41 @@ function grantSyntheticIpEntitlement(companyId: string): void {
   ).toBe(0);
 }
 
+async function configureSyntheticIpWorkspace(
+  api: APIRequestContext,
+  token: string,
+  membershipId: string,
+): Promise<void> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const configuration = await api.put(`${apiBaseUrl}/api/ip/workspace/configuration`, {
+    headers,
+    data: {
+      enabled_asset_types: ["trademark"],
+      jurisdictions: ["IN"],
+      offices: ["IP India"],
+      timezone: "Asia/Kolkata",
+      holiday_calendar_key: "test-calendar",
+      working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
+      document_taxonomy_version: "ip-taxonomy-2026.1",
+      event_catalog_version: "ip-events-v1",
+      deadline_rule_versions: { "IN-TM": "2026.1" },
+      notification_channels: ["in_app"],
+      critical_event_policy: { escalation_after_minutes: 30 },
+      escalation_owner_membership_id: membershipId,
+      provider_keys: [],
+      provider_terms_version: null,
+      accept_provider_terms: false,
+    },
+  });
+  expect(configuration.status(), await configuration.text()).toBe(200);
+
+  const enablement = await api.post(`${apiBaseUrl}/api/ip/workspace/enable`, {
+    headers,
+    data: { expected_config_version: 1, enabled_automations: [] },
+  });
+  expect(enablement.status(), await enablement.text()).toBe(200);
+}
+
 async function bootstrap(api: APIRequestContext, slug: string): Promise<{ token: string; membershipId: string }> {
   const response = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
     data: {
@@ -57,7 +92,10 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<{ token:
   expect(response.status()).toBe(200);
   const body = await response.json();
   grantSyntheticIpEntitlement(body.company.id as string);
-  return { token: body.access_token as string, membershipId: body.membership.id as string };
+  const token = body.access_token as string;
+  const membershipId = body.membership.id as string;
+  await configureSyntheticIpWorkspace(api, token, membershipId);
+  return { token, membershipId };
 }
 
 async function seedLinkedIpDocket(api: APIRequestContext, token: string, membershipId: string): Promise<void> {

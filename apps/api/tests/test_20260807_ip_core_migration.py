@@ -70,7 +70,7 @@ def test_ip_core_migration_upgrades_downgrades_and_reupgrades(
     assert "uq_clients_id_company" not in client_uniques
     assert head == "20260804_0004"
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260807_0001")
     tables, client_uniques, identifier_indexes, head = _schema(database_url)
     assert IP_CORE_TABLES.issubset(tables)
     assert "uq_clients_id_company" in client_uniques
@@ -83,7 +83,7 @@ def test_ip_core_migration_upgrades_downgrades_and_reupgrades(
     assert "uq_clients_id_company" not in client_uniques
     assert head == "20260804_0004"
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260807_0001")
     tables, client_uniques, identifier_indexes, head = _schema(database_url)
     assert IP_CORE_TABLES.issubset(tables)
     assert "uq_clients_id_company" in client_uniques
