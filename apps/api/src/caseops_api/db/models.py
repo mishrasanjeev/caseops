@@ -12444,6 +12444,12 @@ class IpDocketRecord(Base):
             name="fk_ip_docket_creator_company",
             ondelete="SET NULL",
         ),
+        ForeignKeyConstraint(
+            ["successor_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_docket_successor_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "company_id", name="uq_ip_docket_id_company"),
         UniqueConstraint(
             "company_id",
@@ -12451,6 +12457,21 @@ class IpDocketRecord(Base):
             name="uq_ip_docket_company_identifier",
         ),
         Index("ix_ip_docket_company_status", "company_id", "status"),
+        CheckConstraint(
+            "(status IN ('archived', 'abandoned', 'transferred', 'retired', 'closed') "
+            "AND is_active = false) OR "
+            "(status NOT IN ('archived', 'abandoned', 'transferred', 'retired', "
+            "'closed') AND is_active = true)",
+            name="ck_ip_docket_status_active_consistent",
+        ),
+        CheckConstraint(
+            "lifecycle_version >= 0",
+            name="ck_ip_docket_lifecycle_version_nonnegative",
+        ),
+        CheckConstraint(
+            "successor_docket_id IS NULL OR successor_docket_id <> id",
+            name="ck_ip_docket_successor_not_self",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -12462,6 +12483,28 @@ class IpDocketRecord(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     primary_identifier: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
+    lifecycle_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    lifecycle_effective_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    lifecycle_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lifecycle_outcome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lifecycle_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    lifecycle_evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    successor_docket_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     archived_by_matter_disposal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -12475,6 +12518,143 @@ class IpDocketRecord(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpDocketEvent(Base):
+    """Append-only legal event; delivery/audit state remains with shared owners."""
+
+    __tablename__ = "ip_docket_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_docket_event_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_docket_event_application_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proceeding_id", "company_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id"],
+            name="fk_ip_docket_event_proceeding_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["responsible_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_event_responsible_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["entered_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_event_entered_by_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_docket_event_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reconciles_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_docket_event_reconciles_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_docket_event_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "docket_id",
+            "sequence",
+            name="uq_ip_docket_event_company_docket_sequence",
+        ),
+        Index(
+            "ix_ip_docket_events_company_effective",
+            "company_id",
+            "docket_id",
+            "effective_at",
+        ),
+        Index(
+            "ix_ip_docket_events_company_candidate",
+            "company_id",
+            "candidate_status",
+        ),
+        CheckConstraint(
+            "NOT (application_id IS NOT NULL AND proceeding_id IS NOT NULL)",
+            name="ck_ip_docket_event_single_legal_target",
+        ),
+        CheckConstraint(
+            "sequence > 0",
+            name="ck_ip_docket_event_sequence_positive",
+        ),
+        CheckConstraint(
+            "source <> 'manual' OR (reason IS NOT NULL AND length(trim(reason)) > 0)",
+            name="ck_ip_docket_event_manual_reason",
+        ),
+        CheckConstraint(
+            "supersedes_event_id IS NULL OR "
+            "(correction_reason IS NOT NULL AND length(trim(correction_reason)) > 0)",
+            name="ck_ip_docket_event_correction_reason",
+        ),
+        CheckConstraint(
+            "supersedes_event_id IS NULL OR supersedes_event_id <> id",
+            name="ck_ip_docket_event_supersedes_not_self",
+        ),
+        CheckConstraint(
+            "reconciles_event_id IS NULL OR reconciles_event_id <> id",
+            name="ck_ip_docket_event_reconciles_not_self",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    event_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    entered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    responsible_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    entered_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    document_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    resulting_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resulting_deadline_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    before_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    after_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    candidate_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="confirmed", server_default="confirmed"
+    )
+    supersedes_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    correction_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reconciles_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    reconciliation_decision: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    payload_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 

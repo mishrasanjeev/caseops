@@ -130,7 +130,7 @@ def _docket_or_404(
     docket = session.scalar(stmt)
     if docket is None:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
-    if docket.archived_by_matter_disposal:
+    if docket.archived_by_matter_disposal or not docket.is_active:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
     if docket.matter_id:
         matter = session.get(Matter, docket.matter_id)
@@ -220,6 +220,14 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
         title=docket.title,
         primary_identifier=docket.primary_identifier,
         status=docket.status,
+        is_active=docket.is_active,
+        lifecycle_version=docket.lifecycle_version,
+        lifecycle_effective_at=docket.lifecycle_effective_at,
+        lifecycle_reason=docket.lifecycle_reason,
+        lifecycle_outcome=docket.lifecycle_outcome,
+        lifecycle_source=docket.lifecycle_source,
+        lifecycle_evidence_ref=docket.lifecycle_evidence_ref,
+        successor_docket_id=docket.successor_docket_id,
         restricted=docket.restricted,
         current_version=docket.current_version,
         current_particulars=TrademarkParticularVersionRecord.model_validate(particulars),
@@ -381,7 +389,7 @@ def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketLis
     )
     visible: list[IpDocketRecordResponse] = []
     for row in rows:
-        if row.archived_by_matter_disposal:
+        if row.archived_by_matter_disposal or not row.is_active:
             continue
         if row.matter_id:
             matter = session.get(Matter, row.matter_id)

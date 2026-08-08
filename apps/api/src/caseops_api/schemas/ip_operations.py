@@ -373,6 +373,14 @@ class IpDocketRecordResponse(BaseModel):
     title: str
     primary_identifier: str | None
     status: str
+    is_active: bool
+    lifecycle_version: int
+    lifecycle_effective_at: datetime | None
+    lifecycle_reason: str | None
+    lifecycle_outcome: str | None
+    lifecycle_source: str | None
+    lifecycle_evidence_ref: str | None
+    successor_docket_id: str | None
     restricted: bool
     current_version: int
     current_particulars: TrademarkParticularVersionRecord
