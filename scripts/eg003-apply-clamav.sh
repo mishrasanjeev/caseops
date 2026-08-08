@@ -83,32 +83,35 @@ for name, value in (
         api_env.append({"name": name, "value": value})
 api["env"] = api_env
 
-# Wire the sidecar. clamav/clamav:1.4 ships freshclam + clamd; the
-# stable-base variant skips freshclam (we want fresh signatures).
-sidecar_present = any(c.get("name") == "clamav" for c in containers)
-if not sidecar_present:
-    containers.append({
-        "name": "clamav",
-        # Pinned major.minor to avoid surprise upgrades; ClamAV honours
-        # stable APIs on patch bumps.
-        "image": "clamav/clamav:1.4",
-        "resources": {
-            "limits": {
-                "cpu": "1",
-                "memory": "1500Mi",
-            },
+# Wire and converge the sidecar. clamav/clamav:1.4 ships freshclam +
+# clamd; the stable-base variant skips freshclam (we want fresh
+# signatures). Probe immediately because the API container dependency
+# already prevents traffic until clamd is ready. The former 30-second
+# initial delay added avoidable latency after clamd was listening.
+sidecar = next((c for c in containers if c.get("name") == "clamav"), None)
+if sidecar is None:
+    sidecar = {"name": "clamav"}
+    containers.append(sidecar)
+sidecar.update({
+    # Pinned major.minor to avoid surprise upgrades; ClamAV honours
+    # stable APIs on patch bumps.
+    "image": "clamav/clamav:1.4",
+    "resources": {
+        "limits": {
+            "cpu": "1",
+            "memory": "1500Mi",
         },
-        "startupProbe": {
-            # clamd takes 30-60s to load signatures + freshclam runs
-            # on first boot. Give it 4 minutes before Cloud Run treats
-            # the container as failed.
-            "tcpSocket": {"port": 3310},
-            "initialDelaySeconds": 30,
-            "periodSeconds": 10,
-            "timeoutSeconds": 5,
-            "failureThreshold": 24,
-        },
-    })
+    },
+    "startupProbe": {
+        # Keep the same four-minute failure budget while detecting a
+        # ready daemon at two-second granularity.
+        "tcpSocket": {"port": 3310},
+        "initialDelaySeconds": 0,
+        "periodSeconds": 2,
+        "timeoutSeconds": 1,
+        "failureThreshold": 120,
+    },
+})
 
 # Container-dependencies annotation: API waits for clamav startup
 # probe to pass before it starts. Without this, the first few requests

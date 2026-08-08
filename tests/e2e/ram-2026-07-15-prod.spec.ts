@@ -429,10 +429,11 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
     // Creation is intentionally blocked until the structured forum catalog
     // resolves. Waiting for the selected state makes this a real readiness
     // assertion instead of a catalog-speed race that can pass or fail based on
-    // production latency.
+    // production latency. Allow one bounded multi-container autoscale cold
+    // start (ClamAV readiness followed by API startup).
     await expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue(
       "Delhi",
-      { timeout: 30_000 },
+      { timeout: 90_000 },
     );
     const statusSelect = dialog.getByRole("combobox", { name: "Status" });
     await expect(statusSelect).toHaveText(/^Active$/);

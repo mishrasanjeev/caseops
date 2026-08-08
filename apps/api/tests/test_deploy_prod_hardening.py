@@ -216,6 +216,12 @@ elif [[ "$*" == *"services describe caseops-web"* ]]; then
   printf 'registry.invalid/caseops-web:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[].name"* ]]; then
   printf 'api;clamav\n'
+elif [[ "$*" == *"services describe caseops-api"* && \
+  "$*" == *"startupProbe.initialDelaySeconds"* ]]; then
+  printf '0\n'
+elif [[ "$*" == *"services describe caseops-api"* && \
+  "$*" == *"startupProbe.periodSeconds"* ]]; then
+  printf '2\n'
 fi
 """,
     )

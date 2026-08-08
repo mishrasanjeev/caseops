@@ -34,3 +34,12 @@ def test_api_image_preloads_production_embedding_tokenizer() -> None:
     dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
 
     assert "Tokenizer.from_pretrained('voyageai/voyage-4-large')" in dockerfile
+
+
+def test_production_deploy_converges_clamav_startup_probe() -> None:
+    script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
+
+    assert "--container clamav" in script
+    assert "initialDelaySeconds=0" in script
+    assert "periodSeconds=2" in script
+    assert "failureThreshold=120" in script
