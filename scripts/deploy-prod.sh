@@ -171,7 +171,9 @@ gcloud run deploy caseops-api \
   --image "${API_IMAGE}" \
   --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA}" \
   --cpu "${API_CPU}" \
-  --memory "${API_MEMORY}"
+  --memory "${API_MEMORY}" \
+  --container clamav \
+  --startup-probe "tcpSocket.port=3310,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120"
 echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
 
 # Step 4 — deploy web.
@@ -216,6 +218,12 @@ if [[ "${SIDECAR_PRESENT}" != "1" ]]; then
   echo "EG-003 REGRESSION: clamav sidecar missing from caseops-api. Run scripts/eg003-apply-clamav.sh and redeploy."
   exit 1
 fi
-echo "  EG-003 clamav sidecar present."
+CLAMAV_PROBE_DELAY=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.initialDelaySeconds)')
+CLAMAV_PROBE_PERIOD=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.periodSeconds)')
+if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" ]]; then
+  echo "EG-003 REGRESSION: clamav startup probe delay=${CLAMAV_PROBE_DELAY} period=${CLAMAV_PROBE_PERIOD}; expected 0/2 seconds."
+  exit 1
+fi
+echo "  EG-003 clamav sidecar present with immediate two-second startup probing."
 
 echo "=== deploy-prod.sh — DONE ${TAG} ==="
