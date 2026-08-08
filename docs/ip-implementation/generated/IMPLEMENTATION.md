@@ -29,7 +29,7 @@ Generated; do not edit.
 | IPLF-020A | derived | IPLF-020 | M2 |  |  | implemented | passed | ready_for_review | pending |
 | IPLF-020B | derived | IPLF-020 | M2 |  | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-021A | derived | IPLF-021 | M2 |  |  | implemented | passed | deployment_verified | pending |
-| IPLF-021B | derived | IPLF-021 | M2 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-07, IP-ID-08 | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | implemented | passed | ready_for_review | pending |
+| IPLF-021B | derived | IPLF-021 | M2 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-07, IP-ID-08 | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | implemented | passed | deployment_verified | pending |
 | IPLF-022A | derived | IPLF-022 | M2 |  |  | implemented | passed | ready_for_review | pending |
 | IPLF-022B | derived | IPLF-022 | M2 | IP-PROS-01, IP-PROS-02, IP-PROS-03, IP-PROS-04, IP-PROS-05, IP-PROS-06, IP-PROS-07, IP-PROS-08, IP-PROS-09, IP-PROS-10, IP-PROS-11, IP-PROS-12 | UJ-06-EXC-01, UJ-06-EXC-02, UJ-06-EXC-03, UJ-06-NORMAL, UJ-53-EXC-01, UJ-53-EXC-02, UJ-53-EXC-03, UJ-53-EXC-04, UJ-53-NORMAL | not_started | not_run | blocked | pending |
 | IPLF-023A | derived | IPLF-023 | M2 |  |  | not_started | not_run | blocked | pending |

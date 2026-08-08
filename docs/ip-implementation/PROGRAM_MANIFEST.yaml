@@ -17,7 +17,7 @@
     "active_slice": "IPLF-022B",
     "checkpoint": {
       "recorded_at": "2026-08-08T17:30:00+05:30",
-      "repository_revision": "4e9cd12",
+      "repository_revision": "be3e0cf3cf7e2d72245c412de60c46a67e61bf5f",
       "environment": "IPLF-021B is deployment-verified at canonical main 63bc7587af4a5c3157462c6f668707cc8a08db9c, API caseops-api-00250-jzl, web caseops-web-00230-8ff, successful migration caseops-migrate-job-dc9bp, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31255101441. IPLF-022A is restacked on that release with additive Alembic head 20260807_0003 and remains dark pending independent CI and production release.",
       "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, and IPLF-021B have completed repository-controlled implementation and deployment verification. IPLF-022A has complete repository implementation pending fresh restacked verification, independent CI, merge, deploy, and dated production proof. IP-ID-01..08 remain in_progress because reciprocal IPLF-031B is not implemented. IP-PROS-01..12 and UJ-06/UJ-53 remain assigned to IPLF-022B. Human acceptance and external-provider approvals remain genuine pending gates.",
       "program_state": "PROGRAM INCOMPLETE",
@@ -757,7 +757,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-021A/release-2026-08-07.md",
@@ -5087,18 +5087,17 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
-          "revision": "2a70ed450df991ca6b285cadf4d94f23bd74201e",
-          "environment": "Windows CPython 3.13, repository Node/npm lockfiles, ephemeral SQLite, Vitest/jsdom, synthetic IP fixtures",
+          "revision": "63bc7587af4a5c3157462c6f668707cc8a08db9c",
+          "environment": "Independent GitHub CI/Security/CodeQL, PostgreSQL/pgvector, canonical production migration, Cloud Run API caseops-api-00250-jzl, web caseops-web-00230-8ff, six immutable scheduler bindings, and exact-release production Playwright",
           "fixtures": "Synthetic tenants, memberships, dockets, trademark records, identifier variants, workspace policies, and safe dry-run provider references only",
-          "assertions": "IP-ID-01..08 contribution, UJ-01 normal/three exceptions, tenant and restricted access, optimistic concurrency, audit, migration rollback/re-upgrade, responsive visible controls, generated API contract, and governance validators",
+          "assertions": "IP-ID-01..08 contribution, UJ-01 normal/three exceptions, tenant and restricted access, optimistic concurrency, audit, migration rollback/re-upgrade, responsive visible controls, generated API contract, exact API/web identity, 61-test RAM batch, notice upload/reply/sent/filter journey, immutable scheduler configuration, and bounded fail-closed antivirus connect",
           "result": "passed",
-          "recorded_at": "2026-08-07T07:00:00+05:30"
+          "recorded_at": "2026-08-08T17:30:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release serially after IPLF-019B, IPLF-020A, IPLF-020B, and IPLF-021A through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact image/revision, scheduler, and dated production acceptance proof.",
         "Keep environment rollout flags and every real provider/message/deadline/filing effect disabled until the applicable later slices and genuine approvals pass."
       ],
       "data_impact": [
@@ -5113,7 +5112,7 @@
       "allocation_review": "M2 workflow/release slice reviewed against PRD Sections 3.1, 11.2, 13.5, 23 UJ-01, and 25. It completes persisted UJ-01 configuration and the IPLF-021 command/reconciliation contribution while IPLF-031B remains reciprocal owner of the later manual create/duplicate UI journeys for IP-ID-01..08.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {
@@ -5160,18 +5159,18 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-022A/release-2026-08-07.md",
-          "revision": "597188529dbb6406c867e42b694fa59e378d5787",
-          "environment": "Windows CPython 3.13, locked uv copy-mode environment, ephemeral SQLite migrations and synthetic IP/Matter fixtures",
+          "revision": "4e9cd12f0d5f2c8f2d8f8a1d67607b98e1ec5bbd",
+          "environment": "Windows CPython 3.13, locked uv copy-mode environment, ephemeral SQLite migrations and synthetic IP/Matter fixtures, restacked on deployment-verified IPLF-021B release 63bc7587af4a5c3157462c6f668707cc8a08db9c",
           "fixtures": "Synthetic tenant memberships, active/terminal dockets, registry/manual events, corrections, lifecycle versions, operational coverage/obligations/shared deadlines, and Matter disposal",
           "assertions": "append-only sequence/history, candidate and correction rules, tenant/target guards, parent-before-child locks, atomic lifecycle/audit, terminal suppression, stale rejection, controlled reopen, no child resurrection, Matter compatibility, migration rollback/re-upgrade, and FK indexes",
           "result": "passed",
-          "recorded_at": "2026-08-07T09:00:00+05:30"
+          "recorded_at": "2026-08-08T17:30:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release serially after IPLF-020A, IPLF-020B, IPLF-021A, and IPLF-021B through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact production identity, deterministic scheduler audit, and dated acceptance proof.",
+        "Release serially after deployment-verified IPLF-021B through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact production identity, deterministic scheduler audit, and dated acceptance proof.",
         "Implement IPLF-022B user workflows and all allocated IP-PROS/UJ-06/UJ-53 normal and exception paths without enabling unapproved external legal effects."
       ],
       "data_impact": [
@@ -36656,7 +36655,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-020B",
@@ -41070,7 +41069,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-020B",
@@ -41105,7 +41104,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-020B",
@@ -41140,7 +41139,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-020B",
@@ -41176,7 +41175,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-020B",
