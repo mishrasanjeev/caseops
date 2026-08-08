@@ -261,3 +261,112 @@ current-SHA PR gate, exact canonical-main deploy, HTTPS identity verification,
 and another run of the same dated RAM and Notice production workflow. Until
 all of those pass, this evidence remains a failed production checkpoint rather
 than release acceptance.
+
+## Second hotfix release and third production finding
+
+The attachment-row repair was published as commit
+`6934f42b0cbe6ad39d3e60d3172c6808ad86f5ea` in pull request `#184`.
+Independent gates passed on that exact candidate:
+
+- CI run `31264617159` passed repository validators, PostgreSQL/pgvector,
+  web typecheck/Vitest/build, all eight API coverage shards, aggregate
+  coverage, and Playwright;
+- Security run `31264617144` passed; and
+- CodeQL run `31264617153` passed.
+
+The PR merged to canonical `main` as
+`831b72e0674f62501f038c829339677f567d27c2`. Local `main` and
+`origin/main` were verified at that exact SHA. Its production release was:
+
+| Evidence | Exact value |
+| --- | --- |
+| API Cloud Build | `238f3118-ed0c-4cd0-8f88-cbe1dbb5331e` |
+| Web Cloud Build | `e9930ffb-5c16-4e5b-b284-93e868ed0242` |
+| API image digest | `sha256:1fef1285ea3aa91d48ab5ea835c885d1eff0f19cb257ef75d9cd6aa6b67df4f6` |
+| Web image digest | `sha256:b77fcbbd24e9efb6ae801e7bd9c034b31d02a7b4cacbc25caa63564966d2cc7f` |
+| Migration execution | `caseops-migrate-job-lrzdh`, successful in 15.4 s |
+| API revision | `caseops-api-00253-hnx`, 100% traffic |
+| Web revision | `caseops-web-00233-jsf`, 100% traffic |
+
+All six Scheduler/Cloud Run Job pairs matched the immutable API digest and
+expected configuration. The required ClamAV sidecar probe passed. The
+independent HTTPS verifier returned the exact full release SHA and both
+revisions.
+
+Production workflow `31265872079` checked out and verified that exact serving
+release. Its complete dated RAM batch passed. In the Notice suite, the
+received-notice upload returned HTTP 200 in 0.381215891 seconds and the reply
+upload returned HTTP 200 in 9.262007534 seconds. This proves that the original
+attachment-row lock was removed. The sent-notice upload remained pending past
+the browser's 90-second response gate and Cloud Run ultimately returned HTTP
+504 at its 300.000144825-second limit. Its trace was
+`projects/perfect-period-305406/traces/0dbe5808996c1c4b715dc24402c1df73`.
+The browser snapshot showed `Upload sent notice` disabled by the active
+mutation, so this was not a missing control or an unfilled form.
+
+The remaining lock was the worker's `assert_operational_matter` call. It used
+`SELECT ... FOR UPDATE` on the parent Matter before parsing and embedding, and
+held that lock across the external provider call. Every later attachment
+upload must acquire the same Matter lifecycle lock. The first later request
+waited 9.26 seconds for one worker; the next request waited behind the new
+worker long enough to fail production acceptance.
+
+## Parent-lifecycle lock repair
+
+The third repair separates provider latency from the fail-closed lifecycle
+write boundary:
+
+1. load and validate the Matter without a write lock before provider work;
+2. parse and prepare replacement chunks without flushing them;
+3. run the external embedding provider with neither the Matter nor attachment
+   row locked;
+4. immediately before the first ORM/pgvector flush, re-read and lock the
+   Matter using `SELECT ... FOR UPDATE` under `session.no_autoflush`; and
+5. persist only if the Matter is still operational.
+
+If the Matter is disposed while the provider runs, the final lock/recheck
+raises, the prepared attachment/chunk/provider result is rolled back, and the
+durable job is marked failed. Retry/reindex replacement chunks are also kept
+unflushed until this boundary, eliminating the same parent-lock exposure for
+those actions without weakening lifecycle atomicity.
+
+Focused verification on the third candidate:
+
+```text
+uv --directory apps/api run ruff check \
+  src/caseops_api/services/document_processing.py \
+  src/caseops_api/services/document_jobs.py \
+  tests/test_document_worker.py
+All checks passed
+
+uv --directory apps/api run pytest tests/test_document_worker.py -q
+7 passed, 225 warnings in 28.95s
+```
+
+The concurrency regression now updates both the parent Matter and the parent
+attachment from a second session during the open provider phase and proves
+that commit completes. A second race regression disposes the Matter during
+the provider phase and proves the provider result does not persist.
+
+Widened document/Notice/security/lifecycle verification:
+
+```text
+uv --directory apps/api run pytest \
+  tests/test_document_worker.py \
+  tests/test_matter_attachment_embeddings.py \
+  tests/test_matter_attachment_annotations.py \
+  tests/test_legalworkspace_document_lifecycle.py \
+  tests/test_document_storage.py \
+  tests/test_file_security.py \
+  tests/test_notices.py \
+  tests/test_matter_lifecycle.py -q
+
+76 passed, 1538 warnings in 205.11s
+```
+
+Warnings are existing Starlette TestClient and SQLite datetime-adapter
+deprecations. There were no skips, retries, quarantines, or allowed failures.
+This third candidate still requires independent PR gates, merge to canonical
+`main`, exact-revision deployment, HTTPS identity verification, and a fresh
+run of the same dated production workflow. IPLF-022A remains short of
+`deployment_verified` until that exact production run passes.
