@@ -16931,6 +16931,20 @@ export interface components {
             evidence_candidates?: components["schemas"]["IpEvidenceCandidateRecord"][];
             /** Id */
             id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lifecycle Effective At */
+            lifecycle_effective_at: string | null;
+            /** Lifecycle Evidence Ref */
+            lifecycle_evidence_ref: string | null;
+            /** Lifecycle Outcome */
+            lifecycle_outcome: string | null;
+            /** Lifecycle Reason */
+            lifecycle_reason: string | null;
+            /** Lifecycle Source */
+            lifecycle_source: string | null;
+            /** Lifecycle Version */
+            lifecycle_version: number;
             /** Matter Id */
             matter_id: string | null;
             /** Notice Links */
@@ -16945,6 +16959,8 @@ export interface components {
             restricted: boolean;
             /** Status */
             status: string;
+            /** Successor Docket Id */
+            successor_docket_id: string | null;
             /** Title */
             title: string;
             /** Title Interests */
