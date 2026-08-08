@@ -6,7 +6,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from caseops_api.services.ip_records import normalize_ip_identifier, validate_identifier_owner
+from caseops_api.services.ip_identifier_rules import (
+    normalize_ip_identifier,
+    validate_identifier_owner,
+)
 
 
 class IpIdentifierCreate(BaseModel):
