@@ -39,6 +39,10 @@ def test_api_image_preloads_production_embedding_tokenizer() -> None:
 def test_production_deploy_converges_clamav_startup_probe() -> None:
     script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
 
+    # Multi-container Cloud Run deploys must name exactly one ingress port.
+    # Once the command switches to the ClamAV container, gcloud can no longer
+    # infer that the API container owns HTTP ingress from the existing service.
+    assert '--container api \\\n  --port 8080 \\\n  --image "${API_IMAGE}"' in script
     assert "--container clamav" in script
     assert "initialDelaySeconds=0" in script
     assert "periodSeconds=2" in script
