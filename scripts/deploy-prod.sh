@@ -230,6 +230,9 @@ if [[ "${SIDECAR_PRESENT}" != "1" ]]; then
 fi
 CLAMAV_PROBE_DELAY=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.initialDelaySeconds)')
 CLAMAV_PROBE_PERIOD=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.periodSeconds)')
+# Cloud Run omits zero-valued protobuf fields when serializing a service, so
+# an empty initialDelaySeconds is the canonical representation of zero.
+CLAMAV_PROBE_DELAY=${CLAMAV_PROBE_DELAY:-0}
 if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" ]]; then
   echo "EG-003 REGRESSION: clamav startup probe delay=${CLAMAV_PROBE_DELAY} period=${CLAMAV_PROBE_PERIOD}; expected 0/2 seconds."
   exit 1

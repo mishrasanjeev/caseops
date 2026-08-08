@@ -49,3 +49,4 @@ def test_production_deploy_converges_clamav_startup_probe() -> None:
     assert "initialDelaySeconds=0" in script
     assert "periodSeconds=2" in script
     assert "failureThreshold=120" in script
+    assert "CLAMAV_PROBE_DELAY=${CLAMAV_PROBE_DELAY:-0}" in script

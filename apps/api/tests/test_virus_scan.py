@@ -110,6 +110,53 @@ def test_scan_clean_when_daemon_says_ok(
     assert result.status == "clean"
 
 
+def test_scan_applies_timeout_before_clamd_connect(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("CASEOPS_CLAMAV_HOST", "127.0.0.1")
+    monkeypatch.setenv("CASEOPS_CLAMAV_TIMEOUT_S", "0.25")
+    observed: dict[str, object] = {}
+
+    class FakeSocket:
+        def settimeout(self, timeout: float | None) -> None:
+            observed["socket_timeout"] = timeout
+
+    class FakeClient:
+        def __init__(self, *, host: str, port: int, timeout: float) -> None:
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+            self.clamd_socket: FakeSocket | None = None
+
+        def _init_socket(self) -> None:
+            raise AssertionError("the unbounded clamd initializer was used")
+
+        def instream(self, _fh) -> dict[str, tuple[str, None]]:
+            self._init_socket()
+            return {"stream": ("OK", None)}
+
+    def _connect(address: tuple[str, int], *, timeout: float | None) -> FakeSocket:
+        observed["address"] = address
+        observed["connect_timeout"] = timeout
+        return FakeSocket()
+
+    fake = SimpleNamespace(ClamdNetworkSocket=FakeClient)
+    monkeypatch.setitem(sys.modules, "clamd", fake)
+    monkeypatch.setattr(virus_scan.socket, "create_connection", _connect)
+    file = tmp_path / "doc.pdf"
+    file.write_bytes(b"%PDF-1.4\nclean-content")
+
+    result = virus_scan.scan_file_for_viruses(file)
+
+    assert result.status == "clean"
+    assert observed == {
+        "address": ("127.0.0.1", 3310),
+        "connect_timeout": 0.25,
+        "socket_timeout": 0.25,
+    }
+
+
 def test_scan_infected_returns_signature(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
