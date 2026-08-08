@@ -4257,6 +4257,8 @@ def create_matter_attachment(
     session.flush()
 
     try:
+        from caseops_api.services.virus_scan import reject_if_infected
+
         stored = persist_matter_attachment(
             company_id=context.company.id,
             matter_id=matter.id,
@@ -4269,27 +4271,11 @@ def create_matter_attachment(
                 matter_id=matter.id,
                 incoming_size_bytes=size_bytes,
             ),
-        )
-        # §9.3: ClamAV scan on the persisted bytes. Skipped when
-        # CASEOPS_CLAMAV_HOST is unset; raises 400 on infection.
-        from caseops_api.services.document_storage import (
-            delete_stored_document,
-            resolve_storage_path,
-        )
-        from caseops_api.services.virus_scan import reject_if_infected
-
-        try:
-            reject_if_infected(
-                resolve_storage_path(stored.storage_key),
+            validate_temp_file=lambda path: reject_if_infected(
+                path,
                 filename=filename,
-            )
-        except Exception:
-            try:
-                delete_stored_document(stored.storage_key)
-            except Exception:
-                # Best-effort cleanup; preserve the original scan failure.
-                pass
-            raise
+            ),
+        )
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex

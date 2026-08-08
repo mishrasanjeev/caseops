@@ -148,6 +148,7 @@ def persist_matter_attachment(
     filename: str,
     stream: BinaryIO,
     before_store: Callable[[int], None] | None = None,
+    validate_temp_file: Callable[[Path], None] | None = None,
 ) -> StoredDocument:
     return persist_workspace_attachment(
         company_id=company_id,
@@ -156,6 +157,7 @@ def persist_matter_attachment(
         filename=filename,
         stream=stream,
         before_store=before_store,
+        validate_temp_file=validate_temp_file,
     )
 
 
@@ -166,6 +168,7 @@ def persist_contract_attachment(
     attachment_id: str,
     filename: str,
     stream: BinaryIO,
+    validate_temp_file: Callable[[Path], None] | None = None,
 ) -> StoredDocument:
     return persist_workspace_attachment(
         company_id=company_id,
@@ -174,6 +177,7 @@ def persist_contract_attachment(
         filename=filename,
         stream=stream,
         namespace="contracts",
+        validate_temp_file=validate_temp_file,
     )
 
 
@@ -186,6 +190,7 @@ def persist_workspace_attachment(
     stream: BinaryIO,
     namespace: str = "matters",
     before_store: Callable[[int], None] | None = None,
+    validate_temp_file: Callable[[Path], None] | None = None,
 ) -> StoredDocument:
     safe_filename = sanitize_filename(filename)
     safe_company_id = _safe_storage_segment(company_id, "company id")
@@ -205,6 +210,12 @@ def persist_workspace_attachment(
     try:
         if before_store is not None:
             before_store(size_bytes)
+        if validate_temp_file is not None:
+            # Security validation belongs on the bytes already materialized
+            # for persistence.  Scanning this temporary file before either a
+            # local move or a GCS upload avoids storing rejected content and
+            # avoids an immediate GCS download solely to scan the same bytes.
+            validate_temp_file(temp_path)
         if backend == "local":
             root = _document_root()
             target_path = (root / relative_path).resolve()

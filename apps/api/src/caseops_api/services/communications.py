@@ -60,7 +60,6 @@ from caseops_api.services.document_jobs import enqueue_processing_job
 from caseops_api.services.document_storage import (
     delete_stored_document,
     persist_matter_attachment,
-    resolve_storage_path,
     sanitize_filename,
 )
 from caseops_api.services.email_templates import render_template
@@ -617,18 +616,11 @@ def _persist_inbound_attachment(
             matter_id=matter.id,
             incoming_size_bytes=size_bytes,
         ),
+        validate_temp_file=lambda path: reject_if_infected(
+            path,
+            filename=filename,
+        ),
     )
-    try:
-        reject_if_infected(resolve_storage_path(stored.storage_key), filename=filename)
-    except Exception:
-        try:
-            delete_stored_document(stored.storage_key)
-        except Exception:
-            logger.warning(
-                "inbound_email.attachment_cleanup_failed",
-                extra={"attachment_id": attachment.id},
-            )
-        raise
 
     attachment.storage_key = stored.storage_key
     attachment.size_bytes = stored.size_bytes

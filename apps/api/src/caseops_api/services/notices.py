@@ -1258,23 +1258,11 @@ def upload_notice_file(
                 incoming_size_bytes=size_bytes,
                 replaced_size_bytes=old_size_bytes,
             ),
-        )
-        try:
-            reject_if_infected(
-                resolve_storage_path(stored.storage_key),
+            validate_temp_file=lambda path: reject_if_infected(
+                path,
                 filename=filename,
-            )
-        except Exception:
-            try:
-                delete_stored_document(stored.storage_key)
-            except Exception:  # noqa: BLE001 - preserve the scan failure
-                logger.warning(
-                    "Failed to clean up rejected notice file storage_key=%s",
-                    stored.storage_key,
-                    exc_info=True,
-                )
-            stored = None
-            raise
+            ),
+        )
 
         notice.original_filename = sanitize_filename(filename)
         notice.storage_key = stored.storage_key
