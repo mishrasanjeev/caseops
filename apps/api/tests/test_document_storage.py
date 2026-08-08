@@ -97,6 +97,79 @@ def test_gcs_backend_persists_and_materializes_cached_download(
     assert cached_path.read_bytes() == b"matter evidence"
 
 
+def test_gcs_backend_validates_temporary_bytes_before_upload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    objects: dict[str, bytes] = {}
+    observed: dict[str, object] = {}
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "gcs")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET", "caseops-documents")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_PREFIX", "tenant-docs")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_CACHE_PATH", (tmp_path / "cache").as_posix())
+    monkeypatch.setattr(
+        "caseops_api.services.document_storage.storage.Client",
+        lambda project=None: _FakeStorageClient(objects, project),
+    )
+
+    def validate(path: Path) -> None:
+        observed["path"] = path
+        observed["exists_during_validation"] = path.exists()
+        observed["contents"] = path.read_bytes()
+        observed["objects_before_validation"] = dict(objects)
+
+    persist_workspace_attachment(
+        company_id="company-1",
+        workspace_id="matter-1",
+        attachment_id="attachment-1",
+        filename="proof.txt",
+        stream=io.BytesIO(b"scan these exact bytes"),
+        validate_temp_file=validate,
+    )
+
+    assert observed["exists_during_validation"] is True
+    assert observed["contents"] == b"scan these exact bytes"
+    assert observed["objects_before_validation"] == {}
+    assert not Path(observed["path"]).exists()
+    assert next(iter(objects.values())) == b"scan these exact bytes"
+
+
+def test_gcs_backend_does_not_upload_when_temporary_validation_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    objects: dict[str, bytes] = {}
+    observed_path: Path | None = None
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "gcs")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET", "caseops-documents")
+    monkeypatch.setattr(
+        "caseops_api.services.document_storage.storage.Client",
+        lambda project=None: _FakeStorageClient(objects, project),
+    )
+
+    def reject(path: Path) -> None:
+        nonlocal observed_path
+        observed_path = path
+        assert path.read_bytes() == b"rejected bytes"
+        raise HTTPException(status_code=400, detail="infected")
+
+    with pytest.raises(HTTPException, match="infected"):
+        persist_workspace_attachment(
+            company_id="company-1",
+            workspace_id="matter-1",
+            attachment_id="attachment-1",
+            filename="malware.txt",
+            stream=io.BytesIO(b"rejected bytes"),
+            validate_temp_file=reject,
+        )
+
+    assert observed_path is not None
+    assert not observed_path.exists()
+    assert objects == {}
+
+
 def test_delete_stored_document_removes_gcs_blob_and_cache(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -54,9 +54,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.services.audit import record_audit
 from caseops_api.services.document_storage import (
-    delete_stored_document,
     persist_matter_attachment,
-    resolve_storage_path,
     sanitize_filename,
 )
 from caseops_api.services.file_security import verify_upload
@@ -200,19 +198,11 @@ def upload_oc_work_product(
                 matter_id=matter.id,
                 incoming_size_bytes=size_bytes,
             ),
-        )
-        try:
-            reject_if_infected(
-                resolve_storage_path(stored.storage_key),
+            validate_temp_file=lambda path: reject_if_infected(
+                path,
                 filename=filename,
-            )
-        except Exception:
-            try:
-                delete_stored_document(stored.storage_key)
-            except Exception:
-                # Best-effort cleanup; preserve the original scan failure.
-                pass
-            raise
+            ),
+        )
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex
