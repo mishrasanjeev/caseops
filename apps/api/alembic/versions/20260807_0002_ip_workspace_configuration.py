@@ -91,7 +91,7 @@ def upgrade() -> None:
         ["escalation_owner_membership_id"],
     )
     op.create_index(
-        "ix_ip_workspace_configurations_provider_terms_accepted_by_membership_id",
+        "ix_ip_workspace_config_terms_actor",
         "ip_workspace_configurations",
         ["provider_terms_accepted_by_membership_id"],
     )

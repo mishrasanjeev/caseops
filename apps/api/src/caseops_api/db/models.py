@@ -12817,6 +12817,10 @@ class IpWorkspaceConfiguration(Base):
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_workspace_config_id_company"),
         UniqueConstraint("company_id", name="uq_ip_workspace_config_company"),
+        Index(
+            "ix_ip_workspace_config_terms_actor",
+            "provider_terms_accepted_by_membership_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -12841,7 +12845,7 @@ class IpWorkspaceConfiguration(Base):
     provider_keys_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     provider_terms_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     provider_terms_accepted_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True
+        String(36), nullable=True
     )
     provider_terms_accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
