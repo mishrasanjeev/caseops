@@ -36,9 +36,10 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import HTTPException, status
 
@@ -87,6 +88,30 @@ def _config_from_env() -> tuple[str | None, int, float, bool]:
     return host, port, timeout_s, required
 
 
+def _bound_clamd_connect_timeout(client: Any) -> None:
+    """Apply the configured timeout before the clamd TCP connect starts.
+
+    clamd 1.0.2 calls ``socket.connect`` before ``settimeout``. A black-holed
+    local sidecar connection can therefore inherit the operating system's
+    multi-minute TCP retry window even though CASEOPS_CLAMAV_TIMEOUT_S is set.
+    Replace that private initializer on the real network client so connect,
+    send, and receive are all bounded by the same fail-closed timeout.
+    """
+    if not all(hasattr(client, attr) for attr in ("_init_socket", "host", "port")):
+        return
+
+    def _init_socket() -> None:
+        timeout = getattr(client, "timeout", None)
+        clamd_socket = socket.create_connection(
+            (client.host, client.port),
+            timeout=timeout,
+        )
+        clamd_socket.settimeout(timeout)
+        client.clamd_socket = clamd_socket
+
+    client._init_socket = _init_socket
+
+
 def scan_file_for_viruses(path: Path | str) -> ScanResult:
     """Scan a file through ClamAV.
 
@@ -130,6 +155,7 @@ def scan_file_for_viruses(path: Path | str) -> ScanResult:
 
     try:
         client = clamd.ClamdNetworkSocket(host=host, port=port, timeout=timeout_s)
+        _bound_clamd_connect_timeout(client)
         # Stream scan — the client reads the file in chunks so ClamAV never
         # holds the whole payload in memory on very large DOCX/PDFs.
         with open(path, "rb") as fh:

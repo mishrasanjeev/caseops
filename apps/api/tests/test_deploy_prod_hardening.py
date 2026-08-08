@@ -220,7 +220,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[].name
   printf 'api;clamav\n'
 elif [[ "$*" == *"services describe caseops-api"* && \
   "$*" == *"startupProbe.initialDelaySeconds"* ]]; then
-  printf '0\n'
+  printf ''
 elif [[ "$*" == *"services describe caseops-api"* && \
   "$*" == *"startupProbe.periodSeconds"* ]]; then
   printf '2\n'
