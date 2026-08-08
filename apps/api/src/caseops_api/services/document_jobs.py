@@ -433,13 +433,19 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         )
         return
 
-    attachment.chunks.clear()
-    session.flush()
+    # Delete prior chunks before recreating identical chunk indexes on a
+    # retry/reindex.  A newly uploaded attachment has no prior chunks, so do
+    # not open a write transaction before the external parse/embed work.
+    if attachment.chunks:
+        attachment.chunks.clear()
+        session.flush()
     index_matter_attachment(attachment)
-    # Flush new chunks before embedding so they carry ids the pgvector
-    # UPDATE can target. Best-effort: a provider failure leaves the
-    # chunks indexed-but-unembedded so lexical retrieval still works.
-    session.flush()
+    # Embedding can call an external provider. Keep the new attachment and
+    # chunk mutations unflushed until that call returns so the worker cannot
+    # hold the attachment row lock while a reply/supporting upload needs to
+    # update the parent notice. embed_matter_attachment_chunks performs its
+    # own flush immediately before the pgvector UPDATE when PostgreSQL ids
+    # are required. Best-effort provider failure still leaves lexical chunks.
     embed_matter_attachment_chunks(session, attachment)
     job.processed_char_count = attachment.extracted_char_count
     job.error_message = attachment.extraction_error

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from threading import Event, Thread
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -149,6 +150,99 @@ def test_scheduled_reprocessing_retry_can_be_drained_by_worker(
         assert attachment is not None
         assert attachment.processing_status == "indexed"
         assert attachment.extracted_char_count > 0
+
+
+def test_initial_processing_provider_phase_does_not_lock_attachment_row(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Provider lock boundary",
+            "matter_code": "WORKER-LOCK-001",
+            "practice_area": "Litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    matter_id = matter_response.json()["id"]
+    upload_response = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("provider-lock.txt", b"Provider lock regression", "text/plain")},
+    )
+    assert upload_response.status_code == 200, upload_response.text
+    attachment_id = upload_response.json()["id"]
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        attachment = session.get(MatterAttachment, attachment_id)
+        assert attachment is not None
+        attachment.chunks.clear()
+        job = session.scalar(
+            select(DocumentProcessingJob)
+            .where(
+                DocumentProcessingJob.attachment_id == attachment_id,
+                DocumentProcessingJob.target_type
+                == DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            )
+            .order_by(DocumentProcessingJob.queued_at.desc())
+        )
+        assert job is not None
+        job.status = DocumentProcessingJobStatus.QUEUED
+        job.error_message = None
+        job.started_at = None
+        job.completed_at = None
+        session.commit()
+        job_id = job.id
+
+    concurrent_finished = Event()
+    concurrent_errors: list[BaseException] = []
+    provider_observation = {"concurrent_commit_completed": False}
+    concurrent_threads: list[Thread] = []
+
+    def update_parent_while_provider_is_running() -> None:
+        try:
+            with session_factory() as concurrent_session:
+                attachment = concurrent_session.get(MatterAttachment, attachment_id)
+                assert attachment is not None
+                attachment.notice_reply_sent = True
+                concurrent_session.commit()
+        except BaseException as exc:  # noqa: BLE001 - surface thread failures in test
+            concurrent_errors.append(exc)
+        finally:
+            concurrent_finished.set()
+
+    def embedding_provider_phase(_session, _attachment) -> int:
+        thread = Thread(target=update_parent_while_provider_is_running, daemon=True)
+        concurrent_threads.append(thread)
+        thread.start()
+        provider_observation["concurrent_commit_completed"] = concurrent_finished.wait(2)
+        return 0
+
+    monkeypatch.setattr(
+        "caseops_api.services.document_jobs.embed_matter_attachment_chunks",
+        embedding_provider_phase,
+    )
+
+    run_document_processing_job(job_id)
+
+    assert concurrent_threads
+    concurrent_threads[0].join(timeout=5)
+    assert not concurrent_threads[0].is_alive()
+    assert concurrent_errors == []
+    assert provider_observation["concurrent_commit_completed"] is True
+    with session_factory() as session:
+        attachment = session.get(MatterAttachment, attachment_id)
+        job = session.get(DocumentProcessingJob, job_id)
+        assert attachment is not None
+        assert attachment.notice_reply_sent is True
+        assert job is not None
+        assert job.status == DocumentProcessingJobStatus.COMPLETED
 
 
 def test_disposed_matter_document_job_never_indexes_embeds_or_requeues(
