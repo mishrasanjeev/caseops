@@ -212,6 +212,8 @@ elif [[ "$*" == *"run jobs describe"* ]]; then
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[0].image"* ]]; then
   printf 'registry.invalid/caseops-api:%s\n' "${FAKE_TAG}"
+elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[1].image"* ]]; then
+  printf 'clamav/clamav:1.4\n'
 elif [[ "$*" == *"services describe caseops-web"* ]]; then
   printf 'registry.invalid/caseops-web:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[].name"* ]]; then
