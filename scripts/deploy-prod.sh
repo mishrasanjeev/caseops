@@ -168,6 +168,7 @@ gcloud run deploy caseops-api \
   --timeout "${API_TIMEOUT}" \
   --min-instances "${API_MIN_INSTANCES}" \
   --container api \
+  --port 8000 \
   --image "${API_IMAGE}" \
   --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA}" \
   --cpu "${API_CPU}" \
