@@ -39,6 +39,12 @@ COPY alembic ./alembic
 # Add `[observability]` here if/when we wire OTel in prod.
 RUN uv pip install --system ".[ocr]"
 
+# Voyage token counting uses Hugging Face's tokenizer cache before every
+# embedding request. Download the production tokenizer while the image is
+# built so a cold Cloud Run instance never holds an upload response open while
+# it resolves that asset from the network.
+RUN python -c "from tokenizers import Tokenizer; tokenizer = Tokenizer.from_pretrained('voyageai/voyage-4-large'); tokenizer.no_truncation()"
+
 # Pre-download the fastembed cross-encoder (jina-reranker-v1-tiny-en,
 # ~130 MB ONNX) at build time so Cloud Run cold starts don't eat a
 # multi-second download on the first reranked query. The model caches

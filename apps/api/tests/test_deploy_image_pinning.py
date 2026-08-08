@@ -28,3 +28,9 @@ def test_production_deploy_only_refreshes_jobs_provisioned_in_production() -> No
     # The document worker is optional and intentionally absent from the
     # production scheduler inventory.
     assert "caseops-document-worker" not in script
+
+
+def test_api_image_preloads_production_embedding_tokenizer() -> None:
+    dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "Tokenizer.from_pretrained('voyageai/voyage-4-large')" in dockerfile
