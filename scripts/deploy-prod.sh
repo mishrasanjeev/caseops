@@ -160,6 +160,14 @@ python scripts/scheduler_inventory.py reconcile \
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.
 echo "--- 4/6 deploy caseops-api ---"
+CLAMAV_IMAGE=$(gcloud run services describe caseops-api \
+  --region "${REGION}" \
+  --project "${PROJECT}" \
+  --format='value(spec.template.spec.containers[1].image)')
+if [[ -z "${CLAMAV_IMAGE}" ]]; then
+  echo "EG-003 REGRESSION: cannot resolve the deployed ClamAV image; refusing a partial multi-container deploy."
+  exit 1
+fi
 gcloud run deploy caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
@@ -174,6 +182,7 @@ gcloud run deploy caseops-api \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
+  --image "${CLAMAV_IMAGE}" \
   --startup-probe "tcpSocket.port=3310,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120"
 echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
 
