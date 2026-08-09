@@ -9,6 +9,7 @@ dispatch (that's BG-042 / BG-040 land) and no generic assignment
 workflow. Adding the table now unblocks every downstream domain
 that wants to emit a deadline.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -30,7 +31,15 @@ from caseops_api.services.matter_access import assert_access, can_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
-_VALID_SOURCES = {"hearing", "draft", "contract", "intake", "custom", "followup"}
+_VALID_SOURCES = {
+    "hearing",
+    "draft",
+    "contract",
+    "intake",
+    "custom",
+    "followup",
+    "ip_deadline",
+}
 
 
 def _load_matter(session: Session, context: SessionContext, matter_id: str) -> Matter:
@@ -41,9 +50,7 @@ def _load_matter(session: Session, context: SessionContext, matter_id: str) -> M
         )
     )
     if matter is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
     return matter
 
@@ -126,9 +133,7 @@ def list_deadlines(
     )
     if not include_done:
         stmt = stmt.where(
-            MatterDeadline.status.in_(
-                [MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED]
-            )
+            MatterDeadline.status.in_([MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED])
         )
     return list(session.scalars(stmt))
 
@@ -164,6 +169,7 @@ def create_deadline(
     assignee_membership_id: str | None = None,
     source_ref_type: str | None = None,
     source_ref_id: str | None = None,
+    commit: bool = True,
 ) -> MatterDeadline:
     matter = require_operational_matter(
         session,
@@ -225,8 +231,9 @@ def create_deadline(
             "due_on": due_on.isoformat(),
         },
     )
-    session.commit()
-    session.refresh(deadline)
+    if commit:
+        session.commit()
+        session.refresh(deadline)
     return deadline
 
 
@@ -237,6 +244,7 @@ def update_deadline(
     matter_id: str,
     deadline_id: str,
     payload: MatterDeadlineUpdateRequest,
+    commit: bool = True,
 ) -> MatterDeadline:
     matter = require_operational_matter(
         session,
@@ -244,7 +252,8 @@ def update_deadline(
         operation="update a deadline",
     )
     deadline = session.scalar(
-        select(MatterDeadline).where(
+        select(MatterDeadline)
+        .where(
             MatterDeadline.id == deadline_id,
             MatterDeadline.matter_id == matter_id,
         )
@@ -252,9 +261,7 @@ def update_deadline(
         .execution_options(populate_existing=True)
     )
     if deadline is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Deadline not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deadline not found.")
 
     updates = payload.model_dump(exclude_unset=True)
     if (
@@ -357,8 +364,9 @@ def update_deadline(
             "has_source_ref": bool(deadline.source_ref_id),
         },
     )
-    session.commit()
-    session.refresh(deadline)
+    if commit:
+        session.commit()
+        session.refresh(deadline)
     return deadline
 
 
@@ -374,9 +382,7 @@ def transition_deadline(
 ) -> MatterDeadline:
     deadline = session.get(MatterDeadline, deadline_id)
     if deadline is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Deadline not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deadline not found.")
     # Tenant scope via matter.
     require_operational_matter(
         session,

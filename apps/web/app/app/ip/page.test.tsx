@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   enableIpWorkspaceMock,
+  fetchIpDeadlineWorkspaceMock,
   fetchIpCoreRecordsMock,
   fetchIpDocketsMock,
   fetchIpProsecutionWorkspaceMock,
@@ -15,9 +16,12 @@ const {
   saveIpWorkspaceConfigurationMock,
   appendIpDocketEventMock,
   transitionIpDocketLifecycleMock,
+  confirmIpLegalDeadlineMock,
+  proposeIpLegalDeadlineMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
+  fetchIpDeadlineWorkspaceMock: vi.fn(),
   fetchIpCoreRecordsMock: vi.fn(),
   fetchIpDocketsMock: vi.fn(),
   fetchIpProsecutionWorkspaceMock: vi.fn(),
@@ -28,11 +32,14 @@ const {
   saveIpWorkspaceConfigurationMock: vi.fn(),
   appendIpDocketEventMock: vi.fn(),
   transitionIpDocketLifecycleMock: vi.fn(),
+  confirmIpLegalDeadlineMock: vi.fn(),
+  proposeIpLegalDeadlineMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDockets: fetchIpDocketsMock,
+  fetchIpDeadlineWorkspace: fetchIpDeadlineWorkspaceMock,
   fetchIpCoreRecords: fetchIpCoreRecordsMock,
   fetchIpProsecutionWorkspace: fetchIpProsecutionWorkspaceMock,
   fetchIpWorkspaceReadiness: fetchIpWorkspaceReadinessMock,
@@ -52,6 +59,18 @@ vi.mock("@/lib/api/endpoints", () => ({
   appendIpDocketEvent: appendIpDocketEventMock,
   previewIpDocketLifecycle: previewIpDocketLifecycleMock,
   transitionIpDocketLifecycle: transitionIpDocketLifecycleMock,
+  proposeIpLegalDeadline: proposeIpLegalDeadlineMock,
+  confirmIpLegalDeadline: confirmIpLegalDeadlineMock,
+  fetchIpDeadlineImpact: vi.fn(),
+  overrideIpLegalDeadline: vi.fn(),
+  recalculateIpLegalDeadline: vi.fn(),
+  completeIpLegalDeadline: vi.fn(),
+  proposeIpWorkingCalendar: vi.fn(),
+  activateIpWorkingCalendar: vi.fn(),
+  proposeIpDeadlineRule: vi.fn(),
+  fetchIpDeadlineRuleImpact: vi.fn(),
+  activateIpDeadlineRule: vi.fn(),
+  transitionIpDeadlineRule: vi.fn(),
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -78,6 +97,7 @@ function withClient(children: ReactNode) {
 describe("IpDocketPage", () => {
   beforeEach(() => {
     fetchIpDocketsMock.mockReset();
+    fetchIpDeadlineWorkspaceMock.mockReset();
     fetchIpCoreRecordsMock.mockReset();
     fetchIpProsecutionWorkspaceMock.mockReset();
     fetchIpWorkspaceReadinessMock.mockReset();
@@ -85,6 +105,8 @@ describe("IpDocketPage", () => {
     previewIpDocketLifecycleMock.mockReset();
     appendIpDocketEventMock.mockReset();
     transitionIpDocketLifecycleMock.mockReset();
+    confirmIpLegalDeadlineMock.mockReset();
+    proposeIpLegalDeadlineMock.mockReset();
     enableIpWorkspaceMock.mockReset();
     runIpWorkspaceTestMock.mockReset();
     saveIpWorkspaceConfigurationMock.mockReset();
@@ -97,6 +119,20 @@ describe("IpDocketPage", () => {
       features: [],
     });
     fetchIpDocketsMock.mockResolvedValue({ dockets: [], count: 0 });
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1",
+      rules: [{
+        id: "rule-1", key: "in-tm-response", version: 1, status: "active",
+        source_reference: "official:rule", rule_set_id: "set-1", rule_kind: "deadline",
+      }],
+      calendars: [{
+        id: "calendar-1", calendar_id: "calendar-set-1", key: "ip-india",
+        name: "IP India calendar", version: 1, status: "active", timezone: "Asia/Kolkata",
+        weekend_days: [5, 6], holidays: [], exceptional_working_days: [],
+        source_reference: "official:calendar", source_hash: "a".repeat(64),
+      }],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+    });
     fetchIpCoreRecordsMock.mockResolvedValue({ assets: [], applications: [], proceedings: [], identifiers: [] });
     fetchIpProsecutionWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1", lifecycle_status: "active", lifecycle_version: 0,
@@ -120,6 +156,8 @@ describe("IpDocketPage", () => {
       requires_exception_acknowledgement: true, reopen_without_child_resurrection: false,
     });
     transitionIpDocketLifecycleMock.mockResolvedValue({ status: "closed" });
+    proposeIpLegalDeadlineMock.mockResolvedValue({ id: "deadline-proposal-1" });
+    confirmIpLegalDeadlineMock.mockResolvedValue({ id: "deadline-confirmed-1" });
   });
 
   it("renders the authorized empty state and working create form", async () => {
@@ -334,6 +372,58 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Record prosecution event" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Preview lifecycle impact" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Apply lifecycle transition" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Propose calendar version" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Propose rule and fixture" })).toBeVisible();
+  });
+
+  it("surfaces deadline exceptions and keeps every confirmation control visible on mobile", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [{
+        id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
+        title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: false,
+        is_active: true, lifecycle_version: 0, lifecycle_effective_at: null,
+        lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
+        lifecycle_evidence_ref: null, successor_docket_id: null, current_version: 1,
+        created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
+        current_particulars: { form_key: "TM-A", form_version: "2026.1", readiness_status: "ready", classes_json: [{ class_number: 9, specification: "Software" }] },
+        notice_links: [], deadline_incidents: [], title_interests: [], cost_items: [],
+        related_right_obligations: [], evidence_candidates: [], deadline_coverages: [],
+      }],
+      count: 1,
+    });
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1",
+      rules: [{ id: "rule-1", key: "in-tm-response", version: 1, status: "active", source_reference: "official:rule" }],
+      calendars: [{ id: "calendar-1", key: "ip-india", name: "IP India calendar", version: 1, status: "active", source_reference: "official:calendar", timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [], exceptional_working_days: [], source_hash: "a".repeat(64) }],
+      deadlines: [{
+        id: "legal-deadline-1", docket_id: "ip-1", trigger_event_id: null,
+        rule_version_id: "rule-1", calendar_version_id: "calendar-1", matter_deadline_id: null,
+        supersedes_deadline_id: null, deadline_kind: "legal_deadline", title: "Respond to examination report",
+        trigger_kind: "examination_report_received", base_date: "2026-08-14", date_precision: "date",
+        certainty: "certain", result_on: "2026-08-18", calculation_inputs: {}, calculation_trace: [],
+        explanation: "One business day after the verified source date; confirmation remains required.",
+        rule_citation: "Trade Marks Rules", engine_version: "caseops-ip-deadline-v1",
+        source_version: "source-v1", is_critical: true, state: "candidate", version: 1,
+        confirmed_at: null, override_reason: null, override_evidence_ref: null,
+        completed_evidence_ref: null, created_at: "2026-08-09T00:00:00Z",
+        updated_at: "2026-08-09T00:00:00Z", responsibilities: [],
+      }],
+      exceptions: [{ deadline_id: "legal-deadline-1", docket_id: "ip-1", exception_kinds: ["unowned", "unacknowledged"], critical: true, result_on: "2026-08-18", visible: true }],
+      automation_state: "explicit_confirmation_only",
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
+    expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
+    expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
+    expect(within(deadlineWorkspace).getByLabelText("Primary membership ID")).toBeVisible();
+    expect(within(deadlineWorkspace).getByLabelText("Backup membership ID")).toBeVisible();
+    expect(within(deadlineWorkspace).getByLabelText("Evidence reference")).toBeVisible();
+    expect(within(deadlineWorkspace).getByRole("button", { name: "Confirm legal deadline" })).toBeVisible();
+    expect(within(deadlineWorkspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
   });
 
   it("requires a current preview before recording an event or acknowledged lifecycle impact", async () => {

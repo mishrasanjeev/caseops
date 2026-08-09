@@ -6,6 +6,24 @@ from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.core.settings import get_settings
+from caseops_api.schemas.ip_deadlines import (
+    IpDeadlineCompleteRequest,
+    IpDeadlineConfirmRequest,
+    IpDeadlineImpactResponse,
+    IpDeadlineOverrideRequest,
+    IpDeadlineProposalRequest,
+    IpDeadlineRecalculateRequest,
+    IpDeadlineRecord,
+    IpDeadlineWorkspaceResponse,
+    IpRuleActivationRequest,
+    IpRuleImpactResponse,
+    IpRuleTransitionRequest,
+    IpRuleVersionProposalRequest,
+    IpRuleVersionRecord,
+    LegalCalendarActivationRequest,
+    LegalCalendarVersionProposalRequest,
+    LegalCalendarVersionRecord,
+)
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
     IpDocketEventPreviewResponse,
@@ -58,6 +76,21 @@ from caseops_api.schemas.ip_records import (
     TrademarkApplicationResponse,
 )
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
+from caseops_api.services.ip_deadline_workflow import (
+    activate_calendar_version,
+    activate_rule_version,
+    complete_deadline,
+    confirm_deadline,
+    deadline_impact,
+    deadline_workspace,
+    override_deadline,
+    propose_calendar_version,
+    propose_deadline,
+    propose_rule_version,
+    recalculate_deadline,
+    rule_impact,
+    transition_rule_version,
+)
 from caseops_api.services.ip_lifecycle import (
     append_ip_docket_event,
     get_ip_prosecution_workspace,
@@ -108,11 +141,209 @@ router = APIRouter()
 IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
 IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
+IpRuleProposer = Annotated[
+    SessionContext,
+    Depends(require_capability("ip:rules_propose")),
+]
+IpRuleActivator = Annotated[
+    SessionContext,
+    Depends(require_capability("ip:rules_activate")),
+]
 IpFinance = Annotated[SessionContext, Depends(require_capability("ip:fees_manage"))]
 IpWorkspaceAdmin = Annotated[
     SessionContext,
     Depends(require_capability("ip:taxonomy_admin")),
 ]
+
+
+@router.get(
+    "/dockets/{docket_id}/deadline-workspace",
+    response_model=IpDeadlineWorkspaceResponse,
+)
+async def get_ip_deadline_workspace(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDeadlineWorkspaceResponse:
+    return deadline_workspace(session, context=context, docket_id=docket_id)
+
+
+@router.post(
+    "/deadline-rules",
+    response_model=IpRuleVersionRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_deadline_rule(
+    payload: IpRuleVersionProposalRequest,
+    context: IpRuleProposer,
+    session: DbSession,
+) -> IpRuleVersionRecord:
+    return propose_rule_version(session, context=context, payload=payload)
+
+
+@router.get(
+    "/deadline-rules/{rule_version_id}/impact",
+    response_model=IpRuleImpactResponse,
+)
+async def get_ip_deadline_rule_impact(
+    rule_version_id: str,
+    context: IpRuleActivator,
+    session: DbSession,
+) -> IpRuleImpactResponse:
+    return rule_impact(session, context=context, rule_version_id=rule_version_id)
+
+
+@router.post(
+    "/deadline-rules/{rule_version_id}/activate",
+    response_model=IpRuleVersionRecord,
+)
+async def post_ip_deadline_rule_activation(
+    rule_version_id: str,
+    payload: IpRuleActivationRequest,
+    context: IpRuleActivator,
+    session: DbSession,
+) -> IpRuleVersionRecord:
+    return activate_rule_version(
+        session,
+        context=context,
+        rule_version_id=rule_version_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/deadline-rules/{rule_version_id}/transition",
+    response_model=IpRuleVersionRecord,
+)
+async def post_ip_deadline_rule_transition(
+    rule_version_id: str,
+    payload: IpRuleTransitionRequest,
+    context: IpRuleActivator,
+    session: DbSession,
+) -> IpRuleVersionRecord:
+    return transition_rule_version(
+        session,
+        context=context,
+        rule_version_id=rule_version_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/working-calendars",
+    response_model=LegalCalendarVersionRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_working_calendar(
+    payload: LegalCalendarVersionProposalRequest,
+    context: IpRuleProposer,
+    session: DbSession,
+) -> LegalCalendarVersionRecord:
+    return propose_calendar_version(session, context=context, payload=payload)
+
+
+@router.post(
+    "/working-calendars/{calendar_version_id}/activate",
+    response_model=LegalCalendarVersionRecord,
+)
+async def post_ip_working_calendar_activation(
+    calendar_version_id: str,
+    payload: LegalCalendarActivationRequest,
+    context: IpRuleActivator,
+    session: DbSession,
+) -> LegalCalendarVersionRecord:
+    return activate_calendar_version(
+        session,
+        context=context,
+        calendar_version_id=calendar_version_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/deadlines",
+    response_model=IpDeadlineRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_deadline_proposal(
+    docket_id: str,
+    payload: IpDeadlineProposalRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDeadlineRecord:
+    return propose_deadline(session, context=context, docket_id=docket_id, payload=payload)
+
+
+@router.get(
+    "/deadlines/{deadline_id}/impact",
+    response_model=IpDeadlineImpactResponse,
+)
+async def get_ip_deadline_impact(
+    deadline_id: str,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDeadlineImpactResponse:
+    return deadline_impact(session, context=context, deadline_id=deadline_id)
+
+
+@router.post("/deadlines/{deadline_id}/confirm", response_model=IpDeadlineRecord)
+async def post_ip_deadline_confirmation(
+    deadline_id: str,
+    payload: IpDeadlineConfirmRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDeadlineRecord:
+    return confirm_deadline(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+        payload=payload,
+    )
+
+
+@router.post("/deadlines/{deadline_id}/override", response_model=IpDeadlineRecord)
+async def post_ip_deadline_override(
+    deadline_id: str,
+    payload: IpDeadlineOverrideRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDeadlineRecord:
+    return override_deadline(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+        payload=payload,
+    )
+
+
+@router.post("/deadlines/{deadline_id}/recalculate", response_model=IpDeadlineRecord)
+async def post_ip_deadline_recalculation(
+    deadline_id: str,
+    payload: IpDeadlineRecalculateRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDeadlineRecord:
+    return recalculate_deadline(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+        payload=payload,
+    )
+
+
+@router.post("/deadlines/{deadline_id}/complete", response_model=IpDeadlineRecord)
+async def post_ip_deadline_completion(
+    deadline_id: str,
+    payload: IpDeadlineCompleteRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDeadlineRecord:
+    return complete_deadline(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+        payload=payload,
+    )
 
 
 @router.get("/readiness", response_model=IpWorkspaceReadinessResponse)
@@ -440,9 +671,7 @@ async def post_trademark_application(
         identifier=(
             IpIdentifierResponse.model_validate(identifier) if identifier is not None else None
         ),
-        duplicate_candidates=[
-            IpIdentifierResponse.model_validate(row) for row in duplicates
-        ],
+        duplicate_candidates=[IpIdentifierResponse.model_validate(row) for row in duplicates],
     )
 
 
@@ -506,9 +735,7 @@ async def post_ip_identifier(
     )
     return IpIdentifierMutationResponse(
         identifier=IpIdentifierResponse.model_validate(identifier),
-        duplicate_candidates=[
-            IpIdentifierResponse.model_validate(row) for row in duplicates
-        ],
+        duplicate_candidates=[IpIdentifierResponse.model_validate(row) for row in duplicates],
     )
 
 
@@ -533,9 +760,7 @@ async def post_ip_identifier_correction(
     )
     return IpIdentifierMutationResponse(
         identifier=IpIdentifierResponse.model_validate(identifier),
-        duplicate_candidates=[
-            IpIdentifierResponse.model_validate(row) for row in duplicates
-        ],
+        duplicate_candidates=[IpIdentifierResponse.model_validate(row) for row in duplicates],
     )
 
 

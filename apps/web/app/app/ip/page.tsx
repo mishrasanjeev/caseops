@@ -1,7 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BadgeIndianRupee, FileCheck2, Plus, Scale } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeIndianRupee,
+  FileCheck2,
+  Plus,
+  Scale,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -16,24 +22,39 @@ import {
   addIpCostItem,
   addIpRelatedRightObligation,
   addIpTitleInterest,
+  activateIpDeadlineRule,
+  activateIpWorkingCalendar,
   appendIpDocketEvent,
   bulkReassignIpCoverage,
+  completeIpLegalDeadline,
   completeIpRelatedRightObligation,
+  confirmIpLegalDeadline,
   createIpDocket,
   discoverIpEvidence,
   enableIpWorkspace,
   fetchIpCoreRecords,
+  fetchIpDeadlineImpact,
+  fetchIpDeadlineRuleImpact,
+  fetchIpDeadlineWorkspace,
   fetchIpDockets,
   fetchIpProsecutionWorkspace,
   fetchIpWorkspaceReadiness,
   previewIpDocketEvent,
   previewIpDocketLifecycle,
+  proposeIpDeadlineRule,
+  proposeIpLegalDeadline,
+  proposeIpWorkingCalendar,
+  recalculateIpLegalDeadline,
   reconcileIpCosts,
   reviewIpEvidenceCandidate,
   runIpWorkspaceTest,
   saveIpWorkspaceConfiguration,
   transitionIpDocketLifecycle,
+  transitionIpDeadlineRule,
+  overrideIpLegalDeadline,
   type IpDocket,
+  type IpLegalDeadline,
+  type IpResponsibilityAssignmentInput,
   type IpDocketEventInput,
   type IpEvidenceCandidate,
   type IpFeatureReadiness,
@@ -51,6 +72,8 @@ export default function IpDocketPage() {
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
   const canReview = useCapability("ip:approve");
+  const canProposeRules = useCapability("ip:rules_propose");
+  const canActivateRules = useCapability("ip:rules_activate");
   const canFinance = useCapability("ip:fees_manage");
   const canConfigure = useCapability("ip:taxonomy_admin");
   const session = useSession();
@@ -196,6 +219,8 @@ export default function IpDocketPage() {
               canWrite={canWrite}
               canReview={canReview}
               canFinance={canFinance}
+              canProposeRules={canProposeRules}
+              canActivateRules={canActivateRules}
               currentMembershipId={session.context?.membership.id ?? null}
               onChanged={refresh}
             />
@@ -631,6 +656,8 @@ function DocketWorkspace({
   canWrite,
   canReview,
   canFinance,
+  canProposeRules,
+  canActivateRules,
   currentMembershipId,
   onChanged,
 }: {
@@ -638,6 +665,8 @@ function DocketWorkspace({
   canWrite: boolean;
   canReview: boolean;
   canFinance: boolean;
+  canProposeRules: boolean;
+  canActivateRules: boolean;
   currentMembershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
@@ -665,6 +694,18 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <DeadlineWorkspaceCard
+          docket={docket}
+          enabled={canReview}
+          currentMembershipId={currentMembershipId}
+          onChanged={onChanged}
+        />
+        <DeadlineGovernanceCard
+          docket={docket}
+          canPropose={canProposeRules}
+          canActivate={canActivateRules}
+          currentMembershipId={currentMembershipId}
+        />
         <ProsecutionCard
           docket={docket}
           enabled={canWrite}
@@ -688,6 +729,668 @@ function DocketWorkspace({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function DeadlineWorkspaceCard({
+  docket,
+  enabled,
+  currentMembershipId,
+  onChanged,
+}: {
+  docket: IpDocket;
+  enabled: boolean;
+  currentMembershipId: string | null;
+  onChanged: () => Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const workspace = useQuery({
+    queryKey: ["ip", "deadline-workspace", docket.id],
+    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
+  });
+  const [title, setTitle] = useState("Respond to official IP event");
+  const [baseDate, setBaseDate] = useState(TODAY);
+  const [certainty, setCertainty] = useState<
+    "certain" | "uncertain" | "conflicting" | "unknown"
+  >("certain");
+  const [critical, setCritical] = useState(true);
+  const [ruleVersionId, setRuleVersionId] = useState("");
+  const [calendarVersionId, setCalendarVersionId] = useState("");
+  const [primaryId, setPrimaryId] = useState(currentMembershipId ?? "");
+  const [backupId, setBackupId] = useState("");
+  const [internalTargetOn, setInternalTargetOn] = useState("");
+  const [actionDate, setActionDate] = useState("");
+  const [actionReason, setActionReason] = useState("");
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const [attestation, setAttestation] = useState("");
+
+  const activeRules = workspace.data?.rules.filter((row) => row.status === "active") ?? [];
+  const activeCalendars =
+    workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
+  const selectedRuleId = ruleVersionId || activeRules[0]?.id || "";
+  const selectedCalendarId = calendarVersionId || activeCalendars[0]?.id || "";
+
+  const refresh = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["ip", "deadline-workspace", docket.id],
+    });
+    await onChanged();
+  };
+  const mutationOptions = {
+    onSuccess: async () => {
+      toast.success("Legal deadline workspace updated");
+      await refresh();
+    },
+    onError: (error: unknown) =>
+      toast.error(apiErrorMessage(error, "The legal deadline change was rejected.")),
+  };
+  const proposal = useMutation({
+    mutationFn: () =>
+      proposeIpLegalDeadline({
+        docketId: docket.id,
+        title,
+        ruleVersionId: selectedRuleId,
+        calendarVersionId: selectedCalendarId,
+        baseDate: baseDate || null,
+        baseDateCertainty: certainty,
+        critical,
+      }),
+    ...mutationOptions,
+  });
+
+  const responsibilities = (deadline: IpLegalDeadline): IpResponsibilityAssignmentInput[] => {
+    const existing = deadline.responsibilities.map((row) => ({
+      membership_id: row.membership_id,
+      role: row.role,
+      accepted: row.accepted,
+      replacement_source: "retained_assignment",
+      escalation_policy: {},
+    }));
+    if (existing.length) return existing;
+    const values: IpResponsibilityAssignmentInput[] = [];
+    if (primaryId.trim()) {
+      values.push({
+        membership_id: primaryId.trim(),
+        role: "primary",
+        accepted: true,
+        replacement_source: "direct_assignment",
+        escalation_policy: { escalate_after_hours: 24 },
+      });
+    }
+    if (backupId.trim()) {
+      values.push({
+        membership_id: backupId.trim(),
+        role: "backup",
+        accepted: true,
+        replacement_source: "direct_assignment",
+        escalation_policy: { escalate_after_hours: 24 },
+      });
+    }
+    return values;
+  };
+
+  const confirm = useMutation({
+    mutationFn: async (deadline: IpLegalDeadline) => {
+      let impactToken: string | null = null;
+      if (deadline.supersedes_deadline_id) {
+        impactToken = (
+          await fetchIpDeadlineImpact(deadline.supersedes_deadline_id)
+        ).impact_token;
+      }
+      return confirmIpLegalDeadline({
+        deadlineId: deadline.id,
+        expectedVersion: deadline.version,
+        responsibilities: responsibilities(deadline),
+        internalTargetOn: internalTargetOn || null,
+        reminderOffsetsDays: [30, 14, 7, 1, 0],
+        correctedResultOn:
+          deadline.result_on === null && actionDate ? actionDate : null,
+        correctionReason:
+          deadline.result_on === null ? actionReason || null : null,
+        correctionEvidenceReference:
+          deadline.result_on === null ? evidenceReference || null : null,
+        impactToken,
+      });
+    },
+    ...mutationOptions,
+  });
+  const recalculate = useMutation({
+    mutationFn: (deadline: IpLegalDeadline) =>
+      recalculateIpLegalDeadline({
+        deadlineId: deadline.id,
+        expectedVersion: deadline.version,
+        baseDate: baseDate || null,
+        certainty,
+        reason: actionReason,
+        evidenceReference,
+      }),
+    ...mutationOptions,
+  });
+  const override = useMutation({
+    mutationFn: async (deadline: IpLegalDeadline) => {
+      const impact = await fetchIpDeadlineImpact(deadline.id);
+      return overrideIpLegalDeadline({
+        deadlineId: deadline.id,
+        expectedVersion: deadline.version,
+        newResultOn: actionDate,
+        reason: actionReason,
+        evidenceReference,
+        impactToken: impact.impact_token,
+        responsibilities: responsibilities(deadline),
+      });
+    },
+    ...mutationOptions,
+  });
+  const complete = useMutation({
+    mutationFn: (deadline: IpLegalDeadline) =>
+      completeIpLegalDeadline({
+        deadlineId: deadline.id,
+        expectedVersion: deadline.version,
+        evidenceReference,
+        attestation,
+      }),
+    ...mutationOptions,
+  });
+
+  return (
+    <Card className="min-w-0 xl:col-span-2" data-testid="ip-deadline-workspace">
+      <CardHeader>
+        <CardTitle as="h3">Legal deadline control</CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-5">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          Calculations are proposals. A legal deadline changes operational work only after an
+          authorized user explicitly confirms it.
+        </div>
+        {workspace.isPending ? <p className="text-sm">Loading deadline evidenceâ€¦</p> : null}
+        {workspace.isError ? (
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <p className="min-w-0 flex-1 break-words text-sm text-red-700">
+              {apiErrorMessage(workspace.error, "Deadline evidence could not be loaded.")}
+            </p>
+            <Button className="w-full sm:w-auto" onClick={() => workspace.refetch()}>
+              Retry deadline workspace
+            </Button>
+          </div>
+        ) : null}
+        {workspace.data?.exceptions.length ? (
+          <div className="flex min-w-0 flex-col gap-2" data-testid="ip-deadline-exceptions">
+            <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Exception queue
+            </div>
+            {workspace.data.exceptions.map((item) => (
+              <div
+                key={item.deadline_id}
+                className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
+              >
+                <strong className="break-words">{item.exception_kinds.join(" Â· ")}</strong>
+                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                  {item.result_on ?? "No reliable legal date"} Â· deadline {item.deadline_id}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {enabled ? (
+          <form
+            className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              proposal.mutate();
+            }}
+          >
+            <Field label="Deadline title">
+              <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+            </Field>
+            <Field label="Trigger / base date">
+              <Input
+                type="date"
+                value={baseDate}
+                onChange={(event) => setBaseDate(event.target.value)}
+              />
+            </Field>
+            <Field label="Date certainty">
+              <select
+                className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={certainty}
+                onChange={(event) =>
+                  setCertainty(event.target.value as typeof certainty)
+                }
+              >
+                <option value="certain">Certain</option>
+                <option value="uncertain">Uncertain</option>
+                <option value="conflicting">Conflicting</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </Field>
+            <Field label="Active rule version">
+              <select
+                className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={selectedRuleId}
+                onChange={(event) => setRuleVersionId(event.target.value)}
+              >
+                {activeRules.map((row) => (
+                  <option key={row.id} value={row.id}>{row.key} v{row.version}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Active working calendar">
+              <select
+                className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={selectedCalendarId}
+                onChange={(event) => setCalendarVersionId(event.target.value)}
+              >
+                {activeCalendars.map((row) => (
+                  <option key={row.id} value={row.id}>{row.name} v{row.version}</option>
+                ))}
+              </select>
+            </Field>
+            <label className="flex min-w-0 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={critical}
+                onChange={(event) => setCritical(event.target.checked)}
+              />
+              Critical legal deadline
+            </label>
+            <div className="flex min-w-0 items-end sm:col-span-2">
+              <Button
+                className="w-full sm:w-auto"
+                type="submit"
+                disabled={
+                  !title.trim() ||
+                  !selectedRuleId ||
+                  !selectedCalendarId ||
+                  proposal.isPending
+                }
+              >
+                Calculate deadline proposal
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {enabled && workspace.data?.deadlines.length ? (
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Field label="Primary membership ID">
+              <Input value={primaryId} onChange={(event) => setPrimaryId(event.target.value)} />
+            </Field>
+            <Field label="Backup membership ID">
+              <Input value={backupId} onChange={(event) => setBackupId(event.target.value)} />
+            </Field>
+            <Field label="Internal target">
+              <Input
+                type="date"
+                value={internalTargetOn}
+                onChange={(event) => setInternalTargetOn(event.target.value)}
+              />
+            </Field>
+            <Field label="Corrected / override date">
+              <Input
+                type="date"
+                value={actionDate}
+                onChange={(event) => setActionDate(event.target.value)}
+              />
+            </Field>
+            <Field label="Action reason">
+              <Input
+                value={actionReason}
+                onChange={(event) => setActionReason(event.target.value)}
+                placeholder="Verified source changed the dateâ€¦"
+              />
+            </Field>
+            <Field label="Evidence reference">
+              <Input
+                value={evidenceReference}
+                onChange={(event) => setEvidenceReference(event.target.value)}
+                placeholder="attachment:official-source"
+              />
+            </Field>
+            <Field label="Completion attestation">
+              <Input
+                value={attestation}
+                onChange={(event) => setAttestation(event.target.value)}
+                placeholder="Verified official filing receiptâ€¦"
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        <div className="flex min-w-0 flex-col gap-3">
+          {workspace.data?.deadlines.map((deadline) => (
+            <div
+              key={deadline.id}
+              className="min-w-0 rounded-lg border border-[var(--color-line)] p-3"
+              data-testid={`ip-legal-deadline-${deadline.id}`}
+            >
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="break-words font-semibold">{deadline.title}</div>
+                  <div className="mt-1 break-words text-sm">
+                    {deadline.result_on ?? "Provisional â€” source date unresolved"} Â· {deadline.state} Â· v{deadline.version}
+                  </div>
+                  <div className="mt-2 break-words text-xs text-[var(--color-mute)]">
+                    {deadline.explanation}
+                  </div>
+                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                    Governing source: {deadline.rule_citation}
+                  </div>
+                </div>
+                {deadline.is_critical ? (
+                  <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">
+                    Critical
+                  </span>
+                ) : null}
+              </div>
+              {enabled ? (
+                <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  {deadline.state === "candidate" || deadline.state === "provisional" ? (
+                    <Button
+                      className="w-full sm:w-auto"
+                      size="sm"
+                      disabled={
+                        !primaryId.trim() ||
+                        (deadline.is_critical && !backupId.trim()) ||
+                        (deadline.result_on === null &&
+                          (!actionDate || !actionReason.trim() || !evidenceReference.trim())) ||
+                        confirm.isPending
+                      }
+                      onClick={() => confirm.mutate(deadline)}
+                    >
+                      Confirm legal deadline
+                    </Button>
+                  ) : null}
+                  {deadline.state === "confirmed" || deadline.state === "overdue" ? (
+                    <>
+                      <Button
+                        className="w-full sm:w-auto"
+                        size="sm"
+                        variant="secondary"
+                        disabled={
+                          !baseDate || !actionReason.trim() || !evidenceReference.trim() || recalculate.isPending
+                        }
+                        onClick={() => recalculate.mutate(deadline)}
+                      >
+                        Propose recalculation
+                      </Button>
+                      <Button
+                        className="w-full sm:w-auto"
+                        size="sm"
+                        variant="secondary"
+                        disabled={
+                          !actionDate ||
+                          !actionReason.trim() ||
+                          !evidenceReference.trim() ||
+                          override.isPending
+                        }
+                        onClick={() => override.mutate(deadline)}
+                      >
+                        Preview impact and override
+                      </Button>
+                      <Button
+                        className="w-full sm:w-auto"
+                        size="sm"
+                        disabled={
+                          !evidenceReference.trim() || !attestation.trim() || complete.isPending
+                        }
+                        onClick={() => complete.mutate(deadline)}
+                      >
+                        Complete with legal evidence
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {workspace.data && workspace.data.deadlines.length === 0 ? (
+            <p className="text-sm text-[var(--color-mute)]">No legal deadline proposals yet.</p>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DeadlineGovernanceCard({
+  docket,
+  canPropose,
+  canActivate,
+  currentMembershipId,
+}: {
+  docket: IpDocket;
+  canPropose: boolean;
+  canActivate: boolean;
+  currentMembershipId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const workspace = useQuery({
+    queryKey: ["ip", "deadline-workspace", docket.id],
+    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
+  });
+  const [calendarKey, setCalendarKey] = useState("ip-india-working-calendar");
+  const [calendarName, setCalendarName] = useState("IP India working calendar");
+  const [jurisdiction, setJurisdiction] = useState("IN");
+  const [office, setOffice] = useState("IP India");
+  const [holidays, setHolidays] = useState("");
+  const [sourceReference, setSourceReference] = useState("");
+  const [sourceHash, setSourceHash] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(TODAY);
+  const [governanceReason, setGovernanceReason] = useState("");
+  const [ruleKey, setRuleKey] = useState("in-tm-response-deadline");
+  const [triggerKind, setTriggerKind] = useState("examination_report_received");
+  const [durationValue, setDurationValue] = useState("30");
+  const [ruleCitation, setRuleCitation] = useState("");
+  const [fixtureBaseDate, setFixtureBaseDate] = useState(TODAY);
+  const [fixtureExpectedDate, setFixtureExpectedDate] = useState("");
+  const [reviewerId, setReviewerId] = useState("");
+
+  const activeCalendar = workspace.data?.calendars.find((row) => row.status === "active");
+  const refresh = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["ip", "deadline-workspace", docket.id],
+    });
+  };
+  const result = {
+    onSuccess: async () => {
+      toast.success("Deadline governance record updated");
+      await refresh();
+    },
+    onError: (error: unknown) =>
+      toast.error(apiErrorMessage(error, "Deadline governance rejected the change.")),
+  };
+  const proposeCalendar = useMutation({
+    mutationFn: () =>
+      proposeIpWorkingCalendar({
+        key: calendarKey,
+        name: calendarName,
+        jurisdiction,
+        office,
+        timezone: "Asia/Kolkata",
+        holidays: holidays
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        sourceReference,
+        sourceHash,
+        effectiveFrom,
+      }),
+    ...result,
+  });
+  const activateCalendar = useMutation({
+    mutationFn: (id: string) =>
+      activateIpWorkingCalendar({
+        calendarVersionId: id,
+        reason: governanceReason,
+        conflictReviewed: true,
+      }),
+    ...result,
+  });
+  const proposeRule = useMutation({
+    mutationFn: () => {
+      if (!activeCalendar) throw new Error("Activate a working calendar first.");
+      const calculation = {
+        deadline_kind: "legal_deadline",
+        trigger_kind: triggerKind,
+        base_date: fixtureBaseDate,
+        base_date_certainty: "certain",
+        duration_value: Number(durationValue),
+        duration_unit: "days",
+        calendar_method: "business_days",
+        direction: "after",
+        include_base_date: false,
+        next_working_day: true,
+        extension_days: 0,
+        rule_version_id: "governance-fixture-rule",
+        rule_citation: ruleCitation,
+        source_version: "governance-fixture-source",
+        engine_version: "caseops-ip-deadline-v1",
+        calendar: {
+          calendar_version_id: activeCalendar.id,
+          timezone: activeCalendar.timezone,
+          weekend_days: activeCalendar.weekend_days,
+          holidays: activeCalendar.holidays,
+          exceptional_working_days: activeCalendar.exceptional_working_days,
+          source_reference: activeCalendar.source_reference,
+          source_hash: activeCalendar.source_hash,
+        },
+      };
+      return proposeIpDeadlineRule({
+        key: ruleKey,
+        jurisdiction,
+        office,
+        rightKind: "trademark",
+        stage: "examination",
+        sourceRecordId: `verified-source-${effectiveFrom}`,
+        sourceReference,
+        sourceHash,
+        effectiveFrom,
+        triggerKind,
+        durationValue: Number(durationValue),
+        calendarMethod: "business_days",
+        ruleCitation,
+        fixtureCalculation: calculation,
+        fixtureExpectedState: "candidate",
+        fixtureExpectedResultOn: fixtureExpectedDate || null,
+      });
+    },
+    ...result,
+  });
+  const activateRule = useMutation({
+    mutationFn: (id: string) =>
+      activateIpDeadlineRule({
+        ruleVersionId: id,
+        reviewerMembershipId: reviewerId,
+        impactAcknowledged: true,
+        impactReason: governanceReason,
+      }),
+    ...result,
+  });
+  const disableRule = useMutation({
+    mutationFn: async (id: string) => {
+      const impact = await fetchIpDeadlineRuleImpact(id);
+      return transitionIpDeadlineRule({
+        ruleVersionId: id,
+        impactToken: impact.impact_token,
+        reason: governanceReason,
+        emergencyDisable: true,
+      });
+    },
+    ...result,
+  });
+
+  return (
+    <Card className="min-w-0 xl:col-span-2" data-testid="ip-deadline-governance">
+      <CardHeader><CardTitle as="h3">Rule and calendar governance</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-5">
+        <p className="text-sm text-[var(--color-mute)]">
+          Versioned sources require independent approval and server-evaluated fixtures. The
+          proposer cannot approve the same calendar, and rule proposal, fixture review, and
+          legal activation must use separate memberships.
+        </p>
+        {canPropose ? (
+          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+            <form
+              className="grid min-w-0 gap-3 sm:grid-cols-2"
+              onSubmit={(event) => { event.preventDefault(); proposeCalendar.mutate(); }}
+            >
+              <div className="sm:col-span-2 text-sm font-semibold">Propose working calendar</div>
+              <Field label="Calendar key"><Input value={calendarKey} onChange={(e) => setCalendarKey(e.target.value)} /></Field>
+              <Field label="Calendar name"><Input value={calendarName} onChange={(e) => setCalendarName(e.target.value)} /></Field>
+              <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} /></Field>
+              <Field label="Office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
+              <Field label="Holiday dates (comma separated)"><Input value={holidays} onChange={(e) => setHolidays(e.target.value)} placeholder="2026-01-26, 2026-08-15" /></Field>
+              <Field label="Effective from"><Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></Field>
+              <Field label="Official source reference"><Input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} /></Field>
+              <Field label="Source SHA-256"><Input value={sourceHash} onChange={(e) => setSourceHash(e.target.value)} /></Field>
+              <div className="sm:col-span-2"><Button className="w-full sm:w-auto" type="submit" disabled={!sourceReference || sourceHash.length !== 64 || proposeCalendar.isPending}>Propose calendar version</Button></div>
+            </form>
+            <form
+              className="grid min-w-0 gap-3 sm:grid-cols-2"
+              onSubmit={(event) => { event.preventDefault(); proposeRule.mutate(); }}
+            >
+              <div className="sm:col-span-2 text-sm font-semibold">Propose tested deadline rule</div>
+              <Field label="Rule key"><Input value={ruleKey} onChange={(e) => setRuleKey(e.target.value)} /></Field>
+              <Field label="Trigger kind"><Input value={triggerKind} onChange={(e) => setTriggerKind(e.target.value)} /></Field>
+              <Field label="Business-day duration"><Input type="number" min={0} value={durationValue} onChange={(e) => setDurationValue(e.target.value)} /></Field>
+              <Field label="Rule citation"><Input value={ruleCitation} onChange={(e) => setRuleCitation(e.target.value)} /></Field>
+              <Field label="Fixture base date"><Input type="date" value={fixtureBaseDate} onChange={(e) => setFixtureBaseDate(e.target.value)} /></Field>
+              <Field label="Expected fixture date"><Input type="date" value={fixtureExpectedDate} onChange={(e) => setFixtureExpectedDate(e.target.value)} /></Field>
+              <div className="sm:col-span-2"><Button className="w-full sm:w-auto" type="submit" disabled={!activeCalendar || !ruleCitation || !fixtureExpectedDate || !sourceReference || sourceHash.length !== 64 || proposeRule.isPending}>Propose rule and fixture</Button></div>
+            </form>
+          </div>
+        ) : null}
+
+        {canPropose || canActivate ? (
+          <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+            <Field label="Independent fixture reviewer membership ID">
+              <Input value={reviewerId} onChange={(event) => setReviewerId(event.target.value)} />
+            </Field>
+            <Field label="Governance / impact reason">
+              <Input value={governanceReason} onChange={(event) => setGovernanceReason(event.target.value)} />
+            </Field>
+            <div className="flex items-end text-xs text-[var(--color-mute)]">
+              Current actor: {currentMembershipId ?? "unavailable"}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Calendar versions</div>
+            {workspace.data?.calendars.map((row) => (
+              <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
+                <div className="break-words font-semibold">{row.name} v{row.version}</div>
+                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} Â· {row.source_reference}</div>
+                {canActivate && row.status === "candidate" ? (
+                  <Button className="mt-3 w-full sm:w-auto" size="sm" disabled={governanceReason.trim().length < 5 || activateCalendar.isPending} onClick={() => activateCalendar.mutate(row.id)}>Independently activate calendar</Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Rule versions</div>
+            {workspace.data?.rules.map((row) => (
+              <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
+                <div className="break-words font-semibold">{row.key} v{row.version}</div>
+                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} Â· {row.source_reference}</div>
+                {canActivate ? (
+                  <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {row.status === "candidate" ? (
+                      <Button className="w-full sm:w-auto" size="sm" disabled={!reviewerId || activateRule.isPending} onClick={() => activateRule.mutate(row.id)}>Run fixtures and activate rule</Button>
+                    ) : null}
+                    {row.status === "active" ? (
+                      <Button className="w-full sm:w-auto" size="sm" variant="secondary" disabled={governanceReason.trim().length < 5 || disableRule.isPending} onClick={() => disableRule.mutate(row.id)}>Preview impact and emergency-disable</Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
