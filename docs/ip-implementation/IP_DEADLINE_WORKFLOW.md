@@ -175,6 +175,14 @@ read-only against the existing unentitled tester tenant and proves that no
 deadline/rule/calendar data request or mutation occurs behind the readiness
 gate.
 
+Production verification completed on canonical merge
+`d8ac94da22f014dfa205079c9b1b049e98bd5347`: API revision
+`caseops-api-00258-zv8`, web revision `caseops-web-00238-n7s`, migration
+execution `caseops-migrate-job-5wj7s`, and exact-release workflow
+`31298468728` all passed. The detailed immutable image, scheduler, CI, and
+browser evidence is retained in
+`evidence/m2/IPLF-023B/release-2026-08-09.md`.
+
 The arbitrary requirement to wait seven natural days for scheduler health is
 not a release blocker. Exact scheduler identity, immutable image, execution,
 probe, and policy evidence remain required at deployment.
