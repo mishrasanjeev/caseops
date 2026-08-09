@@ -1,22 +1,24 @@
 # IP document foundation and ownership contract
 
-**Slice:** `IPLF-024A`
+**Slices:** `IPLF-024A` foundation and `IPLF-024B` controlled workflow
 
 **Program status:** `PROGRAM INCOMPLETE`
 
-**Slice release status:** `deployment_verified` at canonical release
+**IPLF-024A release status:** `deployment_verified` at canonical release
 `65f7c5cd2a669a0751b99280f136a4d18bbc9df2`; detailed evidence is retained in
 `docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md`.
+IPLF-024B release status and exact deployed identity are recorded only in its
+own dated evidence after the full release gate passes.
 
 ## Purpose and bounded scope
 
 IPLF-024A supplies the additive data and API foundation for governed IP
 documents. It creates tenant-owned document identity, immutable binary-version
 metadata, typed links to legal records, a configurable seeded taxonomy with
-aliases, and a deterministic naming preview. The slice deliberately does not
-claim the IPLF-024B upload/review/approval user journey or completion of
-`IP-DOC-01..12` and UJ-14; those remain allocated to the dependent completion
-slice.
+aliases, and a deterministic naming preview. IPLF-024B consumes those owners to
+provide the upload, shared processing, duplicate reuse, classification, link,
+version, approval/filing-state, policy, download, bulk-preview, and alias-import
+workflow for `IP-DOC-01..12` and UJ-14.
 
 This boundary is functional rather than deferred design. IPLF-024B can consume
 the exact records and contracts documented here without adding another binary
@@ -30,7 +32,7 @@ store, malware queue, OCR queue, or synthetic Matter requirement.
 | IP binary/version evidence | `NEW` identity over `LINK` infrastructure | `ip_document_versions` owns original/display name, storage key, content hash, processing evidence, state, and approval lock | Binary bytes remain in shared document storage; no byte copy is permitted. |
 | IP legal-record links | `NEW` | `ip_document_links` | A link has exactly one typed target and never duplicates a binary. |
 | Tenant document taxonomy | `NEW` | `ip_document_taxonomy_entries` and `ip_document_taxonomy_aliases` | Seeded entries are tenant-owned, configurable, versioned, and optimistic-concurrency protected. |
-| Malware/OCR/extraction queue | `LINK` | existing `document_processing_jobs` and shared document-processing adapters | `ip_document_version` is the reserved target type; IPLF-024B wires upload and worker execution to this existing queue. No second queue is allowed. |
+| Malware/OCR/extraction queue | `LINK` | existing `document_processing_jobs` and shared document-processing adapters | `ip_document_version` is the active target type; IPLF-024B wires upload and worker execution to this existing queue. No second queue is allowed. |
 | Matter attachments | `KEEP` | existing `matter_attachments` | Matter-bound legacy uploads remain canonical for Matter workflows. No portfolio document is forced into a synthetic Matter. |
 
 The schema enforces company-matched composite foreign keys for every taxonomy,
@@ -78,6 +80,14 @@ Authentication, entitlement, and capability enforcement are server-side.
 | `GET /api/ip/document-taxonomy` | `ip:read` | Lists only the authenticated tenant's entries and aliases. |
 | `POST /api/ip/document-taxonomy/seed` | `ip:taxonomy_admin` | Idempotently creates missing baseline categories and aliases with an audit event. |
 | `PUT /api/ip/document-taxonomy/{key}` | `ip:taxonomy_admin` | Creates a custom entry or updates an existing entry with an expected-version check, normalized alias collision detection, and audit event. |
+| `POST /api/ip/document-taxonomy/import-aliases` | `ip:taxonomy_admin` | Dry-runs or imports a law-firm supplied alias list; normalized collisions fail closed. |
+| `GET /api/ip/documents` and `GET /api/ip/documents/{id}` | `ip:read` plus target access | Lists or opens only documents whose linked IP records are visible to the actor. |
+| `POST /api/ip/documents/upload` and `POST /api/ip/documents/{id}/new-version` | `ip:write` and `documents:upload` | Runs file policy, quota, malware scan, shared persistence/hash, deterministic name, and the canonical processing job. |
+| `POST /api/ip/documents/{id}/links` | `ip:write` and `documents:manage` | Adds tenant-validated typed links without copying bytes and rejects stale document versions. |
+| `POST /api/ip/documents/{id}/versions/{version}/transition` | `ip:write` and `documents:manage`; `ip:approve` for Approved/Filed | Locks and checks the current version/state, derives actor from the session, records time, and writes immutable audit evidence. |
+| `POST /api/ip/documents/bulk-preview` then `/bulk-apply` | `ip:write` and `documents:manage` | Requires an exact current preview token, preserves extensions and links, and applies taxonomy/name changes atomically. |
+| `GET /api/ip/documents/{id}/versions/{version}/download` | `ip:read` plus target access | Streams the immutable original name and bytes through the shared document store; missing objects return 404. |
+| `GET /api/ip/documents/{id}/policy` and `POST .../authorize-action` | `ip:read` plus target access | Fails closed for privileged/confidential, incomplete-processing, and low-quality OCR use. |
 
 The baseline taxonomy is trademark filing, examination, opposition, evidence,
 hearing, order, appeal, renewal, assignment, licence, correspondence, search,
@@ -105,6 +115,38 @@ The response returns requested and resolved names, every omitted component,
 sanitized components, conflict status/suffix, warnings, and an export-safe
 value. It is a preview only and therefore cannot silently overwrite storage.
 
+## IPLF-024B controlled workflow
+
+1. The user selects an accessible IP docket, original file, classification,
+   naming particulars, date, confidentiality, and privilege label.
+2. The UI requires a current controlled-name preview before enabling upload;
+   changing any input invalidates that preview.
+3. The API validates the upload, scans the temporary file before persistence,
+   records SHA-256/size/type, detects duplicates from hash plus classification
+   metadata, and either offers reuse or commits one document/version/link.
+4. New bytes enqueue the existing `document_processing_jobs` owner using the
+   `ip_document_version` target. Extraction status, text count, error, time, and
+   a conservative OCR/extraction-quality score are written back to the version.
+5. Low or incomplete extraction disables AI/search eligibility. Privileged or
+   non-internal documents are denied for AI retrieval, portal sharing, export,
+   and notification content by the policy boundary.
+6. A duplicate offer can link the existing document to another accessible
+   docket without a second stored object. Same filename with different bytes
+   is not a duplicate; same bytes under different classification metadata is
+   not silently collapsed.
+7. Bulk classification/rename requires preview and revalidation under row
+   locks. Conflicts receive deterministic suffixes and no binary or link is
+   overwritten.
+8. Review, approval, filing, service, acceptance, rejection, supersession, and
+   replacement-version actions retain actor/state/version/audit evidence.
+   Approved and Filed require `ip:approve`; every state command carries the
+   expected current version and expected state.
+9. A taxonomy administrator previews the supplied law-firm alias list before
+   import. Tenant collisions are shown and block mutation.
+
+No provider call, portal publication, notification delivery, filing, service,
+fee, payment, or other external legal act is performed by this workflow.
+
 ## Security and legal-safety properties
 
 - Tenant filters and composite foreign keys prevent cross-company taxonomy,
@@ -116,8 +158,16 @@ value. It is a preview only and therefore cannot silently overwrite storage.
 - Original filename and content hash are version fields, not mutable document
   display metadata.
 - `approved` and `filed` state cannot exist without a locking actor and time.
+- Upload/version actions require both `ip:write` and `documents:upload`;
+  classification, linking, and state actions require both `ip:write` and
+  `documents:manage`.
+- Every document read validates every typed target through the existing IP
+  access owner. Restricted-target denial is opaque and filtered from counts.
+- Current-version and expected-state tokens reject stale writes; older versions
+  cannot be advanced after supersession.
+- Missing stored objects return a typed 404 rather than a server error.
 - Privilege and confidentiality are first-class document identity fields for
-  IPLF-024B enforcement across AI, portal, export, and notification paths.
+  fail-closed enforcement across AI, portal, export, and notification paths.
 - The slice sends no email/SMS/WhatsApp, files nothing, pays no fee, accepts no
   legal classification, and performs no external provider action.
 
@@ -136,6 +186,18 @@ receives the exact ownership/naming contract, and its tenant-scoped taxonomy
 envelope is valid. Capability-denial and cross-tenant behavior remain covered
 by the API integration suite rather than by making a false assumption about
 the dedicated QA tenant's capabilities.
+
+IPLF-024B adds `apps/api/tests/test_ip_document_workflow.py`,
+`apps/web/components/ip/IpDocumentWorkspace.test.tsx`, responsive IP page
+coverage, and
+`tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts`; the stable,
+idempotent deployed canary is in `tests/e2e/ram-2026-08-09-prod.spec.ts`. They cover the
+normal UJ-14 workflow and all four named exceptions, including actual download
+bytes, missing-object failure, current-preview invalidation, capability
+composition, stale-version rejection, duplicate reuse, taxonomy-sensitive
+hash matching, low OCR, privilege, tenant isolation, alias dry-run/import, and
+mobile-visible action groups. Exact production evidence is deliberately not
+claimed in this design document.
 
 An arbitrary observation duration such as seven consecutive natural days is
 not an IPLF-024A passing condition. Exact-commit CI, exact image/revision,

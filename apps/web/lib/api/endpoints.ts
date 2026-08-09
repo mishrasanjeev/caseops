@@ -8362,6 +8362,311 @@ export type IpDeadlineImpact = {
   unrelated_work_preserved: true;
 };
 
+export type IpDocumentState =
+  | "draft"
+  | "review"
+  | "approved"
+  | "filed"
+  | "served"
+  | "accepted"
+  | "rejected"
+  | "superseded";
+
+export type IpDocumentVersion = {
+  id: string;
+  version: number;
+  original_filename: string;
+  display_name: string;
+  content_type: string | null;
+  size_bytes: number;
+  sha256_hex: string;
+  processing_status: string;
+  extracted_char_count: number;
+  extraction_error: string | null;
+  ocr_quality_score: number | null;
+  low_ocr_quality: boolean;
+  ai_eligible: boolean;
+  state: IpDocumentState;
+  uploaded_by_membership_id: string;
+  locked_by_membership_id: string | null;
+  locked_at: string | null;
+  created_at: string;
+};
+
+export type IpDocument = {
+  id: string;
+  taxonomy_key: string;
+  taxonomy_label: string;
+  title: string;
+  confidentiality: "internal" | "confidential" | "restricted";
+  is_privileged: boolean;
+  current_version: number;
+  created_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+  versions: IpDocumentVersion[];
+  links: Array<{
+    id: string;
+    version_id: string | null;
+    target_type: "docket" | "application" | "proceeding" | "event" | "deadline";
+    target_id: string;
+    created_by_membership_id: string;
+    created_at: string;
+  }>;
+};
+
+export type IpDocumentUploadResult = {
+  outcome: "created" | "duplicate_found";
+  document: IpDocument | null;
+  duplicate_candidates: Array<{
+    document_id: string;
+    version_id: string;
+    display_name: string;
+    sha256_hex: string;
+    size_bytes: number;
+    content_type: string | null;
+    reuse_action: "link_existing_document";
+  }>;
+};
+
+export type IpDocumentBulkItem = {
+  document_id: string;
+  expected_current_version: number;
+  expected_taxonomy_key: string;
+  taxonomy_key: string;
+  naming: {
+    client_code?: string | null;
+    asset_type?: string | null;
+    mark?: string | null;
+    jurisdiction?: string | null;
+    application_no?: string | null;
+    proceeding_type?: string | null;
+    proceeding_no?: string | null;
+    document_type?: string | null;
+    document_date?: string | null;
+    version: number;
+    extension?: string | null;
+  };
+};
+
+export type IpDocumentBulkPreview = {
+  preview_token: string;
+  conflict_count: number;
+  items: Array<{
+    document_id: string;
+    taxonomy_key: string;
+    current_display_name: string;
+    proposed_display_name: string;
+    conflict_detected: boolean;
+    warnings: string[];
+  }>;
+};
+
+export type IpDocumentNamingPreview = {
+  pattern: string;
+  requested_name: string;
+  resolved_name: string;
+  conflict_detected: boolean;
+  conflict_suffix: number | null;
+  sanitized_components: string[];
+  omitted_components: string[];
+  warnings: string[];
+  export_safe_name: string;
+};
+
+export type IpDocumentAliasImportResult = {
+  dry_run: boolean;
+  imported_count: number;
+  unchanged_count: number;
+  conflicts: Array<{
+    alias: string;
+    normalized_alias: string;
+    existing_taxonomy_key: string;
+    requested_taxonomy_key: string;
+  }>;
+};
+
+export async function fetchIpDocuments(): Promise<{ items: IpDocument[]; total: number }> {
+  return apiRequest("/api/ip/documents");
+}
+
+export async function fetchIpDocumentTaxonomy(): Promise<{
+  taxonomy_version: string;
+  entries: Array<{ key: string; label: string; is_active: boolean; version: number }>;
+}> {
+  return apiRequest("/api/ip/document-taxonomy");
+}
+
+export async function previewIpDocumentName(input: {
+  clientCode: string;
+  mark: string;
+  jurisdiction: string;
+  applicationNo: string;
+  proceedingType: string;
+  proceedingNo: string;
+  taxonomyKey: string;
+  documentDate: string;
+  version: number;
+  extension: string;
+  existingNames: string[];
+}): Promise<IpDocumentNamingPreview> {
+  return apiRequest("/api/ip/documents/naming-preview", {
+    method: "POST",
+    body: {
+      client_code: input.clientCode || null,
+      asset_type: "Trademark",
+      mark: input.mark || null,
+      jurisdiction: input.jurisdiction || null,
+      application_no: input.applicationNo || null,
+      proceeding_type: input.proceedingType || null,
+      proceeding_no: input.proceedingNo || null,
+      document_type: input.taxonomyKey,
+      document_date: input.documentDate || null,
+      version: input.version,
+      extension: input.extension || null,
+      existing_names: input.existingNames,
+    },
+  });
+}
+
+export async function uploadIpDocument(input: {
+  file: File;
+  taxonomyKey: string;
+  title: string;
+  confidentiality: "internal" | "confidential" | "restricted";
+  isPrivileged: boolean;
+  clientCode: string;
+  mark: string;
+  jurisdiction: string;
+  applicationNo: string;
+  proceedingType: string;
+  proceedingNo: string;
+  documentDate: string;
+  docketId: string;
+}): Promise<IpDocumentUploadResult> {
+  const body = new FormData();
+  body.append("upload", input.file);
+  body.append(
+    "metadata_json",
+    JSON.stringify({
+      taxonomy_key: input.taxonomyKey,
+      title: input.title || null,
+      confidentiality: input.confidentiality,
+      is_privileged: input.isPrivileged,
+      client_code: input.clientCode || null,
+      asset_type: "Trademark",
+      mark: input.mark || null,
+      jurisdiction: input.jurisdiction || null,
+      application_no: input.applicationNo || null,
+      proceeding_type: input.proceedingType || null,
+      proceeding_no: input.proceedingNo || null,
+      document_date: input.documentDate || null,
+      links: [{ target_type: "docket", target_id: input.docketId }],
+    }),
+  );
+  return apiRequest("/api/ip/documents/upload", { method: "POST", body });
+}
+
+export async function uploadIpDocumentVersion(input: {
+  documentId: string;
+  expectedCurrentVersion: number;
+  file: File;
+  clientCode: string;
+  mark: string;
+  jurisdiction: string;
+  applicationNo: string;
+  proceedingType: string;
+  proceedingNo: string;
+  documentDate: string;
+}): Promise<IpDocumentUploadResult> {
+  const body = new FormData();
+  body.append("upload", input.file);
+  body.append(
+    "metadata_json",
+    JSON.stringify({
+      expected_current_version: input.expectedCurrentVersion,
+      client_code: input.clientCode || null,
+      asset_type: "Trademark",
+      mark: input.mark || null,
+      jurisdiction: input.jurisdiction || null,
+      application_no: input.applicationNo || null,
+      proceeding_type: input.proceedingType || null,
+      proceeding_no: input.proceedingNo || null,
+      document_date: input.documentDate || null,
+    }),
+  );
+  return apiRequest(
+    `/api/ip/documents/${encodeURIComponent(input.documentId)}/new-version`,
+    { method: "POST", body },
+  );
+}
+
+export async function addIpDocumentLinks(input: {
+  documentId: string;
+  expectedCurrentVersion: number;
+  docketId: string;
+}): Promise<IpDocument> {
+  return apiRequest(`/api/ip/documents/${encodeURIComponent(input.documentId)}/links`, {
+    method: "POST",
+    body: {
+      expected_current_version: input.expectedCurrentVersion,
+      links: [{ target_type: "docket", target_id: input.docketId }],
+    },
+  });
+}
+
+export async function transitionIpDocument(input: {
+  documentId: string;
+  version: number;
+  expectedState: IpDocumentState;
+  targetState: IpDocumentState;
+}): Promise<IpDocument> {
+  return apiRequest(
+    `/api/ip/documents/${encodeURIComponent(input.documentId)}/versions/${input.version}/transition`,
+    {
+      method: "POST",
+      body: {
+        expected_current_version: input.version,
+        expected_state: input.expectedState,
+        target_state: input.targetState,
+      },
+    },
+  );
+}
+
+export async function importIpDocumentAliases(input: {
+  taxonomyKey: string;
+  aliases: string[];
+  dryRun: boolean;
+}): Promise<IpDocumentAliasImportResult> {
+  return apiRequest("/api/ip/document-taxonomy/import-aliases", {
+    method: "POST",
+    body: {
+      dry_run: input.dryRun,
+      entries: [{ taxonomy_key: input.taxonomyKey, aliases: input.aliases }],
+    },
+  });
+}
+
+export async function previewIpDocumentBulk(
+  items: IpDocumentBulkItem[],
+): Promise<IpDocumentBulkPreview> {
+  return apiRequest("/api/ip/documents/bulk-preview", {
+    method: "POST",
+    body: { items },
+  });
+}
+
+export async function applyIpDocumentBulk(input: {
+  items: IpDocumentBulkItem[];
+  previewToken: string;
+}): Promise<{ items: IpDocument[]; total: number }> {
+  return apiRequest("/api/ip/documents/bulk-apply", {
+    method: "POST",
+    body: { items: input.items, preview_token: input.previewToken },
+  });
+}
+
 export async function fetchIpWorkspaceReadiness(): Promise<IpWorkspaceReadiness> {
   return apiRequest("/api/ip/readiness");
 }

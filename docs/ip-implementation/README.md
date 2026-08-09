@@ -37,12 +37,13 @@ closed, so deploying the catalogue alone exposes no operational IP feature.
 
 `IP_DOCUMENT_FOUNDATION.md` documents the IPLF-024A one-writer decisions,
 additive schema, shared storage/processing boundary, tenant taxonomy and alias
-contracts, deterministic naming preview, and fail-closed release proof. The
-dependent IPLF-024B slice retains the complete upload/review/approval user
-journey and reciprocal IP-DOC/UJ-14 allocation. IPLF-024A is
+contracts, and the dependent IPLF-024B upload, duplicate-reuse, processing,
+review/approval, policy, bulk, and alias workflow. IPLF-024A is
 `deployment_verified` at canonical release `65f7c5cd...`; exact build, image,
 migration, scheduler, and production-browser evidence is retained in
-`evidence/m2/IPLF-024A/release-2026-08-09.md`.
+`evidence/m2/IPLF-024A/release-2026-08-09.md`. IPLF-024B is locally verified
+and remains `ready_for_review` until its independent CI, canonical merge,
+deployment, and dated production evidence close.
 
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an

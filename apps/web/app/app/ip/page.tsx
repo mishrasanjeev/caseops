@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
+import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
@@ -71,6 +72,8 @@ export default function IpDocketPage() {
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
+  const canUploadDocuments = useCapability("documents:upload");
+  const canManageDocuments = useCapability("documents:manage");
   const canReview = useCapability("ip:approve");
   const canProposeRules = useCapability("ip:rules_propose");
   const canActivateRules = useCapability("ip:rules_activate");
@@ -173,6 +176,14 @@ export default function IpDocketPage() {
           }}
         />
       ) : null}
+
+      <IpDocumentWorkspace
+        dockets={dockets}
+        canUpload={canWrite && canUploadDocuments}
+        canManage={canWrite && canManageDocuments}
+        canReview={canReview}
+        canConfigure={canConfigure}
+      />
 
       {listing.isPending ? (
         <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>

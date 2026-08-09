@@ -43,6 +43,76 @@
       "consumers": ["audit-evidence", "billing-reconciliation"],
       "retention": "financial and legal record retention policy",
       "payload_schema": {"required": ["tenant_id", "ip_cost_item_id", "evidence_type", "evidence_id", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document.uploaded",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:ip_document_version_id",
+      "consumers": ["audit-evidence", "access-filtered-timeline"],
+      "retention": "document legal-record retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "ip_document_id", "ip_document_version_id", "taxonomy_key", "sha256_hex", "display_name", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document.duplicate_offered",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:actor_id:sha256_hex:correlation_id",
+      "consumers": ["audit-evidence"],
+      "retention": "document decision retention; no duplicate bytes are retained",
+      "payload_schema": {"required": ["tenant_id", "sha256_hex", "candidate_count", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document.version_uploaded",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:ip_document_id:version",
+      "consumers": ["audit-evidence", "access-filtered-timeline"],
+      "retention": "document legal-record retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "ip_document_id", "ip_document_version_id", "version", "superseded_version_id", "sha256_hex", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document.links_added",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:ip_document_id:link_set_hash",
+      "consumers": ["audit-evidence", "access-filtered-timeline"],
+      "retention": "document and linked legal-record retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "ip_document_id", "link_ids", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document.state_transitioned",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:ip_document_version_id:from_state:to_state:occurred_at",
+      "consumers": ["audit-evidence", "access-filtered-timeline"],
+      "retention": "document legal-record retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "ip_document_id", "ip_document_version_id", "version", "from_state", "to_state", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document.bulk_updated",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "confidential",
+      "idempotency_key": "tenant_id:preview_token",
+      "consumers": ["audit-evidence"],
+      "retention": "document decision retention plus tenant litigation-hold policy",
+      "payload_schema": {"required": ["tenant_id", "preview_token", "ip_document_ids", "conflict_count", "actor_id", "occurred_at", "correlation_id"]}
+    },
+    {
+      "name": "ip_document_taxonomy.aliases_imported",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "confidentiality": "internal",
+      "idempotency_key": "tenant_id:taxonomy_version:alias_set_hash",
+      "consumers": ["audit-evidence"],
+      "retention": "taxonomy configuration and audit retention policy",
+      "payload_schema": {"required": ["tenant_id", "taxonomy_version", "imported_count", "unchanged_count", "actor_id", "occurred_at", "correlation_id"]}
     }
   ],
   "domain_events": [

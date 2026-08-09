@@ -18,6 +18,7 @@ from caseops_api.db.models import (
     ContractAttachment,
     ContractAttachmentChunk,
     DocumentProcessingStatus,
+    IpDocumentVersion,
     MatterAttachment,
     MatterAttachmentChunk,
     utcnow,
@@ -352,8 +353,8 @@ def embed_matter_attachment_chunks(
         provider = build_provider()
     except EmbeddingProviderError:
         logger.warning(
-            "embedding provider unavailable; matter attachment %s "
-            "will be lexical-only", attachment.id,
+            "embedding provider unavailable; matter attachment %s will be lexical-only",
+            attachment.id,
         )
         return 0
 
@@ -362,7 +363,8 @@ def embed_matter_attachment_chunks(
     except EmbeddingProviderError as exc:
         logger.warning(
             "embedding call failed for matter attachment %s: %s",
-            attachment.id, exc,
+            attachment.id,
+            exc,
         )
         return 0
 
@@ -408,3 +410,29 @@ def index_contract_attachment(attachment: ContractAttachment) -> None:
         )
         for index, chunk in enumerate(parsed.chunks)
     ]
+
+
+def _document_text_quality_score(text: str | None) -> float:
+    """Return a conservative, deterministic extraction-quality signal.
+
+    This is not a legal-confidence score. It only prevents sparse or corrupted
+    extraction from silently entering AI/search paths until a human reviews the
+    original document or replaces the version.
+    """
+    if not text:
+        return 0.0
+    length = len(text)
+    printable_ratio = sum(character.isprintable() for character in text) / length
+    useful_ratio = sum(character.isalnum() or character.isspace() for character in text) / length
+    density = min(length / 500, 1.0)
+    return round(min(max(0.35 * printable_ratio + 0.25 * useful_ratio + 0.40 * density, 0), 1), 4)
+
+
+def index_ip_document_version(version: IpDocumentVersion) -> None:
+    parsed = parse_attachment(version.storage_key, version.content_type)
+    version.processing_status = parsed.status
+    version.extracted_text = parsed.extracted_text
+    version.extracted_char_count = len(parsed.extracted_text or "")
+    version.extraction_error = parsed.error
+    version.processed_at = utcnow()
+    version.ocr_quality_score = _document_text_quality_score(parsed.extracted_text)
