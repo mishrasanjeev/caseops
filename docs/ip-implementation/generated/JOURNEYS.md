@@ -11,8 +11,8 @@ Generated; do not edit.
 | UJ-05 | Detect and resolve duplicate | 2 | IPLF-031B | 2 | 0 | not_started | not_run | false |
 | UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033B | 6 | 1 | in_progress | not_run | false |
 | UJ-07 | Reconcile registry update | 4 | IPLF-051B | 4 | 0 | not_started | not_run | false |
-| UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | not_started | not_run | false |
-| UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | not_started | not_run | false |
+| UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | in_progress | not_run | false |
+| UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | in_progress | not_run | false |
 | UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035B | 4 | 0 | not_started | not_run | false |
 | UJ-11 | Recover failed or suppressed notification | 3 | IPLF-007A, IPLF-007B, IPLF-007C | 2 | 3 | implemented | passed | false |
 | UJ-12 | Docket opposition as applicant | 4 | IPLF-040B, IPLF-041B | 4 | 0 | not_started | not_run | false |
@@ -50,7 +50,7 @@ Generated; do not edit.
 | UJ-44 | Manage GI, plant variety, layout design, or trade secret | 5 | IPLF-091B | 5 | 0 | not_started | not_run | false |
 | UJ-45 | Manage customs or anti-counterfeiting action | 5 | IPLF-091B | 5 | 0 | not_started | not_run | false |
 | UJ-46 | Apply or revoke IP ethical-wall access | 5 | IPLF-026B | 5 | 0 | not_started | not_run | false |
-| UJ-47 | Propose, test, activate, and retire legal rule version | 6 | IPLF-023B, IPLF-027B | 6 | 0 | not_started | not_run | false |
+| UJ-47 | Propose, test, activate, and retire legal rule version | 6 | IPLF-023B, IPLF-027B | 6 | 0 | in_progress | not_run | false |
 | UJ-48 | Verify, quarantine, or supersede legal source | 6 | IPLF-006A, IPLF-006B, IPLF-006C | 6 | 1 | implemented | passed | false |
 | UJ-49 | Onboard IP client/work and clear firm conflict | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
 | UJ-50 | Triage daily docket and workload | 5 | IPLF-039C, IPLF-039H | 5 | 1 | in_progress | not_run | false |
@@ -59,7 +59,7 @@ Generated; do not edit.
 | UJ-53 | Close, abandon, transfer, or retire IP record | 5 | IPLF-022B, IPLF-039H | 8 | 1 | in_progress | not_run | false |
 | UJ-54 | Capture and approve complete trademark filing particulars | 5 | IPLF-039A, IPLF-039H | 5 | 1 | in_progress | not_run | false |
 | UJ-55 | Triage inbound registry, court, client, or associate communication | 7 | IPLF-039B, IPLF-039H | 7 | 1 | in_progress | not_run | false |
-| UJ-56 | Calculate a deadline across holiday, closure, extension, or uncertain trigger | 4 | IPLF-023B, IPLF-034B | 4 | 0 | not_started | not_run | false |
+| UJ-56 | Calculate a deadline across holiday, closure, extension, or uncertain trigger | 4 | IPLF-023B, IPLF-034B | 4 | 0 | in_progress | not_run | false |
 | UJ-57 | Reassign critical work for leave, transfer, or deactivation | 7 | IPLF-039C, IPLF-039H | 7 | 1 | in_progress | not_run | false |
 | UJ-58 | Respond to a suspected missed or incorrect deadline | 6 | IPLF-039D, IPLF-039H | 6 | 1 | in_progress | not_run | false |
 | UJ-59 | Produce and sign off a daily docket control report | 4 | IPLF-038B, IPLF-039C, IPLF-039H | 4 | 1 | in_progress | not_run | false |

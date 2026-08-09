@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-023B",
+    "active_slice": "IPLF-024A",
     "checkpoint": {
       "recorded_at": "2026-08-09T07:38:00+05:30",
       "repository_revision": "fe10fae",
-      "environment": "IPLF-022B and its notification production-gate correction are deployment-verified at canonical main 35aa37fa740136d0adcf0f1eca62654fb03bf0b6, API caseops-api-00256-s8b, web caseops-web-00236-zfm, successful migration caseops-migrate-job-695jf, six immutable scheduler bindings, exact HTTPS identity, and green production workflow 31288756334. IPLF-023A is restacked on that accepted release at additive Alembic head 20260807_0005 and passes 25 foundation/core/lifecycle/prosecution tests, 18 widened schema/migration tests, full API Ruff, physical/metadata FK-index checks, and every manifest/ownership/ARCH-OPS/scheduler validator.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, and IPLF-022B have completed repository-controlled implementation and deployment verification. IPLF-023A adds the neutral working-calendar, immutable rule-version, legal calculation, responsibility, complete foreign-key indexing, and unique one-way operational-deadline correlation foundation; it is freshly locally verified without enabling auto-confirm, reminders, calendar writes, providers, filings, or legal effects. Direct CAL-OPS/IP-DL/RULE-GOV requirements and journeys remain incomplete pending IPLF-023B and reciprocal M3 owners. Human acceptance and external-provider approvals remain genuine pending gates and are not inferred from automation.",
+      "environment": "IPLF-023A is deployment-verified at canonical main dc9f4644633295ede25aa793e4c84df4fe2f39d4, API caseops-api-00257-t6g, web caseops-web-00237-49m, migration caseops-migrate-job-fm9zm at head 20260807_0005, immutable API/web digests, six scheduler bindings, exact HTTPS identity, and green production workflow 31291263573. IPLF-023B feature revision e021bb1fb509448f3282be11da3cb2ae3fbb9b39 passes full changed-scope Ruff, 14 widened API tests, web typecheck/build, eight IP page tests, OpenAPI regeneration, and the complete dated 360px synthetic deadline journey.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, and IPLF-023A have completed repository-controlled implementation and deployment verification. IPLF-023B completes its repository implementation for governed calendar/rule versions, deterministic/provisional legal calculations, explicit confirmation, coverage, reminders, impact-aware override/recalculation, legal-only completion, exception queues, responsive UI, and dated local E2E. Direct CAL-OPS/IP-DL/RULE-GOV families remain incomplete until reciprocal later slices and genuine legal/UAT acceptance pass. No automation, provider, filing, fee, payment, or external message is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-023B",
-      "next_action": "Verify and release IPLF-023A serially through independent checks, canonical main, exact production identity, migration, scheduler inventory, and dated acceptance proof; then implement IPLF-023B without enabling unapproved legal automation. Obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md"
+      "next_slice": "IPLF-024A",
+      "next_action": "Release IPLF-023B through independent CI/Security/CodeQL, canonical main, exact production identity, scheduler inventory, and dated read-only production acceptance; then implement IPLF-024A. Obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md"
     }
   },
   "milestones": [
@@ -845,8 +845,8 @@
         "IPLF-023A",
         "IPLF-023B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": [
@@ -5380,19 +5380,19 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md",
-          "revision": "c378552b5d04a2db60bc54f880b0d98e4dcfe4c1",
-          "environment": "Windows CPython 3.13, locked uv environment in copy-link mode, ephemeral SQLite migration chain and deterministic legal-calendar fixtures",
+          "revision": "dc9f4644633295ede25aa793e4c84df4fe2f39d4",
+          "environment": "Windows CPython 3.13 locked local verification, independent GitHub CI/Security/CodeQL/PostgreSQL checks, canonical main, Cloud Build immutable images, Cloud Run migration caseops-migrate-job-fm9zm, API caseops-api-00257-t6g, web caseops-web-00237-49m, six scheduler bindings, exact HTTPS identity, and production workflow 31291263573",
           "fixtures": "Synthetic rule/calendar version identifiers, official holiday and weekend dates, uncertain/conflicting triggers, independent proposer/reviewer/legal-approver identities, and primary/backup responsibility evidence",
-          "assertions": "canonical ownership, unique one-way MatterDeadline correlation, reproducible calculation inputs/trace, no manufactured precision, independent two-approver fixture gate, critical coverage gate, actor snapshots, complete leading FK index coverage, and migration rollback/re-upgrade with physical index inspection",
+          "assertions": "canonical ownership, unique one-way MatterDeadline correlation, reproducible calculation inputs/trace, no manufactured precision, independent two-approver fixture gate, critical coverage gate, actor snapshots, complete leading FK index coverage, migration rollback/re-upgrade with physical index inspection, exact image/revision identity, scheduler inventory, health, and full production RAM/Notice acceptance",
           "result": "passed",
-          "recorded_at": "2026-08-09T07:48:00+05:30"
+          "recorded_at": "2026-08-09T08:55:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Release IPLF-023A serially through independent CI/Security/CodeQL, PostgreSQL migration, canonical main, exact production identity, scheduler inventory, and dated acceptance proof.",
-        "Implement IPLF-023B authenticated proposal, activation, impact, calculation, confirmation, override, recalculation, completion, exception, operational-projection, responsive UI, and dated E2E paths without enabling unapproved automation."
+        "Retain exact deployment evidence and obtain genuine human legal/UAT acceptance without inferring it from automation.",
+        "Preserve the foundation contracts while IPLF-023B and reciprocal later owners implement their bounded facets."
       ],
       "data_impact": [
         "Additive Alembic head 20260807_0005 creates neutral shared calendar/version, IP rule/version/policy, legal deadline, and effective-dated responsibility evidence tables; it does not backfill, infer, or mutate existing legal dates.",
@@ -5406,7 +5406,7 @@
       "allocation_review": "M2 foundation slice reviewed against PRD Sections 11.2, 13.6, 13.15, 23, and 25. It establishes immutable legal calculation/rule/calendar/responsibility evidence and a one-way adapter boundary while IPLF-023B retains every direct CAL-OPS, IP-DL, RULE-GOV, and journey path allocation.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -5488,40 +5488,78 @@
       "dependencies": [
         "IPLF-023A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/deadlines.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/api/tests/test_ip_deadline_foundation.py",
+        "apps/api/tests/test_20260807_ip_deadline_foundation_migration.py",
+        "apps/api/tests/test_ip_prosecution_workflow.py",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+          "revision": "e021bb1fb509448f3282be11da3cb2ae3fbb9b39",
+          "environment": "Windows 11, CPython 3.13 locked uv copy-link environment, Node 25 locked npm workspace, ephemeral SQLite migration/test tenants, Next.js production build, and Playwright Chromium at 360x900",
+          "fixtures": "Synthetic non-billable IP tenant, linked unrestricted Matter, distinct proposer/reviewer/legal activator memberships, IP India weekend/holiday calendar, deterministic and conflicting trigger dates, critical primary/backup coverage, in-app-only reminders, stale versions/tokens, and cross-tenant probes",
+          "assertions": "independent calendar/rule approval, server fixture evaluation, exact calculation trace/explanation/source, provisional no-precision behavior, explicit confirmation, atomic canonical projection/coverage/reminders, stale-write and stale-impact rejection, immutable recalculation/override chain, unrelated-work preservation, legal-only completion, disabled-rule exception, tenant/Matter denial, visible exception queue, and every grouped action inside a 360px viewport",
+          "result": "passed",
+          "recorded_at": "2026-08-09T09:42:14+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Pass independent CI/Security/CodeQL/PostgreSQL gates, merge the validated revision to canonical main, deploy through the migration-aware path, and run exact-identity production acceptance.",
+        "Retain external effects disabled and obtain genuine named legal fixture/UAT acceptance separately."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No new migration beyond IPLF-023A head 20260807_0005. Authenticated commands create immutable rule/calendar/legal-deadline/responsibility evidence and use the existing MatterDeadline, coverage, audit, and notification-intent writers atomically.",
+        "Only explicitly confirmed deadlines create operational projections. Reminder intents are in-app only; no external delivery, provider, filing, fee, payment, or real legal act is enabled."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_DEADLINE_WORKFLOW.md",
+          "disposition": "created",
+          "owner": "Product IP/Engineering/Legal QA",
+          "evidence": "Authoritative ownership, state, calculation, governance, exception, API, responsive UI, and rollout contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+          "disposition": "created",
+          "owner": "Release Engineering/Product IP",
+          "evidence": "Exact feature revision, fixtures, assertions, commands, local results, non-effects, and pending production boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-023A/release-2026-08-07.md",
+          "disposition": "updated",
+          "owner": "Release Engineering",
+          "evidence": "Exact canonical merge, image digests, Cloud Run revisions, migration, schedulers, and production workflow"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml and generated views",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Reciprocal mapping, executable references, evidence metadata, derived status, checkpoint, and next slice"
+        }
+      ],
+      "allocation_review": "Reviewed against PRD Sections 11.2, 13.6, 13.15, 23, and 25. IPLF-023B implements the bounded governed legal-deadline workflow while reciprocal IPLF-025B/IPLF-027B/IPLF-034B/IPLF-035B/IPLF-039H owners retain daily-docket, form/fee, calendar-feed, portfolio, and broad automation facets.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -17987,7 +18025,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18030,7 +18068,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18073,7 +18111,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18116,7 +18154,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18159,7 +18197,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18202,7 +18240,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18245,7 +18283,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -18288,7 +18326,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -23794,7 +23832,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -23845,7 +23883,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -23896,7 +23934,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -23947,7 +23985,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -23998,7 +24036,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -24049,7 +24087,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -24100,7 +24138,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -24151,7 +24189,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -27385,7 +27423,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -27533,7 +27571,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -27681,7 +27719,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -27829,7 +27867,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -27977,7 +28015,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -28125,7 +28163,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -28909,7 +28947,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -29057,7 +29095,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -29364,7 +29402,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -37206,7 +37244,7 @@
         "planned:IPLF-UJ-08-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -37265,7 +37303,7 @@
         "planned:IPLF-UJ-09-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -39280,7 +39318,7 @@
         "planned:IPLF-UJ-47-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -40213,7 +40251,7 @@
         "planned:IPLF-UJ-56-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42329,7 +42367,7 @@
         "planned:IPLF-UJ-08-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42382,7 +42420,7 @@
         "planned:IPLF-UJ-08-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42435,7 +42473,7 @@
         "planned:IPLF-UJ-08-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42487,7 +42525,7 @@
         "planned:IPLF-UJ-09-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42540,7 +42578,7 @@
         "planned:IPLF-UJ-09-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42593,7 +42631,7 @@
         "planned:IPLF-UJ-09-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -49581,7 +49619,7 @@
         "planned:IPLF-UJ-47-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -49660,7 +49698,7 @@
         "planned:IPLF-UJ-47-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -49739,7 +49777,7 @@
         "planned:IPLF-UJ-47-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -49818,7 +49856,7 @@
         "planned:IPLF-UJ-47-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -49897,7 +49935,7 @@
         "planned:IPLF-UJ-47-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -49976,7 +50014,7 @@
         "planned:IPLF-UJ-47-EXC-05"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -54750,7 +54788,7 @@
         "planned:IPLF-UJ-56-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -54803,7 +54841,7 @@
         "planned:IPLF-UJ-56-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -54856,7 +54894,7 @@
         "planned:IPLF-UJ-56-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -54909,7 +54947,7 @@
         "planned:IPLF-UJ-56-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",

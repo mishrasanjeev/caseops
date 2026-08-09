@@ -95,12 +95,16 @@ new foreign-key actor, rule, calendar, deadline, tenant-policy, and
 responsibility lookup. SQLAlchemy metadata exposes the same leading indexes, so
 the repository FK-index invariant and deployed schema cannot silently diverge.
 
-## Remaining boundary
+## Workflow extension and remaining boundary
 
-`IPLF-023B` owns authenticated APIs, guarded proposal/approval/confirmation/
+`IPLF-023B` now implements the authenticated proposal/activation/confirmation/
 override/recalculation/completion commands, impact preview, operational
-projection, exception queues, responsive UI, dated E2E, and production proof.
-The reciprocal M3 slices remain responsible for domain activation depth. This
-foundation must not be reported as completing `CAL-OPS`, `IP-DL`, `RULE-GOV`,
-M2, or the overall IP program.
+projection, exception queues, responsive UI, and dated local E2E described in
+`IP_DEADLINE_WORKFLOW.md`. Its independent CI and production release boundary
+is tracked separately in the canonical manifest and release evidence.
+
+Reciprocal later slices remain responsible for daily docket, portfolio,
+calendar-feed, form/fee, automation, and domain activation depth. Neither this
+foundation nor IPLF-023B may be reported as completing the full `CAL-OPS`,
+`IP-DL`, `RULE-GOV`, M2, or overall IP program scope.
 
