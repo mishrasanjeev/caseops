@@ -39,7 +39,10 @@ closed, so deploying the catalogue alone exposes no operational IP feature.
 additive schema, shared storage/processing boundary, tenant taxonomy and alias
 contracts, deterministic naming preview, and fail-closed release proof. The
 dependent IPLF-024B slice retains the complete upload/review/approval user
-journey and reciprocal IP-DOC/UJ-14 allocation.
+journey and reciprocal IP-DOC/UJ-14 allocation. IPLF-024A is
+`deployment_verified` at canonical release `65f7c5cd...`; exact build, image,
+migration, scheduler, and production-browser evidence is retained in
+`evidence/m2/IPLF-024A/release-2026-08-09.md`.
 
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an

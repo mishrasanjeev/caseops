@@ -4,6 +4,10 @@
 
 **Program status:** `PROGRAM INCOMPLETE`
 
+**Slice release status:** `deployment_verified` at canonical release
+`65f7c5cd2a669a0751b99280f136a4d18bbc9df2`; detailed evidence is retained in
+`docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md`.
+
 ## Purpose and bounded scope
 
 IPLF-024A supplies the additive data and API foundation for governed IP
@@ -127,10 +131,21 @@ validation, migration upgrade/downgrade/re-upgrade, and database fail-closed
 constraints. The dated Playwright spec
 `tests/e2e/iplf-024a-document-foundation-2026-08-09.spec.ts` exercises the
 entitled API journey end to end. The dated production RAM spec additionally
-proves that the deployed routes exist and remain unavailable to the unentitled
-legal tenant.
+proves unauthenticated access fails with `401`, the authenticated QA tenant
+receives the exact ownership/naming contract, and its tenant-scoped taxonomy
+envelope is valid. Capability-denial and cross-tenant behavior remain covered
+by the API integration suite rather than by making a false assumption about
+the dedicated QA tenant's capabilities.
 
 An arbitrary observation duration such as seven consecutive natural days is
 not an IPLF-024A passing condition. Exact-commit CI, exact image/revision,
 migration completion, current scheduler mapping/health, and dated deployed
 acceptance remain mandatory release gates.
+
+Those repository-controlled gates passed on 9 August 2026: API revision
+`caseops-api-00262-8p5` and web revision `caseops-web-00242-d4j` serve the exact
+canonical release; migration execution `caseops-migrate-job-vpf6g` completed;
+all six scheduler bindings matched the immutable API digest; and production
+workflow `31315434025` passed the 58-case RAM batch plus the two-case Notice
+module. IPLF-024B and genuine human legal/UAT acceptance remain open, so the
+program status stays `PROGRAM INCOMPLETE`.

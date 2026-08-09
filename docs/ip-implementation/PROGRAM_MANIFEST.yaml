@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-024B",
     "checkpoint": {
-      "recorded_at": "2026-08-09T15:00:00+05:30",
-      "repository_revision": "54dd8f5fdbee3391112a068c242952029c7894d7",
-      "environment": "IPLF-023B remains deployment-verified at canonical main 54dd8f5fdbee3391112a068c242952029c7894d7 after green CI/Security/CodeQL and final exact production workflow 31302375928. Production serves API caseops-api-00259-kpk and web caseops-web-00239-8pj at the immutable digests retained in release evidence, with migration at head 20260807_0005 and all six current scheduler bindings verified. IPLF-024A implementation and local verification are complete on its candidate branch; independent CI, canonical merge, exact deployment, migration, scheduler, and dated production evidence remain open release gates.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, and IPLF-023B have completed repository-controlled implementation and deployment verification. IPLF-024A now has an additive tenant-safe document/taxonomy/version/link foundation, deterministic naming preview, explicit shared storage/processing ownership, migration rollback, and dated local E2E; it is not deployment-verified yet. Direct IP-DOC/UJ-14 behavior remains with IPLF-024B, and genuine legal/UAT acceptance remains pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-09T19:20:00+05:30",
+      "repository_revision": "65f7c5cd2a669a0751b99280f136a4d18bbc9df2",
+      "environment": "IPLF-024A is deployment-verified at canonical release 65f7c5cd2a669a0751b99280f136a4d18bbc9df2 after green CI/Security/CodeQL/PostgreSQL/Playwright, successful migration caseops-migrate-job-vpf6g at head 20260809_0001, exact API caseops-api-00262-8p5 and web caseops-web-00242-d4j revisions, six scheduler bindings on the immutable API digest, exact HTTPS release identity, and successful production workflow 31315434025. IPLF-024B is the active unimplemented completion slice.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, and IPLF-024A have completed repository-controlled implementation and deployment verification. IPLF-024A supplies the additive tenant-safe document/taxonomy/version/link foundation, deterministic naming preview, shared storage/processing ownership boundary, migration rollback, and dated local/production E2E. Direct IP-DOC-01..12 and UJ-14 behavior remains with IPLF-024B, and genuine legal/UAT acceptance remains pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-024B",
-      "next_action": "Close IPLF-024A's exact release gates, then implement and release dependent IPLF-024B end to end. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md"
+      "next_action": "Implement and release IPLF-024B end to end on the verified IPLF-024A owners without creating another binary store or processing queue. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md"
     }
   },
   "milestones": [
@@ -85,7 +85,7 @@
       "exit_criteria": "Ownership ledger implemented with no forbidden duplicate; one-writer reconciliation per shared owner; mixed-revision upgrade/rollback rehearsal; Postgres composite-FK/uniqueness tests; UJ-46/UJ-47/UJ-65/UJ-67/UJ-68; current full-stack restore and tenant-export dry run; cross-company/restricted-record isolation; SME-approved rules/workflows/taxonomy; OpenAPI/UI capability parity. Portal, drafting, assistant, registry sync, report jobs, access review/emergency access and automated purge are explicitly not M2 exit claims",
       "blockers": [],
       "implementation_status": "in_progress",
-      "verification_status": "blocked",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "epic_ids": [
@@ -880,7 +880,7 @@
         "IPLF-024B"
       ],
       "implementation_status": "in_progress",
-      "verification_status": "blocked",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": []
@@ -5606,21 +5606,25 @@
         "tests/e2e/iplf-024a-document-foundation-2026-08-09.spec.ts",
         "tests/e2e/ram-2026-08-09-prod.spec.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "approvals": [],
-      "blockers": [
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md"
+      ],
+      "evidence_metadata": [
         {
-          "id": "IPLF-024A-REL-001",
-          "summary": "Release evidence is pending independent CI, canonical main merge, exact immutable production images/revisions, migration completion, current scheduler verification, and dated deployed acceptance.",
-          "owner": "Release Engineering",
-          "evidence_required": "Green independent CI/Security/CodeQL/PostgreSQL/Playwright, exact main commit and image/revision identity, migration completion, six current scheduler probes, health/releases identity, and dated production acceptance.",
-          "state": "open"
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md",
+          "revision": "65f7c5cd2a669a0751b99280f136a4d18bbc9df2",
+          "environment": "Windows 11 local gates; independent PR 191 feature CI/Security/CodeQL/PostgreSQL/Playwright; proof-correction PRs 192 and 193; Cloud Builds a814a9cd-0fbd-4ba6-84c7-e6e52a1eaa4e and 493158cf-71e8-4752-83d3-75c371ef8d61; migration caseops-migrate-job-vpf6g; API caseops-api-00262-8p5; web caseops-web-00242-d4j; six exact-digest scheduler bindings; exact HTTPS identity; and production workflow 31315434025",
+          "fixtures": "Isolated local tenants, tenant taxonomy and aliases, typed docket/application/proceeding/event/deadline records, immutable versions and invalid cross-document/cross-tenant probes, naming safety inputs, and the authenticated dedicated production QA tenant; no real legal document or external effect",
+          "assertions": "one-writer storage/processing ownership, additive migration and rollback, company-matched composite constraints, exactly-one typed links, version/document binding, approved/filed locks, explicit idempotent taxonomy seeding, alias collision and optimistic concurrency, audit evidence, deterministic safe naming, unauthenticated production denial, exact authenticated production contract, tenant taxonomy envelope, exact serving revision, and current scheduler convergence",
+          "result": "passed",
+          "recorded_at": "2026-08-09T19:20:00+05:30"
         }
       ],
+      "approvals": [],
+      "blockers": [],
       "next_actions": [
-        "Run full repository gates and independent CI, merge the validated commit to main, deploy exact immutable images, run migration and current scheduler probes, and execute dated production acceptance.",
-        "After IPLF-024A deployment verification, implement dependent IPLF-024B without a second storage or processing owner."
+        "Retain exact IPLF-024A deployment evidence and keep document external effects disabled.",
+        "Implement dependent IPLF-024B end to end through the shared storage and document-processing owners without creating a second queue or binary store."
       ],
       "data_impact": [
         "Additive migration 20260809_0001 creates five empty tenant-safe IP document foundation tables; no legacy MatterAttachment bytes or metadata are copied or backfilled.",
@@ -5640,16 +5644,22 @@
           "evidence": "Links the IPLF-024A canonical design and preserves IPLF-024B completion ownership"
         },
         {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md",
+          "disposition": "created",
+          "owner": "Release Engineering/Product IP",
+          "evidence": "Exact revisions, local and independent CI results, immutable builds/images, migration, serving revisions, scheduler inventory, negative proof corrections, dated production acceptance, non-effects, and remaining boundary"
+        },
+        {
           "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml and generated views",
           "disposition": "updated",
           "owner": "Program control plane",
-          "evidence": "Concrete NEW/LINK ownership, implementation/test references, data impact, current release blocker, and next slice boundary"
+          "evidence": "Concrete NEW/LINK ownership, implementation/test references, exact deployment evidence, deployment-verified status, data impact, and next slice boundary"
         }
       ],
       "allocation_review": "Reviewed against PRD Sections 11.1, 11.2, 13.7, 23, and 25. This administrative foundation slice owns only the additive identities and backend contracts; reciprocal IPLF-024B retains all IP-DOC-01..12 and UJ-14 normal/exception behavior, including uploads, duplicate reuse, review, approval, filing/acceptance, privilege surfaces, and low-OCR handling.",
       "implementation_status": "implemented",
-      "verification_status": "blocked",
-      "release_status": "blocked",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
