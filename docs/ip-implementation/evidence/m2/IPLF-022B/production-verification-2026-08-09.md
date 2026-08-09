@@ -49,7 +49,33 @@ Local corrective validation:
 - Next.js production build: passed with 65 routes;
 - `git diff --check`: passed.
 
-The corrective commit is not accepted until its own CI passes, its exact image
-is deployed, and the same dated production RAM and Notice suites pass. Overall
-program status remains **PROGRAM INCOMPLETE**; later IP slices and human/provider
-approval boundaries remain outstanding.
+## Corrected exact-release acceptance
+
+Pull request `#187` passed all eight API shards, aggregate coverage, PostgreSQL
+and pgvector validation, the web test/typecheck/build job, the app Playwright
+suite, security audits, gitleaks, OpenAPI cleanliness, CodeQL, and automated
+review. It merged to canonical `main` as
+`35aa37fa740136d0adcf0f1eca62654fb03bf0b6`; local `main` and `origin/main`
+were verified at that same commit before deployment.
+
+The exact corrected release produced:
+
+- API image digest `sha256:cf176d3bb89767741fde54f038d7ef504026b0f6ef4d70d66a430a3710bbc0f2`;
+- web image digest `sha256:d53498478fbab123868ac2a9da461564dde78d180be71712d0469ffe6bb5de84`;
+- migration execution `caseops-migrate-job-695jf`, successful;
+- API revision `caseops-api-00256-s8b` at 100% traffic;
+- web revision `caseops-web-00236-zfm` at 100% traffic;
+- independent exact-40-character-SHA release verification, passed;
+- all six scheduler bindings and runtime health/ClamAV probes, passed.
+
+Automatic push workflow `31288756334` passed in 24m16s against the exact
+serving release. The RAM batch ran 61 tests: 56 passed and five were expected
+skips. The formerly failing IPLF-007C committed-intent/360px journey passed in
+5.2s. The separate Notice production module passed 2/2 in 18.9s, including
+received, reply, sent, attachment, and filter behavior. Duplicate scheduled
+workflow `31289051359` was cancelled so only the canonical push run used the QA
+tenant.
+
+IPLF-022B and its release-gate correction are therefore
+`deployment_verified`. Overall program status remains **PROGRAM INCOMPLETE**;
+later IP slices and human/provider/legal approval boundaries remain outstanding.

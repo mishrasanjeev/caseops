@@ -90,7 +90,10 @@ The migration is additive from `20260807_0004` to `20260807_0005`. Downgrade
 drops only the seven new foundation tables in dependency-safe order; it does
 not change existing Matter deadlines, IP events, applications, or docket rows.
 Automated evidence proves upgrade, downgrade to `0004`, and re-upgrade to
-`0005` on a fresh database.
+`0005` on a fresh database. It also inspects the physical indexes for every
+new foreign-key actor, rule, calendar, deadline, tenant-policy, and
+responsibility lookup. SQLAlchemy metadata exposes the same leading indexes, so
+the repository FK-index invariant and deployed schema cannot silently diverge.
 
 ## Remaining boundary
 
