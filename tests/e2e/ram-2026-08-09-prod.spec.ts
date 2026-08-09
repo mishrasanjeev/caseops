@@ -162,8 +162,13 @@ test("IPLF-024B production runs the reusable, locked, fail-closed document journ
 
   const listedDockets = await page.request.get(`${PROD_API_BASE_URL}/api/ip/dockets`);
   expect(listedDockets.status(), await listedDockets.text()).toBe(200);
-  const docketItems = ((await listedDockets.json()) as { items: Array<{ id: string }> }).items;
-  let docketId = docketItems[0]?.id;
+  const docketListing = (await listedDockets.json()) as {
+    dockets?: Array<{ id: string }>;
+    count?: number;
+  };
+  expect(Array.isArray(docketListing.dockets), JSON.stringify(docketListing)).toBe(true);
+  expect(docketListing.count, JSON.stringify(docketListing)).toBe(docketListing.dockets?.length);
+  let docketId = docketListing.dockets?.[0]?.id;
   if (!docketId) {
     const createdDocket = await page.request.post(`${PROD_API_BASE_URL}/api/ip/dockets`, {
       headers,
