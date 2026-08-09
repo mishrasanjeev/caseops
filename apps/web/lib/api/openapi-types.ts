@@ -3760,6 +3760,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadline-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Rule */
+        post: operations["post_ip_deadline_rule_api_ip_deadline_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-rules/{rule_version_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Rule Activation */
+        post: operations["post_ip_deadline_rule_activation_api_ip_deadline_rules__rule_version_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-rules/{rule_version_id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Rule Impact */
+        get: operations["get_ip_deadline_rule_impact_api_ip_deadline_rules__rule_version_id__impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-rules/{rule_version_id}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Rule Transition */
+        post: operations["post_ip_deadline_rule_transition_api_ip_deadline_rules__rule_version_id__transition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Completion */
+        post: operations["post_ip_deadline_completion_api_ip_deadlines__deadline_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Confirmation */
+        post: operations["post_ip_deadline_confirmation_api_ip_deadlines__deadline_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Impact */
+        get: operations["get_ip_deadline_impact_api_ip_deadlines__deadline_id__impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Override */
+        post: operations["post_ip_deadline_override_api_ip_deadlines__deadline_id__override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/recalculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Recalculation */
+        post: operations["post_ip_deadline_recalculation_api_ip_deadlines__deadline_id__recalculate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets": {
         parameters: {
             query?: never;
@@ -3942,6 +4095,40 @@ export interface paths {
         put?: never;
         /** Post Ip Deadline Incident Verification */
         post: operations["post_ip_deadline_incident_verification_api_ip_dockets__docket_id__deadline_incidents__incident_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadline-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Workspace */
+        get: operations["get_ip_deadline_workspace_api_ip_dockets__docket_id__deadline_workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadlines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Proposal */
+        post: operations["post_ip_deadline_proposal_api_ip_dockets__docket_id__deadlines_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4249,6 +4436,40 @@ export interface paths {
         get: operations["get_ip_docket_control_report_api_ip_reports_docket_control_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/working-calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Working Calendar */
+        post: operations["post_ip_working_calendar_api_ip_working_calendars_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/working-calendars/{calendar_version_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Working Calendar Activation */
+        post: operations["post_ip_working_calendar_activation_api_ip_working_calendars__calendar_version_id__activate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16857,6 +17078,93 @@ export interface components {
             /** Responsible Count */
             responsible_count: number;
         };
+        /** IpDeadlineCalculationRequest */
+        IpDeadlineCalculationRequest: {
+            /** Base Date */
+            base_date: string | null;
+            /**
+             * Base Date Certainty
+             * @enum {string}
+             */
+            base_date_certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+            calendar: components["schemas"]["LegalCalendarSnapshot"];
+            /**
+             * Calendar Method
+             * @enum {string}
+             */
+            calendar_method: "calendar_days" | "business_days" | "month_anniversary" | "year_anniversary";
+            /**
+             * Deadline Kind
+             * @enum {string}
+             */
+            deadline_kind: "legal_deadline" | "internal_target" | "task_date" | "hearing" | "renewal" | "client_instruction" | "reminder";
+            /**
+             * Direction
+             * @default after
+             * @enum {string}
+             */
+            direction: "after" | "before";
+            /**
+             * Duration Unit
+             * @enum {string}
+             */
+            duration_unit: "days" | "months" | "years";
+            /** Duration Value */
+            duration_value: number;
+            /** Engine Version */
+            engine_version: string;
+            /**
+             * Extension Days
+             * @default 0
+             */
+            extension_days: number;
+            /**
+             * Include Base Date
+             * @default false
+             */
+            include_base_date: boolean;
+            /**
+             * Next Working Day
+             * @default true
+             */
+            next_working_day: boolean;
+            /** Rule Citation */
+            rule_citation: string;
+            /** Rule Version Id */
+            rule_version_id: string;
+            /** Source Version */
+            source_version: string;
+            /** Trigger Kind */
+            trigger_kind: string;
+        };
+        /** IpDeadlineCompleteRequest */
+        IpDeadlineCompleteRequest: {
+            /** Attestation */
+            attestation: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** IpDeadlineConfirmRequest */
+        IpDeadlineConfirmRequest: {
+            /** Corrected Result On */
+            corrected_result_on?: string | null;
+            /** Correction Evidence Reference */
+            correction_evidence_reference?: string | null;
+            /** Correction Reason */
+            correction_reason?: string | null;
+            /** Expected Version */
+            expected_version: number;
+            /** Impact Token */
+            impact_token?: string | null;
+            /** Internal Target On */
+            internal_target_on?: string | null;
+            /** Reminder Offsets Days */
+            reminder_offsets_days?: number[];
+            /** Responsibilities */
+            responsibilities: components["schemas"]["IpResponsibilityInput"][];
+        };
         /** IpDeadlineCoverageCreateRequest */
         IpDeadlineCoverageCreateRequest: {
             /** Backup Membership Id */
@@ -16912,6 +17220,44 @@ export interface components {
              */
             updated_at: string;
         };
+        /** IpDeadlineExceptionRecord */
+        IpDeadlineExceptionRecord: {
+            /** Critical */
+            critical: boolean;
+            /** Deadline Id */
+            deadline_id: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Exception Kinds */
+            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled")[];
+            /** Result On */
+            result_on: string | null;
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
+        };
+        /** IpDeadlineImpactResponse */
+        IpDeadlineImpactResponse: {
+            /** Active Responsibility Ids */
+            active_responsibility_ids: string[];
+            /** Deadline Id */
+            deadline_id: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Impact Token */
+            impact_token: string;
+            /** Notification Intent Ids */
+            notification_intent_ids: string[];
+            /** Operational Deadline Ids */
+            operational_deadline_ids: string[];
+            /**
+             * Unrelated Work Preserved
+             * @default true
+             */
+            unrelated_work_preserved: boolean;
+        };
         /** IpDeadlineIncidentCreateRequest */
         IpDeadlineIncidentCreateRequest: {
             /** Containment */
@@ -16966,6 +17312,175 @@ export interface components {
         IpDeadlineIncidentVerifyRequest: {
             /** Corrective Action */
             corrective_action: string;
+        };
+        /** IpDeadlineOverrideRequest */
+        IpDeadlineOverrideRequest: {
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Impact Token */
+            impact_token: string;
+            /** Internal Target On */
+            internal_target_on?: string | null;
+            /**
+             * New Result On
+             * Format: date
+             */
+            new_result_on: string;
+            /** Reason */
+            reason: string;
+            /** Reminder Offsets Days */
+            reminder_offsets_days?: number[];
+            /** Responsibilities */
+            responsibilities: components["schemas"]["IpResponsibilityInput"][];
+        };
+        /** IpDeadlineProposalRequest */
+        IpDeadlineProposalRequest: {
+            /** Base Date */
+            base_date: string | null;
+            /**
+             * Base Date Certainty
+             * @enum {string}
+             */
+            base_date_certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+            /** Calendar Version Id */
+            calendar_version_id: string;
+            /**
+             * Date Precision
+             * @default date
+             * @enum {string}
+             */
+            date_precision: "unknown" | "date" | "datetime" | "session";
+            /**
+             * Is Critical
+             * @default true
+             */
+            is_critical: boolean;
+            /** Rule Version Id */
+            rule_version_id: string;
+            /** Title */
+            title: string;
+            /** Trigger Event Id */
+            trigger_event_id?: string | null;
+        };
+        /** IpDeadlineRecalculateRequest */
+        IpDeadlineRecalculateRequest: {
+            /** Base Date */
+            base_date: string | null;
+            /**
+             * Base Date Certainty
+             * @enum {string}
+             */
+            base_date_certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /** Trigger Event Id */
+            trigger_event_id?: string | null;
+        };
+        /** IpDeadlineRecord */
+        IpDeadlineRecord: {
+            /** Base Date */
+            base_date: string | null;
+            /** Calculation Inputs */
+            calculation_inputs: {
+                [key: string]: unknown;
+            };
+            /** Calculation Trace */
+            calculation_trace: {
+                [key: string]: unknown;
+            }[];
+            /** Calendar Version Id */
+            calendar_version_id: string;
+            /** Certainty */
+            certainty: string;
+            /** Completed Evidence Ref */
+            completed_evidence_ref: string | null;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Date Precision */
+            date_precision: string;
+            /**
+             * Deadline Kind
+             * @enum {string}
+             */
+            deadline_kind: "legal_deadline" | "internal_target" | "task_date" | "hearing" | "renewal" | "client_instruction" | "reminder";
+            /** Docket Id */
+            docket_id: string;
+            /** Engine Version */
+            engine_version: string;
+            /** Explanation */
+            explanation: string;
+            /** Id */
+            id: string;
+            /** Is Critical */
+            is_critical: boolean;
+            /** Matter Deadline Id */
+            matter_deadline_id: string | null;
+            /** Override Evidence Ref */
+            override_evidence_ref: string | null;
+            /** Override Reason */
+            override_reason: string | null;
+            /** Responsibilities */
+            responsibilities?: {
+                [key: string]: unknown;
+            }[];
+            /** Result On */
+            result_on: string | null;
+            /** Rule Citation */
+            rule_citation: string;
+            /** Rule Version Id */
+            rule_version_id: string;
+            /** Source Version */
+            source_version: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "provisional" | "candidate" | "confirmed" | "overdue" | "completed" | "superseded" | "cancelled";
+            /** Supersedes Deadline Id */
+            supersedes_deadline_id: string | null;
+            /** Title */
+            title: string;
+            /** Trigger Event Id */
+            trigger_event_id: string | null;
+            /** Trigger Kind */
+            trigger_kind: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** IpDeadlineWorkspaceResponse */
+        IpDeadlineWorkspaceResponse: {
+            /**
+             * Automation State
+             * @default explicit_confirmation_only
+             * @constant
+             */
+            automation_state: "explicit_confirmation_only";
+            /** Calendars */
+            calendars: components["schemas"]["LegalCalendarVersionRecord"][];
+            /** Deadlines */
+            deadlines: components["schemas"]["IpDeadlineRecord"][];
+            /** Docket Id */
+            docket_id: string;
+            /** Exceptions */
+            exceptions: components["schemas"]["IpDeadlineExceptionRecord"][];
+            /** Rules */
+            rules: components["schemas"]["IpRuleVersionRecord"][];
         };
         /** IpDocketControlReport */
         IpDocketControlReport: {
@@ -17768,6 +18283,226 @@ export interface components {
              */
             updated_at: string;
         };
+        /** IpResponsibilityInput */
+        IpResponsibilityInput: {
+            /**
+             * Accepted
+             * @default false
+             */
+            accepted: boolean;
+            /** Escalation Policy */
+            escalation_policy?: {
+                [key: string]: unknown;
+            };
+            /** Membership Id */
+            membership_id: string;
+            /**
+             * Replacement Source
+             * @default direct_assignment
+             */
+            replacement_source: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "primary" | "backup" | "supervisor" | "docketing";
+        };
+        /** IpRuleActivationRequest */
+        IpRuleActivationRequest: {
+            /**
+             * Auto Confirm Eligible
+             * @default false
+             */
+            auto_confirm_eligible: boolean;
+            /**
+             * Impact Acknowledged
+             * @default false
+             */
+            impact_acknowledged: boolean;
+            /**
+             * Impact Reason
+             * @default
+             */
+            impact_reason: string;
+            /** Internal Target Policy */
+            internal_target_policy?: {
+                [key: string]: unknown;
+            };
+            /** Reviewer Membership Id */
+            reviewer_membership_id: string;
+            /**
+             * Select For Company
+             * @default true
+             */
+            select_for_company: boolean;
+        };
+        /** IpRuleFixture */
+        IpRuleFixture: {
+            calculation?: components["schemas"]["IpDeadlineCalculationRequest"] | null;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Outcome */
+            expected_outcome?: unknown | null;
+            /** Expected Result On */
+            expected_result_on?: string | null;
+            /** Expected State */
+            expected_state?: ("provisional" | "candidate") | null;
+            /**
+             * Fixture Kind
+             * @enum {string}
+             */
+            fixture_kind: "positive" | "negative" | "boundary";
+            /** Id */
+            id: string;
+            /** Observed Outcome */
+            observed_outcome?: unknown | null;
+        };
+        /** IpRuleImpactResponse */
+        IpRuleImpactResponse: {
+            /** Candidate Deadline Count */
+            candidate_deadline_count: number;
+            /** Company Policy Count */
+            company_policy_count: number;
+            /**
+             * Confirmed Deadlines Preserved
+             * @default true
+             */
+            confirmed_deadlines_preserved: boolean;
+            /** Impact Token */
+            impact_token: string;
+            /** Open Deadline Count */
+            open_deadline_count: number;
+            /** Rule Version Id */
+            rule_version_id: string;
+        };
+        /** IpRuleTransitionRequest */
+        IpRuleTransitionRequest: {
+            /**
+             * Emergency Disable
+             * @default false
+             */
+            emergency_disable: boolean;
+            /** Impact Token */
+            impact_token: string;
+            /** Reason */
+            reason: string;
+        };
+        /** IpRuleVersionProposalRequest */
+        IpRuleVersionProposalRequest: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Engine Compatibility */
+            engine_compatibility: string;
+            /** Fixtures */
+            fixtures: components["schemas"]["IpRuleFixture"][];
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Key */
+            key: string;
+            /** Office */
+            office?: string | null;
+            /** Proceeding Kind */
+            proceeding_kind?: string | null;
+            /** Right Kind */
+            right_kind: string;
+            /** Role */
+            role?: string | null;
+            /**
+             * Rule Kind
+             * @enum {string}
+             */
+            rule_kind: "deadline" | "form" | "fee";
+            /** Source Hash */
+            source_hash: string;
+            /** Source Record Id */
+            source_record_id: string;
+            /** Source Reference */
+            source_reference: string;
+            /** Stage */
+            stage: string;
+        };
+        /** IpRuleVersionRecord */
+        IpRuleVersionRecord: {
+            /** Activated At */
+            activated_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Disabled At */
+            disabled_at: string | null;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until: string | null;
+            /** Engine Compatibility */
+            engine_compatibility: string;
+            /** Fixtures */
+            fixtures: {
+                [key: string]: unknown;
+            }[];
+            /** Fixtures Passed At */
+            fixtures_passed_at: string | null;
+            /** Id */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Key */
+            key: string;
+            /** Legal Approver Label Snapshot */
+            legal_approver_label_snapshot: string | null;
+            /** Office */
+            office: string | null;
+            /** Proceeding Kind */
+            proceeding_kind: string | null;
+            /** Proposer Label Snapshot */
+            proposer_label_snapshot: string;
+            /** Reviewer Label Snapshot */
+            reviewer_label_snapshot: string | null;
+            /** Right Kind */
+            right_kind: string;
+            /** Role */
+            role: string | null;
+            /**
+             * Rule Kind
+             * @enum {string}
+             */
+            rule_kind: "deadline" | "form" | "fee";
+            /** Rule Set Id */
+            rule_set_id: string;
+            /** Source Hash */
+            source_hash: string;
+            /** Source Record Id */
+            source_record_id: string;
+            /** Source Reference */
+            source_reference: string;
+            /** Stage */
+            stage: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "candidate" | "approved" | "active" | "retired" | "disabled";
+            /** Version */
+            version: number;
+        };
         /** IpTitleInterestCreateRequest */
         IpTitleInterestCreateRequest: {
             /**
@@ -18353,6 +19088,119 @@ export interface components {
         KycSubmitRequest: {
             /** Documents */
             documents?: components["schemas"]["KycDocumentRecord"][];
+        };
+        /** LegalCalendarActivationRequest */
+        LegalCalendarActivationRequest: {
+            /**
+             * Conflict Reviewed
+             * @default false
+             */
+            conflict_reviewed: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /** LegalCalendarSnapshot */
+        LegalCalendarSnapshot: {
+            /** Calendar Version Id */
+            calendar_version_id: string;
+            /** Exceptional Working Days */
+            exceptional_working_days?: string[];
+            /** Holidays */
+            holidays?: string[];
+            /** Source Hash */
+            source_hash: string;
+            /** Source Reference */
+            source_reference: string;
+            /** Timezone */
+            timezone: string;
+            /** Weekend Days */
+            weekend_days?: number[];
+        };
+        /** LegalCalendarVersionProposalRequest */
+        LegalCalendarVersionProposalRequest: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Exceptional Working Days */
+            exceptional_working_days?: string[];
+            /** Holidays */
+            holidays?: string[];
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Office */
+            office?: string | null;
+            /** Source Hash */
+            source_hash: string;
+            /** Source Priority */
+            source_priority: string[];
+            /** Source Reference */
+            source_reference: string;
+            /** Timezone */
+            timezone: string;
+            /** Weekend Days */
+            weekend_days?: number[];
+        };
+        /** LegalCalendarVersionRecord */
+        LegalCalendarVersionRecord: {
+            /** Approved At */
+            approved_at: string | null;
+            /** Approver Label Snapshot */
+            approver_label_snapshot: string | null;
+            /** Calendar Id */
+            calendar_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until: string | null;
+            /** Exceptional Working Days */
+            exceptional_working_days: string[];
+            /** Holidays */
+            holidays: string[];
+            /** Id */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Office */
+            office: string | null;
+            /** Proposer Label Snapshot */
+            proposer_label_snapshot: string;
+            /** Source Hash */
+            source_hash: string;
+            /** Source Priority */
+            source_priority: string[];
+            /** Source Reference */
+            source_reference: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "candidate" | "approved" | "active" | "retired" | "disabled";
+            /** Timezone */
+            timezone: string;
+            /** Version */
+            version: number;
+            /** Weekend Days */
+            weekend_days: number[];
         };
         /** LegalKnowledgeGraphEdgeRecord */
         LegalKnowledgeGraphEdgeRecord: {
@@ -35525,6 +36373,311 @@ export interface operations {
             };
         };
     };
+    post_ip_deadline_rule_api_ip_deadline_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRuleVersionProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRuleVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_rule_activation_api_ip_deadline_rules__rule_version_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRuleActivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRuleVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_deadline_rule_impact_api_ip_deadline_rules__rule_version_id__impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRuleImpactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_rule_transition_api_ip_deadline_rules__rule_version_id__transition_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRuleTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRuleVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_completion_api_ip_deadlines__deadline_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_confirmation_api_ip_deadlines__deadline_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_deadline_impact_api_ip_deadlines__deadline_id__impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineImpactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_override_api_ip_deadlines__deadline_id__override_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_recalculation_api_ip_deadlines__deadline_id__recalculate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineRecalculateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_dockets_api_ip_dockets_get: {
         parameters: {
             query?: never;
@@ -35905,6 +37058,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_deadline_workspace_api_ip_dockets__docket_id__deadline_workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_proposal_api_ip_dockets__docket_id__deadlines_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineRecord"];
                 };
             };
             /** @description Validation Error */
@@ -36536,6 +37755,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketControlReport"];
+                };
+            };
+        };
+    };
+    post_ip_working_calendar_api_ip_working_calendars_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalCalendarVersionProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalCalendarVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_working_calendar_activation_api_ip_working_calendars__calendar_version_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalCalendarActivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalCalendarVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

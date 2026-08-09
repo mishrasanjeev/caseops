@@ -8227,6 +8227,141 @@ export type IpWorkspaceReadiness = {
   features: IpFeatureReadiness[];
 };
 
+export type IpDeadlineRuleVersion = {
+  id: string;
+  rule_set_id: string;
+  key: string;
+  rule_kind: "deadline" | "fee" | "form" | "evidence" | "workflow";
+  jurisdiction: string;
+  office: string | null;
+  right_kind: string;
+  proceeding_kind: string | null;
+  role: string | null;
+  stage: string;
+  version: number;
+  status: "candidate" | "approved" | "active" | "retired" | "disabled";
+  source_record_id: string;
+  source_hash: string;
+  source_reference: string;
+  effective_from: string;
+  effective_until: string | null;
+  engine_compatibility: string;
+  definition: Record<string, unknown>;
+  fixtures: Array<Record<string, unknown>>;
+  proposer_label_snapshot: string;
+  reviewer_label_snapshot: string | null;
+  legal_approver_label_snapshot: string | null;
+  fixtures_passed_at: string | null;
+  activated_at: string | null;
+  disabled_at: string | null;
+  created_at: string;
+};
+
+export type IpWorkingCalendarVersion = {
+  id: string;
+  calendar_id: string;
+  key: string;
+  name: string;
+  jurisdiction: string;
+  office: string | null;
+  version: number;
+  status: "candidate" | "approved" | "active" | "retired" | "disabled";
+  timezone: string;
+  weekend_days: number[];
+  holidays: string[];
+  exceptional_working_days: string[];
+  source_priority: string[];
+  source_reference: string;
+  source_hash: string;
+  effective_from: string;
+  effective_until: string | null;
+  proposer_label_snapshot: string;
+  approver_label_snapshot: string | null;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type IpLegalDeadline = {
+  id: string;
+  docket_id: string;
+  trigger_event_id: string | null;
+  rule_version_id: string;
+  calendar_version_id: string;
+  matter_deadline_id: string | null;
+  supersedes_deadline_id: string | null;
+  deadline_kind: "legal_deadline" | "internal_target" | "reminder" | "escalation";
+  title: string;
+  trigger_kind: string;
+  base_date: string | null;
+  date_precision: string;
+  certainty: string;
+  result_on: string | null;
+  calculation_inputs: Record<string, unknown>;
+  calculation_trace: Array<Record<string, unknown>>;
+  explanation: string;
+  rule_citation: string;
+  engine_version: string;
+  source_version: string;
+  is_critical: boolean;
+  state:
+    | "provisional"
+    | "candidate"
+    | "confirmed"
+    | "overdue"
+    | "completed"
+    | "superseded"
+    | "cancelled";
+  version: number;
+  confirmed_at: string | null;
+  override_reason: string | null;
+  override_evidence_ref: string | null;
+  completed_evidence_ref: string | null;
+  created_at: string;
+  updated_at: string;
+  responsibilities: Array<{
+    membership_id: string;
+    membership_label_snapshot: string;
+    role: "primary" | "backup" | "supervisor" | "docketing";
+    accepted: boolean;
+  }>;
+};
+
+export type IpDeadlineException = {
+  deadline_id: string;
+  docket_id: string;
+  exception_kinds: Array<
+    | "overdue"
+    | "unacknowledged"
+    | "unowned"
+    | "conflicting"
+    | "uncertain"
+    | "source_stale"
+    | "rule_disabled"
+  >;
+  critical: boolean;
+  result_on: string | null;
+  visible: true;
+};
+
+export type IpDeadlineWorkspace = {
+  docket_id: string;
+  rules: IpDeadlineRuleVersion[];
+  calendars: IpWorkingCalendarVersion[];
+  deadlines: IpLegalDeadline[];
+  exceptions: IpDeadlineException[];
+  automation_state: "explicit_confirmation_only";
+};
+
+export type IpDeadlineImpact = {
+  deadline_id: string;
+  expected_version: number;
+  impact_token: string;
+  operational_deadline_ids: string[];
+  notification_intent_ids: string[];
+  active_responsibility_ids: string[];
+  unrelated_work_preserved: true;
+};
+
 export async function fetchIpWorkspaceReadiness(): Promise<IpWorkspaceReadiness> {
   return apiRequest("/api/ip/readiness");
 }
@@ -8297,6 +8432,304 @@ export async function enableIpWorkspace(input: {
 
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
   return apiRequest("/api/ip/dockets");
+}
+
+export async function fetchIpDeadlineWorkspace(
+  docketId: string,
+): Promise<IpDeadlineWorkspace> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/deadline-workspace`,
+  );
+}
+
+export async function proposeIpWorkingCalendar(input: {
+  key: string;
+  name: string;
+  jurisdiction: string;
+  office: string;
+  timezone: string;
+  holidays: string[];
+  sourceReference: string;
+  sourceHash: string;
+  effectiveFrom: string;
+}): Promise<IpWorkingCalendarVersion> {
+  return apiRequest("/api/ip/working-calendars", {
+    method: "POST",
+    body: {
+      key: input.key,
+      name: input.name,
+      jurisdiction: input.jurisdiction,
+      office: input.office || null,
+      timezone: input.timezone,
+      weekend_days: [5, 6],
+      holidays: input.holidays,
+      exceptional_working_days: [],
+      source_priority: ["official_source"],
+      source_reference: input.sourceReference,
+      source_hash: input.sourceHash,
+      effective_from: input.effectiveFrom,
+      effective_until: null,
+    },
+  });
+}
+
+export async function activateIpWorkingCalendar(input: {
+  calendarVersionId: string;
+  reason: string;
+  conflictReviewed: boolean;
+}): Promise<IpWorkingCalendarVersion> {
+  return apiRequest(
+    `/api/ip/working-calendars/${encodeURIComponent(input.calendarVersionId)}/activate`,
+    {
+      method: "POST",
+      body: { reason: input.reason, conflict_reviewed: input.conflictReviewed },
+    },
+  );
+}
+
+export async function proposeIpDeadlineRule(input: {
+  key: string;
+  jurisdiction: string;
+  office: string;
+  rightKind: string;
+  stage: string;
+  sourceRecordId: string;
+  sourceReference: string;
+  sourceHash: string;
+  effectiveFrom: string;
+  triggerKind: string;
+  durationValue: number;
+  calendarMethod: "calendar_days" | "business_days";
+  ruleCitation: string;
+  fixtureCalculation: Record<string, unknown>;
+  fixtureExpectedState: "candidate" | "provisional";
+  fixtureExpectedResultOn: string | null;
+}): Promise<IpDeadlineRuleVersion> {
+  return apiRequest("/api/ip/deadline-rules", {
+    method: "POST",
+    body: {
+      key: input.key,
+      rule_kind: "deadline",
+      jurisdiction: input.jurisdiction,
+      office: input.office || null,
+      right_kind: input.rightKind,
+      proceeding_kind: null,
+      role: null,
+      stage: input.stage,
+      source_record_id: input.sourceRecordId,
+      source_hash: input.sourceHash,
+      source_reference: input.sourceReference,
+      effective_from: input.effectiveFrom,
+      effective_until: null,
+      engine_compatibility: "caseops-ip-deadline-v1",
+      definition: {
+        deadline_kind: "legal_deadline",
+        trigger_kind: input.triggerKind,
+        duration_value: input.durationValue,
+        duration_unit: "days",
+        calendar_method: input.calendarMethod,
+        direction: "after",
+        include_base_date: false,
+        next_working_day: true,
+        extension_days: 0,
+        rule_citation: input.ruleCitation,
+      },
+      fixtures: [
+        {
+          id: "ui-governance-fixture",
+          fixture_kind: "boundary",
+          calculation: input.fixtureCalculation,
+          expected_state: input.fixtureExpectedState,
+          expected_result_on: input.fixtureExpectedResultOn,
+          evidence_reference: input.sourceReference,
+        },
+      ],
+    },
+  });
+}
+
+export async function fetchIpDeadlineRuleImpact(
+  ruleVersionId: string,
+): Promise<{
+  rule_version_id: string;
+  impact_token: string;
+  company_policy_count: number;
+  open_deadline_count: number;
+  candidate_deadline_count: number;
+  confirmed_deadlines_preserved: true;
+}> {
+  return apiRequest(
+    `/api/ip/deadline-rules/${encodeURIComponent(ruleVersionId)}/impact`,
+  );
+}
+
+export async function activateIpDeadlineRule(input: {
+  ruleVersionId: string;
+  reviewerMembershipId: string;
+  impactAcknowledged: boolean;
+  impactReason: string;
+}): Promise<IpDeadlineRuleVersion> {
+  return apiRequest(
+    `/api/ip/deadline-rules/${encodeURIComponent(input.ruleVersionId)}/activate`,
+    {
+      method: "POST",
+      body: {
+        reviewer_membership_id: input.reviewerMembershipId,
+        impact_acknowledged: input.impactAcknowledged,
+        impact_reason: input.impactReason,
+        select_for_company: true,
+        auto_confirm_eligible: false,
+        internal_target_policy: {},
+      },
+    },
+  );
+}
+
+export async function transitionIpDeadlineRule(input: {
+  ruleVersionId: string;
+  impactToken: string;
+  reason: string;
+  emergencyDisable: boolean;
+}): Promise<IpDeadlineRuleVersion> {
+  return apiRequest(
+    `/api/ip/deadline-rules/${encodeURIComponent(input.ruleVersionId)}/transition`,
+    {
+      method: "POST",
+      body: {
+        impact_token: input.impactToken,
+        reason: input.reason,
+        emergency_disable: input.emergencyDisable,
+      },
+    },
+  );
+}
+
+export async function proposeIpLegalDeadline(input: {
+  docketId: string;
+  title: string;
+  ruleVersionId: string;
+  calendarVersionId: string;
+  baseDate: string | null;
+  baseDateCertainty: "certain" | "uncertain" | "conflicting" | "unknown";
+  critical: boolean;
+}): Promise<IpLegalDeadline> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadlines`, {
+    method: "POST",
+    body: {
+      title: input.title,
+      trigger_event_id: null,
+      rule_version_id: input.ruleVersionId,
+      calendar_version_id: input.calendarVersionId,
+      base_date: input.baseDate,
+      base_date_certainty: input.baseDateCertainty,
+      date_precision: input.baseDate ? "date" : "unknown",
+      is_critical: input.critical,
+    },
+  });
+}
+
+export async function fetchIpDeadlineImpact(
+  deadlineId: string,
+): Promise<IpDeadlineImpact> {
+  return apiRequest(`/api/ip/deadlines/${encodeURIComponent(deadlineId)}/impact`);
+}
+
+export type IpResponsibilityAssignmentInput = {
+  membership_id: string;
+  role: "primary" | "backup" | "supervisor" | "docketing";
+  accepted: boolean;
+  replacement_source: string;
+  escalation_policy: Record<string, unknown>;
+};
+
+export async function confirmIpLegalDeadline(input: {
+  deadlineId: string;
+  expectedVersion: number;
+  responsibilities: IpResponsibilityAssignmentInput[];
+  internalTargetOn: string | null;
+  reminderOffsetsDays: number[];
+  correctedResultOn?: string | null;
+  correctionReason?: string | null;
+  correctionEvidenceReference?: string | null;
+  impactToken?: string | null;
+}): Promise<IpLegalDeadline> {
+  return apiRequest(`/api/ip/deadlines/${encodeURIComponent(input.deadlineId)}/confirm`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      responsibilities: input.responsibilities,
+      internal_target_on: input.internalTargetOn,
+      reminder_offsets_days: input.reminderOffsetsDays,
+      corrected_result_on: input.correctedResultOn ?? null,
+      correction_reason: input.correctionReason ?? null,
+      correction_evidence_reference: input.correctionEvidenceReference ?? null,
+      impact_token: input.impactToken ?? null,
+    },
+  });
+}
+
+export async function overrideIpLegalDeadline(input: {
+  deadlineId: string;
+  expectedVersion: number;
+  newResultOn: string;
+  reason: string;
+  evidenceReference: string;
+  impactToken: string;
+  responsibilities: IpResponsibilityAssignmentInput[];
+}): Promise<IpLegalDeadline> {
+  return apiRequest(`/api/ip/deadlines/${encodeURIComponent(input.deadlineId)}/override`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      new_result_on: input.newResultOn,
+      reason: input.reason,
+      evidence_reference: input.evidenceReference,
+      impact_token: input.impactToken,
+      responsibilities: input.responsibilities,
+      internal_target_on: null,
+      reminder_offsets_days: [7, 1, 0],
+    },
+  });
+}
+
+export async function recalculateIpLegalDeadline(input: {
+  deadlineId: string;
+  expectedVersion: number;
+  baseDate: string | null;
+  certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+  reason: string;
+  evidenceReference: string;
+}): Promise<IpLegalDeadline> {
+  return apiRequest(
+    `/api/ip/deadlines/${encodeURIComponent(input.deadlineId)}/recalculate`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        trigger_event_id: null,
+        base_date: input.baseDate,
+        base_date_certainty: input.certainty,
+        reason: input.reason,
+        evidence_reference: input.evidenceReference,
+      },
+    },
+  );
+}
+
+export async function completeIpLegalDeadline(input: {
+  deadlineId: string;
+  expectedVersion: number;
+  evidenceReference: string;
+  attestation: string;
+}): Promise<IpLegalDeadline> {
+  return apiRequest(`/api/ip/deadlines/${encodeURIComponent(input.deadlineId)}/complete`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      evidence_reference: input.evidenceReference,
+      attestation: input.attestation,
+    },
+  });
 }
 
 export async function fetchIpCoreRecords(docketId: string): Promise<IpCoreRecords> {
