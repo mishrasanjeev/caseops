@@ -53,6 +53,11 @@ def upgrade() -> None:
         "legal_working_calendars",
         ["company_id", "jurisdiction", "office"],
     )
+    op.create_index(
+        "ix_legal_working_calendars_created_by_membership_id",
+        "legal_working_calendars",
+        ["created_by_membership_id"],
+    )
 
     op.create_table(
         "legal_working_calendar_versions",
@@ -116,6 +121,12 @@ def upgrade() -> None:
         "legal_working_calendar_versions",
         ["calendar_id"],
     )
+    for column in ("proposed_by_membership_id", "approved_by_membership_id"):
+        op.create_index(
+            f"ix_legal_working_calendar_versions_{column}",
+            "legal_working_calendar_versions",
+            [column],
+        )
 
     op.create_table(
         "ip_rule_sets",
@@ -187,6 +198,12 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_ip_rule_versions_rule_set_id", "ip_rule_versions", ["rule_set_id"])
+    for column in (
+        "proposed_by_membership_id",
+        "reviewed_by_membership_id",
+        "legal_approved_by_membership_id",
+    ):
+        op.create_index(f"ix_ip_rule_versions_{column}", "ip_rule_versions", [column])
 
     op.create_table(
         "company_ip_rule_policies",
@@ -219,6 +236,12 @@ def upgrade() -> None:
         "company_ip_rule_policies",
         ["company_id"],
     )
+    for column in ("rule_set_id", "active_rule_version_id", "updated_by_membership_id"):
+        op.create_index(
+            f"ix_company_ip_rule_policies_{column}",
+            "company_ip_rule_policies",
+            [column],
+        )
 
     op.create_table(
         "ip_deadlines",
@@ -318,6 +341,8 @@ def upgrade() -> None:
         "calendar_version_id",
         "matter_deadline_id",
         "supersedes_deadline_id",
+        "confirmed_by_membership_id",
+        "created_by_membership_id",
         "result_on",
     ):
         op.create_index(f"ix_ip_deadlines_{column}", "ip_deadlines", [column])
@@ -377,7 +402,13 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("version > 0", name="ck_ip_responsibility_version_positive"),
     )
-    for column in ("docket_id", "deadline_id", "membership_id"):
+    for column in (
+        "company_id",
+        "docket_id",
+        "deadline_id",
+        "membership_id",
+        "created_by_membership_id",
+    ):
         op.create_index(
             f"ix_ip_responsibility_assignments_{column}",
             "ip_responsibility_assignments",

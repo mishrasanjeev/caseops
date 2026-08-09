@@ -13420,7 +13420,7 @@ class LegalWorkingCalendar(Base):
     jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
     office: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -13477,9 +13477,13 @@ class LegalWorkingCalendarVersion(Base):
     source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
     effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
-    proposed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    proposed_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     proposer_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
-    approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -13548,15 +13552,15 @@ class IpRuleVersion(Base):
     fixture_set_json: Mapped[list] = mapped_column(JSON, nullable=False)
     definition_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     proposed_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     proposer_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     reviewed_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     reviewer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     legal_approved_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     legal_approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fixtures_passed_at: Mapped[datetime | None] = mapped_column(
@@ -13589,14 +13593,14 @@ class CompanyIpRulePolicy(Base):
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
     )
     rule_set_id: Mapped[str] = mapped_column(
-        ForeignKey("ip_rule_sets.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("ip_rule_sets.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    active_rule_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    active_rule_version_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     auto_confirm_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     internal_target_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     updated_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     updater_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -13691,7 +13695,7 @@ class IpDeadline(Base):
     state: Mapped[str] = mapped_column(String(24), nullable=False, default="candidate")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     confirmed_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     confirmer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -13699,7 +13703,7 @@ class IpDeadline(Base):
     override_evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     completed_evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -13751,7 +13755,7 @@ class IpResponsibilityAssignment(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     deadline_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -13765,7 +13769,7 @@ class IpResponsibilityAssignment(Base):
     escalation_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

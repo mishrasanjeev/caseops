@@ -19,6 +19,41 @@ EXPECTED_TABLES = {
     "ip_responsibility_assignments",
 }
 
+EXPECTED_INDEXES = {
+    ("legal_working_calendars", "ix_legal_working_calendars_created_by_membership_id"),
+    (
+        "legal_working_calendar_versions",
+        "ix_legal_working_calendar_versions_proposed_by_membership_id",
+    ),
+    (
+        "legal_working_calendar_versions",
+        "ix_legal_working_calendar_versions_approved_by_membership_id",
+    ),
+    ("ip_rule_versions", "ix_ip_rule_versions_proposed_by_membership_id"),
+    ("ip_rule_versions", "ix_ip_rule_versions_reviewed_by_membership_id"),
+    ("ip_rule_versions", "ix_ip_rule_versions_legal_approved_by_membership_id"),
+    ("company_ip_rule_policies", "ix_company_ip_rule_policies_rule_set_id"),
+    (
+        "company_ip_rule_policies",
+        "ix_company_ip_rule_policies_active_rule_version_id",
+    ),
+    (
+        "company_ip_rule_policies",
+        "ix_company_ip_rule_policies_updated_by_membership_id",
+    ),
+    ("ip_deadlines", "ix_ip_deadlines_confirmed_by_membership_id"),
+    ("ip_deadlines", "ix_ip_deadlines_created_by_membership_id"),
+    (
+        "ip_responsibility_assignments",
+        "ix_ip_responsibility_assignments_company_id",
+    ),
+    (
+        "ip_responsibility_assignments",
+        "ix_ip_responsibility_assignments_created_by_membership_id",
+    ),
+    ("ip_deadlines", "ix_ip_deadlines_company_state_result"),
+}
+
 
 def _alembic_config(project_root: Path) -> Config:
     config = Config(str(project_root / "alembic.ini"))
@@ -26,25 +61,22 @@ def _alembic_config(project_root: Path) -> Config:
     return config
 
 
-def _schema(database_url: str) -> tuple[set[str], set[str], str]:
+def _schema(database_url: str) -> tuple[set[str], set[tuple[str, str]], str]:
     engine = create_engine(database_url, future=True)
     try:
         inspector = inspect(engine)
         tables = set(inspector.get_table_names())
-        deadline_indexes = (
-            {
-                str(index["name"])
-                for index in inspector.get_indexes("ip_deadlines")
-                if index.get("name")
-            }
-            if "ip_deadlines" in tables
-            else set()
-        )
+        indexes = {
+            (table, str(index["name"]))
+            for table in EXPECTED_TABLES.intersection(tables)
+            for index in inspector.get_indexes(table)
+            if index.get("name")
+        }
         with engine.connect() as connection:
             head = str(
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             )
-        return tables, deadline_indexes, head
+        return tables, indexes, head
     finally:
         engine.dispose()
 
@@ -70,7 +102,7 @@ def test_ip_deadline_foundation_migration_upgrades_downgrades_and_reupgrades(
     command.upgrade(config, "20260807_0005")
     tables, indexes, head = _schema(database_url)
     assert EXPECTED_TABLES <= tables
-    assert "ix_ip_deadlines_company_state_result" in indexes
+    assert EXPECTED_INDEXES <= indexes
     assert head == "20260807_0005"
 
     command.downgrade(config, "20260807_0004")
@@ -81,7 +113,7 @@ def test_ip_deadline_foundation_migration_upgrades_downgrades_and_reupgrades(
     command.upgrade(config, "20260807_0005")
     tables, indexes, head = _schema(database_url)
     assert EXPECTED_TABLES <= tables
-    assert "ix_ip_deadlines_company_state_result" in indexes
+    assert EXPECTED_INDEXES <= indexes
     assert head == "20260807_0005"
 
     get_settings.cache_clear()
