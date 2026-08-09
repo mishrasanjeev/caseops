@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse
+from pydantic import ValidationError
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.core.settings import get_settings
@@ -25,12 +37,27 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarVersionRecord,
 )
 from caseops_api.schemas.ip_documents import (
+    IpDocumentAddLinksRequest,
+    IpDocumentAliasImportRequest,
+    IpDocumentAliasImportResponse,
+    IpDocumentBulkApplyRequest,
+    IpDocumentBulkPreviewRequest,
+    IpDocumentBulkPreviewResponse,
     IpDocumentFoundationContract,
+    IpDocumentListResponse,
     IpDocumentNamingPreviewRequest,
     IpDocumentNamingPreviewResponse,
+    IpDocumentNewVersionMetadata,
+    IpDocumentPolicyActionRequest,
+    IpDocumentPolicyActionResponse,
+    IpDocumentPolicyResponse,
+    IpDocumentRecord,
+    IpDocumentStateTransitionRequest,
     IpDocumentTaxonomyEntryRecord,
     IpDocumentTaxonomyResponse,
     IpDocumentTaxonomyUpsertRequest,
+    IpDocumentUploadMetadata,
+    IpDocumentUploadResponse,
 )
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
@@ -83,6 +110,8 @@ from caseops_api.schemas.ip_records import (
     TrademarkApplicationPhaseUpdateRequest,
     TrademarkApplicationResponse,
 )
+from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
 from caseops_api.services.ip_deadline_workflow import (
     activate_calendar_version,
@@ -98,6 +127,20 @@ from caseops_api.services.ip_deadline_workflow import (
     recalculate_deadline,
     rule_impact,
     transition_rule_version,
+)
+from caseops_api.services.ip_document_workflow import (
+    add_ip_document_links,
+    apply_ip_document_bulk_update,
+    authorize_ip_document_action,
+    get_ip_document,
+    get_ip_document_policy,
+    get_ip_document_version_for_download,
+    import_ip_document_aliases,
+    list_ip_documents,
+    preview_ip_document_bulk_update,
+    transition_ip_document_state,
+    upload_ip_document,
+    upload_ip_document_version,
 )
 from caseops_api.services.ip_documents import (
     get_ip_document_taxonomy,
@@ -194,6 +237,181 @@ async def post_ip_document_naming_preview(
     return preview_ip_document_name(payload)
 
 
+@router.get("/documents", response_model=IpDocumentListResponse)
+async def get_ip_documents(
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentListResponse:
+    return list_ip_documents(session, context=context)
+
+
+@router.post("/documents/upload", response_model=IpDocumentUploadResponse)
+async def post_ip_document_upload(
+    background_tasks: BackgroundTasks,
+    context: IpWriter,
+    session: DbSession,
+    metadata_json: Annotated[str, Form()],
+    upload: Annotated[UploadFile, File()],
+) -> IpDocumentUploadResponse:
+    try:
+        metadata = IpDocumentUploadMetadata.model_validate_json(metadata_json)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    response, job_id = upload_ip_document(
+        session,
+        context=context,
+        metadata=metadata,
+        filename=upload.filename or "document",
+        content_type=upload.content_type,
+        stream=upload.file,
+    )
+    if job_id is not None:
+        background_tasks.add_task(run_document_processing_job, job_id)
+    return response
+
+
+@router.post("/documents/bulk-preview", response_model=IpDocumentBulkPreviewResponse)
+async def post_ip_document_bulk_preview(
+    payload: IpDocumentBulkPreviewRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocumentBulkPreviewResponse:
+    return preview_ip_document_bulk_update(session, context=context, payload=payload)
+
+
+@router.post("/documents/bulk-apply", response_model=IpDocumentListResponse)
+async def post_ip_document_bulk_apply(
+    payload: IpDocumentBulkApplyRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocumentListResponse:
+    return apply_ip_document_bulk_update(session, context=context, payload=payload)
+
+
+@router.get("/documents/{document_id}", response_model=IpDocumentRecord)
+async def get_ip_document_route(
+    document_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentRecord:
+    return get_ip_document(session, context=context, document_id=document_id)
+
+
+@router.post("/documents/{document_id}/links", response_model=IpDocumentRecord)
+async def post_ip_document_links(
+    document_id: str,
+    payload: IpDocumentAddLinksRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocumentRecord:
+    return add_ip_document_links(
+        session,
+        context=context,
+        document_id=document_id,
+        payload=payload,
+    )
+
+
+@router.get("/documents/{document_id}/policy", response_model=IpDocumentPolicyResponse)
+async def get_ip_document_policy_route(
+    document_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentPolicyResponse:
+    return get_ip_document_policy(session, context=context, document_id=document_id)
+
+
+@router.post(
+    "/documents/{document_id}/authorize-action",
+    response_model=IpDocumentPolicyActionResponse,
+)
+async def post_ip_document_authorize_action(
+    document_id: str,
+    payload: IpDocumentPolicyActionRequest,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentPolicyActionResponse:
+    return authorize_ip_document_action(
+        session,
+        context=context,
+        document_id=document_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/documents/{document_id}/versions/{version_number}/transition",
+    response_model=IpDocumentRecord,
+)
+async def post_ip_document_state_transition(
+    document_id: str,
+    version_number: int,
+    payload: IpDocumentStateTransitionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocumentRecord:
+    return transition_ip_document_state(
+        session,
+        context=context,
+        document_id=document_id,
+        version_number=version_number,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/documents/{document_id}/new-version",
+    response_model=IpDocumentUploadResponse,
+)
+async def post_ip_document_version_upload(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    context: IpWriter,
+    session: DbSession,
+    metadata_json: Annotated[str, Form()],
+    upload: Annotated[UploadFile, File()],
+) -> IpDocumentUploadResponse:
+    try:
+        metadata = IpDocumentNewVersionMetadata.model_validate_json(metadata_json)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    response, job_id = upload_ip_document_version(
+        session,
+        context=context,
+        document_id=document_id,
+        metadata=metadata,
+        filename=upload.filename or "document",
+        content_type=upload.content_type,
+        stream=upload.file,
+    )
+    if job_id is not None:
+        background_tasks.add_task(run_document_processing_job, job_id)
+    return response
+
+
+@router.get("/documents/{document_id}/versions/{version_number}/download")
+async def get_ip_document_download(
+    document_id: str,
+    version_number: int,
+    context: IpViewer,
+    session: DbSession,
+) -> FileResponse:
+    version = get_ip_document_version_for_download(
+        session,
+        context=context,
+        document_id=document_id,
+        version_number=version_number,
+    )
+    storage_path = resolve_storage_path(version.storage_key)
+    if not storage_path.exists():
+        raise HTTPException(status_code=404, detail="Document file is no longer available.")
+    return FileResponse(
+        storage_path,
+        filename=version.original_filename,
+        media_type=version.content_type or "application/octet-stream",
+    )
+
+
 @router.get(
     "/document-taxonomy",
     response_model=IpDocumentTaxonomyResponse,
@@ -232,6 +450,18 @@ async def put_ip_document_taxonomy_entry(
         key=key,
         payload=payload,
     )
+
+
+@router.post(
+    "/document-taxonomy/import-aliases",
+    response_model=IpDocumentAliasImportResponse,
+)
+async def post_ip_document_alias_import(
+    payload: IpDocumentAliasImportRequest,
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpDocumentAliasImportResponse:
+    return import_ip_document_aliases(session, context=context, payload=payload)
 
 
 @router.get(

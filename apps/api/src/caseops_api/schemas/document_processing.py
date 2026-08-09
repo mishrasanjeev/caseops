@@ -11,7 +11,7 @@ class DocumentProcessingJobRecord(BaseModel):
     company_id: str
     requested_by_membership_id: str | None
     requested_by_name: str | None
-    target_type: Literal["matter_attachment", "contract_attachment"]
+    target_type: Literal["matter_attachment", "contract_attachment", "ip_document_version"]
     attachment_id: str
     action: Literal["initial_index", "retry", "reindex"]
     status: Literal["queued", "processing", "completed", "failed"]

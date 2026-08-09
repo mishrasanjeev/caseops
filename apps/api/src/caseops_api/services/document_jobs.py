@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     DocumentProcessingJobStatus,
     DocumentProcessingStatus,
     DocumentProcessingTargetType,
+    IpDocumentVersion,
     MatterActivity,
     MatterAttachment,
     utcnow,
@@ -23,6 +24,7 @@ from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 from caseops_api.services.document_processing import (
     embed_matter_attachment_chunks,
     index_contract_attachment,
+    index_ip_document_version,
     index_matter_attachment,
 )
 from caseops_api.services.matter_operational_guard import (
@@ -198,6 +200,19 @@ def enqueue_scheduled_document_reprocessing(
         if retry_after_hours >= 0 and queued < limit:
             queued += _enqueue_attachment_reprocessing_candidates(
                 session,
+                target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
+                attachment_model=IpDocumentVersion,
+                candidate_statuses=[
+                    DocumentProcessingStatus.NEEDS_OCR,
+                    DocumentProcessingStatus.FAILED,
+                ],
+                action=DocumentProcessingAction.RETRY,
+                processed_before=retry_cutoff,
+                limit=limit - queued,
+            )
+        if retry_after_hours >= 0 and queued < limit:
+            queued += _enqueue_attachment_reprocessing_candidates(
+                session,
                 target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
                 attachment_model=ContractAttachment,
                 candidate_statuses=[
@@ -213,6 +228,16 @@ def enqueue_scheduled_document_reprocessing(
                 session,
                 target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
                 attachment_model=MatterAttachment,
+                candidate_statuses=[DocumentProcessingStatus.INDEXED],
+                action=DocumentProcessingAction.REINDEX,
+                processed_before=reindex_cutoff,
+                limit=limit - queued,
+            )
+        if reindex_after_hours >= 0 and queued < limit:
+            queued += _enqueue_attachment_reprocessing_candidates(
+                session,
+                target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
+                attachment_model=IpDocumentVersion,
                 candidate_statuses=[DocumentProcessingStatus.INDEXED],
                 action=DocumentProcessingAction.REINDEX,
                 processed_before=reindex_cutoff,
@@ -286,6 +311,8 @@ def run_document_processing_job(job_id: str) -> None:
                 _process_matter_attachment_job(session, job)
             elif job.target_type == DocumentProcessingTargetType.CONTRACT_ATTACHMENT:
                 _process_contract_attachment_job(session, job)
+            elif job.target_type == DocumentProcessingTargetType.IP_DOCUMENT_VERSION:
+                _process_ip_document_version_job(session, job)
             else:
                 _mark_job_failed(
                     session,
@@ -354,7 +381,7 @@ def _enqueue_attachment_reprocessing_candidates(
     session: Session,
     *,
     target_type: str,
-    attachment_model: type[MatterAttachment] | type[ContractAttachment],
+    attachment_model: type[MatterAttachment] | type[ContractAttachment] | type[IpDocumentVersion],
     candidate_statuses: list[str],
     action: str,
     processed_before,
@@ -363,15 +390,14 @@ def _enqueue_attachment_reprocessing_candidates(
     if limit <= 0:
         return 0
 
+    stmt = select(attachment_model)
+    if attachment_model is MatterAttachment:
+        stmt = stmt.options(joinedload(MatterAttachment.matter))
+    elif attachment_model is ContractAttachment:
+        stmt = stmt.options(joinedload(ContractAttachment.contract))
     attachments = list(
         session.scalars(
-            select(attachment_model)
-            .options(
-                joinedload(MatterAttachment.matter)
-                if attachment_model is MatterAttachment
-                else joinedload(ContractAttachment.contract)
-            )
-            .where(
+            stmt.where(
                 attachment_model.processing_status.in_(candidate_statuses),
                 attachment_model.processed_at.is_not(None),
                 attachment_model.processed_at <= processed_before,
@@ -395,8 +421,10 @@ def _enqueue_attachment_reprocessing_candidates(
             if not matter_is_operational(attachment.matter):
                 continue
             company_id = attachment.matter.company_id
-        else:
+        elif isinstance(attachment, ContractAttachment):
             company_id = attachment.contract.company_id
+        else:
+            company_id = attachment.company_id
         enqueue_processing_job(
             session,
             company_id=company_id,
@@ -572,4 +600,28 @@ def _process_contract_attachment_job(session: Session, job: DocumentProcessingJo
             ),
         )
     )
+    session.commit()
+
+
+def _process_ip_document_version_job(session: Session, job: DocumentProcessingJob) -> None:
+    version = session.scalar(
+        select(IpDocumentVersion).where(
+            IpDocumentVersion.id == job.attachment_id,
+            IpDocumentVersion.company_id == job.company_id,
+        )
+    )
+    if version is None:
+        _mark_job_failed(session, job, error_message="IP document version could not be found.")
+        return
+    index_ip_document_version(version)
+    job.processed_char_count = version.extracted_char_count
+    job.error_message = version.extraction_error
+    job.completed_at = utcnow()
+    job.status = (
+        DocumentProcessingJobStatus.COMPLETED
+        if version.processing_status == DocumentProcessingStatus.INDEXED
+        else DocumentProcessingJobStatus.FAILED
+    )
+    session.add(version)
+    session.add(job)
     session.commit()

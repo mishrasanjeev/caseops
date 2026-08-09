@@ -4425,6 +4425,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/document-taxonomy/import-aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Alias Import */
+        post: operations["post_ip_document_alias_import_api_ip_document_taxonomy_import_aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/document-taxonomy/seed": {
         parameters: {
             query?: never;
@@ -4436,6 +4453,176 @@ export interface paths {
         put?: never;
         /** Post Ip Document Taxonomy Seed */
         post: operations["post_ip_document_taxonomy_seed_api_ip_document_taxonomy_seed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Documents */
+        get: operations["get_ip_documents_api_ip_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Route */
+        get: operations["get_ip_document_route_api_ip_documents__document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/authorize-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Authorize Action */
+        post: operations["post_ip_document_authorize_action_api_ip_documents__document_id__authorize_action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Links */
+        post: operations["post_ip_document_links_api_ip_documents__document_id__links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/new-version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Version Upload */
+        post: operations["post_ip_document_version_upload_api_ip_documents__document_id__new_version_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Policy Route */
+        get: operations["get_ip_document_policy_route_api_ip_documents__document_id__policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/versions/{version_number}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Download */
+        get: operations["get_ip_document_download_api_ip_documents__document_id__versions__version_number__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/versions/{version_number}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document State Transition */
+        post: operations["post_ip_document_state_transition_api_ip_documents__document_id__versions__version_number__transition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/bulk-apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Bulk Apply */
+        post: operations["post_ip_document_bulk_apply_api_ip_documents_bulk_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/bulk-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Bulk Preview */
+        post: operations["post_ip_document_bulk_preview_api_ip_documents_bulk_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4470,6 +4657,23 @@ export interface paths {
         put?: never;
         /** Post Ip Document Naming Preview */
         post: operations["post_ip_document_naming_preview_api_ip_documents_naming_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Upload */
+        post: operations["post_ip_document_upload_api_ip_documents_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10824,6 +11028,20 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_post_ip_document_upload_api_ip_documents_upload_post */
+        Body_post_ip_document_upload_api_ip_documents_upload_post: {
+            /** Metadata Json */
+            metadata_json: string;
+            /** Upload */
+            upload: string;
+        };
+        /** Body_post_ip_document_version_upload_api_ip_documents__document_id__new_version_post */
+        Body_post_ip_document_version_upload_api_ip_documents__document_id__new_version_post: {
+            /** Metadata Json */
+            metadata_json: string;
+            /** Upload */
+            upload: string;
+        };
         /** Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post */
         Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post: {
             /** File */
@@ -14069,7 +14287,7 @@ export interface components {
              * Target Type
              * @enum {string}
              */
-            target_type: "matter_attachment" | "contract_attachment";
+            target_type: "matter_attachment" | "contract_attachment" | "ip_document_version";
             /**
              * Updated At
              * Format: date-time
@@ -17881,6 +18099,123 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** IpDocumentAddLinksRequest */
+        IpDocumentAddLinksRequest: {
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Links */
+            links: components["schemas"]["IpDocumentLinkTarget"][];
+            /** Version Id */
+            version_id?: string | null;
+        };
+        /** IpDocumentAliasImportConflict */
+        IpDocumentAliasImportConflict: {
+            /** Alias */
+            alias: string;
+            /** Existing Taxonomy Key */
+            existing_taxonomy_key: string;
+            /** Normalized Alias */
+            normalized_alias: string;
+            /** Requested Taxonomy Key */
+            requested_taxonomy_key: string;
+        };
+        /** IpDocumentAliasImportEntry */
+        IpDocumentAliasImportEntry: {
+            /** Aliases */
+            aliases: string[];
+            /** Taxonomy Key */
+            taxonomy_key: string;
+        };
+        /** IpDocumentAliasImportRequest */
+        IpDocumentAliasImportRequest: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Entries */
+            entries: components["schemas"]["IpDocumentAliasImportEntry"][];
+        };
+        /** IpDocumentAliasImportResponse */
+        IpDocumentAliasImportResponse: {
+            /** Conflicts */
+            conflicts: components["schemas"]["IpDocumentAliasImportConflict"][];
+            /** Dry Run */
+            dry_run: boolean;
+            /** Imported Count */
+            imported_count: number;
+            /** Unchanged Count */
+            unchanged_count: number;
+        };
+        /** IpDocumentBulkApplyRequest */
+        IpDocumentBulkApplyRequest: {
+            /** Items */
+            items: components["schemas"]["IpDocumentBulkItem"][];
+            /** Preview Token */
+            preview_token: string;
+        };
+        /** IpDocumentBulkItem */
+        IpDocumentBulkItem: {
+            /** Document Id */
+            document_id: string;
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Expected Taxonomy Key */
+            expected_taxonomy_key: string;
+            naming: components["schemas"]["IpDocumentNamingPreviewRequest"];
+            /** Taxonomy Key */
+            taxonomy_key: string;
+        };
+        /** IpDocumentBulkPreviewItem */
+        IpDocumentBulkPreviewItem: {
+            /** Conflict Detected */
+            conflict_detected: boolean;
+            /** Current Display Name */
+            current_display_name: string;
+            /** Document Id */
+            document_id: string;
+            /** Proposed Display Name */
+            proposed_display_name: string;
+            /** Taxonomy Key */
+            taxonomy_key: string;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** IpDocumentBulkPreviewRequest */
+        IpDocumentBulkPreviewRequest: {
+            /** Items */
+            items: components["schemas"]["IpDocumentBulkItem"][];
+        };
+        /** IpDocumentBulkPreviewResponse */
+        IpDocumentBulkPreviewResponse: {
+            /** Conflict Count */
+            conflict_count: number;
+            /** Items */
+            items: components["schemas"]["IpDocumentBulkPreviewItem"][];
+            /** Preview Token */
+            preview_token: string;
+        };
+        /** IpDocumentDuplicateCandidate */
+        IpDocumentDuplicateCandidate: {
+            /** Content Type */
+            content_type: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string;
+            /**
+             * Reuse Action
+             * @default link_existing_document
+             * @constant
+             */
+            reuse_action: "link_existing_document";
+            /** Sha256 Hex */
+            sha256_hex: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Version Id */
+            version_id: string;
+        };
         /** IpDocumentFoundationContract */
         IpDocumentFoundationContract: {
             /**
@@ -17925,6 +18260,44 @@ export interface components {
              * @constant
              */
             version_owner: "ip_document_versions";
+        };
+        /** IpDocumentLinkRecord */
+        IpDocumentLinkRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Id */
+            id: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "docket" | "application" | "proceeding" | "event" | "deadline";
+            /** Version Id */
+            version_id: string | null;
+        };
+        /** IpDocumentLinkTarget */
+        IpDocumentLinkTarget: {
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "docket" | "application" | "proceeding" | "event" | "deadline";
+        };
+        /** IpDocumentListResponse */
+        IpDocumentListResponse: {
+            /** Items */
+            items: components["schemas"]["IpDocumentRecord"][];
+            /** Total */
+            total: number;
         };
         /** IpDocumentNamingPreviewRequest */
         IpDocumentNamingPreviewRequest: {
@@ -17973,6 +18346,90 @@ export interface components {
             sanitized_components: string[];
             /** Warnings */
             warnings: string[];
+        };
+        /** IpDocumentPolicyActionRequest */
+        IpDocumentPolicyActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "ai_retrieval" | "portal_share" | "export" | "notification_content";
+        };
+        /** IpDocumentPolicyActionResponse */
+        IpDocumentPolicyActionResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "ai_retrieval" | "portal_share" | "export" | "notification_content";
+            /** Allowed */
+            allowed: boolean;
+            /** Reasons */
+            reasons: string[];
+        };
+        /** IpDocumentPolicyResponse */
+        IpDocumentPolicyResponse: {
+            /** Ai Retrieval Allowed */
+            ai_retrieval_allowed: boolean;
+            /** Export Allowed */
+            export_allowed: boolean;
+            /** Notification Content Allowed */
+            notification_content_allowed: boolean;
+            /** Portal Share Allowed */
+            portal_share_allowed: boolean;
+            /** Reasons */
+            reasons: string[];
+        };
+        /** IpDocumentRecord */
+        IpDocumentRecord: {
+            /**
+             * Confidentiality
+             * @enum {string}
+             */
+            confidentiality: "internal" | "confidential" | "restricted";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Current Version */
+            current_version: number;
+            /** Id */
+            id: string;
+            /** Is Privileged */
+            is_privileged: boolean;
+            /** Links */
+            links: components["schemas"]["IpDocumentLinkRecord"][];
+            /** Taxonomy Key */
+            taxonomy_key: string;
+            /** Taxonomy Label */
+            taxonomy_label: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Versions */
+            versions: components["schemas"]["IpDocumentVersionRecord"][];
+        };
+        /** IpDocumentStateTransitionRequest */
+        IpDocumentStateTransitionRequest: {
+            /** Expected Current Version */
+            expected_current_version: number;
+            /**
+             * Expected State
+             * @enum {string}
+             */
+            expected_state: "draft" | "review" | "approved" | "filed" | "served" | "accepted" | "rejected" | "superseded";
+            /**
+             * Target State
+             * @enum {string}
+             */
+            target_state: "draft" | "review" | "approved" | "filed" | "served" | "accepted" | "rejected" | "superseded";
         };
         /** IpDocumentTaxonomyAliasRecord */
         IpDocumentTaxonomyAliasRecord: {
@@ -18048,6 +18505,64 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+        };
+        /** IpDocumentUploadResponse */
+        IpDocumentUploadResponse: {
+            document?: components["schemas"]["IpDocumentRecord"] | null;
+            /** Duplicate Candidates */
+            duplicate_candidates?: components["schemas"]["IpDocumentDuplicateCandidate"][];
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "duplicate_found";
+            processing_job?: components["schemas"]["DocumentProcessingJobRecord"] | null;
+        };
+        /** IpDocumentVersionRecord */
+        IpDocumentVersionRecord: {
+            /** Ai Eligible */
+            ai_eligible: boolean;
+            /** Content Type */
+            content_type: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            /** Extracted Char Count */
+            extracted_char_count: number;
+            /** Extraction Error */
+            extraction_error: string | null;
+            /** Id */
+            id: string;
+            latest_processing_job?: components["schemas"]["DocumentProcessingJobRecord"] | null;
+            /** Locked At */
+            locked_at: string | null;
+            /** Locked By Membership Id */
+            locked_by_membership_id: string | null;
+            /** Low Ocr Quality */
+            low_ocr_quality: boolean;
+            /** Ocr Quality Score */
+            ocr_quality_score: number | null;
+            /** Original Filename */
+            original_filename: string;
+            /** Processing Status */
+            processing_status: string;
+            /** Sha256 Hex */
+            sha256_hex: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "review" | "approved" | "filed" | "served" | "accepted" | "rejected" | "superseded";
+            /** Uploaded By Membership Id */
+            uploaded_by_membership_id: string;
+            /** Version */
+            version: number;
         };
         /** IpEvidenceCandidateRecord */
         IpEvidenceCandidateRecord: {
@@ -37996,6 +38511,39 @@ export interface operations {
             };
         };
     };
+    post_ip_document_alias_import_api_ip_document_taxonomy_import_aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentAliasImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentAliasImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_document_taxonomy_seed_api_ip_document_taxonomy_seed_post: {
         parameters: {
             query?: never;
@@ -38012,6 +38560,327 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentTaxonomyResponse"];
+                };
+            };
+        };
+    };
+    get_ip_documents_api_ip_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentListResponse"];
+                };
+            };
+        };
+    };
+    get_ip_document_route_api_ip_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_authorize_action_api_ip_documents__document_id__authorize_action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentPolicyActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentPolicyActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_links_api_ip_documents__document_id__links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentAddLinksRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_version_upload_api_ip_documents__document_id__new_version_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_ip_document_version_upload_api_ip_documents__document_id__new_version_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_document_policy_route_api_ip_documents__document_id__policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_document_download_api_ip_documents__document_id__versions__version_number__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                version_number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_state_transition_api_ip_documents__document_id__versions__version_number__transition_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                version_number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentStateTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_bulk_apply_api_ip_documents_bulk_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentBulkApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_bulk_preview_api_ip_documents_bulk_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentBulkPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentBulkPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -38056,6 +38925,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentNamingPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_upload_api_ip_documents_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_ip_document_upload_api_ip_documents_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentUploadResponse"];
                 };
             };
             /** @description Validation Error */

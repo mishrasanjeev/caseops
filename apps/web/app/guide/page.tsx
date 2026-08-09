@@ -9,7 +9,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "User guide",
   description:
-    "The current CaseOps user guide: daily priorities, intake and optional conflict review, matters, notices and reply deadlines, communications, tracked case refresh, compliance review, drafting, hearings, contracts, outside counsel, billing, and safe source-backed intelligence.",
+    "The current CaseOps user guide: daily priorities, intake and optional conflict review, matters, governed IP documents, notices and reply deadlines, communications, tracked case refresh, compliance review, drafting, hearings, contracts, outside counsel, billing, and safe source-backed intelligence.",
   alternates: { canonical: "/guide" },
   openGraph: {
     type: "article",
@@ -146,7 +146,7 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-ink-2)]">Updated</span>{" "}
-                23 July 2026
+                9 August 2026
               </span>
             </div>
           </Container>
@@ -615,6 +615,53 @@ export default function GuidePage() {
                     audit entry records who uploaded and who retrieved it. The original PDF
                     stays in the document store and is served over a short-lived signed URL
                     when a user opens it.
+                  </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    IP document workflow
+                  </h3>
+                  <p>
+                    When the IP workspace is enabled for your firm, open{" "}
+                    <a className="underline" href="/app/ip">IP docket</a> to classify,
+                    name, version, and link portfolio documents without forcing them into
+                    a synthetic Matter. Original bytes, filename, hash, processing result,
+                    and every immutable version remain available separately from the
+                    controlled display name.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Choose an accessible docket, file, classification, naming details,
+                        document date, confidentiality, and privilege label.
+                      </>,
+                      <>
+                        Select <strong>Preview controlled name</strong>. Review the proposed
+                        name and filing state. Any changed input requires a new preview.
+                      </>,
+                      <>
+                        Upload the reviewed document. CaseOps scans before storage, hashes
+                        the bytes, and uses the shared extraction/OCR job. A duplicate hash
+                        plus matching metadata offers a reusable link instead of another file.
+                      </>,
+                      <>
+                        Move the current version through review. Approved and Filed actions
+                        require the approval capability and lock the exact version, actor,
+                        and time. Uploading replacement bytes creates a new version and
+                        supersedes the prior one.
+                      </>,
+                      <>
+                        Document managers preview bulk classification/name changes before
+                        apply. Taxonomy administrators preview supplied law-firm aliases
+                        before import.
+                      </>,
+                    ]}
+                  />
+                  <Callout tone="warn" title="Privilege and OCR are fail-closed">
+                    Privileged or confidential documents cannot be used for portal sharing,
+                    export, notification content, or AI retrieval through the IP document
+                    policy boundary. Low or incomplete extraction disables AI/search legal
+                    conclusions until the original is reviewed or a clearer version is
+                    uploaded. This workflow records filing state; it does not submit a filing
+                    or send a document externally.
                   </Callout>
                 </Section>
 

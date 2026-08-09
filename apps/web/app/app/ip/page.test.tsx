@@ -8,6 +8,8 @@ const {
   fetchIpDeadlineWorkspaceMock,
   fetchIpCoreRecordsMock,
   fetchIpDocketsMock,
+  fetchIpDocumentsMock,
+  fetchIpDocumentTaxonomyMock,
   fetchIpProsecutionWorkspaceMock,
   fetchIpWorkspaceReadinessMock,
   previewIpDocketEventMock,
@@ -24,6 +26,8 @@ const {
   fetchIpDeadlineWorkspaceMock: vi.fn(),
   fetchIpCoreRecordsMock: vi.fn(),
   fetchIpDocketsMock: vi.fn(),
+  fetchIpDocumentsMock: vi.fn(),
+  fetchIpDocumentTaxonomyMock: vi.fn(),
   fetchIpProsecutionWorkspaceMock: vi.fn(),
   fetchIpWorkspaceReadinessMock: vi.fn(),
   previewIpDocketEventMock: vi.fn(),
@@ -39,6 +43,17 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDockets: fetchIpDocketsMock,
+  fetchIpDocuments: fetchIpDocumentsMock,
+  fetchIpDocumentTaxonomy: fetchIpDocumentTaxonomyMock,
+  previewIpDocumentName: vi.fn(),
+  importIpDocumentAliases: vi.fn(),
+  downloadApiFile: vi.fn(),
+  uploadIpDocument: vi.fn(),
+  uploadIpDocumentVersion: vi.fn(),
+  addIpDocumentLinks: vi.fn(),
+  transitionIpDocument: vi.fn(),
+  previewIpDocumentBulk: vi.fn(),
+  applyIpDocumentBulk: vi.fn(),
   fetchIpDeadlineWorkspace: fetchIpDeadlineWorkspaceMock,
   fetchIpCoreRecords: fetchIpCoreRecordsMock,
   fetchIpProsecutionWorkspace: fetchIpProsecutionWorkspaceMock,
@@ -97,6 +112,8 @@ function withClient(children: ReactNode) {
 describe("IpDocketPage", () => {
   beforeEach(() => {
     fetchIpDocketsMock.mockReset();
+    fetchIpDocumentsMock.mockReset();
+    fetchIpDocumentTaxonomyMock.mockReset();
     fetchIpDeadlineWorkspaceMock.mockReset();
     fetchIpCoreRecordsMock.mockReset();
     fetchIpProsecutionWorkspaceMock.mockReset();
@@ -119,6 +136,11 @@ describe("IpDocketPage", () => {
       features: [],
     });
     fetchIpDocketsMock.mockResolvedValue({ dockets: [], count: 0 });
+    fetchIpDocumentsMock.mockResolvedValue({ items: [], total: 0 });
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [{ key: "evidence", label: "Evidence", is_active: true, version: 1 }],
+    });
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1",
       rules: [{
@@ -359,6 +381,25 @@ describe("IpDocketPage", () => {
       }],
       count: 1,
     });
+    fetchIpDocumentsMock.mockResolvedValue({
+      items: [{
+        id: "document-1", taxonomy_key: "evidence", taxonomy_label: "Evidence",
+        title: "Evidence affidavit", confidentiality: "restricted", is_privileged: true,
+        current_version: 1, created_by_membership_id: "membership-1",
+        created_at: "2026-08-09T00:00:00Z", updated_at: "2026-08-09T00:00:00Z",
+        links: [{ id: "link-1", version_id: null, target_type: "docket", target_id: "ip-1", created_by_membership_id: "membership-1", created_at: "2026-08-09T00:00:00Z" }],
+        versions: [{
+          id: "version-1", version: 1, original_filename: "original evidence.pdf",
+          display_name: "ACME_Trademark_Evidence_2026-08-09_1.pdf",
+          content_type: "application/pdf", size_bytes: 200, sha256_hex: "a".repeat(64),
+          processing_status: "indexed", extracted_char_count: 12, extraction_error: null,
+          ocr_quality_score: 0.4, low_ocr_quality: true, ai_eligible: false, state: "draft",
+          uploaded_by_membership_id: "membership-1", locked_by_membership_id: null,
+          locked_at: null, created_at: "2026-08-09T00:00:00Z",
+        }],
+      }],
+      total: 1,
+    });
 
     render(withClient(<IpDocketPage />));
 
@@ -375,6 +416,16 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Propose calendar version" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Propose rule and fixture" })).toBeVisible();
+    const documentWorkspace = screen.getByTestId("ip-document-workspace");
+    expect(within(documentWorkspace).getByLabelText("Original file")).toBeVisible();
+    expect(within(documentWorkspace).getByRole("button", { name: "Preview controlled name" })).toBeVisible();
+    expect(within(documentWorkspace).getByRole("button", { name: "Upload reviewed document" })).toBeVisible();
+    expect(within(documentWorkspace).getByRole("button", { name: "Download original" })).toBeVisible();
+    expect(within(documentWorkspace).getByLabelText("Supplied document names")).toBeVisible();
+    expect(within(documentWorkspace).getByRole("button", { name: "Preview alias import" })).toBeVisible();
+    expect(within(documentWorkspace).getByRole("button", { name: "Move to review" })).toBeVisible();
+    expect(within(documentWorkspace).getByText(/AI\/search legal conclusions are disabled/i)).toBeVisible();
+    expect(within(documentWorkspace).getByLabelText(/New version for ACME_Trademark/i)).toBeVisible();
   });
 
   it("surfaces deadline exceptions and keeps every confirmation control visible on mobile", async () => {
