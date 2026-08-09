@@ -68,18 +68,39 @@ test("IPLF-023B production keeps unentitled legal automation and records fail-cl
   expect(box!.x + box!.width).toBeLessThanOrEqual(360);
 });
 
-test("IPLF-024A production exposes document contracts only behind IP entitlement", async ({
+test("IPLF-024A production serves the exact document contract to the entitled QA tenant", async ({
   page,
 }) => {
   test.setTimeout(120_000);
+  const unauthenticated = await fetch(
+    `${PROD_API_BASE_URL}/api/ip/documents/foundation-contract`,
+  );
+  expect(unauthenticated.status).toBe(401);
+
   await signIn(page);
   const foundation = await page.request.get(
     `${PROD_API_BASE_URL}/api/ip/documents/foundation-contract`,
   );
-  expect(foundation.status(), await foundation.text()).toBe(403);
-  expect(await foundation.text()).toContain("ip_workspace");
+  expect(foundation.status(), await foundation.text()).toBe(200);
+  expect(await foundation.json()).toEqual({
+    identity_owner: "ip_documents",
+    version_owner: "ip_document_versions",
+    link_owner: "ip_document_links",
+    binary_storage_owner: "shared_document_storage",
+    processing_queue_owner: "document_processing_jobs",
+    processing_target_type: "ip_document_version",
+    taxonomy_version: "ip-document-taxonomy-v1",
+    naming_pattern:
+      "[ClientCode]_[AssetType]_[Mark]_[Jurisdiction]_[ApplicationNo]_[ProceedingType]_[ProceedingNo]_[DocumentType]_[YYYY-MM-DD]_[Version]",
+    supported_link_targets: ["docket", "application", "proceeding", "event", "deadline"],
+  });
 
   const taxonomy = await page.request.get(`${PROD_API_BASE_URL}/api/ip/document-taxonomy`);
-  expect(taxonomy.status(), await taxonomy.text()).toBe(403);
-  expect(await taxonomy.text()).toContain("ip_workspace");
+  expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+  const taxonomyBody = (await taxonomy.json()) as {
+    taxonomy_version: string;
+    entries: unknown[];
+  };
+  expect(taxonomyBody.taxonomy_version).toBe("ip-document-taxonomy-v1");
+  expect(Array.isArray(taxonomyBody.entries)).toBe(true);
 });
