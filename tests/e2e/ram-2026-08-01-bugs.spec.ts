@@ -132,6 +132,21 @@ async function seedLinkedIpDocket(api: APIRequestContext, token: string, members
   });
   expect(docket.status()).toBe(201);
   const docketId = (await docket.json()).id as string;
+  const asset = await api.post(`${apiBaseUrl}/api/ip/dockets/${docketId}/assets`, {
+    headers,
+    data: { asset_kind: "trademark", jurisdiction: "IN", title: "ORBIT" },
+  });
+  expect(asset.status()).toBe(201);
+  const assetId = (await asset.json()).id as string;
+  const application = await api.post(`${apiBaseUrl}/api/ip/dockets/${docketId}/applications`, {
+    headers,
+    data: {
+      asset_id: assetId, office: "IP India", jurisdiction: "IN", filing_phase: "draft",
+      source_pending_identifier_allocation: false,
+      application_number: { raw_value: unique("TM-E2E"), source: "manual_e2e", effective_from: "2026-08-07", is_primary: true },
+    },
+  });
+  expect(application.status()).toBe(201);
   const coverage = await api.post(`${apiBaseUrl}/api/ip/dockets/${docketId}/deadline-coverages`, {
     headers,
     data: { matter_deadline_id: deadlineId, responsible_membership_id: membershipId, coverage_status: "accepted" },
@@ -195,6 +210,14 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     await expect(workspace.getByText("Readiness")).toBeVisible();
     await expect(workspace.getByText("Operational links")).toBeVisible();
     await expect(page.getByRole("button", { name: "Add ownership evidence" })).toBeVisible();
+    for (const name of ["Preview prosecution event", "Record prosecution event", "Preview lifecycle impact", "Apply lifecycle transition"]) {
+      const control = page.getByRole("button", { name });
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    }
   });
 
   test("linked Matter evidence, obligations, coverage, and reconciliation complete through the browser", async ({ page }) => {
@@ -227,7 +250,17 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     await expect(page.getByText("Registry fee")).toBeVisible();
     await page.getByRole("button", { name: "Reconcile with Matter billing" }).click();
 
-    for (const name of ["Discover Matter evidence", "Transfer covered deadlines", "Add recordal obligation", "Reconcile with Matter billing"]) {
+    const prosecution = page.getByTestId("ip-prosecution-workspace");
+    await prosecution.getByLabel("Reason").fill("Reviewed the official formalities evidence.");
+    await prosecution.getByLabel("Evidence reference").fill("attachment:formalities-evidence");
+    await prosecution.getByLabel("Document reference").fill("attachment:formalities-document");
+    await prosecution.getByRole("button", { name: "Preview prosecution event" }).click();
+    await expect(prosecution.getByTestId("ip-event-preview")).toContainText("Preview only");
+    await prosecution.getByRole("button", { name: "Record prosecution event" }).click();
+    await expect(page.getByText("Prosecution event recorded in the immutable timeline.")).toBeVisible();
+    await expect(prosecution.getByRole("list", { name: "Prosecution event timeline" })).toContainText("formalities");
+
+    for (const name of ["Discover Matter evidence", "Transfer covered deadlines", "Add recordal obligation", "Reconcile with Matter billing", "Preview prosecution event", "Record prosecution event", "Preview lifecycle impact", "Apply lifecycle transition"]) {
       const control = page.getByRole("button", { name });
       await expect(control).toBeVisible();
       const box = await control.boundingBox();
@@ -235,5 +268,14 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(360);
     }
+
+    const lifecycle = page.getByTestId("ip-lifecycle-workflow");
+    await lifecycle.getByLabel("Reason").fill("Synthetic QA docket lifecycle completion.");
+    await lifecycle.getByLabel("Outcome").fill("closed");
+    await lifecycle.getByLabel("Evidence reference").fill("qa:synthetic-close-proof");
+    await lifecycle.getByRole("button", { name: "Preview lifecycle impact" }).click();
+    await expect(lifecycle.getByTestId("ip-lifecycle-preview")).toContainText("ready → closed");
+    await lifecycle.getByRole("button", { name: "Apply lifecycle transition" }).click();
+    await expect(page.getByText("Docket lifecycle transition recorded.")).toBeVisible();
   });
 });

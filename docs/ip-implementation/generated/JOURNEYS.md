@@ -9,7 +9,7 @@ Generated; do not edit.
 | UJ-03 | Create trademark application manually | 3 | IPLF-031B, IPLF-039A, IPLF-039H | 3 | 1 | in_progress | not_run | false |
 | UJ-04 | Find and work from portfolio listing | 4 | IPLF-030B | 4 | 0 | not_started | not_run | false |
 | UJ-05 | Detect and resolve duplicate | 2 | IPLF-031B | 2 | 0 | not_started | not_run | false |
-| UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033B | 4 | 0 | not_started | not_run | false |
+| UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033B | 6 | 1 | in_progress | not_run | false |
 | UJ-07 | Reconcile registry update | 4 | IPLF-051B | 4 | 0 | not_started | not_run | false |
 | UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | not_started | not_run | false |
 | UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034B | 3 | 0 | not_started | not_run | false |
@@ -56,7 +56,7 @@ Generated; do not edit.
 | UJ-50 | Triage daily docket and workload | 5 | IPLF-039C, IPLF-039H | 5 | 1 | in_progress | not_run | false |
 | UJ-51 | Capture correspondence and client or associate instruction | 9 | IPLF-039B, IPLF-039H | 9 | 1 | in_progress | not_run | false |
 | UJ-52 | Record time, cost, invoice, and payment linkage | 7 | IPLF-039F, IPLF-039H | 7 | 1 | in_progress | not_run | false |
-| UJ-53 | Close, abandon, transfer, or retire IP record | 5 | IPLF-022B, IPLF-039H | 5 | 0 | not_started | not_run | false |
+| UJ-53 | Close, abandon, transfer, or retire IP record | 5 | IPLF-022B, IPLF-039H | 8 | 1 | in_progress | not_run | false |
 | UJ-54 | Capture and approve complete trademark filing particulars | 5 | IPLF-039A, IPLF-039H | 5 | 1 | in_progress | not_run | false |
 | UJ-55 | Triage inbound registry, court, client, or associate communication | 7 | IPLF-039B, IPLF-039H | 7 | 1 | in_progress | not_run | false |
 | UJ-56 | Calculate a deadline across holiday, closure, extension, or uncertain trigger | 4 | IPLF-023B, IPLF-034B | 4 | 0 | not_started | not_run | false |

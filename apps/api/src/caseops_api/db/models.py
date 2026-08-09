@@ -12713,6 +12713,18 @@ class TrademarkApplication(Base):
     office: Mapped[str] = mapped_column(String(80), nullable=False)
     jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
     filing_phase: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
+    lifecycle_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     source_pending_identifier_allocation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
