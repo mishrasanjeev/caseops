@@ -523,6 +523,7 @@ class DocumentProcessingStatus(StrEnum):
 class DocumentProcessingTargetType(StrEnum):
     MATTER_ATTACHMENT = "matter_attachment"
     CONTRACT_ATTACHMENT = "contract_attachment"
+    IP_DOCUMENT_VERSION = "ip_document_version"
 
 
 class DocumentProcessingAction(StrEnum):
@@ -13056,6 +13057,304 @@ class IpWorkspaceTestResult(Base):
     details_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     performed_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     performed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDocumentTaxonomyEntry(Base):
+    """Tenant-owned controlled vocabulary for IP documents."""
+
+    __tablename__ = "ip_document_taxonomy_entries"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_doc_taxonomy_updater_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_doc_taxonomy_id_company"),
+        UniqueConstraint("company_id", "key", name="uq_ip_doc_taxonomy_company_key"),
+        CheckConstraint("version > 0", name="ck_ip_doc_taxonomy_version_positive"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_seeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpDocumentTaxonomyAlias(Base):
+    """Normalized import/search alias resolving to one tenant taxonomy entry."""
+
+    __tablename__ = "ip_document_taxonomy_aliases"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["taxonomy_entry_id", "company_id"],
+            ["ip_document_taxonomy_entries.id", "ip_document_taxonomy_entries.company_id"],
+            name="fk_ip_doc_taxonomy_alias_entry_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_doc_taxonomy_alias_creator_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "normalized_alias", name="uq_ip_doc_taxonomy_alias_company"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    taxonomy_entry_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    alias: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String(160), nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="tenant")
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDocument(Base):
+    """Stable document identity; binary content is held by immutable versions."""
+
+    __tablename__ = "ip_documents"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["taxonomy_entry_id", "company_id"],
+            ["ip_document_taxonomy_entries.id", "ip_document_taxonomy_entries.company_id"],
+            name="fk_ip_document_taxonomy_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_creator_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_document_id_company"),
+        CheckConstraint("current_version > 0", name="ck_ip_document_current_version_positive"),
+        CheckConstraint(
+            "confidentiality IN ('internal', 'confidential', 'restricted')",
+            name="ck_ip_document_confidentiality",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    taxonomy_entry_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    confidentiality: Mapped[str] = mapped_column(String(24), nullable=False, default="internal")
+    is_privileged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpDocumentVersion(Base):
+    """Immutable binary identity and processing evidence for an IP document version."""
+
+    __tablename__ = "ip_document_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "company_id"],
+            ["ip_documents.id", "ip_documents.company_id"],
+            name="fk_ip_document_version_document_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["uploaded_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_version_uploader_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["locked_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_version_locker_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_document_version_id_company"),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "document_id",
+            name="uq_ip_document_version_id_company_document",
+        ),
+        UniqueConstraint("document_id", "version", name="uq_ip_document_version_number"),
+        UniqueConstraint("storage_key", name="uq_ip_document_version_storage_key"),
+        CheckConstraint("version > 0", name="ck_ip_document_version_positive"),
+        CheckConstraint("size_bytes >= 0", name="ck_ip_document_version_size_nonnegative"),
+        CheckConstraint(
+            "length(sha256_hex) = 64", name="ck_ip_document_version_sha256_length"
+        ),
+        CheckConstraint(
+            "extracted_char_count >= 0",
+            name="ck_ip_document_version_extracted_chars_nonnegative",
+        ),
+        CheckConstraint(
+            "ocr_quality_score IS NULL OR "
+            "(ocr_quality_score >= 0 AND ocr_quality_score <= 1)",
+            name="ck_ip_document_version_ocr_quality_range",
+        ),
+        CheckConstraint(
+            "state IN ('draft', 'review', 'approved', 'filed', 'served', 'accepted', "
+            "'rejected', 'superseded')",
+            name="ck_ip_document_version_state",
+        ),
+        CheckConstraint(
+            "(state IN ('approved', 'filed') AND locked_at IS NOT NULL "
+            "AND locked_by_membership_id IS NOT NULL) OR "
+            "(state NOT IN ('approved', 'filed'))",
+            name="ck_ip_document_version_approval_lock",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=DocumentProcessingStatus.PENDING
+    )
+    extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ocr_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
+    uploaded_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    locked_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDocumentLink(Base):
+    """Typed, tenant-safe links without duplicating an IP document binary."""
+
+    __tablename__ = "ip_document_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "company_id"],
+            ["ip_documents.id", "ip_documents.company_id"],
+            name="fk_ip_document_link_document_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["version_id", "company_id", "document_id"],
+            [
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_ip_document_link_version_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_document_link_docket_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_document_link_application_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proceeding_id", "company_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id"],
+            name="fk_ip_document_link_proceeding_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_document_link_event_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_document_link_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_link_creator_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "document_id", "target_type", "target_id", name="uq_ip_document_link_target"
+        ),
+        CheckConstraint(
+            "(CASE WHEN docket_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN application_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN proceeding_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN event_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN deadline_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_ip_document_link_exactly_one_target",
+        ),
+        CheckConstraint(
+            "CASE target_type "
+            "WHEN 'docket' THEN CASE WHEN docket_id = target_id THEN 1 ELSE 0 END "
+            "WHEN 'application' THEN CASE WHEN application_id = target_id THEN 1 ELSE 0 END "
+            "WHEN 'proceeding' THEN CASE WHEN proceeding_id = target_id THEN 1 ELSE 0 END "
+            "WHEN 'event' THEN CASE WHEN event_id = target_id THEN 1 ELSE 0 END "
+            "WHEN 'deadline' THEN CASE WHEN deadline_id = target_id THEN 1 ELSE 0 END "
+            "ELSE 0 END = 1",
+            name="ck_ip_document_link_target_consistent",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    target_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    event_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    deadline_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
 

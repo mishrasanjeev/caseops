@@ -4391,6 +4391,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/document-taxonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Taxonomy Route */
+        get: operations["get_ip_document_taxonomy_route_api_ip_document_taxonomy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/document-taxonomy/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Ip Document Taxonomy Entry */
+        put: operations["put_ip_document_taxonomy_entry_api_ip_document_taxonomy__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/document-taxonomy/seed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Taxonomy Seed */
+        post: operations["post_ip_document_taxonomy_seed_api_ip_document_taxonomy_seed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/foundation-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Foundation Contract */
+        get: operations["get_ip_document_foundation_contract_api_ip_documents_foundation_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/naming-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Naming Preview */
+        post: operations["post_ip_document_naming_preview_api_ip_documents_naming_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/identifiers/search": {
         parameters: {
             query?: never;
@@ -17795,6 +17880,174 @@ export interface components {
             use_priority?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** IpDocumentFoundationContract */
+        IpDocumentFoundationContract: {
+            /**
+             * Binary Storage Owner
+             * @default shared_document_storage
+             * @constant
+             */
+            binary_storage_owner: "shared_document_storage";
+            /**
+             * Identity Owner
+             * @default ip_documents
+             * @constant
+             */
+            identity_owner: "ip_documents";
+            /**
+             * Link Owner
+             * @default ip_document_links
+             * @constant
+             */
+            link_owner: "ip_document_links";
+            /** Naming Pattern */
+            naming_pattern: string;
+            /**
+             * Processing Queue Owner
+             * @default document_processing_jobs
+             * @constant
+             */
+            processing_queue_owner: "document_processing_jobs";
+            /**
+             * Processing Target Type
+             * @default ip_document_version
+             * @constant
+             */
+            processing_target_type: "ip_document_version";
+            /** Supported Link Targets */
+            supported_link_targets: string[];
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /**
+             * Version Owner
+             * @default ip_document_versions
+             * @constant
+             */
+            version_owner: "ip_document_versions";
+        };
+        /** IpDocumentNamingPreviewRequest */
+        IpDocumentNamingPreviewRequest: {
+            /** Application No */
+            application_no?: string | null;
+            /** Asset Type */
+            asset_type?: string | null;
+            /** Client Code */
+            client_code?: string | null;
+            /** Document Date */
+            document_date?: string | null;
+            /** Document Type */
+            document_type?: string | null;
+            /** Existing Names */
+            existing_names?: string[];
+            /** Extension */
+            extension?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Mark */
+            mark?: string | null;
+            /** Proceeding No */
+            proceeding_no?: string | null;
+            /** Proceeding Type */
+            proceeding_type?: string | null;
+            /** Version */
+            version: number;
+        };
+        /** IpDocumentNamingPreviewResponse */
+        IpDocumentNamingPreviewResponse: {
+            /** Conflict Detected */
+            conflict_detected: boolean;
+            /** Conflict Suffix */
+            conflict_suffix: number | null;
+            /** Export Safe Name */
+            export_safe_name: string;
+            /** Omitted Components */
+            omitted_components: string[];
+            /** Pattern */
+            pattern: string;
+            /** Requested Name */
+            requested_name: string;
+            /** Resolved Name */
+            resolved_name: string;
+            /** Sanitized Components */
+            sanitized_components: string[];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** IpDocumentTaxonomyAliasRecord */
+        IpDocumentTaxonomyAliasRecord: {
+            /** Alias */
+            alias: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Normalized Alias */
+            normalized_alias: string;
+            /** Source */
+            source: string;
+        };
+        /** IpDocumentTaxonomyEntryRecord */
+        IpDocumentTaxonomyEntryRecord: {
+            /** Aliases */
+            aliases?: components["schemas"]["IpDocumentTaxonomyAliasRecord"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Seeded */
+            is_seeded: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** IpDocumentTaxonomyResponse */
+        IpDocumentTaxonomyResponse: {
+            /** Entries */
+            entries: components["schemas"]["IpDocumentTaxonomyEntryRecord"][];
+            /** Taxonomy Version */
+            taxonomy_version: string;
+        };
+        /** IpDocumentTaxonomyUpsertRequest */
+        IpDocumentTaxonomyUpsertRequest: {
+            /** Aliases */
+            aliases?: string[];
+            /** Description */
+            description?: string | null;
+            /** Expected Version */
+            expected_version?: number | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Label */
+            label: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
         };
         /** IpEvidenceCandidateRecord */
         IpEvidenceCandidateRecord: {
@@ -37675,6 +37928,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_document_taxonomy_route_api_ip_document_taxonomy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentTaxonomyResponse"];
+                };
+            };
+        };
+    };
+    put_ip_document_taxonomy_entry_api_ip_document_taxonomy__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentTaxonomyUpsertRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentTaxonomyEntryRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_taxonomy_seed_api_ip_document_taxonomy_seed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentTaxonomyResponse"];
+                };
+            };
+        };
+    };
+    get_ip_document_foundation_contract_api_ip_documents_foundation_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentFoundationContract"];
+                };
+            };
+        };
+    };
+    post_ip_document_naming_preview_api_ip_documents_naming_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentNamingPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentNamingPreviewResponse"];
                 };
             };
             /** @description Validation Error */

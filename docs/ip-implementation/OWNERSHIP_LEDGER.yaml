@@ -336,8 +336,9 @@
       "epic_id": "IPLF-024",
       "milestone": "M2",
       "components": [
-        {"kind": "table", "name": "ip_documents_and_versions", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP document metadata service", "state_boundary": "Version identity/classification/approval only; bytes and processing remain shared.", "implementation_phase": "M2 expand"},
-        {"kind": "table", "name": "ip_document_links", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP document link service", "state_boundary": "Typed legal-record references only.", "implementation_phase": "M2 expand"},
+        {"kind": "table", "name": "ip_documents_and_versions", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_documents.py over ip_documents and ip_document_versions", "state_boundary": "Stable identity, immutable version metadata, classification, processing evidence, and approval lock only; bytes and processing remain shared.", "implementation_phase": "M2 expand via 20260809_0001"},
+        {"kind": "table", "name": "ip_document_taxonomy_entries_and_aliases", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "services/ip_documents.py taxonomy commands", "state_boundary": "Tenant-controlled document vocabulary, normalized aliases, optimistic version, and audit evidence only.", "implementation_phase": "M2 expand via 20260809_0001"},
+        {"kind": "table", "name": "ip_document_links", "classification": "NEW", "owner_id": "ip-legal-state", "canonical_writer": "IP document link service over ip_document_links", "state_boundary": "Exactly one company-matched docket, application, proceeding, event, or deadline target; optional version must belong to the linked document.", "implementation_phase": "M2 expand via 20260809_0001"},
         {"kind": "contract", "name": "shared-document-processing-adapter", "classification": "LINK", "owner_id": "document-processing", "canonical_writer": "services/document_storage.py, document_processing.py, and document_jobs.py", "state_boundary": "Reference canonical object/hash/scan/OCR/extraction results without copied binaries or queues.", "implementation_phase": "M2 expand"}
       ]
     },

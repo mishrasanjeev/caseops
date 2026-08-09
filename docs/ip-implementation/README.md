@@ -35,6 +35,12 @@ and safety rollout are independent fail-closed gates; frontend visibility is
 never authorization. All IP flags default off and optional pilot expiries fail
 closed, so deploying the catalogue alone exposes no operational IP feature.
 
+`IP_DOCUMENT_FOUNDATION.md` documents the IPLF-024A one-writer decisions,
+additive schema, shared storage/processing boundary, tenant taxonomy and alias
+contracts, deterministic naming preview, and fail-closed release proof. The
+dependent IPLF-024B slice retains the complete upload/review/approval user
+journey and reciprocal IP-DOC/UJ-14 allocation.
+
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an
 actively maintained program manifest.

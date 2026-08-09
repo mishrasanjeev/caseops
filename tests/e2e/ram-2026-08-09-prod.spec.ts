@@ -65,3 +65,19 @@ test("IPLF-023B production keeps unentitled legal automation and records fail-cl
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(360);
 });
+
+test("IPLF-024A production exposes document contracts only behind IP entitlement", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await signIn(page);
+  const foundation = await page.request.get(
+    `${PROD_BASE_URL}/api/ip/documents/foundation-contract`,
+  );
+  expect(foundation.status(), await foundation.text()).toBe(403);
+  expect(await foundation.text()).toContain("ip_workspace");
+
+  const taxonomy = await page.request.get(`${PROD_BASE_URL}/api/ip/document-taxonomy`);
+  expect(taxonomy.status(), await taxonomy.text()).toBe(403);
+  expect(await taxonomy.text()).toContain("ip_workspace");
+});
