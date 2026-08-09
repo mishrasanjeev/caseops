@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
+const PROD_API_BASE_URL =
+  process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
 const COMPANY_SLUG = process.env.CASEOPS_RAM_PROD_SLUG ?? "legal";
 const TESTER_EMAIL = process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
 
@@ -72,12 +74,12 @@ test("IPLF-024A production exposes document contracts only behind IP entitlement
   test.setTimeout(120_000);
   await signIn(page);
   const foundation = await page.request.get(
-    `${PROD_BASE_URL}/api/ip/documents/foundation-contract`,
+    `${PROD_API_BASE_URL}/api/ip/documents/foundation-contract`,
   );
   expect(foundation.status(), await foundation.text()).toBe(403);
   expect(await foundation.text()).toContain("ip_workspace");
 
-  const taxonomy = await page.request.get(`${PROD_BASE_URL}/api/ip/document-taxonomy`);
+  const taxonomy = await page.request.get(`${PROD_API_BASE_URL}/api/ip/document-taxonomy`);
   expect(taxonomy.status(), await taxonomy.text()).toBe(403);
   expect(await taxonomy.text()).toContain("ip_workspace");
 });
