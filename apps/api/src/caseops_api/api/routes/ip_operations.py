@@ -24,6 +24,14 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarVersionProposalRequest,
     LegalCalendarVersionRecord,
 )
+from caseops_api.schemas.ip_documents import (
+    IpDocumentFoundationContract,
+    IpDocumentNamingPreviewRequest,
+    IpDocumentNamingPreviewResponse,
+    IpDocumentTaxonomyEntryRecord,
+    IpDocumentTaxonomyResponse,
+    IpDocumentTaxonomyUpsertRequest,
+)
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
     IpDocketEventPreviewResponse,
@@ -91,6 +99,13 @@ from caseops_api.services.ip_deadline_workflow import (
     rule_impact,
     transition_rule_version,
 )
+from caseops_api.services.ip_documents import (
+    get_ip_document_taxonomy,
+    ip_document_foundation_contract,
+    preview_ip_document_name,
+    seed_ip_document_taxonomy,
+    upsert_ip_document_taxonomy_entry,
+)
 from caseops_api.services.ip_lifecycle import (
     append_ip_docket_event,
     get_ip_prosecution_workspace,
@@ -154,6 +169,69 @@ IpWorkspaceAdmin = Annotated[
     SessionContext,
     Depends(require_capability("ip:taxonomy_admin")),
 ]
+
+
+@router.get(
+    "/documents/foundation-contract",
+    response_model=IpDocumentFoundationContract,
+)
+async def get_ip_document_foundation_contract(
+    context: IpViewer,
+) -> IpDocumentFoundationContract:
+    del context
+    return ip_document_foundation_contract()
+
+
+@router.post(
+    "/documents/naming-preview",
+    response_model=IpDocumentNamingPreviewResponse,
+)
+async def post_ip_document_naming_preview(
+    payload: IpDocumentNamingPreviewRequest,
+    context: IpViewer,
+) -> IpDocumentNamingPreviewResponse:
+    del context
+    return preview_ip_document_name(payload)
+
+
+@router.get(
+    "/document-taxonomy",
+    response_model=IpDocumentTaxonomyResponse,
+)
+async def get_ip_document_taxonomy_route(
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentTaxonomyResponse:
+    return get_ip_document_taxonomy(session, context=context)
+
+
+@router.post(
+    "/document-taxonomy/seed",
+    response_model=IpDocumentTaxonomyResponse,
+)
+async def post_ip_document_taxonomy_seed(
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpDocumentTaxonomyResponse:
+    return seed_ip_document_taxonomy(session, context=context)
+
+
+@router.put(
+    "/document-taxonomy/{key}",
+    response_model=IpDocumentTaxonomyEntryRecord,
+)
+async def put_ip_document_taxonomy_entry(
+    key: str,
+    payload: IpDocumentTaxonomyUpsertRequest,
+    context: IpWorkspaceAdmin,
+    session: DbSession,
+) -> IpDocumentTaxonomyEntryRecord:
+    return upsert_ip_document_taxonomy_entry(
+        session,
+        context=context,
+        key=key,
+        payload=payload,
+    )
 
 
 @router.get(
