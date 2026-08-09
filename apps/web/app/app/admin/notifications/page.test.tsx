@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -219,11 +219,55 @@ describe("AdminNotificationsPage", () => {
 
     render(withClient(<AdminNotificationsPage />));
     await screen.findByText("No delivery intents");
-    fireEvent.click(screen.getByTestId("notification-self-test"));
+    const selfTest = screen.getByTestId("notification-self-test");
+    await waitFor(() => expect(selfTest).toBeEnabled());
+    fireEvent.click(selfTest);
 
     expect(await screen.findByTestId("notification-intent-intent-committed")).toHaveTextContent(
       /delivered.*notification test.*in_app.*No external destination/i,
     );
     expect(screen.getByText("Delivered").parentElement).toHaveTextContent("1");
+  });
+
+  it("waits for the initial intent snapshot before enabling the self-test", async () => {
+    useCapabilityMock.mockReturnValue(true);
+    let resolveInitial: ((value: unknown) => void) | undefined;
+    listAdminNotificationsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInitial = resolve;
+        }),
+    );
+
+    render(withClient(<AdminNotificationsPage />));
+
+    const selfTest = screen.getByTestId("notification-self-test");
+    expect(selfTest).toBeDisabled();
+    fireEvent.click(selfTest);
+    expect(testCurrentUserNotificationMock).not.toHaveBeenCalled();
+
+    resolveInitial?.({
+      total_queued: 0,
+      total_sent: 0,
+      total_delivered: 0,
+      total_failed: 0,
+      reminders: [],
+      intents: [],
+      suppressions: [],
+      metrics: {
+        due: 0,
+        attempted: 0,
+        delivered: 0,
+        suppressed: 0,
+        bounced: 0,
+        failed: 0,
+        fallback: 0,
+        stale_queue: 0,
+        critical_alerts: 0,
+      },
+    });
+
+    expect(await screen.findByText("No delivery intents")).toBeInTheDocument();
+    await waitFor(() => expect(selfTest).toBeEnabled());
   });
 });

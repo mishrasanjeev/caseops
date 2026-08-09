@@ -245,7 +245,7 @@ export default function AdminNotificationsPage() {
             type="button"
             className="w-full sm:w-auto"
             onClick={() => testMutation.mutate()}
-            disabled={testMutation.isPending}
+            disabled={testMutation.isPending || query.isPending}
             data-testid="notification-self-test"
           >
             <Send className="h-4 w-4" aria-hidden /> Test notification
