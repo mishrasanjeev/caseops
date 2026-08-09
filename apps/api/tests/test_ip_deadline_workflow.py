@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from caseops_api.db.models import (
@@ -10,6 +12,14 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.ip_deadlines import (
+    IpDeadlineCalculationRequest,
+    IpDeadlineConfirmRequest,
+    IpDeadlineRuleDefinition,
+    IpRuleVersionProposalRequest,
+    LegalCalendarSnapshot,
+    LegalCalendarVersionProposalRequest,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -166,6 +176,81 @@ def _responsibilities(primary_id: str, backup_id: str) -> list[dict]:
             "escalation_policy": {"after_hours": 24},
         },
     ]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"weekend_days": [-1, 6]}, "weekend days must be integers"),
+        ({"weekend_days": [5, 5]}, "weekend days cannot contain duplicates"),
+        ({"timezone": "Invalid/Deadline-Timezone"}, "valid IANA timezone"),
+    ],
+)
+def test_legal_calendar_snapshot_rejects_unsafe_calendar_inputs(
+    overrides: dict,
+    message: str,
+) -> None:
+    payload = _rule_payload()["fixtures"][0]["calculation"]["calendar"]
+    payload.update(overrides)
+
+    with pytest.raises(ValidationError, match=message):
+        LegalCalendarSnapshot.model_validate(payload)
+
+
+def test_deadline_schema_validators_reject_inconsistent_legal_inputs() -> None:
+    calculation = _rule_payload()["fixtures"][0]["calculation"]
+    calculation["duration_unit"] = "months"
+    with pytest.raises(ValidationError, match="business_days calculations require days"):
+        IpDeadlineCalculationRequest.model_validate(calculation)
+
+    definition = _rule_payload()["definition"]
+    definition["duration_unit"] = "years"
+    with pytest.raises(ValidationError, match="business_days rules require days"):
+        IpDeadlineRuleDefinition.model_validate(definition)
+
+    invalid_dates = _rule_payload()
+    invalid_dates["effective_from"] = "2026-08-02"
+    invalid_dates["effective_until"] = "2026-08-01"
+    with pytest.raises(ValidationError, match="effective_until cannot precede"):
+        IpRuleVersionProposalRequest.model_validate(invalid_dates)
+
+    missing_calculation = _rule_payload()
+    missing_calculation["fixtures"][0]["calculation"] = None
+    with pytest.raises(ValidationError, match="deterministic calculations"):
+        IpRuleVersionProposalRequest.model_validate(missing_calculation)
+
+    invalid_calendar_dates = _calendar_payload()
+    invalid_calendar_dates["effective_from"] = "2026-08-02"
+    invalid_calendar_dates["effective_until"] = "2026-08-01"
+    with pytest.raises(ValidationError, match="effective_until cannot precede"):
+        LegalCalendarVersionProposalRequest.model_validate(invalid_calendar_dates)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (
+            {"corrected_result_on": "2026-08-18"},
+            "corrected confirmation requires reason and evidence",
+        ),
+        ({"reminder_offsets_days": [7, 7]}, "reminder offsets cannot contain duplicates"),
+        ({"reminder_offsets_days": [3651]}, "reminder offsets must be between"),
+    ],
+)
+def test_deadline_confirmation_rejects_unsafe_correction_and_reminders(
+    overrides: dict,
+    message: str,
+) -> None:
+    payload = {
+        "expected_version": 1,
+        "responsibilities": [
+            {"membership_id": "fixture-primary", "role": "primary", "accepted": True}
+        ],
+        **overrides,
+    }
+
+    with pytest.raises(ValidationError, match=message):
+        IpDeadlineConfirmRequest.model_validate(payload)
 
 
 def test_rule_calendar_deadline_end_to_end_and_immutable_legal_completion(
