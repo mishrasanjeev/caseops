@@ -18,7 +18,7 @@
     "checkpoint": {
       "recorded_at": "2026-08-10T07:30:00+05:30",
       "repository_revision": "feb52bb2dad5fef8156de7212a8f12e7e0806cfc",
-      "environment": "IPLF-024B remains deployment-verified at canonical release 64f6360b7bd9f4943be56c3d2c28662ce361bf5f. A focused integrations cold-start remediation is at its final independent Playwright gate after all API, web, Postgres, security, and CodeQL checks passed. IPLF-025A repository implementation and local verification are complete on candidate dcc31892782cf6f8c17fb8ec6d1098c05881431d: ordered expand/backfill/switch migrations, canonical shared-work adapters, generated OpenAPI, governance validation, current-source production build, and dated local Playwright passed. Independent CI, canonical merge, exact deployment, migration/reconciliation, scheduler convergence, and dated production proof remain open release gates.",
+      "environment": "IPLF-024B remains deployment-verified, and its evidence-head integrations cold-start remediation is now exact-release verified at canonical main 18a199bfb0ef6377f88d7bd401d22b42f68faf91: all independent CI gates passed, immutable images built, migration caseops-migrate-job-m8nrh completed, six schedulers converged, API caseops-api-00267-swr and web caseops-web-00247-sb7 serve 100% traffic, public identities match, and production workflow 31348569898 passed 61 RAM tests with three conditional skips plus both Notice cases. IPLF-025A repository implementation and local verification are complete on rebased candidate feb52bb2dad5fef8156de7212a8f12e7e0806cfc: ordered expand/backfill/switch migrations, canonical shared-work adapters, generated OpenAPI, governance validation, current-source production build, and dated local Playwright passed. Independent IPLF-025A CI, canonical merge, exact deployment, migration/reconciliation, scheduler convergence, and dated production proof remain open release gates.",
       "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, and IPLF-024B have completed repository-controlled implementation and deployment verification. IPLF-025A now has completed repository implementation and local verification but is not deployment-verified. IPLF-025B retains CAL-OPS-01..14 and UJ-10/UJ-62 behavior. Genuine legal/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-025B",
@@ -886,6 +886,7 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md",
         "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md",
+        "docs/ip-implementation/evidence/m2/IPLF-024B/cold-start-remediation-2026-08-10.md",
         "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md"
       ]
     },
@@ -5738,7 +5739,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md",
-        "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md"
+        "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md",
+        "docs/ip-implementation/evidence/m2/IPLF-024B/cold-start-remediation-2026-08-10.md"
       ],
       "evidence_metadata": [
         {
@@ -5758,6 +5760,15 @@
           "assertions": "All eight API shards, complete web/build and security gates, immutable exact deployment identity, migration, six scheduler bindings, original and controlled-name downloads, duplicate reuse, processing readiness, accepted-state locking, privilege denial, AI/portal fail-closed policy, RAM regression batch, and Notice module",
           "result": "passed",
           "recorded_at": "2026-08-10T00:40:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-024B/cold-start-remediation-2026-08-10.md",
+          "revision": "18a199bfb0ef6377f88d7bd401d22b42f68faf91",
+          "environment": "Independent CI/Security/CodeQL/PostgreSQL/full Playwright; canonical exact Cloud Build images; successful production migration and six-binding scheduler reconciliation; Cloud Run API caseops-api-00267-swr and web caseops-web-00247-sb7 at 100% traffic; exact-release production workflow 31348569898",
+          "fixtures": "Dedicated CaseOps QA tenant and existing dated production regression fixtures; admin integrations provider reads and IPLF-024B document canary; no client record or real external legal effect",
+          "assertions": "Sequenced integration reads under concurrency=1, all independent gates, immutable exact deployment identity, migration, six schedulers, ClamAV guard, exact public release identity, 61-pass RAM batch with three conditional skips, IPLF-024B locked document journey, and two-case Notice module",
+          "result": "passed",
+          "recorded_at": "2026-08-10T07:56:00+05:30"
         }
       ],
       "approvals": [],
