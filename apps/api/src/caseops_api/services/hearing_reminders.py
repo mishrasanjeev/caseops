@@ -785,23 +785,23 @@ def run_reminder_worker(
             r.updated_at = now
             continue
 
-        recipient = (
-            session.get(CompanyMembership, r.recipient_membership_id)
-            if r.recipient_membership_id is not None
-            else None
-        )
-        if (
-            recipient is None
-            or recipient.company_id != r.company_id
-            or not recipient.is_active
-            or recipient.user is None
-            or not recipient.user.is_active
-        ):
-            r.status = HearingReminderStatus.CANCELLED
-            r.last_error = "Recipient permission was removed before delivery."
-            r.updated_at = now
-            continue
         if hearing.ip_docket_id is not None:
+            recipient = (
+                session.get(CompanyMembership, r.recipient_membership_id)
+                if r.recipient_membership_id is not None
+                else None
+            )
+            if (
+                recipient is None
+                or recipient.company_id != r.company_id
+                or not recipient.is_active
+                or recipient.user is None
+                or not recipient.user.is_active
+            ):
+                r.status = HearingReminderStatus.CANCELLED
+                r.last_error = "Recipient permission was removed before delivery."
+                r.updated_at = now
+                continue
             docket = session.get(IpDocketRecord, hearing.ip_docket_id)
             linked_matter = (
                 session.get(Matter, docket.matter_id)
