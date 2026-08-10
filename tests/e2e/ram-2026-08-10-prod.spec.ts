@@ -101,6 +101,10 @@ test("IPLF-025B production schedules, supersedes, and cancels unknown-time remin
   await signIn(page);
   const headers = await csrfHeaders(page);
   const canary = Date.now();
+  const hearingOn = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
+  const rescheduledOn = new Date(hearingOn.getTime() + 24 * 60 * 60 * 1000);
+  const hearingDate = hearingOn.toISOString().slice(0, 10);
+  const rescheduledDate = rescheduledOn.toISOString().slice(0, 10);
 
   const createdDocket = await page.request.post(
     `${PROD_API_BASE_URL}/api/ip/dockets`,
@@ -157,7 +161,7 @@ test("IPLF-025B production schedules, supersedes, and cancels unknown-time remin
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(360);
 
-  await page.getByLabel("Hearing date").fill("2027-02-10");
+  await page.getByLabel("Hearing date").fill(hearingDate);
   await page.getByLabel("Location").fill("Production QA registry room");
   await page
     .getByLabel("Virtual hearing link")
@@ -202,7 +206,7 @@ test("IPLF-025B production schedules, supersedes, and cancels unknown-time remin
     ),
   ).toEqual(new Set(["email", "in_app"]));
 
-  await page.getByLabel("Reschedule Hearing").fill("2027-02-11");
+  await page.getByLabel("Reschedule Hearing").fill(rescheduledDate);
   const reschedule = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === `/api/ip/hearings/${hearingId}` &&
