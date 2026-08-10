@@ -3554,23 +3554,25 @@ def resync_synced_hearing_events_for_context(
     failures therefore remain observable sync state and cannot undo CaseOps.
     """
 
+    synced_hearing_exists = (
+        select(CalendarEventSync.id)
+        .where(
+            CalendarEventSync.calendar_connection_id == UserCalendarConnection.id,
+            CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
+            CalendarEventSync.source_id == hearing_id,
+            CalendarEventSync.provider_event_id.is_not(None),
+            CalendarEventSync.sync_status != CalendarEventSyncStatus.DELETED,
+        )
+        .exists()
+    )
     connections = list(
         session.scalars(
-            select(UserCalendarConnection)
-            .join(
-                CalendarEventSync,
-                CalendarEventSync.calendar_connection_id == UserCalendarConnection.id,
-            )
-            .where(
+            select(UserCalendarConnection).where(
                 UserCalendarConnection.company_id == context.company.id,
                 UserCalendarConnection.membership_id == context.membership.id,
                 UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
-                CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
-                CalendarEventSync.source_id == hearing_id,
-                CalendarEventSync.provider_event_id.is_not(None),
-                CalendarEventSync.sync_status != CalendarEventSyncStatus.DELETED,
+                synced_hearing_exists,
             )
-            .distinct()
         )
     )
     for connection in connections:
