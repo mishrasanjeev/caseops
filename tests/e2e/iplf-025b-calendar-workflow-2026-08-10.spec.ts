@@ -80,7 +80,7 @@ test("IPLF-025B schedules unknown-time reminders, exposes outcomes, and supersed
       jurisdictions: ["IN"],
       offices: ["IP India"],
       timezone: "Asia/Kolkata",
-      holiday_calendar_key: "IN-CENTRAL-2026",
+      holiday_calendar_key: "test-calendar",
       working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
       document_taxonomy_version: "ip-taxonomy-2026.1",
       event_catalog_version: "ip-events-v1",

@@ -25,3 +25,8 @@ docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:88
 # public Cloud Run container digest copied into the next program checkpoint.
 # The suppression is fingerprint-specific; any new generic-key finding fails.
 a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21
+
+# 2026-08-10 IPLF-025B: exact false positive on the public synthetic holiday
+# calendar fixture label. The fixture now uses the established low-entropy
+# test value; only the historical fingerprint is suppressed.
+246ad73b5f1540ac9b9850f52b8d7616815b1c52:tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts:generic-api-key:83
