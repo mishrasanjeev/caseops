@@ -31,19 +31,23 @@ from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    Company,
     CompanyMembership,
     HearingReminder,
     HearingReminderChannel,
     HearingReminderStatus,
+    IpDocketRecord,
+    Matter,
     MatterHearing,
     User,
 )
+from caseops_api.services.matter_access import can_access
 from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
     assert_operational_matter,
@@ -95,13 +99,16 @@ def _eligible_recipients(
     targets: list[tuple[str | None, str | None]] = []
     seen: set[str] = set()
     matter = hearing.matter
+    company_id = hearing.company_id or (matter.company_id if matter is not None else None)
+    if company_id is None:
+        raise ValueError("Hearing has no tenant correlation.")
     policy_ids = list((hearing.reminder_policy_json or {}).get("recipient_membership_ids") or [])
     if policy_ids:
         stmt = (
             select(CompanyMembership)
             .join(User, CompanyMembership.user_id == User.id)
             .where(
-                CompanyMembership.company_id == matter.company_id,
+                CompanyMembership.company_id == company_id,
                 CompanyMembership.id.in_(policy_ids),
                 CompanyMembership.is_active.is_(True),
                 User.is_active.is_(True),
@@ -113,7 +120,19 @@ def _eligible_recipients(
             for membership_id in policy_ids
             if membership_id in by_id and by_id[membership_id].user.email
         ]
-    if matter.assignee_membership and matter.assignee_membership.user:
+    if hearing.responsible_membership_id:
+        responsible = session.get(CompanyMembership, hearing.responsible_membership_id)
+        if (
+            responsible is not None
+            and responsible.company_id == company_id
+            and responsible.is_active
+            and responsible.user is not None
+            and responsible.user.is_active
+            and responsible.user.email
+        ):
+            targets.append((responsible.id, responsible.user.email))
+            seen.add(responsible.id)
+    if matter is not None and matter.assignee_membership and matter.assignee_membership.user:
         mid = matter.assignee_membership.id
         email = matter.assignee_membership.user.email
         if email and mid not in seen:
@@ -123,7 +142,7 @@ def _eligible_recipients(
         select(CompanyMembership)
         .join(User, CompanyMembership.user_id == User.id)
         .where(
-            CompanyMembership.company_id == matter.company_id,
+            CompanyMembership.company_id == company_id,
             CompanyMembership.is_active.is_(True),
             CompanyMembership.role.in_(("owner", "admin", "partner")),
         )
@@ -158,7 +177,43 @@ def schedule_reminders_for_hearing(
     if not recipients:
         return []
 
+    # Repeating the scheduler while the current generation is still active is
+    # a no-op. Once the caller has cancelled that generation during a legal
+    # reschedule, increment the generation so a replacement offset may land at
+    # the same timestamp as one of its cancelled predecessors.
+    if session.scalar(
+        select(HearingReminder.id)
+        .where(
+            HearingReminder.hearing_id == hearing.id,
+            HearingReminder.status == HearingReminderStatus.QUEUED,
+        )
+        .limit(1)
+    ) is not None:
+        return []
+    schedule_generation = int(
+        session.scalar(
+            select(func.coalesce(func.max(HearingReminder.schedule_generation), 0)).where(
+                HearingReminder.hearing_id == hearing.id
+            )
+        )
+        or 0
+    ) + 1
+
     created: list[HearingReminder] = []
+    matter = hearing.matter
+    company_id = hearing.company_id or (matter.company_id if matter is not None else None)
+    if company_id is None:
+        raise ValueError("Hearing has no tenant correlation.")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise ValueError("Hearing tenant no longer exists.")
+    ip_docket = (
+        session.get(IpDocketRecord, hearing.ip_docket_id)
+        if hearing.ip_docket_id is not None
+        else None
+    )
+    if matter is None and ip_docket is None:
+        raise ValueError("Hearing target no longer exists.")
     requested_channels = list(policy.get("channels") or [HearingReminderChannel.EMAIL])
     for offset_h in offsets:
         send_at = hearing_at - timedelta(hours=int(offset_h))
@@ -170,13 +225,15 @@ def schedule_reminders_for_hearing(
             if HearingReminderChannel.EMAIL not in requested_channels:
                 continue
             reminder = HearingReminder(
-                company_id=hearing.matter.company_id,
+                company_id=company_id,
                 matter_id=hearing.matter_id,
+                ip_docket_id=hearing.ip_docket_id,
                 hearing_id=hearing.id,
                 recipient_membership_id=membership_id,
                 recipient_email=email,
                 channel=HearingReminderChannel.EMAIL,
                 scheduled_for=send_at,
+                schedule_generation=schedule_generation,
                 status=HearingReminderStatus.QUEUED,
             )
             # Use a nested transaction (SAVEPOINT) so an
@@ -202,7 +259,7 @@ def schedule_reminders_for_hearing(
                     )
 
                     context = SessionContext(
-                        company=hearing.matter.company,
+                        company=company,
                         membership=membership,
                         user=membership.user,
                     )
@@ -221,7 +278,8 @@ def schedule_reminders_for_hearing(
                         event_type="hearing_upcoming",
                         source_type="hearing_reminder",
                         source_id=source_id,
-                        matter=hearing.matter,
+                        matter=matter,
+                        ip_docket=ip_docket,
                         title="Hearing reminder",
                         body="A hearing reminder is due. Open CaseOps for the details.",
                         scheduled_for=send_at,
@@ -254,20 +312,22 @@ def schedule_reminders_for_hearing(
                 raise
         for membership_id, _email in recipients:
             for channel in requested_channels:
-                if channel in {
-                    HearingReminderChannel.EMAIL,
-                    HearingReminderChannel.IN_APP,
-                }:
+                if channel == HearingReminderChannel.EMAIL or (
+                    channel == HearingReminderChannel.IN_APP
+                    and hearing.ip_docket_id is None
+                ):
                     continue
                 reminder = HearingReminder(
-                    company_id=hearing.matter.company_id,
+                    company_id=company_id,
                     matter_id=hearing.matter_id,
+                    ip_docket_id=hearing.ip_docket_id,
                     hearing_id=hearing.id,
                     recipient_membership_id=membership_id,
                     recipient_email=None,
                     recipient_phone=None,
                     channel=channel,
                     scheduled_for=send_at,
+                    schedule_generation=schedule_generation,
                     status=HearingReminderStatus.QUEUED,
                 )
                 sp = session.begin_nested()
@@ -290,7 +350,7 @@ def schedule_reminders_for_hearing(
                         else membership
                     )
                     context = SessionContext(
-                        company=hearing.matter.company,
+                        company=company,
                         membership=membership,
                         user=membership.user,
                     )
@@ -302,7 +362,8 @@ def schedule_reminders_for_hearing(
                         event_type="hearing_upcoming",
                         source_type="hearing_reminder",
                         source_id=f"{reminder.id}:v1",
-                        matter=hearing.matter,
+                        matter=matter,
+                        ip_docket=ip_docket,
                         title="Hearing reminder",
                         body="A hearing reminder is due. Open CaseOps for the details.",
                         scheduled_for=send_at,
@@ -333,37 +394,6 @@ def schedule_reminders_for_hearing(
                 except Exception:
                     sp.rollback()
                     raise
-        if requested_channels == [HearingReminderChannel.IN_APP]:
-            from caseops_api.services.notification_delivery import (
-                enqueue_notification_delivery_intent,
-            )
-
-            for membership_id, _email in recipients:
-                membership = session.get(CompanyMembership, membership_id)
-                if membership is None or membership.user is None:
-                    continue
-                context = SessionContext(
-                    company=hearing.matter.company,
-                    membership=membership,
-                    user=membership.user,
-                )
-                enqueue_notification_delivery_intent(
-                    session,
-                    context=context,
-                    recipient_membership=membership,
-                    channel=HearingReminderChannel.IN_APP,
-                    event_type="hearing_upcoming",
-                    source_type="hearing_reminder",
-                    source_id=f"{hearing.id}:{membership.id}:{offset_h}:in_app:v1",
-                    matter=hearing.matter,
-                    title="Hearing reminder",
-                    body="A hearing reminder is due. Open CaseOps for the details.",
-                    scheduled_for=send_at,
-                    critical=True,
-                    escalation_membership=membership,
-                    schedule_source_type="matter_hearing",
-                    schedule_source_id=hearing.id,
-                )
     return created
 
 
@@ -409,11 +439,37 @@ def _render_email(
     hearing: MatterHearing,
     recipient_email: str,
     offset_hours: float,
+    ip_docket: IpDocketRecord | None = None,
 ) -> tuple[str, str, str]:
     """Render (subject, html, plaintext). Keep the body short and
     factual — lawyers skim reminder emails. Link back to the matter
     cockpit so the reader can open the hearing page in one click."""
     matter = hearing.matter
+    if matter is None:
+        if ip_docket is None:
+            raise ValueError("IP hearing target no longer exists.")
+        forum = hearing.forum_name or "the scheduled forum"
+        when = hearing.hearing_on.isoformat()
+        target_label = ip_docket.title or "IP docket"
+        subject = f"Hearing in ~{int(round(offset_hours))}h - {target_label} - {when}"
+        target_url = "https://caseops.ai/app/ip"
+        purpose = hearing.purpose or "Hearing"
+        judge = f" (before {hearing.judge_name})" if hearing.judge_name else ""
+        plaintext = (
+            f"Hi,\n\n"
+            f"Reminder: {purpose} on {when} at {forum}{judge}.\n\n"
+            f"Docket: {target_label}\n"
+            f"CaseOps: {target_url}\n\n"
+            f"- CaseOps"
+        )
+        html = (
+            f"<p>Reminder: <strong>{purpose}</strong> on <strong>{when}</strong> "
+            f"at <strong>{forum}</strong>{judge}.</p>"
+            f"<p>Docket: <a href='{target_url}'>{target_label}</a></p>"
+            f"<p style='color:#6d727a;font-size:12px'>- CaseOps</p>"
+        )
+        _ = recipient_email
+        return subject, html, plaintext
     forum = hearing.forum_name or matter.court_name or "the scheduled forum"
     when = hearing.hearing_on.isoformat()
     subject = (
@@ -665,24 +721,45 @@ def run_reminder_worker(
                 r.updated_at = now
             continue
 
-        try:
-            assert_operational_matter(
-                session,
-                matter=hearing.matter,
-                lock_for_write=True,
+        if hearing.matter_id is not None:
+            try:
+                assert_operational_matter(
+                    session,
+                    matter=hearing.matter,
+                    lock_for_write=True,
+                )
+            except MatterNotOperationalError:
+                r = session.scalar(
+                    select(HearingReminder)
+                    .where(HearingReminder.id == candidate.id)
+                    .with_for_update(of=HearingReminder)
+                    .execution_options(populate_existing=True)
+                )
+                if r is not None and r.status == HearingReminderStatus.QUEUED:
+                    r.status = HearingReminderStatus.CANCELLED
+                    r.last_error = "Matter disposed before reminder delivery."
+                    r.updated_at = now
+                continue
+        elif hearing.ip_docket_id is not None:
+            ip_docket = session.scalar(
+                select(IpDocketRecord)
+                .where(
+                    IpDocketRecord.id == hearing.ip_docket_id,
+                    IpDocketRecord.company_id == hearing.company_id,
+                )
+                .with_for_update(of=IpDocketRecord)
             )
-        except MatterNotOperationalError:
-            r = session.scalar(
-                select(HearingReminder)
-                .where(HearingReminder.id == candidate.id)
-                .with_for_update(of=HearingReminder)
-                .execution_options(populate_existing=True)
-            )
-            if r is not None and r.status == HearingReminderStatus.QUEUED:
-                r.status = HearingReminderStatus.CANCELLED
-                r.last_error = "Matter disposed before reminder delivery."
-                r.updated_at = now
-            continue
+            if (
+                ip_docket is None
+                or not ip_docket.is_active
+                or ip_docket.archived_by_matter_disposal
+            ):
+                r = session.get(HearingReminder, candidate.id)
+                if r is not None and r.status == HearingReminderStatus.QUEUED:
+                    r.status = HearingReminderStatus.CANCELLED
+                    r.last_error = "IP docket removed before reminder delivery."
+                    r.updated_at = now
+                continue
 
         r = session.scalar(
             select(HearingReminder)
@@ -707,6 +784,49 @@ def run_reminder_worker(
             r.last_error = "Hearing is no longer scheduled."
             r.updated_at = now
             continue
+
+        recipient = (
+            session.get(CompanyMembership, r.recipient_membership_id)
+            if r.recipient_membership_id is not None
+            else None
+        )
+        if (
+            recipient is None
+            or recipient.company_id != r.company_id
+            or not recipient.is_active
+            or recipient.user is None
+            or not recipient.user.is_active
+        ):
+            r.status = HearingReminderStatus.CANCELLED
+            r.last_error = "Recipient permission was removed before delivery."
+            r.updated_at = now
+            continue
+        if hearing.ip_docket_id is not None:
+            docket = session.get(IpDocketRecord, hearing.ip_docket_id)
+            linked_matter = (
+                session.get(Matter, docket.matter_id)
+                if docket is not None and docket.matter_id is not None
+                else None
+            )
+            company = session.get(Company, r.company_id)
+            if company is None or docket is None or (
+                docket.restricted and linked_matter is None
+            ) or (
+                linked_matter is not None
+                and not can_access(
+                    session,
+                    context=SessionContext(
+                        company=company,
+                        membership=recipient,
+                        user=recipient.user,
+                    ),
+                    matter=linked_matter,
+                )
+            ):
+                r.status = HearingReminderStatus.CANCELLED
+                r.last_error = "Recipient no longer has access to this IP docket."
+                r.updated_at = now
+                continue
 
         # Channel-specific recipient validation. Email needs an email;
         # SMS / WhatsApp need a phone. Missing-recipient is FAILED so
@@ -738,6 +858,11 @@ def run_reminder_worker(
             hearing=hearing,
             recipient_email=r.recipient_email or "",
             offset_hours=offset_hours,
+            ip_docket=(
+                session.get(IpDocketRecord, hearing.ip_docket_id)
+                if hearing.ip_docket_id is not None
+                else None
+            ),
         )
         r.attempts += 1
 

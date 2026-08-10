@@ -13,6 +13,7 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     InAppNotification,
+    IpDocketRecord,
     Matter,
     MatterCourtOrder,
     NotificationDeliveryIntent,
@@ -78,6 +79,32 @@ class StubOutlookProvider:
             }
         )
         return existing_provider_event_id or "remote-event-1"
+
+    def upsert_calendar_item(
+        self,
+        *,
+        token_payload: dict[str, object],
+        item,
+        existing_provider_event_id: str | None,
+    ) -> str:
+        if self.fail:
+            raise RuntimeError(self.fail_message)
+        assert token_payload["access_token"] == "fixture-access-credential"
+        self.calls.append(
+            {
+                "source_type": item.source_type,
+                "source_id": item.source_id,
+                "matter_id": item.matter.id if item.matter is not None else None,
+                "ip_docket_id": (
+                    item.ip_docket.id if item.ip_docket is not None else None
+                ),
+                "title": item.title,
+                "occurs_on": item.occurs_on,
+                "detail_lines": item.detail_lines,
+                "existing": existing_provider_event_id,
+            }
+        )
+        return existing_provider_event_id or f"remote-calendar-item-{len(self.calls)}"
 
     def validate_connection(self, *, token_payload: dict[str, object]) -> dict[str, object]:
         assert token_payload["access_token"] == "fixture-access-credential"
@@ -255,6 +282,122 @@ def _seed_order(matter_id: str) -> str:
         session.add(order)
         session.commit()
         return order.id
+
+
+def test_ip_outlook_task_hearing_and_deadline_projection_is_minimal_and_stable(
+    client: TestClient,
+) -> None:
+    provider = StubOutlookProvider()
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    _connect_outlook(client, token, provider)
+    try:
+        with get_session_factory()() as session:
+            docket = IpDocketRecord(
+                company_id=company_id,
+                record_type="trademark",
+                title="Confidential Outlook docket",
+                status="draft",
+                restricted=False,
+                created_by_membership_id=membership_id,
+            )
+            session.add(docket)
+            session.commit()
+            docket_id = docket.id
+
+        task_due = date.today() + timedelta(days=9)
+        task = client.post(
+            "/api/ip/tasks",
+            headers=_auth(token),
+            json={
+                "docket_id": docket_id,
+                "title": "Privileged Outlook task",
+                "due_on": task_due.isoformat(),
+                "owner_membership_id": membership_id,
+            },
+        )
+        assert task.status_code == 201, task.text
+        task_id = str(task.json()["id"])
+
+        hearing_on = date.today() + timedelta(days=12)
+        hearing = client.post(
+            "/api/ip/hearings",
+            headers=_auth(token),
+            json={
+                "docket_id": docket_id,
+                "hearing_on": hearing_on.isoformat(),
+                "forum_name": "Trade Marks Registry",
+                "purpose": "Privileged Outlook hearing",
+                "time_status": "time_not_published",
+                "responsible_membership_id": membership_id,
+            },
+        )
+        assert hearing.status_code == 201, hearing.text
+        hearing_id = str(hearing.json()["id"])
+
+        deadline_due = date.today() + timedelta(days=14)
+        deadline = client.post(
+            "/api/ip/operational-deadlines",
+            headers=_auth(token),
+            json={
+                "docket_id": docket_id,
+                "source": "followup",
+                "kind": "hearing_note",
+                "title": "Privileged Outlook deadline",
+                "due_on": deadline_due.isoformat(),
+                "assignee_membership_id": membership_id,
+            },
+        )
+        assert deadline.status_code == 201, deadline.text
+        deadline_id = str(deadline.json()["id"])
+
+        task_first = client.post(
+            f"/api/calendar/sync/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        task_second = client.post(
+            f"/api/calendar/sync/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        hearing_sync = client.post(
+            f"/api/calendar/sync/hearings/{hearing_id}",
+            headers=_auth(token),
+        )
+        deadline_sync = client.post(
+            f"/api/calendar/sync/deadlines/{deadline_id}",
+            headers=_auth(token),
+        )
+        assert task_first.status_code == task_second.status_code == 200
+        assert hearing_sync.status_code == 200, hearing_sync.text
+        assert deadline_sync.status_code == 200, deadline_sync.text
+        assert task_first.json()["sync"]["provider_event_id"] == task_second.json()[
+            "sync"
+        ]["provider_event_id"]
+
+        assert [call["title"] for call in provider.calls] == [
+            "CaseOps IP - Task",
+            "CaseOps IP - Task",
+            "CaseOps IP - Hearing",
+            "CaseOps IP - Deadline",
+        ]
+        assert provider.calls[1]["existing"] == task_first.json()["sync"][
+            "provider_event_id"
+        ]
+        assert provider.calls[0]["occurs_on"] == task_due
+        assert provider.calls[2]["occurs_on"] == hearing_on
+        assert provider.calls[3]["occurs_on"] == deadline_due
+        rendered = " ".join(
+            str(line)
+            for call in provider.calls
+            for line in call["detail_lines"]
+        )
+        assert "Confidential Outlook" not in rendered
+        assert "Privileged Outlook" not in rendered
+        assert {call["ip_docket_id"] for call in provider.calls} == {docket_id}
+    finally:
+        set_outlook_provider_for_tests(None)
 
 
 def test_outlook_connection_start_callback_revoke_store_no_raw_tokens(

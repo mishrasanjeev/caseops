@@ -2025,6 +2025,11 @@ class MatterHearing(Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Kolkata")
     reminder_policy_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     hearing_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    location_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    meeting_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    attendee_membership_ids_json: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="manual")
     source_ref_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source_ref_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -2297,7 +2302,8 @@ class HearingReminder(Base):
             "recipient_membership_id",
             "channel",
             "scheduled_for",
-            name="uq_hearing_reminders_recipient_channel_time",
+            "schedule_generation",
+            name="uq_hearing_reminders_recipient_channel_time_generation",
         ),
         ForeignKeyConstraint(
             ["matter_id", "company_id"],
@@ -2354,6 +2360,12 @@ class HearingReminder(Base):
         DateTime(timezone=True),
         nullable=False,
         index=True,
+    )
+    schedule_generation: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
     )
     status: Mapped[str] = mapped_column(
         String(16),

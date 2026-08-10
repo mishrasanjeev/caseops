@@ -22,10 +22,13 @@ vi.mock("sonner", () => ({
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
 
-function withClient(children: ReactNode) {
-  const client = new QueryClient({
+function createTestClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function withClient(children: ReactNode, client = createTestClient()) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
@@ -332,6 +335,32 @@ describe("NewMatterDialog", () => {
         status: "active",
       }),
     );
+  });
+
+  it("closes after successful creation without waiting for a slow matters refetch", async () => {
+    const user = userEvent.setup();
+    const client = createTestClient();
+    vi.spyOn(client, "invalidateQueries").mockReturnValue(new Promise(() => {}));
+    createMatterMock.mockResolvedValue({
+      id: "m-1",
+      matter_code: "BLR-001",
+      title: "Active matter",
+      created_at: "2026-04-17T10:00:00Z",
+      status: "active",
+    });
+    render(withClient(<NewMatterDialog />, client));
+
+    await openDialog(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+    );
+    await fillRequiredMatterFields(user);
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /New matter/i })).not.toBeInTheDocument(),
+    );
+    expect(client.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["matters"] });
   });
 
   it("can create a district court matter for a state missing from the catalog", async () => {

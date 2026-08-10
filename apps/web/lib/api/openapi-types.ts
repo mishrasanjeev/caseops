@@ -2096,6 +2096,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/sync/deadlines/{deadline_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync one deadline to Outlook. */
+        post: operations["sync_deadline_outlook_api_calendar_sync_deadlines__deadline_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/sync/google-calendar": {
         parameters: {
             query?: never;
@@ -2210,6 +2227,23 @@ export interface paths {
          *     is not yet available — this endpoint is the only sync path.
          */
         post: operations["sync_outlook_visible_range_api_calendar_sync_outlook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/sync/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync one dated task to Outlook. */
+        post: operations["sync_task_outlook_api_calendar_sync_tasks__task_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16607,10 +16641,12 @@ export interface components {
             id: string;
             /** Intent Ids */
             intent_ids?: string[];
+            /** Ip Docket Id */
+            ip_docket_id: string | null;
             /** Last Error */
             last_error: string | null;
             /** Matter Id */
-            matter_id: string;
+            matter_id: string | null;
             /** Provider */
             provider: string | null;
             /** Provider Message Id */
@@ -18795,6 +18831,63 @@ export interface components {
             /** Rollout Flag */
             rollout_flag: string | null;
         };
+        /** IpHearingReminderPolicyRequest */
+        IpHearingReminderPolicyRequest: {
+            /** Channels */
+            channels?: ("in_app" | "email" | "sms" | "whatsapp")[];
+            /**
+             * Critical
+             * @default true
+             */
+            critical: boolean;
+            /**
+             * Date Reminder Local Time
+             * Format: time
+             * @default 18:00:00
+             */
+            date_reminder_local_time: string;
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
+            /** Offsets Hours */
+            offsets_hours?: number[];
+            /** Recipient Membership Ids */
+            recipient_membership_ids?: string[];
+        };
+        /** IpHearingReminderRecord */
+        IpHearingReminderRecord: {
+            /** Attempts */
+            attempts: number;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Id */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Provider */
+            provider: string | null;
+            /** Provider Message Id */
+            provider_message_id: string | null;
+            /** Recipient Membership Id */
+            recipient_membership_id: string | null;
+            /** Schedule Generation */
+            schedule_generation: number;
+            /**
+             * Scheduled For
+             * Format: date-time
+             */
+            scheduled_for: string;
+            /** Sent At */
+            sent_at: string | null;
+            /** Status */
+            status: string;
+        };
         /** IpIdentifierCorrectionCreate */
         IpIdentifierCorrectionCreate: {
             /** Application Id */
@@ -19513,6 +19606,8 @@ export interface components {
         };
         /** IpSharedHearingCreateRequest */
         IpSharedHearingCreateRequest: {
+            /** Attendee Membership Ids */
+            attendee_membership_ids?: string[];
             /** Docket Id */
             docket_id: string;
             /** Forum Name */
@@ -19532,10 +19627,15 @@ export interface components {
             hearing_time?: string | null;
             /** Judge Name */
             judge_name?: string | null;
+            /** Location Text */
+            location_text?: string | null;
+            /** Meeting Url */
+            meeting_url?: string | null;
             /** Outcome Note */
             outcome_note?: string | null;
             /** Purpose */
             purpose: string;
+            reminder_policy?: components["schemas"]["IpHearingReminderPolicyRequest"] | null;
             /** Responsible Membership Id */
             responsible_membership_id?: string | null;
             /** Session Label */
@@ -19576,6 +19676,8 @@ export interface components {
         };
         /** IpSharedHearingRecord */
         IpSharedHearingRecord: {
+            /** Attendee Membership Ids */
+            attendee_membership_ids: string[];
             /** Company Id */
             company_id: string;
             /**
@@ -19600,10 +19702,20 @@ export interface components {
             ip_docket_id: string;
             /** Judge Name */
             judge_name: string | null;
+            /** Location Text */
+            location_text: string | null;
+            /** Meeting Url */
+            meeting_url: string | null;
             /** Outcome Note */
             outcome_note: string | null;
             /** Purpose */
             purpose: string;
+            /** Reminder Policy */
+            reminder_policy: {
+                [key: string]: unknown;
+            } | null;
+            /** Reminders */
+            reminders?: components["schemas"]["IpHearingReminderRecord"][];
             /** Responsible Membership Id */
             responsible_membership_id: string | null;
             /** Session Label */
@@ -19631,16 +19743,39 @@ export interface components {
         };
         /** IpSharedHearingUpdateRequest */
         IpSharedHearingUpdateRequest: {
+            /** Attendee Membership Ids */
+            attendee_membership_ids?: string[] | null;
             /** Docket Id */
             docket_id: string;
+            /** Forum Name */
+            forum_name?: string | null;
+            /** Hearing Mode */
+            hearing_mode?: ("physical" | "virtual" | "hybrid" | "unknown") | null;
             /** Hearing On */
             hearing_on?: string | null;
+            /** Hearing Time */
+            hearing_time?: string | null;
+            /** Judge Name */
+            judge_name?: string | null;
+            /** Location Text */
+            location_text?: string | null;
+            /** Meeting Url */
+            meeting_url?: string | null;
             /** Outcome Note */
             outcome_note?: string | null;
+            /** Purpose */
+            purpose?: string | null;
+            reminder_policy?: components["schemas"]["IpHearingReminderPolicyRequest"] | null;
             /** Responsible Membership Id */
             responsible_membership_id?: string | null;
+            /** Session Label */
+            session_label?: string | null;
             /** Status */
             status?: ("scheduled" | "completed" | "adjourned" | "cancelled") | null;
+            /** Time Status */
+            time_status?: ("exact" | "session" | "time_not_published") | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** IpSharedTaskCreateRequest */
         IpSharedTaskCreateRequest: {
@@ -34101,6 +34236,37 @@ export interface operations {
             };
         };
     };
+    sync_deadline_outlook_api_calendar_sync_deadlines__deadline_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     sync_google_calendar_visible_range_api_calendar_sync_google_calendar_post: {
         parameters: {
             query?: never;
@@ -34309,6 +34475,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OutlookBulkSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_task_outlook_api_calendar_sync_tasks__task_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventSyncResponse"];
                 };
             };
             /** @description Validation Error */

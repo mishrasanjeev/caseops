@@ -21,6 +21,7 @@ from caseops_api.db.models import (
     CalendarProvider,
     Company,
     CompanyMembership,
+    IpDocketRecord,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
@@ -105,14 +106,24 @@ class StubGoogleCalendarProvider:
         if self.fail:
             raise RuntimeError(self.fail_message)
         assert token_payload["access_token"] == "google-access-credential"
-        self.calls.append(
-            {
-                "source_type": item.source_type,
-                "source_id": item.source_id,
-                "matter_id": item.matter.id,
-                "existing": existing_provider_event_id,
-            }
-        )
+        call = {
+            "source_type": item.source_type,
+            "source_id": item.source_id,
+            "matter_id": item.matter.id if item.matter is not None else None,
+            "existing": existing_provider_event_id,
+        }
+        if item.ip_docket is not None:
+            call.update(
+                {
+                    "ip_docket_id": item.ip_docket.id,
+                    "title": item.title,
+                    "detail_lines": item.detail_lines,
+                    "occurs_on": item.occurs_on,
+                    "category": item.category,
+                    "private_properties": item.private_properties,
+                }
+            )
+        self.calls.append(call)
         return existing_provider_event_id or f"google-event-{len(self.calls)}"
 
     def validate_connection(self, *, token_payload: dict[str, object]) -> dict[str, object]:
@@ -195,6 +206,187 @@ def _connect_google(
     assert "google-access-credential" not in callback.text
     assert "google-refresh-credential" not in callback.text
     return callback.json()["connection"]["id"]
+
+
+def test_ip_calendar_projection_is_minimal_stable_and_idempotent(
+    client: TestClient,
+) -> None:
+    provider = StubGoogleCalendarProvider()
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    connection_id = _connect_google(client, token, provider)
+    try:
+        with get_session_factory()() as session:
+            docket = IpDocketRecord(
+                company_id=company_id,
+                record_type="trademark",
+                title="Highly confidential acquisition mark",
+                status="draft",
+                restricted=False,
+                created_by_membership_id=membership_id,
+            )
+            session.add(docket)
+            session.commit()
+            docket_id = docket.id
+
+        task = client.post(
+            "/api/ip/tasks",
+            headers=_auth(token),
+            json={
+                "docket_id": docket_id,
+                "title": "Prepare privileged acquisition analysis",
+                "due_on": (date.today() + timedelta(days=10)).isoformat(),
+                "owner_membership_id": membership_id,
+            },
+        )
+        assert task.status_code == 201, task.text
+        task_id = str(task.json()["id"])
+
+        first = client.post(
+            f"/api/calendar/sync/google-calendar/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        second = client.post(
+            f"/api/calendar/sync/google-calendar/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        assert first.status_code == second.status_code == 200
+        assert first.json()["sync"]["provider_event_id"] == second.json()["sync"][
+            "provider_event_id"
+        ]
+        assert len(provider.calls) == 2
+        assert provider.calls[0]["existing"] is None
+        assert provider.calls[1]["existing"] == first.json()["sync"]["provider_event_id"]
+        projection = provider.calls[0]
+        assert projection["matter_id"] is None
+        assert projection["ip_docket_id"] == docket_id
+        assert projection["title"] == "CaseOps IP - Task"
+        assert projection["occurs_on"] == date.today() + timedelta(days=10)
+        rendered = " ".join(projection["detail_lines"])
+        assert "Highly confidential" not in rendered
+        assert "privileged acquisition" not in rendered
+        assert projection["private_properties"]["caseops_ip_docket_id"] == docket_id
+
+        provider.fail = True
+        failed = client.post(
+            f"/api/calendar/sync/google-calendar/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        assert failed.status_code == 200, failed.text
+        assert failed.json()["sync"]["sync_status"] == "failed"
+        provider.fail = False
+        retried = client.post(
+            f"/api/calendar/sync/google-calendar/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        assert retried.status_code == 200, retried.text
+        assert retried.json()["sync"]["sync_status"] == "synced"
+        assert retried.json()["sync"]["provider_event_id"] == first.json()["sync"][
+            "provider_event_id"
+        ]
+        canonical_task = client.get(
+            f"/api/ip/tasks?docket_id={docket_id}",
+            headers=_auth(token),
+        )
+        assert canonical_task.status_code == 200, canonical_task.text
+        assert canonical_task.json()["tasks"][0]["due_on"] == (
+            date.today() + timedelta(days=10)
+        ).isoformat()
+
+        with get_session_factory()() as session:
+            rows = list(
+                session.scalars(
+                    select(CalendarEventSync).where(
+                        CalendarEventSync.source_type == "matter_task",
+                        CalendarEventSync.source_id == task_id,
+                    )
+                )
+            )
+            assert len(rows) == 1
+
+        hearing_date = date.today() + timedelta(days=15)
+        hearing = client.post(
+            "/api/ip/hearings",
+            headers=_auth(token),
+            json={
+                "docket_id": docket_id,
+                "hearing_on": hearing_date.isoformat(),
+                "forum_name": "Trade Marks Registry",
+                "purpose": "Confidential hearing purpose",
+                "time_status": "time_not_published",
+                "responsible_membership_id": membership_id,
+            },
+        )
+        assert hearing.status_code == 201, hearing.text
+        hearing_id = str(hearing.json()["id"])
+        projected = client.post(
+            f"/api/calendar/sync/google-calendar/hearings/{hearing_id}",
+            headers=_auth(token),
+        )
+        assert projected.status_code == 200, projected.text
+        hearing_event_id = projected.json()["sync"]["provider_event_id"]
+        hearing_projection = provider.calls[-1]
+        assert hearing_projection["title"] == "CaseOps IP - Hearing"
+        assert hearing_projection["occurs_on"] == hearing_date
+        assert "Confidential hearing purpose" not in " ".join(
+            hearing_projection["detail_lines"]
+        )
+
+        moved = client.patch(
+            f"/api/ip/hearings/{hearing_id}",
+            headers=_auth(token),
+            json={
+                "docket_id": docket_id,
+                "hearing_on": (hearing_date + timedelta(days=1)).isoformat(),
+            },
+        )
+        assert moved.status_code == 200, moved.text
+        assert provider.calls[-1]["existing"] == hearing_event_id
+        assert provider.calls[-1]["source_id"] == hearing_id
+
+        cancelled = client.patch(
+            f"/api/ip/hearings/{hearing_id}",
+            headers=_auth(token),
+            json={"docket_id": docket_id, "status": "cancelled"},
+        )
+        assert cancelled.status_code == 200, cancelled.text
+        assert provider.delete_calls == [hearing_event_id]
+        with get_session_factory()() as session:
+            hearing_sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_type == "matter_hearing",
+                    CalendarEventSync.source_id == hearing_id,
+                )
+            )
+            assert hearing_sync is not None
+            assert hearing_sync.sync_status == CalendarEventSyncStatus.DELETED
+
+        revoked = client.delete(
+            f"/api/calendar/connections/{connection_id}",
+            headers=_auth(token),
+        )
+        assert revoked.status_code == 200, revoked.text
+        blocked = client.post(
+            f"/api/calendar/sync/google-calendar/tasks/{task_id}",
+            headers=_auth(token),
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert blocked.json()["detail"] == "Google Calendar is not connected."
+        with get_session_factory()() as session:
+            task_sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_type == "matter_task",
+                    CalendarEventSync.source_id == task_id,
+                )
+            )
+            assert task_sync is not None
+            assert task_sync.provider_event_id == first.json()["sync"][
+                "provider_event_id"
+            ]
+    finally:
+        set_google_calendar_provider_for_tests(None)
 
 
 def test_google_calendar_connection_start_callback_revoke_store_no_raw_tokens(

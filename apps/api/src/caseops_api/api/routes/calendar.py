@@ -54,12 +54,14 @@ from caseops_api.services.calendar_sync import (
     start_google_calendar_connection,
     start_outlook_connection,
     sync_deadline_to_google_calendar,
+    sync_deadline_to_outlook,
     sync_google_calendar_bulk,
     sync_hearing_to_google_calendar,
     sync_hearing_to_outlook,
     sync_outlook_bulk,
     sync_status,
     sync_task_to_google_calendar,
+    sync_task_to_outlook,
 )
 from caseops_api.services.connector_health import refresh_connector_health_records
 from caseops_api.services.email_calendar_candidates import (
@@ -312,6 +314,36 @@ async def sync_hearing(
     hearing_id: str,
 ) -> CalendarEventSyncResponse:
     return sync_hearing_to_outlook(session, context=context, hearing_id=hearing_id)
+
+
+@router.post(
+    "/sync/tasks/{task_id}",
+    response_model=CalendarEventSyncResponse,
+    summary="Manually sync one dated task to Outlook.",
+)
+async def sync_task_outlook(
+    context: CalendarSyncer,
+    session: DbSession,
+    task_id: str,
+) -> CalendarEventSyncResponse:
+    return sync_task_to_outlook(session, context=context, task_id=task_id)
+
+
+@router.post(
+    "/sync/deadlines/{deadline_id}",
+    response_model=CalendarEventSyncResponse,
+    summary="Manually sync one deadline to Outlook.",
+)
+async def sync_deadline_outlook(
+    context: CalendarSyncer,
+    session: DbSession,
+    deadline_id: str,
+) -> CalendarEventSyncResponse:
+    return sync_deadline_to_outlook(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+    )
 
 
 @router.post(

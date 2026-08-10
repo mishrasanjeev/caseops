@@ -31,6 +31,7 @@ import {
   completeIpRelatedRightObligation,
   confirmIpLegalDeadline,
   createIpDocket,
+  createIpSharedHearing,
   discoverIpEvidence,
   enableIpWorkspace,
   fetchIpCoreRecords,
@@ -38,8 +39,10 @@ import {
   fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
   fetchIpDockets,
+  fetchIpSharedHearings,
   fetchIpProsecutionWorkspace,
   fetchIpWorkspaceReadiness,
+  listCalendarConnections,
   previewIpDocketEvent,
   previewIpDocketLifecycle,
   proposeIpDeadlineRule,
@@ -50,17 +53,21 @@ import {
   reviewIpEvidenceCandidate,
   runIpWorkspaceTest,
   saveIpWorkspaceConfiguration,
+  syncHearingToGoogleCalendar,
+  syncHearingToOutlook,
   transitionIpDocketLifecycle,
   transitionIpDeadlineRule,
   overrideIpLegalDeadline,
   type IpDocket,
   type IpLegalDeadline,
+  type IpSharedHearing,
   type IpResponsibilityAssignmentInput,
   type IpDocketEventInput,
   type IpEvidenceCandidate,
   type IpFeatureReadiness,
   type IpWorkspaceConfigurationStatus,
   type IpWorkspaceTestResult,
+  updateIpSharedHearing,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
@@ -705,6 +712,11 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <HearingWorkflowCard
+          docket={docket}
+          enabled={canWrite}
+          currentMembershipId={currentMembershipId}
+        />
         <DeadlineWorkspaceCard
           docket={docket}
           enabled={canReview}
@@ -740,6 +752,214 @@ function DocketWorkspace({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function HearingWorkflowCard({
+  docket,
+  enabled,
+  currentMembershipId,
+}: {
+  docket: IpDocket;
+  enabled: boolean;
+  currentMembershipId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const hearings = useQuery({
+    queryKey: ["ip", "hearings", docket.id],
+    queryFn: () => fetchIpSharedHearings(docket.id),
+  });
+  const connections = useQuery({
+    queryKey: ["calendar", "connections"],
+    queryFn: listCalendarConnections,
+  });
+  const [hearingOn, setHearingOn] = useState(TODAY);
+  const [timeStatus, setTimeStatus] = useState<
+    "exact" | "session" | "time_not_published"
+  >("time_not_published");
+  const [hearingTime, setHearingTime] = useState("10:00");
+  const [sessionLabel, setSessionLabel] = useState("Morning board");
+  const [timezone, setTimezone] = useState("Asia/Kolkata");
+  const [forumName, setForumName] = useState("Trade Marks Registry");
+  const [purpose, setPurpose] = useState("Hearing");
+  const [mode, setMode] = useState<"physical" | "virtual" | "hybrid" | "unknown">(
+    "unknown",
+  );
+  const [locationText, setLocationText] = useState("");
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [source, setSource] = useState("manual");
+  const [offsets, setOffsets] = useState("48, 24");
+  const [emailReminder, setEmailReminder] = useState(true);
+  const [inAppReminder, setInAppReminder] = useState(true);
+  const [previewing, setPreviewing] = useState(false);
+  const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const offsetValues = offsets
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value >= 0);
+  const reminderChannels: Array<"email" | "in_app"> = [
+    ...(emailReminder ? (["email"] as const) : []),
+    ...(inAppReminder ? (["in_app"] as const) : []),
+  ];
+  const recipientIds = currentMembershipId ? [currentMembershipId] : [];
+
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["ip", "hearings", docket.id] });
+  const create = useMutation({
+    mutationFn: () =>
+      createIpSharedHearing({
+        docketId: docket.id,
+        hearingOn,
+        timeStatus,
+        hearingTime: timeStatus === "exact" ? hearingTime : null,
+        sessionLabel: timeStatus === "session" ? sessionLabel : null,
+        timezone,
+        forumName,
+        purpose,
+        hearingMode: mode,
+        locationText: locationText || null,
+        meetingUrl: meetingUrl || null,
+        source,
+        responsibleMembershipId: currentMembershipId,
+        attendeeMembershipIds: recipientIds,
+        reminderOffsetsHours: offsetValues,
+        reminderChannels,
+        reminderRecipientMembershipIds: recipientIds,
+      }),
+    onSuccess: async () => {
+      setPreviewing(false);
+      toast.success("Hearing and idempotent reminders scheduled.");
+      await refresh();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not schedule hearing.")),
+  });
+  const update = useMutation({
+    mutationFn: (input: {
+      hearingId: string;
+      hearingOn?: string;
+      status?: "scheduled" | "completed" | "adjourned" | "cancelled";
+    }) => updateIpSharedHearing({ docketId: docket.id, ...input }),
+    onSuccess: async () => {
+      toast.success("Hearing updated; dependent reminders were superseded.");
+      await refresh();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not update hearing.")),
+  });
+  const sync = useMutation({
+    mutationFn: ({ provider, hearingId }: { provider: string; hearingId: string }) =>
+      provider === "outlook"
+        ? syncHearingToOutlook(hearingId)
+        : syncHearingToGoogleCalendar(hearingId),
+    onSuccess: async () => {
+      toast.success("Calendar projection synchronized; CaseOps remains authoritative.");
+      await refresh();
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Calendar projection could not be synchronized.")),
+  });
+  const connectedProviders = new Set(
+    (connections.data?.connections ?? [])
+      .filter((row) => row.status === "connected")
+      .map((row) => row.provider),
+  );
+
+  return (
+    <Card className="min-w-0 xl:col-span-2" data-testid="ip-hearing-workflow">
+      <CardHeader><CardTitle as="h3">Hearings, reminders, and calendar copies</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-5">
+        <p className="text-sm text-[var(--color-mute)]">
+          CaseOps is authoritative. External calendars receive a minimal date-only copy and a
+          secure source link; provider edits never alter this docket.
+        </p>
+        {enabled ? (
+          <form
+            className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (previewing) create.mutate();
+              else setPreviewing(true);
+            }}
+          >
+            <Field label="Hearing date"><Input type="date" value={hearingOn} onChange={(event) => setHearingOn(event.target.value)} /></Field>
+            <Field label="Time precision">
+              <select className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={timeStatus} onChange={(event) => { setTimeStatus(event.target.value as typeof timeStatus); setPreviewing(false); }}>
+                <option value="time_not_published">Time not published</option>
+                <option value="session">Session / board</option>
+                <option value="exact">Exact time</option>
+              </select>
+            </Field>
+            {timeStatus === "exact" ? <Field label="Exact local time"><Input type="time" value={hearingTime} onChange={(event) => setHearingTime(event.target.value)} /></Field> : null}
+            {timeStatus === "session" ? <Field label="Session label"><Input value={sessionLabel} onChange={(event) => setSessionLabel(event.target.value)} /></Field> : null}
+            <Field label="IANA timezone"><Input value={timezone} onChange={(event) => setTimezone(event.target.value)} /></Field>
+            <Field label="Forum"><Input value={forumName} onChange={(event) => setForumName(event.target.value)} /></Field>
+            <Field label="Purpose"><Input value={purpose} onChange={(event) => setPurpose(event.target.value)} /></Field>
+            <Field label="Mode">
+              <select className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}>
+                <option value="unknown">Not confirmed</option><option value="physical">Physical</option><option value="virtual">Virtual</option><option value="hybrid">Hybrid</option>
+              </select>
+            </Field>
+            <Field label="Location"><Input value={locationText} onChange={(event) => setLocationText(event.target.value)} /></Field>
+            <Field label="Virtual hearing link"><Input type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} /></Field>
+            <Field label="Source"><Input value={source} onChange={(event) => setSource(event.target.value)} /></Field>
+            <Field label="Reminder offsets (hours)"><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
+            <fieldset className="min-w-0 rounded-md border border-[var(--color-line)] p-3 sm:col-span-2">
+              <legend className="px-1 text-sm font-semibold">Reminder channels</legend>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={emailReminder} onChange={(event) => setEmailReminder(event.target.checked)} /> Email</label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={inAppReminder} onChange={(event) => setInAppReminder(event.target.checked)} /> In app</label>
+              </div>
+            </fieldset>
+            {previewing ? (
+              <div className="min-w-0 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm sm:col-span-2 xl:col-span-4" data-testid="ip-hearing-preview">
+                <strong>Confirm reminder policy</strong>
+                <div className="mt-1 break-words">{timeStatus === "exact" ? `Exact time ${hearingTime}` : timeStatus === "session" ? `Session: ${sessionLabel}` : "Date-based reminder only; no hearing time will be invented."}</div>
+                <div className="mt-1 break-words">Recipients: {recipientIds.join(", ") || "none"} · Offsets: {offsetValues.join(", ") || "none"} hours · Channels: {reminderChannels.join(", ") || "none"}</div>
+              </div>
+            ) : null}
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:col-span-2 xl:col-span-4">
+              <Button className="w-full sm:w-auto" type="submit" disabled={!hearingOn || !forumName.trim() || !purpose.trim() || !offsetValues.length || !reminderChannels.length || !recipientIds.length || create.isPending}>
+                {previewing ? "Confirm hearing and reminders" : "Preview recipients and policy"}
+              </Button>
+              {previewing ? <Button className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => setPreviewing(false)}>Edit details</Button> : null}
+            </div>
+          </form>
+        ) : null}
+
+        {hearings.isPending ? <p className="text-sm">Loading hearings…</p> : null}
+        {hearings.isError ? <p className="break-words text-sm text-red-700">{apiErrorMessage(hearings.error, "Hearings could not be loaded.")}</p> : null}
+        <div className="flex min-w-0 flex-col gap-3">
+          {(hearings.data?.hearings ?? []).map((hearing: IpSharedHearing) => {
+            const activeReminders = hearing.reminders.filter((row) => row.status !== "cancelled");
+            return (
+              <article key={hearing.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h4 className="break-words font-semibold">{hearing.purpose}</h4>
+                    <p className="break-words text-xs text-[var(--color-mute)]">{hearing.hearing_on} · {hearing.time_status === "exact" ? hearing.hearing_time : hearing.session_label ?? "Time not published"} · {hearing.timezone} · {hearing.forum_name} · {hearing.hearing_mode}</p>
+                  </div>
+                  <span className="text-sm font-semibold">{hearing.status}</span>
+                </div>
+                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label={`Reminder delivery for ${hearing.purpose}`}>
+                  {activeReminders.map((reminder) => (
+                    <div key={reminder.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-2 text-xs">
+                      <strong>{reminder.channel}</strong> · {reminder.status}
+                      <div className="break-words text-[var(--color-mute)]">{new Date(reminder.scheduled_for).toLocaleString()} · attempts {reminder.attempts}{reminder.last_error ? ` · ${reminder.last_error}` : ""}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full sm:w-auto" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
+                  <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, hearingOn: rescheduleDates[hearing.id] ?? hearing.hearing_on })}>Reschedule</Button>
+                  <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, status: "cancelled" })}>Cancel hearing</Button>
+                  {connectedProviders.has("outlook") ? <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => sync.mutate({ provider: "outlook", hearingId: hearing.id })}>Sync Outlook</Button> : null}
+                  {connectedProviders.has("google_calendar") ? <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => sync.mutate({ provider: "google_calendar", hearingId: hearing.id })}>Sync Google Calendar</Button> : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

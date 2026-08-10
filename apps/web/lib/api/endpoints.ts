@@ -7957,6 +7957,58 @@ export type IpDocket = {
   updated_at: string;
 };
 
+export type IpHearingReminder = {
+  id: string;
+  recipient_membership_id: string | null;
+  channel: "in_app" | "email" | "sms" | "whatsapp";
+  scheduled_for: string;
+  schedule_generation: number;
+  status: "queued" | "sent" | "delivered" | "failed" | "cancelled";
+  provider: string | null;
+  provider_message_id: string | null;
+  last_error: string | null;
+  attempts: number;
+  sent_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
+};
+
+export type IpSharedHearing = {
+  id: string;
+  company_id: string;
+  target_type: "ip_docket";
+  target_id: string;
+  ip_docket_id: string;
+  hearing_on: string;
+  time_status: "exact" | "session" | "time_not_published";
+  hearing_time: string | null;
+  session_label: string | null;
+  timezone: string;
+  hearing_mode: "physical" | "virtual" | "hybrid" | "unknown";
+  location_text: string | null;
+  meeting_url: string | null;
+  attendee_membership_ids: string[];
+  source: string;
+  source_ref_type: string | null;
+  source_ref_id: string | null;
+  responsible_membership_id: string | null;
+  forum_name: string;
+  judge_name: string | null;
+  purpose: string;
+  status: "scheduled" | "completed" | "adjourned" | "cancelled";
+  outcome_note: string | null;
+  reminder_policy: {
+    offsets_hours?: number[];
+    channels?: Array<"in_app" | "email" | "sms" | "whatsapp">;
+    recipient_membership_ids?: string[];
+    escalation_membership_id?: string | null;
+    date_reminder_local_time?: string;
+    critical?: boolean;
+  } | null;
+  reminders: IpHearingReminder[];
+  created_at: string;
+};
+
 export type TrademarkApplication = {
   id: string;
   docket_id: string;
@@ -8737,6 +8789,83 @@ export async function enableIpWorkspace(input: {
 
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
   return apiRequest("/api/ip/dockets");
+}
+
+export async function fetchIpSharedHearings(
+  docketId: string,
+): Promise<{ docket_id: string; hearings: IpSharedHearing[] }> {
+  const params = new URLSearchParams({ docket_id: docketId });
+  return apiRequest(`/api/ip/hearings?${params.toString()}`);
+}
+
+export async function createIpSharedHearing(input: {
+  docketId: string;
+  hearingOn: string;
+  timeStatus: "exact" | "session" | "time_not_published";
+  hearingTime?: string | null;
+  sessionLabel?: string | null;
+  timezone: string;
+  forumName: string;
+  judgeName?: string | null;
+  purpose: string;
+  hearingMode: "physical" | "virtual" | "hybrid" | "unknown";
+  locationText?: string | null;
+  meetingUrl?: string | null;
+  source: string;
+  sourceRefType?: string | null;
+  sourceRefId?: string | null;
+  responsibleMembershipId?: string | null;
+  attendeeMembershipIds: string[];
+  reminderOffsetsHours: number[];
+  reminderChannels: Array<"in_app" | "email" | "sms" | "whatsapp">;
+  reminderRecipientMembershipIds: string[];
+}): Promise<IpSharedHearing> {
+  return apiRequest("/api/ip/hearings", {
+    method: "POST",
+    body: {
+      docket_id: input.docketId,
+      hearing_on: input.hearingOn,
+      time_status: input.timeStatus,
+      hearing_time: input.hearingTime ?? null,
+      session_label: input.sessionLabel ?? null,
+      timezone: input.timezone,
+      forum_name: input.forumName,
+      judge_name: input.judgeName ?? null,
+      purpose: input.purpose,
+      hearing_mode: input.hearingMode,
+      location_text: input.locationText ?? null,
+      meeting_url: input.meetingUrl ?? null,
+      source: input.source,
+      source_ref_type: input.sourceRefType ?? null,
+      source_ref_id: input.sourceRefId ?? null,
+      responsible_membership_id: input.responsibleMembershipId ?? null,
+      attendee_membership_ids: input.attendeeMembershipIds,
+      reminder_policy: {
+        offsets_hours: input.reminderOffsetsHours,
+        channels: input.reminderChannels,
+        recipient_membership_ids: input.reminderRecipientMembershipIds,
+        escalation_membership_id: input.responsibleMembershipId ?? null,
+        date_reminder_local_time: "18:00:00",
+        critical: true,
+      },
+    },
+  });
+}
+
+export async function updateIpSharedHearing(input: {
+  docketId: string;
+  hearingId: string;
+  hearingOn?: string;
+  status?: "scheduled" | "completed" | "adjourned" | "cancelled";
+}): Promise<IpSharedHearing> {
+  return apiRequest(`/api/ip/hearings/${encodeURIComponent(input.hearingId)}`, {
+    method: "PATCH",
+    body: {
+      docket_id: input.docketId,
+      ...(input.hearingOn ? { hearing_on: input.hearingOn } : {}),
+      ...(input.status ? { status: input.status } : {}),
+    },
+  });
 }
 
 export async function fetchIpDeadlineWorkspace(

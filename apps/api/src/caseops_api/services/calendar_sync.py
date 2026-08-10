@@ -24,6 +24,7 @@ from caseops_api.db.models import (
     CalendarSyncSourceType,
     Company,
     CompanyMembership,
+    IpDocketRecord,
     Matter,
     MatterDeadline,
     MatterHearing,
@@ -68,6 +69,7 @@ from caseops_api.services.notification_delivery import (
     retry_delay_for_attempt,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.shared_work import resolve_shared_work_target
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
@@ -136,7 +138,8 @@ class CalendarDeletionProcessResult:
 class CalendarSourcePayload:
     source_type: str
     source_id: str
-    matter: Matter
+    matter: Matter | None
+    ip_docket: IpDocketRecord | None
     title: str
     occurs_on: date
     detail_lines: tuple[str, ...]
@@ -878,6 +881,7 @@ def _hearing_source_payload(
         source_type=CalendarSyncSourceType.MATTER_HEARING.value,
         source_id=hearing.id,
         matter=matter,
+        ip_docket=None,
         title=f"{matter.matter_code}: {hearing.purpose or 'Hearing'}",
         occurs_on=hearing.hearing_on,
         detail_lines=tuple(detail_lines),
@@ -905,6 +909,7 @@ def _task_source_payload(task: MatterTask, matter: Matter) -> CalendarSourcePayl
         source_type=CalendarSyncSourceType.MATTER_TASK.value,
         source_id=task.id,
         matter=matter,
+        ip_docket=None,
         title=f"{matter.matter_code}: {task.title}",
         occurs_on=task.due_on,
         detail_lines=tuple(detail_lines),
@@ -935,6 +940,7 @@ def _deadline_source_payload(
         source_type=CalendarSyncSourceType.MATTER_DEADLINE.value,
         source_id=deadline.id,
         matter=matter,
+        ip_docket=None,
         title=f"{matter.matter_code}: {deadline.title}",
         occurs_on=deadline.due_on,
         detail_lines=tuple(detail_lines),
@@ -948,6 +954,99 @@ def _deadline_source_payload(
     )
 
 
+def _ip_source_payload(
+    *,
+    source_type: str,
+    source_id: str,
+    occurs_on: date,
+    category: str,
+    docket: IpDocketRecord,
+) -> CalendarSourcePayload:
+    """Build the deliberately minimal outbound IP projection.
+
+    Provider calendars receive stable correlation and a CaseOps link, never
+    the docket title, identifier, forum, notes, or other privileged content.
+    """
+
+    source_url = f"https://caseops.ai/app/ip?docket={docket.id}"
+    return CalendarSourcePayload(
+        source_type=source_type,
+        source_id=source_id,
+        matter=None,
+        ip_docket=docket,
+        title=f"CaseOps IP - {category}",
+        occurs_on=occurs_on,
+        detail_lines=(
+            "Open CaseOps to view authorized details.",
+            f"CaseOps source: {source_url}",
+            f"Source version: {docket.current_version}",
+        ),
+        category=category,
+        private_properties={
+            "caseops_ip_docket_id": docket.id,
+            "caseops_source_type": source_type,
+            "caseops_source_id": source_id,
+            "caseops_source_version": str(docket.current_version),
+            "caseops_source_url": source_url,
+        },
+    )
+
+
+def _ip_source_payload_for(
+    session: Session,
+    *,
+    context: SessionContext,
+    source_type: str,
+    source_id: str,
+) -> CalendarSourcePayload | None:
+    model: type[MatterHearing] | type[MatterTask] | type[MatterDeadline]
+    category: str
+    occurs_on_attribute: str
+    if source_type == CalendarSyncSourceType.MATTER_HEARING.value:
+        model, category, occurs_on_attribute = MatterHearing, "Hearing", "hearing_on"
+    elif source_type == CalendarSyncSourceType.MATTER_TASK.value:
+        model, category, occurs_on_attribute = MatterTask, "Task", "due_on"
+    elif source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        model, category, occurs_on_attribute = MatterDeadline, "Deadline", "due_on"
+    else:
+        return None
+
+    row = session.scalar(
+        select(model).where(
+            model.id == source_id,
+            model.company_id == context.company.id,
+            model.ip_docket_id.is_not(None),
+        )
+    )
+    if row is None:
+        return None
+    assert row.ip_docket_id is not None
+    target = resolve_shared_work_target(
+        session,
+        context=context,
+        ip_docket_id=row.ip_docket_id,
+    )
+    assert target.ip_docket is not None
+    if isinstance(row, MatterHearing) and row.status == MatterHearingStatus.CANCELLED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cancelled hearings are removed from provider calendars.",
+        )
+    occurs_on = getattr(row, occurs_on_attribute)
+    if occurs_on is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{category} has no date and cannot be synced to calendar.",
+        )
+    return _ip_source_payload(
+        source_type=source_type,
+        source_id=source_id,
+        occurs_on=occurs_on,
+        category=category,
+        docket=target.ip_docket,
+    )
+
+
 def _source_payload_for(
     session: Session,
     *,
@@ -955,6 +1054,14 @@ def _source_payload_for(
     source_type: str,
     source_id: str,
 ) -> CalendarSourcePayload:
+    ip_payload = _ip_source_payload_for(
+        session,
+        context=context,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    if ip_payload is not None:
+        return ip_payload
     if source_type == CalendarSyncSourceType.MATTER_HEARING.value:
         row = session.execute(
             select(MatterHearing, Matter)
@@ -2841,6 +2948,36 @@ def sync_hearing_to_google_calendar(
     )
 
 
+def sync_task_to_outlook(
+    session: Session,
+    *,
+    context: SessionContext,
+    task_id: str,
+) -> CalendarEventSyncResponse:
+    return _sync_source_to_provider(
+        session,
+        context=context,
+        source_type=CalendarSyncSourceType.MATTER_TASK.value,
+        source_id=task_id,
+        calendar_provider=CalendarProvider.OUTLOOK,
+    )
+
+
+def sync_deadline_to_outlook(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+) -> CalendarEventSyncResponse:
+    return _sync_source_to_provider(
+        session,
+        context=context,
+        source_type=CalendarSyncSourceType.MATTER_DEADLINE.value,
+        source_id=deadline_id,
+        calendar_provider=CalendarProvider.OUTLOOK,
+    )
+
+
 def sync_task_to_google_calendar(
     session: Session,
     *,
@@ -3063,14 +3200,24 @@ def _sync_source_to_provider(
         )
         session.add(sync)
         session.flush()
-    expected_lifecycle_version = item.matter.lifecycle_version
+    expected_lifecycle_version = (
+        item.matter.lifecycle_version if item.matter is not None else None
+    )
+    matter_id = item.matter.id if item.matter is not None else None
+    target_metadata = (
+        {"ip_docket_ref": redact_identifier(item.ip_docket.id)}
+        if item.ip_docket is not None
+        else {}
+    )
     provider: OutlookProvider | None = None
     token_payload: dict[str, Any] | None = None
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
         provider = _provider_for(calendar_provider, session, context=context)
-        if item.source_type == CalendarSyncSourceType.MATTER_HEARING.value and hasattr(
-            provider, "upsert_hearing_event"
+        if (
+            item.matter is not None
+            and item.source_type == CalendarSyncSourceType.MATTER_HEARING.value
+            and hasattr(provider, "upsert_hearing_event")
         ):
             hearing = session.get(MatterHearing, item.source_id)
             if hearing is None:
@@ -3088,20 +3235,21 @@ def _sync_source_to_provider(
                 existing_provider_event_id=sync.provider_event_id,
             )
     except Exception as exc:
-        deletion_response = _post_provider_deletion_winner(
-            session,
-            context=context,
-            matter_id=item.matter.id,
-            expected_lifecycle_version=expected_lifecycle_version,
-            sync_id=sync.id,
-            connection=connection,
-            calendar_provider=calendar_provider,
-            provider=provider,
-            token_payload=token_payload,
-            returned_provider_event_id=None,
-        )
-        if deletion_response is not None:
-            return deletion_response
+        if matter_id is not None and expected_lifecycle_version is not None:
+            deletion_response = _post_provider_deletion_winner(
+                session,
+                context=context,
+                matter_id=matter_id,
+                expected_lifecycle_version=expected_lifecycle_version,
+                sync_id=sync.id,
+                connection=connection,
+                calendar_provider=calendar_provider,
+                provider=provider,
+                token_payload=token_payload,
+                returned_provider_event_id=None,
+            )
+            if deletion_response is not None:
+                return deletion_response
         sync.sync_status = CalendarEventSyncStatus.FAILED
         sync.last_error = _safe_error(exc)
         session.add(sync)
@@ -3111,32 +3259,34 @@ def _sync_source_to_provider(
             action="calendar.sync.failed",
             target_type="calendar_event_sync",
             target_id=sync.id,
-            matter_id=item.matter.id,
+            matter_id=matter_id,
             result="failed",
             metadata={
                 "provider": calendar_provider,
                 "source_type": item.source_type,
                 "source_id": item.source_id,
                 "error": sync.last_error,
+                **target_metadata,
             },
         )
         session.commit()
         return CalendarEventSyncResponse(sync=_sync_record(sync))
 
-    deletion_response = _post_provider_deletion_winner(
-        session,
-        context=context,
-        matter_id=item.matter.id,
-        expected_lifecycle_version=expected_lifecycle_version,
-        sync_id=sync.id,
-        connection=connection,
-        calendar_provider=calendar_provider,
-        provider=provider,
-        token_payload=token_payload,
-        returned_provider_event_id=provider_event_id,
-    )
-    if deletion_response is not None:
-        return deletion_response
+    if matter_id is not None and expected_lifecycle_version is not None:
+        deletion_response = _post_provider_deletion_winner(
+            session,
+            context=context,
+            matter_id=matter_id,
+            expected_lifecycle_version=expected_lifecycle_version,
+            sync_id=sync.id,
+            connection=connection,
+            calendar_provider=calendar_provider,
+            provider=provider,
+            token_payload=token_payload,
+            returned_provider_event_id=provider_event_id,
+        )
+        if deletion_response is not None:
+            return deletion_response
 
     # _post_provider_deletion_winner refreshed and locked this row.  Resolve it
     # again from the identity map so the success write targets the fresh state.
@@ -3158,12 +3308,13 @@ def _sync_source_to_provider(
         action="calendar.sync.succeeded",
         target_type="calendar_event_sync",
         target_id=sync.id,
-        matter_id=item.matter.id,
+        matter_id=matter_id,
         metadata={
             "provider": calendar_provider,
             "source_type": item.source_type,
             "source_id": item.source_id,
             "provider_event_id": provider_event_id,
+            **target_metadata,
         },
     )
     session.commit()
@@ -3283,18 +3434,26 @@ def delete_synced_hearing_events_for_context(
     hearing_id: str,
     commit: bool = True,
 ) -> int:
-    row = session.execute(
-        select(MatterHearing, Matter)
-        .join(Matter, Matter.id == MatterHearing.matter_id)
-        .where(
+    hearing = session.scalar(
+        select(MatterHearing).where(
             MatterHearing.id == hearing_id,
-            Matter.company_id == context.company.id,
+            MatterHearing.company_id == context.company.id,
         )
-    ).first()
-    if row is None:
+    )
+    if hearing is None:
         return 0
-    _hearing, matter = row
-    assert_access(session, context=context, matter=matter)
+    target = resolve_shared_work_target(
+        session,
+        context=context,
+        matter_id=hearing.matter_id,
+        ip_docket_id=hearing.ip_docket_id,
+    )
+    matter_id = target.matter_id
+    target_metadata = (
+        {"ip_docket_ref": redact_identifier(target.ip_docket_id)}
+        if target.ip_docket_id is not None
+        else {}
+    )
     syncs = list(
         session.scalars(
             select(CalendarEventSync)
@@ -3341,7 +3500,7 @@ def delete_synced_hearing_events_for_context(
                 action="calendar.sync.auto_delete_failed",
                 target_type="calendar_event_sync",
                 target_id=sync.id,
-                matter_id=matter.id,
+                matter_id=matter_id,
                 result="failed",
                 metadata={
                     "provider": sync.connection.provider,
@@ -3349,6 +3508,7 @@ def delete_synced_hearing_events_for_context(
                     "source_id": hearing_id,
                     "reason": "hearing_cancelled",
                     "error": sync.last_error,
+                    **target_metadata,
                 },
             )
             continue
@@ -3367,18 +3527,61 @@ def delete_synced_hearing_events_for_context(
             action="calendar.sync.auto_deleted",
             target_type="calendar_event_sync",
             target_id=sync.id,
-            matter_id=matter.id,
+            matter_id=matter_id,
             metadata={
                 "provider": sync.connection.provider,
                 "source_type": CalendarSyncSourceType.MATTER_HEARING,
                 "source_id": hearing_id,
                 "reason": "hearing_cancelled",
                 "provider_event_id": provider_event_id,
+                **target_metadata,
             },
         )
     if commit:
         session.commit()
     return deleted_count
+
+
+def resync_synced_hearing_events_for_context(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_id: str,
+) -> int:
+    """Update only provider copies already selected by this user.
+
+    The legal hearing commit happens before this helper is invoked. Provider
+    failures therefore remain observable sync state and cannot undo CaseOps.
+    """
+
+    connections = list(
+        session.scalars(
+            select(UserCalendarConnection)
+            .join(
+                CalendarEventSync,
+                CalendarEventSync.calendar_connection_id == UserCalendarConnection.id,
+            )
+            .where(
+                UserCalendarConnection.company_id == context.company.id,
+                UserCalendarConnection.membership_id == context.membership.id,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+                CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
+                CalendarEventSync.source_id == hearing_id,
+                CalendarEventSync.provider_event_id.is_not(None),
+                CalendarEventSync.sync_status != CalendarEventSyncStatus.DELETED,
+            )
+            .distinct()
+        )
+    )
+    for connection in connections:
+        _sync_source_to_provider(
+            session,
+            context=context,
+            source_type=CalendarSyncSourceType.MATTER_HEARING.value,
+            source_id=hearing_id,
+            calendar_provider=CalendarProvider(connection.provider),
+        )
+    return len(connections)
 
 
 def sync_outlook_bulk(
@@ -3867,6 +4070,7 @@ __all__ = [
     "process_durable_google_calendar_sync_by_company",
     "process_durable_outlook_sync",
     "process_durable_outlook_sync_by_company",
+    "resync_synced_hearing_events_for_context",
     "revoke_connection",
     "set_google_calendar_provider_for_tests",
     "set_outlook_provider_for_tests",
@@ -3874,10 +4078,12 @@ __all__ = [
     "start_outlook_connection",
     "sync_google_calendar_bulk",
     "sync_deadline_to_google_calendar",
+    "sync_deadline_to_outlook",
     "sync_hearing_to_google_calendar",
     "sync_hearing_to_outlook",
     "sync_status",
     "sync_task_to_google_calendar",
+    "sync_task_to_outlook",
     "test_outlook_tenant_configuration",
     "update_outlook_tenant_configuration",
 ]
