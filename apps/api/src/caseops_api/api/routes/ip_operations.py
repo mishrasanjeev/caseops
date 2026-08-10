@@ -110,6 +110,22 @@ from caseops_api.schemas.ip_records import (
     TrademarkApplicationPhaseUpdateRequest,
     TrademarkApplicationResponse,
 )
+from caseops_api.schemas.shared_work import (
+    IpOperationalDeadlineCreateRequest,
+    IpOperationalDeadlineListResponse,
+    IpOperationalDeadlineRecord,
+    IpOperationalDeadlineUpdateRequest,
+    IpSharedHearingCreateRequest,
+    IpSharedHearingListResponse,
+    IpSharedHearingRecord,
+    IpSharedHearingUpdateRequest,
+    IpSharedTaskCreateRequest,
+    IpSharedTaskListResponse,
+    IpSharedTaskRecord,
+    IpSharedTaskUpdateRequest,
+    SharedWorkFoundationContract,
+    SharedWorkReconciliationReport,
+)
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
@@ -194,6 +210,19 @@ from caseops_api.services.ip_workspace import (
     upsert_ip_workspace_configuration,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.shared_work import (
+    create_ip_operational_deadline,
+    create_ip_shared_hearing,
+    create_ip_shared_task,
+    list_ip_operational_deadlines,
+    list_ip_shared_hearings,
+    list_ip_shared_tasks,
+    reconcile_shared_work_owners,
+    shared_work_foundation_contract,
+    update_ip_operational_deadline,
+    update_ip_shared_hearing,
+    update_ip_shared_task,
+)
 
 router = APIRouter()
 IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
@@ -212,6 +241,144 @@ IpWorkspaceAdmin = Annotated[
     SessionContext,
     Depends(require_capability("ip:taxonomy_admin")),
 ]
+
+
+@router.get(
+    "/shared-work/foundation-contract",
+    response_model=SharedWorkFoundationContract,
+)
+async def get_shared_work_foundation_contract(
+    context: IpViewer,
+) -> SharedWorkFoundationContract:
+    del context
+    return shared_work_foundation_contract()
+
+
+@router.get(
+    "/shared-work/reconciliation",
+    response_model=SharedWorkReconciliationReport,
+)
+async def get_shared_work_reconciliation(
+    context: IpViewer,
+    session: DbSession,
+) -> SharedWorkReconciliationReport:
+    return reconcile_shared_work_owners(session, context=context)
+
+
+@router.get("/tasks", response_model=IpSharedTaskListResponse)
+async def get_ip_shared_tasks(
+    context: IpViewer,
+    session: DbSession,
+    docket_id: Annotated[str, Query()],
+    include_completed: Annotated[bool, Query()] = True,
+) -> IpSharedTaskListResponse:
+    return list_ip_shared_tasks(
+        session,
+        context=context,
+        docket_id=docket_id,
+        include_completed=include_completed,
+    )
+
+
+@router.post("/tasks", response_model=IpSharedTaskRecord, status_code=status.HTTP_201_CREATED)
+async def post_ip_shared_task(
+    payload: IpSharedTaskCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpSharedTaskRecord:
+    return create_ip_shared_task(session, context=context, payload=payload)
+
+
+@router.patch("/tasks/{task_id}", response_model=IpSharedTaskRecord)
+async def patch_ip_shared_task(
+    task_id: str,
+    payload: IpSharedTaskUpdateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpSharedTaskRecord:
+    return update_ip_shared_task(
+        session, context=context, task_id=task_id, payload=payload
+    )
+
+
+@router.get("/hearings", response_model=IpSharedHearingListResponse)
+async def get_ip_shared_hearings(
+    context: IpViewer,
+    session: DbSession,
+    docket_id: Annotated[str, Query()],
+) -> IpSharedHearingListResponse:
+    return list_ip_shared_hearings(session, context=context, docket_id=docket_id)
+
+
+@router.post(
+    "/hearings",
+    response_model=IpSharedHearingRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_shared_hearing(
+    payload: IpSharedHearingCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpSharedHearingRecord:
+    return create_ip_shared_hearing(session, context=context, payload=payload)
+
+
+@router.patch("/hearings/{hearing_id}", response_model=IpSharedHearingRecord)
+async def patch_ip_shared_hearing(
+    hearing_id: str,
+    payload: IpSharedHearingUpdateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpSharedHearingRecord:
+    return update_ip_shared_hearing(
+        session, context=context, hearing_id=hearing_id, payload=payload
+    )
+
+
+@router.get(
+    "/operational-deadlines",
+    response_model=IpOperationalDeadlineListResponse,
+)
+async def get_ip_operational_deadlines(
+    context: IpViewer,
+    session: DbSession,
+    docket_id: Annotated[str, Query()],
+    include_done: Annotated[bool, Query()] = False,
+) -> IpOperationalDeadlineListResponse:
+    return list_ip_operational_deadlines(
+        session,
+        context=context,
+        docket_id=docket_id,
+        include_done=include_done,
+    )
+
+
+@router.post(
+    "/operational-deadlines",
+    response_model=IpOperationalDeadlineRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_operational_deadline(
+    payload: IpOperationalDeadlineCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpOperationalDeadlineRecord:
+    return create_ip_operational_deadline(session, context=context, payload=payload)
+
+
+@router.patch(
+    "/operational-deadlines/{deadline_id}",
+    response_model=IpOperationalDeadlineRecord,
+)
+async def patch_ip_operational_deadline(
+    deadline_id: str,
+    payload: IpOperationalDeadlineUpdateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpOperationalDeadlineRecord:
+    return update_ip_operational_deadline(
+        session, context=context, deadline_id=deadline_id, payload=payload
+    )
 
 
 @router.get(

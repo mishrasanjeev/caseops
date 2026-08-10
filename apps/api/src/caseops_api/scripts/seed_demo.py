@@ -241,6 +241,7 @@ def _seed_hearings(
             continue
         session.add(
             MatterHearing(
+                company_id=matter.company_id,
                 matter_id=matter.id,
                 hearing_on=hearing_on,
                 forum_name=forum_name,

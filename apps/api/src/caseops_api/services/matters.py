@@ -2709,6 +2709,7 @@ def create_matter_task(
         owner_name = owner.user.full_name
 
     task = MatterTask(
+        company_id=matter.company_id,
         matter_id=matter.id,
         created_by_membership_id=context.membership.id,
         owner_membership_id=owner_membership_id,
@@ -3142,6 +3143,7 @@ def update_matter_hearing(
         due = hearing.hearing_on + timedelta(days=3)
         outcome_detail = hearing.outcome_note or "Post-hearing follow-up"
         follow_up = MatterTask(
+            company_id=matter.company_id,
             matter_id=matter.id,
             created_by_membership_id=context.membership.id,
             owner_membership_id=matter.assignee_membership_id,
@@ -3448,6 +3450,7 @@ def _sync_notice_reply_deadline(
     )
     if existing is None:
         existing = MatterDeadline(
+            company_id=matter.company_id,
             matter_id=matter.id,
             source="notice",
             kind="reply_due",
@@ -3831,6 +3834,7 @@ def create_matter_hearing(
     if configured_offsets is None:
         configured_offsets = list(get_settings().hearing_reminder_offsets_hours or [])
     hearing = MatterHearing(
+        company_id=matter.company_id,
         matter_id=matter.id,
         hearing_on=payload.hearing_on,
         time_status=payload.time_status,

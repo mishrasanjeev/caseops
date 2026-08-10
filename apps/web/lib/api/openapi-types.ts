@@ -4680,6 +4680,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/hearings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Shared Hearings */
+        get: operations["get_ip_shared_hearings_api_ip_hearings_get"];
+        put?: never;
+        /** Post Ip Shared Hearing */
+        post: operations["post_ip_shared_hearing_api_ip_hearings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/hearings/{hearing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Ip Shared Hearing */
+        patch: operations["patch_ip_shared_hearing_api_ip_hearings__hearing_id__patch"];
+        trace?: never;
+    };
     "/api/ip/identifiers/search": {
         parameters: {
             query?: never;
@@ -4695,6 +4730,41 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/ip/operational-deadlines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Operational Deadlines */
+        get: operations["get_ip_operational_deadlines_api_ip_operational_deadlines_get"];
+        put?: never;
+        /** Post Ip Operational Deadline */
+        post: operations["post_ip_operational_deadline_api_ip_operational_deadlines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/operational-deadlines/{deadline_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Ip Operational Deadline */
+        patch: operations["patch_ip_operational_deadline_api_ip_operational_deadlines__deadline_id__patch"];
         trace?: never;
     };
     "/api/ip/readiness": {
@@ -4729,6 +4799,75 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/ip/shared-work/foundation-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Shared Work Foundation Contract */
+        get: operations["get_shared_work_foundation_contract_api_ip_shared_work_foundation_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/shared-work/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Shared Work Reconciliation */
+        get: operations["get_shared_work_reconciliation_api_ip_shared_work_reconciliation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Shared Tasks */
+        get: operations["get_ip_shared_tasks_api_ip_tasks_get"];
+        put?: never;
+        /** Post Ip Shared Task */
+        post: operations["post_ip_shared_task_api_ip_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Ip Shared Task */
+        patch: operations["patch_ip_shared_task_api_ip_tasks__task_id__patch"];
         trace?: never;
     };
     "/api/ip/working-calendars": {
@@ -18896,6 +19035,107 @@ export interface components {
             /** Notice Id */
             notice_id: string;
         };
+        /** IpOperationalDeadlineCreateRequest */
+        IpOperationalDeadlineCreateRequest: {
+            /** Assignee Membership Id */
+            assignee_membership_id?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /**
+             * Kind
+             * @default manual
+             */
+            kind: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Source
+             * @default custom
+             * @enum {string}
+             */
+            source: "custom" | "hearing" | "followup" | "intake";
+            /** Title */
+            title: string;
+        };
+        /** IpOperationalDeadlineListResponse */
+        IpOperationalDeadlineListResponse: {
+            /** Deadlines */
+            deadlines: components["schemas"]["IpOperationalDeadlineRecord"][];
+            /** Docket Id */
+            docket_id: string;
+        };
+        /** IpOperationalDeadlineRecord */
+        IpOperationalDeadlineRecord: {
+            /** Assignee Membership Id */
+            assignee_membership_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /** Id */
+            id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string;
+            /** Kind */
+            kind: string;
+            /** Notes */
+            notes: string | null;
+            /** Source */
+            source: string;
+            /** Source Ref Id */
+            source_ref_id: string | null;
+            /** Source Ref Type */
+            source_ref_type: string | null;
+            /** Status */
+            status: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @default ip_docket
+             * @constant
+             */
+            target_type: "ip_docket";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IpOperationalDeadlineUpdateRequest */
+        IpOperationalDeadlineUpdateRequest: {
+            /** Assignee Membership Id */
+            assignee_membership_id?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Status */
+            status?: ("open" | "done" | "cancelled" | "missed") | null;
+            /** Title */
+            title?: string | null;
+        };
         /** IpProceedingCreateRequest */
         IpProceedingCreateRequest: {
             /** Application Id */
@@ -19270,6 +19510,229 @@ export interface components {
             status: "candidate" | "approved" | "active" | "retired" | "disabled";
             /** Version */
             version: number;
+        };
+        /** IpSharedHearingCreateRequest */
+        IpSharedHearingCreateRequest: {
+            /** Docket Id */
+            docket_id: string;
+            /** Forum Name */
+            forum_name: string;
+            /**
+             * Hearing Mode
+             * @default unknown
+             * @enum {string}
+             */
+            hearing_mode: "physical" | "virtual" | "hybrid" | "unknown";
+            /**
+             * Hearing On
+             * Format: date
+             */
+            hearing_on: string;
+            /** Hearing Time */
+            hearing_time?: string | null;
+            /** Judge Name */
+            judge_name?: string | null;
+            /** Outcome Note */
+            outcome_note?: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Responsible Membership Id */
+            responsible_membership_id?: string | null;
+            /** Session Label */
+            session_label?: string | null;
+            /**
+             * Source
+             * @default manual
+             */
+            source: string;
+            /** Source Ref Id */
+            source_ref_id?: string | null;
+            /** Source Ref Type */
+            source_ref_type?: string | null;
+            /**
+             * Status
+             * @default scheduled
+             * @enum {string}
+             */
+            status: "scheduled" | "completed" | "adjourned" | "cancelled";
+            /**
+             * Time Status
+             * @default time_not_published
+             * @enum {string}
+             */
+            time_status: "exact" | "session" | "time_not_published";
+            /**
+             * Timezone
+             * @default Asia/Kolkata
+             */
+            timezone: string;
+        };
+        /** IpSharedHearingListResponse */
+        IpSharedHearingListResponse: {
+            /** Docket Id */
+            docket_id: string;
+            /** Hearings */
+            hearings: components["schemas"]["IpSharedHearingRecord"][];
+        };
+        /** IpSharedHearingRecord */
+        IpSharedHearingRecord: {
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Forum Name */
+            forum_name: string;
+            /** Hearing Mode */
+            hearing_mode: string | null;
+            /**
+             * Hearing On
+             * Format: date
+             */
+            hearing_on: string;
+            /** Hearing Time */
+            hearing_time: string | null;
+            /** Id */
+            id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string;
+            /** Judge Name */
+            judge_name: string | null;
+            /** Outcome Note */
+            outcome_note: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string | null;
+            /** Session Label */
+            session_label: string | null;
+            /** Source */
+            source: string;
+            /** Source Ref Id */
+            source_ref_id: string | null;
+            /** Source Ref Type */
+            source_ref_type: string | null;
+            /** Status */
+            status: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @default ip_docket
+             * @constant
+             */
+            target_type: "ip_docket";
+            /** Time Status */
+            time_status: string;
+            /** Timezone */
+            timezone: string;
+        };
+        /** IpSharedHearingUpdateRequest */
+        IpSharedHearingUpdateRequest: {
+            /** Docket Id */
+            docket_id: string;
+            /** Hearing On */
+            hearing_on?: string | null;
+            /** Outcome Note */
+            outcome_note?: string | null;
+            /** Responsible Membership Id */
+            responsible_membership_id?: string | null;
+            /** Status */
+            status?: ("scheduled" | "completed" | "adjourned" | "cancelled") | null;
+        };
+        /** IpSharedTaskCreateRequest */
+        IpSharedTaskCreateRequest: {
+            /** Description */
+            description?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Owner Membership Id */
+            owner_membership_id?: string | null;
+            /**
+             * Priority
+             * @default medium
+             * @enum {string}
+             */
+            priority: "low" | "medium" | "high" | "urgent";
+            /**
+             * Status
+             * @default todo
+             * @enum {string}
+             */
+            status: "todo" | "in_progress" | "completed" | "cancelled";
+            /** Title */
+            title: string;
+        };
+        /** IpSharedTaskListResponse */
+        IpSharedTaskListResponse: {
+            /** Docket Id */
+            docket_id: string;
+            /** Tasks */
+            tasks: components["schemas"]["IpSharedTaskRecord"][];
+        };
+        /** IpSharedTaskRecord */
+        IpSharedTaskRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Description */
+            description: string | null;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string;
+            /** Owner Membership Id */
+            owner_membership_id: string | null;
+            /** Priority */
+            priority: string;
+            /** Status */
+            status: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @default ip_docket
+             * @constant
+             */
+            target_type: "ip_docket";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IpSharedTaskUpdateRequest */
+        IpSharedTaskUpdateRequest: {
+            /** Description */
+            description?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Owner Membership Id */
+            owner_membership_id?: string | null;
+            /** Priority */
+            priority?: ("low" | "medium" | "high" | "urgent") | null;
+            /** Status */
+            status?: ("todo" | "in_progress" | "completed" | "cancelled") | null;
+            /** Title */
+            title?: string | null;
         };
         /** IpTitleInterestCreateRequest */
         IpTitleInterestCreateRequest: {
@@ -27842,6 +28305,79 @@ export interface components {
              * @default 0
              */
             tax_minor: number;
+        };
+        /** SharedWorkFoundationContract */
+        SharedWorkFoundationContract: {
+            /** Contract Version */
+            contract_version: string;
+            /** Forbidden Duplicates */
+            forbidden_duplicates: string[];
+            /** Migration Heads */
+            migration_heads: string[];
+            /** Mixed Revision Policy */
+            mixed_revision_policy: string;
+            /** One Writer Policy */
+            one_writer_policy: string;
+            /** Owners */
+            owners: components["schemas"]["SharedWorkOwnerContract"][];
+            /** Target Rule */
+            target_rule: string;
+        };
+        /** SharedWorkOwnerContract */
+        SharedWorkOwnerContract: {
+            /** Canonical Writer */
+            canonical_writer: string;
+            /**
+             * Classification
+             * @enum {string}
+             */
+            classification: "EXTEND" | "LINK";
+            /** Compatibility Path */
+            compatibility_path: string;
+            /** Ip Target Column */
+            ip_target_column: string | null;
+            /** Owner */
+            owner: string;
+            /** Table Name */
+            table_name: string;
+        };
+        /** SharedWorkOwnerReconciliation */
+        SharedWorkOwnerReconciliation: {
+            /** Invalid Target Rows */
+            invalid_target_rows: number;
+            /** Ip Target Rows */
+            ip_target_rows: number;
+            /** Legacy Tail Rows */
+            legacy_tail_rows: number;
+            /** Owner */
+            owner: string;
+            /** Ready */
+            ready: boolean;
+            /** Row Count */
+            row_count: number;
+            /** Table Name */
+            table_name: string;
+            /** Tenant Mismatch Rows */
+            tenant_mismatch_rows: number;
+        };
+        /** SharedWorkReconciliationReport */
+        SharedWorkReconciliationReport: {
+            /** Calendar Source Types */
+            calendar_source_types: string[];
+            /** Company Id */
+            company_id: string;
+            /** Contract Version */
+            contract_version: string;
+            /** Notification Ip Target Rows */
+            notification_ip_target_rows: number;
+            /** Notification Tenant Mismatch Rows */
+            notification_tenant_mismatch_rows: number;
+            /** Owners */
+            owners: components["schemas"]["SharedWorkOwnerReconciliation"][];
+            /** Ready */
+            ready: boolean;
+            /** Release Blocking */
+            release_blocking: boolean;
         };
         /** SourceActionInspectRequest */
         SourceActionInspectRequest: {
@@ -38971,6 +39507,105 @@ export interface operations {
             };
         };
     };
+    get_ip_shared_hearings_api_ip_hearings_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSharedHearingListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_shared_hearing_api_ip_hearings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpSharedHearingCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSharedHearingRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_ip_shared_hearing_api_ip_hearings__hearing_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hearing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpSharedHearingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSharedHearingRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_identifier_search_api_ip_identifiers_search_get: {
         parameters: {
             query: {
@@ -38989,6 +39624,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpIdentifierResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_operational_deadlines_api_ip_operational_deadlines_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+                include_done?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOperationalDeadlineListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_operational_deadline_api_ip_operational_deadlines_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOperationalDeadlineCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOperationalDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_ip_operational_deadline_api_ip_operational_deadlines__deadline_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOperationalDeadlineUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOperationalDeadlineRecord"];
                 };
             };
             /** @description Validation Error */
@@ -39038,6 +39773,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketControlReport"];
+                };
+            };
+        };
+    };
+    get_shared_work_foundation_contract_api_ip_shared_work_foundation_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedWorkFoundationContract"];
+                };
+            };
+        };
+    };
+    get_shared_work_reconciliation_api_ip_shared_work_reconciliation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedWorkReconciliationReport"];
+                };
+            };
+        };
+    };
+    get_ip_shared_tasks_api_ip_tasks_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+                include_completed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSharedTaskListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_shared_task_api_ip_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpSharedTaskCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSharedTaskRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_ip_shared_task_api_ip_tasks__task_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpSharedTaskUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSharedTaskRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

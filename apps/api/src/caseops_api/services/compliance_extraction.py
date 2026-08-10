@@ -1000,6 +1000,7 @@ def _activate_item(
     matter = assert_operational_matter(session, matter=matter)
     if item.generated_task_id is None:
         task = MatterTask(
+            company_id=matter.company_id,
             matter_id=matter.id,
             created_by_membership_id=actor_membership_id,
             owner_membership_id=matter.assignee_membership_id,
@@ -1017,6 +1018,7 @@ def _activate_item(
         item.generated_task_id = task.id
     if item.due_on is not None and item.generated_deadline_id is None:
         deadline = MatterDeadline(
+            company_id=matter.company_id,
             matter_id=matter.id,
             source="compliance",
             kind="court_order_compliance",

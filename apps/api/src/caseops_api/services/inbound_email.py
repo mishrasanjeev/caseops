@@ -435,6 +435,7 @@ def review_inbound_email_event(
             session.flush()
         if payload.action == "create_task":
             task = MatterTask(
+                company_id=matter.company_id,
                 matter_id=matter.id,
                 created_by_membership_id=context.membership.id,
                 owner_membership_id=context.membership.id,
