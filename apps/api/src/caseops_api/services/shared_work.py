@@ -758,7 +758,6 @@ def reconcile_shared_work_owners(
             ),
         )
         tenant_mismatch_rows = matter_mismatch + docket_mismatch
-        ready = not (legacy_tail_rows or invalid_target_rows or tenant_mismatch_rows)
         rows.append(
             SharedWorkOwnerReconciliation(
                 owner=owner,
@@ -768,7 +767,9 @@ def reconcile_shared_work_owners(
                 legacy_tail_rows=legacy_tail_rows,
                 invalid_target_rows=invalid_target_rows,
                 tenant_mismatch_rows=tenant_mismatch_rows,
-                ready=ready,
+                ready=not (
+                    legacy_tail_rows or invalid_target_rows or tenant_mismatch_rows
+                ),
             )
         )
 
@@ -791,12 +792,14 @@ def reconcile_shared_work_owners(
             IpDocketRecord.company_id != NotificationDeliveryIntent.company_id,
         ),
     )
-    ready = all(row.ready for row in rows) and notification_tenant_mismatch_rows == 0
+    report_ready = (
+        all(row.ready for row in rows) and notification_tenant_mismatch_rows == 0
+    )
     return SharedWorkReconciliationReport(
         contract_version=CONTRACT_VERSION,
         company_id=company_id,
         release_blocking=True,
-        ready=ready,
+        ready=report_ready,
         owners=rows,
         calendar_source_types=["matter_task", "matter_hearing", "matter_deadline"],
         notification_ip_target_rows=notification_ip_target_rows,

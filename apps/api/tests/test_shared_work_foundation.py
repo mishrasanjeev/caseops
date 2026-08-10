@@ -134,12 +134,6 @@ def test_ip_contract_and_reconciliation_use_shared_rows_and_one_notification_own
     assert contract_response.json()["contract_version"] == "IPLF-025A/2026-08-10"
 
     with get_session_factory()() as session:
-        membership = session.get(CompanyMembership, membership_id)
-        company = session.get(Company, company_id)
-        assert membership is not None and company is not None
-        user = session.get(User, membership.user_id)
-        assert user is not None
-        context = SessionContext(company=company, membership=membership, user=user)
         docket = IpDocketRecord(
             company_id=company_id,
             record_type="trademark",
