@@ -3,32 +3,52 @@ import { expect, test, type Page } from "@playwright/test";
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
   process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
-const COMPANY_SLUG = process.env.CASEOPS_RAM_PROD_SLUG ?? "legal";
-const TESTER_EMAIL =
-  process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
+type ProdCredentials = {
+  companySlug: string;
+  email: string;
+  passwordEnvironmentVariable: string;
+};
 
-function requiredPassword(): string {
-  const password = process.env.CASEOPS_RAM_PROD_PASSWORD?.trim() ?? "";
+const RAM_PROD_CREDENTIALS: ProdCredentials = {
+  companySlug: process.env.CASEOPS_RAM_PROD_SLUG ?? "legal",
+  email: process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com",
+  passwordEnvironmentVariable: "CASEOPS_RAM_PROD_PASSWORD",
+};
+const IP_QA_CREDENTIALS: ProdCredentials = {
+  companySlug: process.env.CASEOPS_IP_QA_SLUG ?? "caseops-ip-qa",
+  email: process.env.CASEOPS_IP_QA_EMAIL ?? "ip-qa-bot@caseops.ai",
+  passwordEnvironmentVariable: "CASEOPS_IP_QA_PASSWORD",
+};
+
+function requiredPassword(environmentVariable: string): string {
+  const password = process.env[environmentVariable]?.trim() ?? "";
   if (!password)
     throw new Error(
-      "CASEOPS_RAM_PROD_PASSWORD is required for production proof.",
+      `${environmentVariable} is required for production proof.`,
     );
   return password;
 }
 
-async function signIn(page: Page): Promise<void> {
+async function signIn(
+  page: Page,
+  credentials: ProdCredentials = RAM_PROD_CREDENTIALS,
+): Promise<{ membership: { id: string } }> {
   await page.goto(`${PROD_BASE_URL}/sign-in`);
-  await page.locator("#company-slug").fill(COMPANY_SLUG);
-  await page.locator("#email").fill(TESTER_EMAIL);
-  await page.locator("#password").fill(requiredPassword());
+  await page.locator("#company-slug").fill(credentials.companySlug);
+  await page.locator("#email").fill(credentials.email);
+  await page
+    .locator("#password")
+    .fill(requiredPassword(credentials.passwordEnvironmentVariable));
   const login = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/auth/login" &&
       response.request().method() === "POST",
   );
   await page.getByRole("button", { name: /^Sign in$/ }).click();
-  expect((await login).status()).toBe(200);
+  const loginResponse = await login;
+  expect(loginResponse.status(), await loginResponse.text()).toBe(200);
   await page.waitForURL(new RegExp(`${PROD_BASE_URL}/app(?:[/?]|$)`));
+  return (await loginResponse.json()) as { membership: { id: string } };
 }
 
 async function csrfHeaders(page: Page): Promise<Record<string, string>> {
@@ -98,8 +118,64 @@ test("IPLF-025B production schedules, supersedes, and cancels unknown-time remin
   page,
 }) => {
   test.setTimeout(180_000);
-  await signIn(page);
+  const identity = await signIn(page, IP_QA_CREDENTIALS);
   const headers = await csrfHeaders(page);
+  const configurationResponse = await page.request.get(
+    `${PROD_API_BASE_URL}/api/ip/workspace/configuration`,
+  );
+  expect(
+    configurationResponse.status(),
+    await configurationResponse.text(),
+  ).toBe(200);
+  let configurationStatus = (await configurationResponse.json()) as {
+    configuration: { version: number; workspace_enabled: boolean } | null;
+  };
+  if (configurationStatus.configuration === null) {
+    const configured = await page.request.put(
+      `${PROD_API_BASE_URL}/api/ip/workspace/configuration`,
+      {
+        headers,
+        data: {
+          expected_version: null,
+          enabled_asset_types: ["trademark"],
+          jurisdictions: ["IN"],
+          offices: ["IP India"],
+          timezone: "Asia/Kolkata",
+          holiday_calendar_key: "test-calendar",
+          working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
+          document_taxonomy_version: "ip-taxonomy-2026.1",
+          event_catalog_version: "ip-events-v1",
+          deadline_rule_versions: { IN: "2026.1" },
+          notification_channels: ["in_app", "email"],
+          critical_event_policy: { escalation_after_minutes: 30 },
+          escalation_owner_membership_id: identity.membership.id,
+          provider_keys: [],
+          provider_terms_version: null,
+          accept_provider_terms: false,
+        },
+      },
+    );
+    expect(configured.status(), await configured.text()).toBe(200);
+    configurationStatus = (await configured.json()) as typeof configurationStatus;
+  }
+  if (!configurationStatus.configuration?.workspace_enabled) {
+    const enabled = await page.request.post(
+      `${PROD_API_BASE_URL}/api/ip/workspace/enable`,
+      {
+        headers,
+        data: {
+          expected_config_version: configurationStatus.configuration!.version,
+          enabled_automations: [],
+        },
+      },
+    );
+    expect(enabled.status(), await enabled.text()).toBe(200);
+  }
+  const readiness = await page.request.get(
+    `${PROD_API_BASE_URL}/api/ip/readiness`,
+  );
+  expect(readiness.status(), await readiness.text()).toBe(200);
+  expect(await readiness.json()).toMatchObject({ workspace_available: true });
   const canary = Date.now();
   const hearingOn = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
   const rescheduledOn = new Date(hearingOn.getTime() + 24 * 60 * 60 * 1000);

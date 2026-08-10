@@ -82,16 +82,22 @@ jobs:
           echo "api_revision=${{ steps.deployed-release.outputs.api_revision }}"
           echo "web_revision=${{ steps.deployed-release.outputs.web_revision }}"
 
-      - name: Gate on CASEOPS_QA_PASSWORD secret
+      - name: Gate on production QA secrets
         # Fail loudly + early if the secret is missing. Without it the
         # setup project's signIn would fail anyway, but this makes the
         # diagnosis obvious in the run log instead of buried in a
         # Playwright timeout.
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
         run: |
           if [ -z "$CASEOPS_QA_PASSWORD" ]; then
             echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
+            echo "Add it under repo Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
+            echo "::error::CASEOPS_IP_QA_PASSWORD secret is not configured."
             echo "Add it under repo Settings → Secrets and variables → Actions."
             exit 1
           fi
@@ -122,6 +128,9 @@ jobs:
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
+          CASEOPS_IP_QA_EMAIL: ${{ vars.CASEOPS_IP_QA_EMAIL }}
+          CASEOPS_IP_QA_SLUG: ${{ vars.CASEOPS_IP_QA_SLUG }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
