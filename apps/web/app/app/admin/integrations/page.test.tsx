@@ -43,6 +43,26 @@ describe("TenantIntegrationsPage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("sequences initial connector reads instead of cold-starting a request burst", async () => {
+    renderWithQuery(<TenantIntegrationsPage />);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toEqual(
+      expect.stringContaining("/api/admin/integrations"),
+    );
+    await screen.findByTestId("google-workspace-configuration");
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4));
+    const firstFourPaths = fetchMock.mock.calls.slice(0, 4).map(([url]) =>
+      new URL(String(url)).pathname,
+    );
+    expect(firstFourPaths).toEqual([
+      "/api/admin/integrations",
+      "/api/admin/integrations/health",
+      "/api/admin/google-workspace-configuration",
+      "/api/drive/google/status",
+    ]);
+  });
+
   it("renders tenant-safe connector readiness without internal labels", async () => {
     renderWithQuery(<TenantIntegrationsPage />);
 

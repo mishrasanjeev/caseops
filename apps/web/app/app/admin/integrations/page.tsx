@@ -860,17 +860,22 @@ export default function TenantIntegrationsPage() {
   const healthQuery = useQuery({
     queryKey: ["admin", "integrations", "health"],
     queryFn: fetchTenantConnectorHealth,
-    enabled: canAdmin,
+    // Cloud Run intentionally serves one request per API instance so a
+    // blocking integration cannot pin unrelated work.  Starting all four
+    // page reads together therefore causes a burst of ClamAV-sidecar cold
+    // starts.  Sequence the independent reads on first load; each panel still
+    // renders progressively and subsequent explicit refreshes remain scoped.
+    enabled: canAdmin && integrationsQuery.isFetched,
   });
   const googleWorkspaceQuery = useQuery({
     queryKey: ["admin", "google-workspace-configuration"],
     queryFn: fetchGoogleWorkspaceTenantConfiguration,
-    enabled: canAdmin,
+    enabled: canAdmin && healthQuery.isFetched,
   });
   const driveStatusQuery = useQuery({
     queryKey: ["drive", "google", "status"],
     queryFn: fetchGoogleDriveStatus,
-    enabled: canAdmin,
+    enabled: canAdmin && googleWorkspaceQuery.isFetched,
   });
   useEffect(() => {
     const status = googleWorkspaceQuery.data;
