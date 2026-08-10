@@ -4,11 +4,15 @@ const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
   process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
 const COMPANY_SLUG = process.env.CASEOPS_RAM_PROD_SLUG ?? "legal";
-const TESTER_EMAIL = process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
+const TESTER_EMAIL =
+  process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
 
 function requiredPassword(): string {
   const password = process.env.CASEOPS_RAM_PROD_PASSWORD?.trim() ?? "";
-  if (!password) throw new Error("CASEOPS_RAM_PROD_PASSWORD is required for production proof.");
+  if (!password)
+    throw new Error(
+      "CASEOPS_RAM_PROD_PASSWORD is required for production proof.",
+    );
   return password;
 }
 
@@ -27,7 +31,14 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForURL(new RegExp(`${PROD_BASE_URL}/app(?:[/?]|$)`));
 }
 
-test("IPLF-025A production serves the exact shared-work contract and a ready tenant reconciliation", async ({
+async function csrfHeaders(page: Page): Promise<Record<string, string>> {
+  const cookies = await page.context().cookies();
+  const csrf = cookies.find((cookie) => cookie.name === "caseops_csrf")?.value;
+  expect(csrf, "caseops_csrf cookie must exist after sign-in").toBeTruthy();
+  return { "X-CSRF-Token": csrf! };
+}
+
+test("IPLF-025A/025B production serves the exact shared-work contract and a ready tenant reconciliation", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -42,9 +53,15 @@ test("IPLF-025A production serves the exact shared-work contract and a ready ten
   );
   expect(contract.status(), await contract.text()).toBe(200);
   expect(await contract.json()).toMatchObject({
-    contract_version: "IPLF-025A/2026-08-10",
-    migration_heads: ["20260810_0001", "20260810_0002", "20260810_0003"],
-    target_rule: "Exactly one of matter_id or ip_docket_id on target-owned rows.",
+    contract_version: "IPLF-025B/2026-08-10",
+    migration_heads: [
+      "20260810_0001",
+      "20260810_0002",
+      "20260810_0003",
+      "20260810_0004",
+    ],
+    target_rule:
+      "Exactly one of matter_id or ip_docket_id on target-owned rows.",
     forbidden_duplicates: [
       "ip_tasks",
       "ip_hearings",
@@ -60,7 +77,7 @@ test("IPLF-025A production serves the exact shared-work contract and a ready ten
   expect(reconciliation.status(), await reconciliation.text()).toBe(200);
   const report = await reconciliation.json();
   expect(report).toMatchObject({
-    contract_version: "IPLF-025A/2026-08-10",
+    contract_version: "IPLF-025B/2026-08-10",
     release_blocking: true,
     ready: true,
     notification_tenant_mismatch_rows: 0,
@@ -75,4 +92,174 @@ test("IPLF-025A production serves the exact shared-work contract and a ready ten
     expect(owner.invalid_target_rows).toBe(0);
     expect(owner.tenant_mismatch_rows).toBe(0);
   }
+});
+
+test("IPLF-025B production schedules, supersedes, and cancels unknown-time reminders at 360px", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await signIn(page);
+  const headers = await csrfHeaders(page);
+  const canary = Date.now();
+
+  const createdDocket = await page.request.post(
+    `${PROD_API_BASE_URL}/api/ip/dockets`,
+    {
+      headers,
+      data: {
+        title: `IPLF-025B production calendar canary ${canary}`,
+        primary_identifier: `TM-IPLF-025B-PROD-${canary}`,
+        particulars: {
+          form_key: "TM-A",
+          form_version: "2026.1",
+          mark_kind: "word",
+          representation: {
+            text: "CALENDAR CANARY",
+            evidence_reference: "qa:iplf-025b-production-calendar-canary",
+          },
+          classes: [
+            { class_number: 42, specification: "Legal workflow software" },
+          ],
+          use_priority: null,
+          parties: [{ role: "applicant", name: "CaseOps QA Bot LLP" }],
+          agent: null,
+          filing_manifest: [
+            {
+              key: "representation",
+              label: "Mark representation",
+              required: true,
+              evidence_reference: "qa:iplf-025b-production-calendar-canary",
+            },
+          ],
+        },
+      },
+    },
+  );
+  expect(createdDocket.status(), await createdDocket.text()).toBe(201);
+  const docketId = (await createdDocket.json()).id as string;
+
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto(
+    `${PROD_BASE_URL}/app/ip?docket=${encodeURIComponent(docketId)}`,
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "Hearings, reminders, and calendar copies",
+    }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Hearing date")).toBeVisible();
+  await expect(page.getByLabel("Time precision")).toBeVisible();
+  await expect(page.getByLabel("Virtual hearing link")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Preview recipients and policy" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(360);
+
+  await page.getByLabel("Hearing date").fill("2027-02-10");
+  await page.getByLabel("Location").fill("Production QA registry room");
+  await page
+    .getByLabel("Virtual hearing link")
+    .fill("https://meet.example.test/qa-hearing");
+  await page
+    .getByRole("button", { name: "Preview recipients and policy" })
+    .click();
+  const preview = page.getByTestId("ip-hearing-preview");
+  await expect(preview).toContainText(
+    "Date-based reminder only; no hearing time will be invented.",
+  );
+  await expect(preview).toContainText("48, 24 hours");
+  await expect(preview).toContainText("email, in_app");
+
+  const creation = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/ip/hearings" &&
+      response.request().method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "Confirm hearing and reminders" })
+    .click();
+  const creationResponse = await creation;
+  expect(creationResponse.status(), await creationResponse.text()).toBe(201);
+  const hearingId = ((await creationResponse.json()) as { id: string }).id;
+  const outcomes = page.getByLabel("Reminder delivery for Hearing");
+  await expect(outcomes.getByText(/email .* queued/).first()).toBeVisible();
+  await expect(outcomes.getByText(/in_app .* queued/).first()).toBeVisible();
+
+  const initial = await page.request.get(
+    `${PROD_API_BASE_URL}/api/ip/hearings?docket_id=${encodeURIComponent(docketId)}`,
+  );
+  expect(initial.status(), await initial.text()).toBe(200);
+  const initialHearing = (await initial.json()).hearings.find(
+    (row: { id: string }) => row.id === hearingId,
+  );
+  expect(initialHearing.hearing_time).toBeNull();
+  expect(initialHearing.reminders).toHaveLength(4);
+  expect(
+    new Set(
+      initialHearing.reminders.map((row: { channel: string }) => row.channel),
+    ),
+  ).toEqual(new Set(["email", "in_app"]));
+
+  await page.getByLabel("Reschedule Hearing").fill("2027-02-11");
+  const reschedule = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api/ip/hearings/${hearingId}` &&
+      response.request().method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Reschedule" }).click();
+  expect((await reschedule).status()).toBe(200);
+
+  const afterReschedule = await page.request.get(
+    `${PROD_API_BASE_URL}/api/ip/hearings?docket_id=${encodeURIComponent(docketId)}`,
+  );
+  expect(afterReschedule.status(), await afterReschedule.text()).toBe(200);
+  const rescheduledHearing = (await afterReschedule.json()).hearings.find(
+    (row: { id: string }) => row.id === hearingId,
+  );
+  const reminders = rescheduledHearing.reminders as Array<{
+    status: string;
+    schedule_generation: number;
+  }>;
+  expect(reminders.filter((row) => row.status === "cancelled")).toHaveLength(4);
+  expect(reminders.filter((row) => row.status === "queued")).toHaveLength(4);
+  expect(
+    new Set(
+      reminders
+        .filter((row) => row.status === "cancelled")
+        .map((row) => row.schedule_generation),
+    ),
+  ).toEqual(new Set([1]));
+  expect(
+    new Set(
+      reminders
+        .filter((row) => row.status === "queued")
+        .map((row) => row.schedule_generation),
+    ),
+  ).toEqual(new Set([2]));
+
+  const cancellation = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api/ip/hearings/${hearingId}` &&
+      response.request().method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Cancel hearing" }).click();
+  expect((await cancellation).status()).toBe(200);
+  const afterCancellation = await page.request.get(
+    `${PROD_API_BASE_URL}/api/ip/hearings?docket_id=${encodeURIComponent(docketId)}`,
+  );
+  expect(afterCancellation.status(), await afterCancellation.text()).toBe(200);
+  const cancelledHearing = (await afterCancellation.json()).hearings.find(
+    (row: { id: string }) => row.id === hearingId,
+  );
+  expect(cancelledHearing.status).toBe("cancelled");
+  expect(
+    cancelledHearing.reminders.every(
+      (row: { status: string }) => row.status === "cancelled",
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(360);
 });
