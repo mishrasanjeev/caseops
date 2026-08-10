@@ -65,8 +65,13 @@ test("IPLF-025A uses one tenant-safe shared owner for IP tasks, hearings, and de
   });
   expect(contract.status(), await contract.text()).toBe(200);
   expect(await contract.json()).toMatchObject({
-    contract_version: "IPLF-025A/2026-08-10",
-    migration_heads: ["20260810_0001", "20260810_0002", "20260810_0003"],
+    contract_version: "IPLF-025B/2026-08-10",
+    migration_heads: [
+      "20260810_0001",
+      "20260810_0002",
+      "20260810_0003",
+      "20260810_0004",
+    ],
     forbidden_duplicates: [
       "ip_tasks",
       "ip_hearings",
@@ -157,7 +162,7 @@ test("IPLF-025A uses one tenant-safe shared owner for IP tasks, hearings, and de
   expect(reconciliation.status(), await reconciliation.text()).toBe(200);
   const report = await reconciliation.json();
   expect(report).toMatchObject({
-    contract_version: "IPLF-025A/2026-08-10",
+    contract_version: "IPLF-025B/2026-08-10",
     release_blocking: true,
     ready: true,
   });

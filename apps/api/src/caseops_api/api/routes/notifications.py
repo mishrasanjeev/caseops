@@ -85,7 +85,8 @@ class HearingReminderRecord(BaseModel):
 
     id: str
     company_id: str
-    matter_id: str
+    matter_id: str | None
+    ip_docket_id: str | None
     hearing_id: str
     recipient_email: str | None
     channel: str

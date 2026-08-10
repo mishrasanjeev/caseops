@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-025B",
+    "active_slice": "IPLF-026A",
     "checkpoint": {
-      "recorded_at": "2026-08-10T10:02:00+05:30",
-      "repository_revision": "2f27f044dd27d47c805e1d2a35b92f4fbee893ae",
-      "environment": "IPLF-025A is deployment-verified at canonical main 2f27f044dd27d47c805e1d2a35b92f4fbee893ae: final-head CI, Security, CodeQL, PostgreSQL, generated-contract, and full Playwright gates passed; exact immutable API/web images were built; migration caseops-migrate-job-shxpm completed at 20260810_0003; six schedulers converged; API caseops-api-00268-6p9 and web caseops-web-00248-spm serve 100% traffic with exact public identities; and production workflow 31354008059 passed 61 RAM tests with four conditional skips plus both Notice cases. The dated IPLF-025A contract and tenant-reconciliation canary passed with ready=true.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, and IPLF-025A have completed repository-controlled implementation and deployment verification. IPLF-025B retains CAL-OPS-01..14 and all UJ-10/UJ-62 behavior. Genuine legal/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-10T12:52:00+05:30",
+      "repository_revision": "bab046e1cc22a0c19a6e8622765047d3076325d7",
+      "environment": "IPLF-025B is implemented and locally verified at immutable revision bab046e1cc22a0c19a6e8622765047d3076325d7: the consolidated shared-work/calendar/reminder/migration batch passed 67 tests, all 18 legacy Matter reminder regressions passed, 19 focused web tests passed, Ruff/typecheck/build/diff gates passed, and the dated 360px journey passed. Initial CI passed six API shards, PostgreSQL, web, Security, CodeQL, and review but found legacy Matter channel/suppression regressions in shards 3/8 and 4/8; the compatibility fix passed all 22 affected channel/suppression/shared-work tests locally and requires final-head CI rerun. Canonical merge, exact deployment, and production acceptance remain open. The preceding canonical docs release b8dbde8b08cb3ef2b4eb13725d66a948090d60db serves exact API caseops-api-00269-d5g and web caseops-web-00249-tsm identities with health, immutable-image, migration, and six-scheduler reconciliation proven; workflow 31358897193 passed the IPLF-025A canary but exposed one successful-create dialog latency regression, now fixed locally and still requiring exact-release rerun.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, and IPLF-025A have completed repository-controlled implementation and deployment verification. IPLF-025B has completed repository-controlled implementation and local verification but retains independent release gates. Genuine legal/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-025B",
-      "next_action": "Implement and release IPLF-025B CAL-OPS and UJ-10/UJ-62 workflows over the verified shared owners. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-025A/release-2026-08-10.md"
+      "next_slice": "IPLF-026A",
+      "next_action": "Complete independent review, exact canonical release, migration, and dated production acceptance for IPLF-025B; then implement IPLF-026A. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-025B/local-2026-08-10.md"
     }
   },
   "milestones": [
@@ -918,8 +918,8 @@
         "IPLF-025A",
         "IPLF-025B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "evidence_refs": [
@@ -5966,34 +5966,78 @@
       "dependencies": [
         "IPLF-025A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260810_0004_ip_hearing_workflow.py",
+        "apps/api/src/caseops_api/services/shared_work.py",
+        "apps/api/src/caseops_api/services/hearing_reminders.py",
+        "apps/api/src/caseops_api/services/calendar_sync.py",
+        "apps/api/src/caseops_api/api/routes/calendar.py",
+        "apps/api/src/caseops_api/schemas/shared_work.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "docs/ip-implementation/CALENDAR_REMINDER_WORKFLOW.md"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "IPLF-UJ-10-NORMAL::tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts",
+        "IPLF-UJ-10-EXC-01::apps/api/tests/test_shared_work_foundation.py",
+        "IPLF-UJ-10-EXC-02::apps/api/tests/test_shared_work_foundation.py",
+        "IPLF-UJ-10-EXC-03::apps/api/tests/test_shared_work_foundation.py",
+        "IPLF-UJ-62-NORMAL::apps/api/tests/test_google_calendar_sync.py",
+        "IPLF-UJ-62-EXC-01::apps/api/tests/test_google_calendar_sync.py",
+        "IPLF-UJ-62-EXC-02::apps/api/tests/test_google_calendar_sync.py",
+        "IPLF-UJ-62-EXC-03::apps/api/tests/test_google_calendar_sync.py",
+        "IPLF-UJ-62-EXC-04::apps/api/tests/test_legalworkspace_calendar_sync.py",
+        "IPLF-UJ-62-EXC-05::apps/api/tests/test_legalworkspace_calendar_sync.py",
+        "apps/api/tests/test_hearing_reminders.py",
+        "apps/api/tests/test_20260810_shared_work_target_migration.py",
+        "apps/web/app/app/ip/page.test.tsx",
+        "apps/web/components/app/NewMatterDialog.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/CALENDAR_REMINDER_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m2/IPLF-025B/local-2026-08-10.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-025B/local-2026-08-10.md",
+          "revision": "bab046e1cc22a0c19a6e8622765047d3076325d7",
+          "environment": "Windows 11 focused and consolidated API tests over isolated SQLite, API Ruff, generated-route TypeScript, focused Vitest, current-source Next production build, diff integrity, and fresh-server dated Playwright at 360px; PostgreSQL-marked tests skip locally and independent CI/deployment remain required",
+          "fixtures": "Isolated tenant IP docket, unknown-time and rescheduled hearings, active then deactivated recipient, generated reminder outcomes, canonical task and operational deadline, Google and Outlook provider stubs, failure/retry/revocation/cancellation paths, and one synthetic Matter creation; no real client record or external provider/legal effect",
+          "assertions": "CAL-OPS-01..14 allocation, UJ-10 and UJ-62 normal/exception paths, no invented hearing precision, explicit preview/confirmation, per-channel outcomes, generation-safe reschedule/cancel, permission revalidation, stable minimal date-safe projections, idempotent provider upsert/delete, canonical legal-date authority, responsive grouped controls, migration rollback, and successful-create dialog closure independent of list refetch latency",
+          "result": "passed",
+          "recorded_at": "2026-08-10T12:52:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Run independent CI, Security, CodeQL, PostgreSQL, generated-contract, full web, and full Playwright gates on the final reviewed head.",
+        "Merge the exact reviewed head to canonical main, deploy immutable images, migrate to 20260810_0004, reconcile all six schedulers, and rerun dated production acceptance.",
+        "Obtain genuine named legal/pilot/UAT acceptance without treating repository-controlled evidence as human approval."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Migration 20260810_0004 adds hearing location/instructions/attendee logistics and a generation-aware reminder uniqueness key to the existing shared hearing and reminder owners.",
+        "Explicit confirmed actions create or update only canonical shared task, hearing, operational-deadline, reminder, durable-notification, and calendar-projection rows for the tenant IP docket; no parallel IP scheduler, queue, feed, or legal-date authority is introduced.",
+        "Reschedule and cancellation preserve cancelled reminder generations for audit, update or delete external projections through stable provider identifiers, and never mutate the canonical legal deadline from provider state."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/CALENDAR_REMINDER_WORKFLOW.md",
+          "disposition": "created",
+          "owner": "Shared Tasks/Calendar/Notification owners",
+          "evidence": "Canonical workflow, precision, reminder generation, calendar projection, access, rollback, and non-effect contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Concrete implementation/test references, bounded data effects, exact local evidence, and open independent release gates"
+        }
+      ],
+      "allocation_review": "Reviewed against PRD Sections 11.2, 13.6, 13.15, 23, and 25. IPLF-025B completes its bounded CAL-OPS-01..14 and UJ-10/UJ-62 shared-work/calendar behavior without creating a second owner; reciprocal later slices retain their broader notification, communication, registry, and workflow allocations.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -37562,7 +37606,7 @@
         "planned:IPLF-UJ-10-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42881,7 +42925,7 @@
         "planned:IPLF-UJ-10-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42942,7 +42986,7 @@
         "planned:IPLF-UJ-10-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -43003,7 +43047,7 @@
         "planned:IPLF-UJ-10-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -43064,7 +43108,7 @@
         "planned:IPLF-UJ-10-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",

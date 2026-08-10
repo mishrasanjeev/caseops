@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, select
 
 from caseops_api.db.base import Base
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
+    HearingReminder,
     IpDocketRecord,
     Matter,
     MatterTask,
+    NotificationDeliveryIntent,
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.hearing_reminders import run_reminder_worker
 from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import (
@@ -119,6 +124,143 @@ def test_hearing_owner_carries_precision_provenance_mode_and_responsibility() ->
     } <= set(columns.keys())
 
 
+def test_ip_hearing_reminders_are_inspectable_targeted_and_superseded(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    headers = auth_headers(str(bootstrap["access_token"]))
+    with get_session_factory()() as session:
+        docket = IpDocketRecord(
+            company_id=company_id,
+            record_type="trademark",
+            title="Reminder target",
+            status="draft",
+            restricted=False,
+            created_by_membership_id=membership_id,
+        )
+        session.add(docket)
+        session.commit()
+        docket_id = docket.id
+
+    first_date = date.today() + timedelta(days=60)
+    created = client.post(
+        "/api/ip/hearings",
+        headers=headers,
+        json={
+            "docket_id": docket_id,
+            "hearing_on": first_date.isoformat(),
+            "forum_name": "Trade Marks Registry, Delhi",
+            "purpose": "Opposition hearing",
+            "time_status": "time_not_published",
+            "timezone": "Asia/Kolkata",
+            "hearing_mode": "hybrid",
+            "location_text": "Registry hearing room 2",
+            "meeting_url": "https://meet.example.test/ip-hearing",
+            "attendee_membership_ids": [membership_id],
+            "responsible_membership_id": membership_id,
+            "reminder_policy": {
+                "offsets_hours": [48, 24],
+                "channels": ["email", "in_app"],
+                "recipient_membership_ids": [membership_id],
+                "date_reminder_local_time": "18:00:00",
+                "critical": True,
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    hearing_id = str(body["id"])
+    assert body["hearing_time"] is None
+    assert body["time_status"] == "time_not_published"
+    assert body["location_text"] == "Registry hearing room 2"
+    assert body["meeting_url"] == "https://meet.example.test/ip-hearing"
+    assert body["attendee_membership_ids"] == [membership_id]
+    assert len(body["reminders"]) == 4
+    assert {row["channel"] for row in body["reminders"]} == {"email", "in_app"}
+    assert {row["status"] for row in body["reminders"]} == {"queued"}
+    assert {row["schedule_generation"] for row in body["reminders"]} == {1}
+
+    with get_session_factory()() as session:
+        initial_reminders = list(
+            session.scalars(
+                select(HearingReminder).where(HearingReminder.hearing_id == hearing_id)
+            )
+        )
+        assert len(initial_reminders) == 4
+        assert all(row.matter_id is None for row in initial_reminders)
+        assert all(row.ip_docket_id == docket_id for row in initial_reminders)
+        intents = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.schedule_source_type == "matter_hearing",
+                    NotificationDeliveryIntent.schedule_source_id == hearing_id,
+                )
+            )
+        )
+        # Two critical external intents add their durable in-app fallbacks.
+        assert len(intents) == 6
+        assert all(row.matter_id is None for row in intents)
+        assert all(row.ip_docket_id == docket_id for row in intents)
+
+    # Moving by one day makes the replacement T-48 reminder collide in wall
+    # time with the cancelled T-24 reminder from generation 1.
+    moved_date = first_date + timedelta(days=1)
+    moved = client.patch(
+        f"/api/ip/hearings/{hearing_id}",
+        headers=headers,
+        json={"docket_id": docket_id, "hearing_on": moved_date.isoformat()},
+    )
+    assert moved.status_code == 200, moved.text
+    moved_body = moved.json()
+    assert moved_body["hearing_on"] == moved_date.isoformat()
+    assert len(moved_body["reminders"]) == 8
+    assert [row["status"] for row in moved_body["reminders"]].count("cancelled") == 4
+    assert [row["status"] for row in moved_body["reminders"]].count("queued") == 4
+    assert {
+        row["schedule_generation"]
+        for row in moved_body["reminders"]
+        if row["status"] == "cancelled"
+    } == {1}
+    assert {
+        row["schedule_generation"]
+        for row in moved_body["reminders"]
+        if row["status"] == "queued"
+    } == {2}
+
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, membership_id)
+        assert membership is not None
+        membership.is_active = False
+        for reminder in session.scalars(
+            select(HearingReminder).where(
+                HearingReminder.hearing_id == hearing_id,
+                HearingReminder.status == "queued",
+            )
+        ):
+            reminder.scheduled_for = datetime.now(UTC) - timedelta(minutes=1)
+        session.commit()
+        report = run_reminder_worker(
+            session,
+            now=datetime.now(UTC),
+            mode="dry_run",
+        )
+        assert report["due_count"] == 4
+        blocked = list(
+            session.scalars(
+                select(HearingReminder).where(
+                    HearingReminder.hearing_id == hearing_id,
+                    HearingReminder.schedule_generation == 2,
+                )
+            )
+        )
+        assert {row.status for row in blocked} == {"cancelled"}
+        assert {row.last_error for row in blocked} == {
+            "Recipient permission was removed before delivery."
+        }
+
+
 def test_ip_contract_and_reconciliation_use_shared_rows_and_one_notification_owner(
     client: TestClient,
 ) -> None:
@@ -131,7 +273,7 @@ def test_ip_contract_and_reconciliation_use_shared_rows_and_one_notification_own
         "/api/ip/shared-work/foundation-contract", headers=headers
     )
     assert contract_response.status_code == 200, contract_response.text
-    assert contract_response.json()["contract_version"] == "IPLF-025A/2026-08-10"
+    assert contract_response.json()["contract_version"] == "IPLF-025B/2026-08-10"
 
     with get_session_factory()() as session:
         docket = IpDocketRecord(

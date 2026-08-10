@@ -11,7 +11,9 @@ const {
   fetchIpDocumentsMock,
   fetchIpDocumentTaxonomyMock,
   fetchIpProsecutionWorkspaceMock,
+  fetchIpSharedHearingsMock,
   fetchIpWorkspaceReadinessMock,
+  listCalendarConnectionsMock,
   previewIpDocketEventMock,
   previewIpDocketLifecycleMock,
   runIpWorkspaceTestMock,
@@ -20,6 +22,7 @@ const {
   transitionIpDocketLifecycleMock,
   confirmIpLegalDeadlineMock,
   proposeIpLegalDeadlineMock,
+  createIpSharedHearingMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
@@ -29,7 +32,9 @@ const {
   fetchIpDocumentsMock: vi.fn(),
   fetchIpDocumentTaxonomyMock: vi.fn(),
   fetchIpProsecutionWorkspaceMock: vi.fn(),
+  fetchIpSharedHearingsMock: vi.fn(),
   fetchIpWorkspaceReadinessMock: vi.fn(),
+  listCalendarConnectionsMock: vi.fn(),
   previewIpDocketEventMock: vi.fn(),
   previewIpDocketLifecycleMock: vi.fn(),
   runIpWorkspaceTestMock: vi.fn(),
@@ -38,6 +43,7 @@ const {
   transitionIpDocketLifecycleMock: vi.fn(),
   confirmIpLegalDeadlineMock: vi.fn(),
   proposeIpLegalDeadlineMock: vi.fn(),
+  createIpSharedHearingMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -57,11 +63,17 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDeadlineWorkspace: fetchIpDeadlineWorkspaceMock,
   fetchIpCoreRecords: fetchIpCoreRecordsMock,
   fetchIpProsecutionWorkspace: fetchIpProsecutionWorkspaceMock,
+  fetchIpSharedHearings: fetchIpSharedHearingsMock,
   fetchIpWorkspaceReadiness: fetchIpWorkspaceReadinessMock,
   enableIpWorkspace: enableIpWorkspaceMock,
   runIpWorkspaceTest: runIpWorkspaceTestMock,
   saveIpWorkspaceConfiguration: saveIpWorkspaceConfigurationMock,
   createIpDocket: vi.fn(),
+  createIpSharedHearing: createIpSharedHearingMock,
+  updateIpSharedHearing: vi.fn(),
+  listCalendarConnections: listCalendarConnectionsMock,
+  syncHearingToOutlook: vi.fn(),
+  syncHearingToGoogleCalendar: vi.fn(),
   addIpTitleInterest: vi.fn(),
   addIpCostItem: vi.fn(),
   discoverIpEvidence: vi.fn(),
@@ -117,13 +129,16 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockReset();
     fetchIpCoreRecordsMock.mockReset();
     fetchIpProsecutionWorkspaceMock.mockReset();
+    fetchIpSharedHearingsMock.mockReset();
     fetchIpWorkspaceReadinessMock.mockReset();
+    listCalendarConnectionsMock.mockReset();
     previewIpDocketEventMock.mockReset();
     previewIpDocketLifecycleMock.mockReset();
     appendIpDocketEventMock.mockReset();
     transitionIpDocketLifecycleMock.mockReset();
     confirmIpLegalDeadlineMock.mockReset();
     proposeIpLegalDeadlineMock.mockReset();
+    createIpSharedHearingMock.mockReset();
     enableIpWorkspaceMock.mockReset();
     runIpWorkspaceTestMock.mockReset();
     saveIpWorkspaceConfigurationMock.mockReset();
@@ -163,6 +178,8 @@ describe("IpDocketPage", () => {
       events: [], operational_completion_count: 0, filing_evidence_count: 0,
       registry_acceptance_count: 0, final_disposition_count: 0,
     });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [] });
+    listCalendarConnectionsMock.mockResolvedValue({ connections: [] });
     previewIpDocketEventMock.mockResolvedValue({
       docket_id: "ip-1", lifecycle_version: 0, current_phase: "draft",
       proposed_phase: "formalities", backdated: false, recalculation_required: false,
@@ -416,6 +433,23 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Propose calendar version" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Propose rule and fixture" })).toBeVisible();
+    const hearingWorkflow = screen.getByTestId("ip-hearing-workflow");
+    expect(within(hearingWorkflow).getByLabelText("Hearing date")).toBeVisible();
+    expect(within(hearingWorkflow).getByLabelText("Time precision")).toBeVisible();
+    expect(within(hearingWorkflow).getByLabelText("Virtual hearing link")).toBeVisible();
+    expect(within(hearingWorkflow).getByLabelText("Reminder offsets (hours)")).toBeVisible();
+    const previewReminders = within(hearingWorkflow).getByRole("button", {
+      name: "Preview recipients and policy",
+    });
+    expect(previewReminders).toBeVisible();
+    fireEvent.click(previewReminders);
+    expect(within(hearingWorkflow).getByTestId("ip-hearing-preview")).toBeVisible();
+    expect(
+      within(hearingWorkflow).getByRole("button", {
+        name: "Confirm hearing and reminders",
+      }),
+    ).toBeVisible();
+    expect(within(hearingWorkflow).getByRole("button", { name: "Edit details" })).toBeVisible();
     const documentWorkspace = screen.getByTestId("ip-document-workspace");
     expect(within(documentWorkspace).getByLabelText("Original file")).toBeVisible();
     expect(within(documentWorkspace).getByRole("button", { name: "Preview controlled name" })).toBeVisible();

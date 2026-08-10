@@ -30,6 +30,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.schemas.shared_work import (
+    IpHearingReminderRecord,
     IpOperationalDeadlineCreateRequest,
     IpOperationalDeadlineListResponse,
     IpOperationalDeadlineRecord,
@@ -53,8 +54,13 @@ from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
-CONTRACT_VERSION = "IPLF-025A/2026-08-10"
-MIGRATION_HEADS = ["20260810_0001", "20260810_0002", "20260810_0003"]
+CONTRACT_VERSION = "IPLF-025B/2026-08-10"
+MIGRATION_HEADS = [
+    "20260810_0001",
+    "20260810_0002",
+    "20260810_0003",
+    "20260810_0004",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,8 +299,17 @@ def update_ip_shared_task(
     return _task_record(task)
 
 
-def _hearing_record(hearing: MatterHearing) -> IpSharedHearingRecord:
+def _hearing_record(session: Session, hearing: MatterHearing) -> IpSharedHearingRecord:
     assert hearing.company_id is not None and hearing.ip_docket_id is not None
+    reminders = session.scalars(
+        select(HearingReminder)
+        .where(
+            HearingReminder.company_id == hearing.company_id,
+            HearingReminder.ip_docket_id == hearing.ip_docket_id,
+            HearingReminder.hearing_id == hearing.id,
+        )
+        .order_by(HearingReminder.scheduled_for, HearingReminder.id)
+    )
     return IpSharedHearingRecord(
         id=hearing.id,
         company_id=hearing.company_id,
@@ -306,6 +321,9 @@ def _hearing_record(hearing: MatterHearing) -> IpSharedHearingRecord:
         session_label=hearing.session_label,
         timezone=hearing.timezone,
         hearing_mode=hearing.hearing_mode,
+        location_text=hearing.location_text,
+        meeting_url=hearing.meeting_url,
+        attendee_membership_ids=list(hearing.attendee_membership_ids_json or []),
         source=hearing.source,
         source_ref_type=hearing.source_ref_type,
         source_ref_id=hearing.source_ref_id,
@@ -315,8 +333,47 @@ def _hearing_record(hearing: MatterHearing) -> IpSharedHearingRecord:
         purpose=hearing.purpose,
         status=hearing.status,
         outcome_note=hearing.outcome_note,
+        reminder_policy=hearing.reminder_policy_json,
+        reminders=[
+            IpHearingReminderRecord(
+                id=reminder.id,
+                recipient_membership_id=reminder.recipient_membership_id,
+                channel=reminder.channel,
+                scheduled_for=reminder.scheduled_for,
+                schedule_generation=reminder.schedule_generation,
+                status=reminder.status,
+                provider=reminder.provider,
+                provider_message_id=reminder.provider_message_id,
+                last_error=reminder.last_error,
+                attempts=reminder.attempts,
+                sent_at=reminder.sent_at,
+                delivered_at=reminder.delivered_at,
+                created_at=reminder.created_at,
+            )
+            for reminder in reminders
+        ],
         created_at=hearing.created_at,
     )
+
+
+def _validated_reminder_policy(
+    session: Session,
+    *,
+    company_id: str,
+    policy,
+) -> dict | None:
+    if policy is None:
+        return None
+    for membership_id in policy.recipient_membership_ids:
+        _active_membership(
+            session, company_id=company_id, membership_id=membership_id
+        )
+    _active_membership(
+        session,
+        company_id=company_id,
+        membership_id=policy.escalation_membership_id,
+    )
+    return policy.model_dump(mode="json")
 
 
 def _append_ip_next_hearing_history(
@@ -367,6 +424,12 @@ def create_ip_shared_hearing(
         company_id=target.company_id,
         membership_id=payload.responsible_membership_id,
     )
+    for membership_id in payload.attendee_membership_ids:
+        _active_membership(
+            session,
+            company_id=target.company_id,
+            membership_id=membership_id,
+        )
     hearing = MatterHearing(
         company_id=target.company_id,
         ip_docket_id=target.ip_docket_id,
@@ -376,10 +439,18 @@ def create_ip_shared_hearing(
         session_label=payload.session_label.strip() if payload.session_label else None,
         timezone=payload.timezone,
         hearing_mode=payload.hearing_mode,
+        location_text=payload.location_text.strip() if payload.location_text else None,
+        meeting_url=payload.meeting_url,
+        attendee_membership_ids_json=payload.attendee_membership_ids,
         source=payload.source.strip().lower(),
         source_ref_type=payload.source_ref_type,
         source_ref_id=payload.source_ref_id,
         responsible_membership_id=payload.responsible_membership_id,
+        reminder_policy_json=_validated_reminder_policy(
+            session,
+            company_id=target.company_id,
+            policy=payload.reminder_policy,
+        ),
         forum_name=payload.forum_name.strip(),
         judge_name=payload.judge_name.strip() if payload.judge_name else None,
         purpose=payload.purpose.strip(),
@@ -397,6 +468,12 @@ def create_ip_shared_hearing(
             source_ref_id=hearing.id,
             reason="hearing_created",
         )
+        if hearing.reminder_policy_json:
+            from caseops_api.services.hearing_reminders import (
+                schedule_reminders_for_hearing,
+            )
+
+            schedule_reminders_for_hearing(session, hearing=hearing)
     record_from_context(
         session,
         context,
@@ -407,7 +484,7 @@ def create_ip_shared_hearing(
     )
     session.commit()
     session.refresh(hearing)
-    return _hearing_record(hearing)
+    return _hearing_record(session, hearing)
 
 
 def list_ip_shared_hearings(
@@ -423,7 +500,7 @@ def list_ip_shared_hearings(
     )
     return IpSharedHearingListResponse(
         docket_id=docket_id,
-        hearings=[_hearing_record(hearing) for hearing in hearings],
+        hearings=[_hearing_record(session, hearing) for hearing in hearings],
     )
 
 
@@ -454,11 +531,58 @@ def update_ip_shared_hearing(
             company_id=target.company_id,
             membership_id=updates["responsible_membership_id"],
         )
+    if "attendee_membership_ids" in updates:
+        attendee_ids = updates.pop("attendee_membership_ids") or []
+        for membership_id in attendee_ids:
+            _active_membership(
+                session,
+                company_id=target.company_id,
+                membership_id=membership_id,
+            )
+        updates["attendee_membership_ids_json"] = attendee_ids
+    if "reminder_policy" in updates:
+        updates["reminder_policy_json"] = _validated_reminder_policy(
+            session,
+            company_id=target.company_id,
+            policy=payload.reminder_policy,
+        )
+        updates.pop("reminder_policy", None)
     old_date = hearing.hearing_on
+    old_status = hearing.status
+    old_schedule = (
+        hearing.hearing_on,
+        hearing.time_status,
+        hearing.hearing_time,
+        hearing.session_label,
+        hearing.timezone,
+    )
+    reminder_policy_changed = "reminder_policy_json" in updates
     for field, value in updates.items():
-        if field == "outcome_note" and isinstance(value, str):
+        if field in {"outcome_note", "location_text"} and isinstance(value, str):
             value = value.strip() or None
+        elif field in {"forum_name", "judge_name", "purpose"} and isinstance(value, str):
+            value = value.strip()
         setattr(hearing, field, value)
+    if hearing.time_status == "exact" and hearing.hearing_time is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="hearing_time is required when time_status is exact",
+        )
+    if hearing.time_status != "exact" and hearing.hearing_time is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="hearing_time is only allowed when time_status is exact",
+        )
+    if hearing.time_status == "session" and not (hearing.session_label or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="session_label is required when time_status is session",
+        )
+    if hearing.time_status != "session" and hearing.session_label is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="session_label is only allowed when time_status is session",
+        )
     if hearing.hearing_on != old_date:
         _append_ip_next_hearing_history(
             session,
@@ -468,6 +592,23 @@ def update_ip_shared_hearing(
             source_ref_id=hearing.id,
             reason="hearing_rescheduled",
         )
+    schedule_changed = (
+        hearing.hearing_on,
+        hearing.time_status,
+        hearing.hearing_time,
+        hearing.session_label,
+        hearing.timezone,
+    ) != old_schedule
+    cancelled_transition = hearing.status == "cancelled" and old_status != "cancelled"
+    if schedule_changed or hearing.status != old_status or reminder_policy_changed:
+        from caseops_api.services.hearing_reminders import (
+            cancel_reminders_for_hearing,
+            schedule_reminders_for_hearing,
+        )
+
+        cancel_reminders_for_hearing(session, hearing_id=hearing.id)
+        if hearing.status not in {"completed", "cancelled"} and hearing.reminder_policy_json:
+            schedule_reminders_for_hearing(session, hearing=hearing)
     record_from_context(
         session,
         context,
@@ -478,7 +619,28 @@ def update_ip_shared_hearing(
     )
     session.commit()
     session.refresh(hearing)
-    return _hearing_record(hearing)
+    if cancelled_transition:
+        from caseops_api.services.calendar_sync import (
+            delete_synced_hearing_events_for_context,
+        )
+
+        delete_synced_hearing_events_for_context(
+            session,
+            context=context,
+            hearing_id=hearing.id,
+        )
+    elif schedule_changed:
+        from caseops_api.services.calendar_sync import (
+            resync_synced_hearing_events_for_context,
+        )
+
+        resync_synced_hearing_events_for_context(
+            session,
+            context=context,
+            hearing_id=hearing.id,
+        )
+    session.refresh(hearing)
+    return _hearing_record(session, hearing)
 
 
 def _deadline_record(deadline: MatterDeadline) -> IpOperationalDeadlineRecord:

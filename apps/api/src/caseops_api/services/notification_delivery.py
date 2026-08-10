@@ -659,6 +659,7 @@ def enqueue_notification_delivery_intent(
                 source_type=source_type,
                 source_id=source_id,
                 matter=matter,
+                ip_docket=ip_docket,
                 notification_rule_id=notification_rule_id,
                 title=fallback_title or "Delivery fallback",
                 body=(
@@ -694,6 +695,7 @@ def enqueue_notification_delivery_intent(
             source_type=source_type,
             source_id=source_id,
             matter=matter,
+            ip_docket=ip_docket,
             notification_rule_id=notification_rule_id,
             title=title or "Critical reminder",
             body=body or "Review this critical reminder in CaseOps.",
@@ -778,6 +780,11 @@ def _ensure_in_app_fallback(
         source_type=intent.source_type,
         source_id=intent.source_id,
         matter=intent.matter,
+        ip_docket=(
+            session.get(IpDocketRecord, intent.ip_docket_id)
+            if intent.ip_docket_id is not None
+            else None
+        ),
         notification_rule_id=intent.notification_rule_id,
         title=intent.title or "Delivery fallback",
         body=intent.body or "An external notification could not be delivered.",

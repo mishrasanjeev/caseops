@@ -173,12 +173,12 @@ export function NewMatterDialog() {
         forum_consumer_level: forumSelection.forum_consumer_level,
         status: values.status,
       }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["matters"] });
+    onSuccess: () => {
       toast.success("Matter created");
       form.reset();
       setForumSelection(EMPTY_FORUM_SELECTION);
       setOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["matters"] });
     },
     onError: (err) => {
       const message = apiErrorMessage(err, "Could not create matter.");

@@ -165,6 +165,41 @@ def test_shared_work_expand_backfill_switch_downgrade_reupgrade(
         engine.dispose()
     assert _head(database_url) == "20260810_0003"
 
+    command.upgrade(config, "20260810_0004")
+    engine = create_engine(database_url, future=True)
+    try:
+        inspector = inspect(engine)
+        hearing_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("matter_hearings")
+        }
+        assert {
+            "location_text",
+            "meeting_url",
+            "attendee_membership_ids_json",
+        }.issubset(hearing_columns)
+        reminder_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("hearing_reminders")
+        }
+        assert reminder_columns["schedule_generation"]["nullable"] is False
+        reminder_uniques = {
+            constraint["name"]: set(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints("hearing_reminders")
+        }
+        assert reminder_uniques[
+            "uq_hearing_reminders_recipient_channel_time_generation"
+        ] == {
+            "hearing_id",
+            "recipient_membership_id",
+            "channel",
+            "scheduled_for",
+            "schedule_generation",
+        }
+    finally:
+        engine.dispose()
+    assert _head(database_url) == "20260810_0004"
+
     command.downgrade(config, "20260809_0001")
     engine = create_engine(database_url, future=True)
     try:
@@ -177,5 +212,5 @@ def test_shared_work_expand_backfill_switch_downgrade_reupgrade(
         engine.dispose()
     assert _head(database_url) == "20260809_0001"
 
-    command.upgrade(config, "20260810_0003")
-    assert _head(database_url) == "20260810_0003"
+    command.upgrade(config, "20260810_0004")
+    assert _head(database_url) == "20260810_0004"
