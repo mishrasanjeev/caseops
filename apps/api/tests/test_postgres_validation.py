@@ -569,6 +569,57 @@ def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
     assert calendar_sync_row.dead_letter_reason == "matter_disposed_delete"
 
 
+def test_hearing_resync_query_does_not_compare_json_columns_on_postgres(pg_engine):
+    """The no-provider path must not apply DISTINCT to a JSON column."""
+    from caseops_api.db.models import Company, CompanyMembership, User
+    from caseops_api.services.calendar_sync import (
+        resync_synced_hearing_events_for_context,
+    )
+    from caseops_api.services.session_context import SessionContext
+
+    company_id = str(uuid4())
+    user_id = str(uuid4())
+    membership_id = str(uuid4())
+    with Session(pg_engine) as session:
+        company = Company(
+            id=company_id,
+            name="PostgreSQL Calendar Resync Firm",
+            slug=f"pg-calendar-resync-{company_id[:8]}",
+            company_type="law_firm",
+            tenant_key=company_id,
+        )
+        user = User(
+            id=user_id,
+            email=f"pg-calendar-resync-{user_id[:8]}@example.com",
+            full_name="PostgreSQL Calendar Resync Owner",
+            password_hash="not-used",
+        )
+        membership = CompanyMembership(
+            id=membership_id,
+            company_id=company_id,
+            user_id=user_id,
+            role="owner",
+        )
+        session.add_all([company, user])
+        session.commit()
+        session.add(membership)
+        session.commit()
+
+        context = SessionContext(
+            company=company,
+            membership=membership,
+            user=user,
+        )
+        assert (
+            resync_synced_hearing_events_for_context(
+                session,
+                context=context,
+                hearing_id=str(uuid4()),
+            )
+            == 0
+        )
+
+
 def test_foreign_key_indexes_exist_after_head(pg_engine):
     inspector = inspect(pg_engine)
     missing: list[tuple[str, str]] = []
