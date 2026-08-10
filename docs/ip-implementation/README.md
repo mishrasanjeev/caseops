@@ -44,7 +44,17 @@ migration, scheduler, and production-browser evidence is retained in
 `evidence/m2/IPLF-024A/release-2026-08-09.md`. IPLF-024B is also
 `deployment_verified` at canonical release `64f6360b...`; its exact CI, build,
 image, migration, scheduler, and successful dated production evidence is
-retained in `evidence/m2/IPLF-024B/release-2026-08-10.md`.
+retained in `evidence/m2/IPLF-024B/release-2026-08-10.md`. Evidence-head release
+`18a199bf...` subsequently remediated the integrations cold-start request burst
+and reconfirmed the full production suite; its exact evidence is retained in
+`evidence/m2/IPLF-024B/cold-start-remediation-2026-08-10.md`.
+
+`SHARED_WORK_FOUNDATION.md` documents the IPLF-025A expansion of the existing
+task, hearing, next-hearing, operational-deadline, calendar, reminder, and
+durable-notification owners to tenant-correlated IP docket targets. It records
+the three-step expand/backfill/switch migration, forbidden duplicate tables,
+release-blocking reconciliation, legal-deadline one-writer boundary, and
+rollback contract used by IPLF-025B.
 
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an

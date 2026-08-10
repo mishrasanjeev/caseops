@@ -204,6 +204,7 @@ def create_deadline(
             detail="Deadline title is required.",
         )
     deadline = MatterDeadline(
+        company_id=matter.company_id,
         matter_id=matter_id,
         source=source_norm,
         kind=(kind or "").strip().lower()[:64] or "other",

@@ -138,6 +138,7 @@ def _ensure_hearing(session: Session, *, matter: Matter) -> MatterHearing:
     if existing is not None:
         return existing
     hearing = MatterHearing(
+        company_id=matter.company_id,
         matter_id=matter.id,
         hearing_on=utcnow().date(),
         forum_name=matter.court_name or "Unknown",

@@ -240,6 +240,7 @@ def review_email_invitation_candidate(
         operation="approve an email-calendar candidate",
     )
     deadline = MatterDeadline(
+        company_id=matter.company_id,
         matter_id=matter.id,
         source="email_invitation",
         kind="calendar_event_candidate",

@@ -1550,6 +1550,7 @@ class Matter(Base):
     tasks: Mapped[list[MatterTask]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
+        foreign_keys="MatterTask.matter_id",
     )
     notes: Mapped[list[MatterNote]] = relationship(
         back_populates="matter",
@@ -1558,6 +1559,7 @@ class Matter(Base):
     hearings: Mapped[list[MatterHearing]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
+        foreign_keys="MatterHearing.matter_id",
     )
     conflict_checks: Mapped[list[MatterConflictCheck]] = relationship(
         back_populates="matter",
@@ -1623,11 +1625,13 @@ class Matter(Base):
     next_hearing_history: Mapped[list[MatterNextHearingHistory]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
+        foreign_keys="MatterNextHearingHistory.matter_id",
         order_by="desc(MatterNextHearingHistory.created_at)",
     )
     next_hearing_suggestions: Mapped[list[MatterNextHearingSuggestion]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
+        foreign_keys="MatterNextHearingSuggestion.matter_id",
         order_by="desc(MatterNextHearingSuggestion.created_at)",
     )
     linked_contracts: Mapped[list[Contract]] = relationship(
@@ -1823,11 +1827,39 @@ class MatterFileQAEntry(Base):
 
 class MatterTask(Base):
     __tablename__ = "matter_tasks"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_matter_task_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_matter_task_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_matter_task_id_company"),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_matter_task_exactly_one_target",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    matter_id: Mapped[str] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     created_by_membership_id: Mapped[str | None] = mapped_column(
@@ -1872,7 +1904,9 @@ class MatterTask(Base):
         nullable=False,
     )
 
-    matter: Mapped[Matter] = relationship(back_populates="tasks")
+    matter: Mapped[Matter | None] = relationship(
+        back_populates="tasks", foreign_keys=[matter_id]
+    )
     created_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="created_tasks",
         foreign_keys=[created_by_membership_id],
@@ -1947,11 +1981,39 @@ class MatterConflictCheck(Base):
 
 class MatterHearing(Base):
     __tablename__ = "matter_hearings"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_matter_hearing_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_matter_hearing_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_matter_hearing_id_company"),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_matter_hearing_exactly_one_target",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    matter_id: Mapped[str] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     hearing_on: Mapped[date] = mapped_column(Date, nullable=False)
@@ -1962,6 +2024,13 @@ class MatterHearing(Base):
     session_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Kolkata")
     reminder_policy_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    hearing_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="manual")
+    source_ref_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_ref_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    responsible_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     forum_name: Mapped[str] = mapped_column(String(255), nullable=False)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     purpose: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -1983,7 +2052,9 @@ class MatterHearing(Base):
         nullable=False,
     )
 
-    matter: Mapped[Matter] = relationship(back_populates="hearings")
+    matter: Mapped[Matter | None] = relationship(
+        back_populates="hearings", foreign_keys=[matter_id]
+    )
     reminders: Mapped[list[HearingReminder]] = relationship(
         back_populates="hearing",
         cascade="all, delete-orphan",
@@ -2228,6 +2299,23 @@ class HearingReminder(Base):
             "scheduled_for",
             name="uq_hearing_reminders_recipient_channel_time",
         ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_hearing_reminder_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_hearing_reminder_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_hearing_reminder_exactly_one_target",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -2236,9 +2324,14 @@ class HearingReminder(Base):
         nullable=False,
         index=True,
     )
-    matter_id: Mapped[str] = mapped_column(
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     hearing_id: Mapped[str] = mapped_column(
@@ -3576,6 +3669,16 @@ class NotificationDeliveryIntent(Base):
             "CASE WHEN recipient_external_ref IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_notification_delivery_exactly_one_recipient",
         ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_notification_delivery_ip_docket_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "matter_id IS NULL OR ip_docket_id IS NULL",
+            name="ck_notification_delivery_at_most_one_work_target",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -3596,6 +3699,11 @@ class NotificationDeliveryIntent(Base):
     destination_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -4913,6 +5021,25 @@ class MatterComplianceItem(Base):
 
 class MatterNextHearingHistory(Base):
     __tablename__ = "matter_next_hearing_history"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_next_hearing_history_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_next_hearing_history_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_next_hearing_history_exactly_one_target",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -4920,9 +5047,14 @@ class MatterNextHearingHistory(Base):
         nullable=False,
         index=True,
     )
-    matter_id: Mapped[str] = mapped_column(
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     old_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -4943,7 +5075,9 @@ class MatterNextHearingHistory(Base):
         nullable=False,
     )
 
-    matter: Mapped[Matter] = relationship(back_populates="next_hearing_history")
+    matter: Mapped[Matter | None] = relationship(
+        back_populates="next_hearing_history", foreign_keys=[matter_id]
+    )
     changed_by_membership: Mapped[CompanyMembership | None] = relationship()
 
 
@@ -4958,6 +5092,31 @@ class MatterNextHearingSuggestion(Base):
             "source_ref_id",
             name="uq_matter_next_hearing_suggestion_source",
         ),
+        UniqueConstraint(
+            "ip_docket_id",
+            "suggested_date",
+            "source",
+            "source_ref_type",
+            "source_ref_id",
+            name="uq_ip_next_hearing_suggestion_source",
+        ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_next_hearing_suggestion_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_next_hearing_suggestion_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_next_hearing_suggestion_exactly_one_target",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -4966,9 +5125,14 @@ class MatterNextHearingSuggestion(Base):
         nullable=False,
         index=True,
     )
-    matter_id: Mapped[str] = mapped_column(
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     suggested_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
@@ -4996,7 +5160,9 @@ class MatterNextHearingSuggestion(Base):
         nullable=False,
     )
 
-    matter: Mapped[Matter] = relationship(back_populates="next_hearing_suggestions")
+    matter: Mapped[Matter | None] = relationship(
+        back_populates="next_hearing_suggestions", foreign_keys=[matter_id]
+    )
     decided_by_membership: Mapped[CompanyMembership | None] = relationship()
 
 
@@ -11618,11 +11784,39 @@ class MatterDeadline(Base):
     """
 
     __tablename__ = "matter_deadlines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_matter_deadline_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_matter_deadline_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_matter_deadline_id_company"),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_matter_deadline_exactly_one_target",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    matter_id: Mapped[str] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     source: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -275,6 +275,7 @@ def review_calendar_event_candidate(
             detail="Matter next hearing is manually locked; explicit override is required.",
         )
     hearing = MatterHearing(
+        company_id=matter.company_id,
         matter_id=matter.id,
         hearing_on=row.starts_at.date(),
         forum_name=row.location or matter.court_name or "Provider calendar",

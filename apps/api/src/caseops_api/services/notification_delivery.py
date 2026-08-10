@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     HearingReminder,
     HearingReminderDeliveryIntent,
     InAppNotification,
+    IpDocketRecord,
     Matter,
     MatterPortalGrant,
     NotificationDeliveryChannel,
@@ -359,6 +360,7 @@ def enqueue_notification_delivery_intent(
     source_type: str,
     source_id: str,
     matter: Matter | None = None,
+    ip_docket: IpDocketRecord | None = None,
     notification_rule_id: str | None = None,
     title: str | None = None,
     body: str | None = None,
@@ -371,6 +373,8 @@ def enqueue_notification_delivery_intent(
     schedule_source_type: str | None = None,
     schedule_source_id: str | None = None,
 ) -> NotificationDeliveryIntent | None:
+    if matter is not None and ip_docket is not None:
+        raise ValueError("A notification may target a Matter or an IP docket, not both.")
     targets = [
         recipient_membership is not None,
         recipient_portal_user is not None,
@@ -425,6 +429,34 @@ def enqueue_notification_delivery_intent(
             )
             if grant is None:
                 return None
+    if ip_docket is not None:
+        if (
+            ip_docket.company_id != context.company.id
+            or not ip_docket.is_active
+            or ip_docket.archived_by_matter_disposal
+        ):
+            return None
+        if ip_docket.matter_id:
+            linked_matter = session.get(Matter, ip_docket.matter_id)
+            if linked_matter is None:
+                return None
+            try:
+                linked_matter = assert_operational_matter(session, matter=linked_matter)
+            except MatterNotOperationalError:
+                return None
+            if recipient_membership is not None and not can_access(
+                session,
+                context=_recipient_context(
+                    actor_context=context,
+                    membership=recipient_membership,
+                ),
+                matter=linked_matter,
+            ):
+                return None
+        elif ip_docket.restricted:
+            # IPLF-026 introduces the shared restricted-record policy. Until
+            # then an unlinked restricted docket is deliberately fail-closed.
+            return None
 
     target_key = (
         f"membership:{recipient_membership.id}"
@@ -527,6 +559,7 @@ def enqueue_notification_delivery_intent(
         recipient_external_ref=recipient_external_ref,
         destination_version=destination_version,
         matter_id=matter.id if matter is not None else None,
+        ip_docket_id=ip_docket.id if ip_docket is not None else None,
         notification_rule_id=notification_rule_id,
         channel=channel,
         event_type=event_type,

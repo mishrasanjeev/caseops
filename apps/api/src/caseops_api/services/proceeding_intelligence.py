@@ -451,6 +451,7 @@ def _ensure_task_and_deadline(
             )
     else:
         task = MatterTask(
+            company_id=matter.company_id,
             matter_id=matter.id,
             created_by_membership_id=actor_membership_id,
             title=title,
@@ -513,6 +514,7 @@ def _ensure_task_and_deadline(
             )
     else:
         deadline = MatterDeadline(
+            company_id=matter.company_id,
             matter_id=matter.id,
             source="proceeding",
             kind=signal.signal_type[:64],
