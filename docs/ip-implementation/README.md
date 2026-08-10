@@ -59,6 +59,13 @@ canonical release `2f27f044...`; exact CI, image, migration, scheduler,
 reconciliation, and production-browser evidence is retained in
 `evidence/m2/IPLF-025A/release-2026-08-10.md`.
 
+`CALENDAR_REMINDER_WORKFLOW.md` documents the IPLF-025B hearing, reminder, and
+external-calendar behavior over those shared owners. IPLF-025B is
+`deployment_verified` at canonical release `88ef0b99...`; exact CI, immutable
+images, migration, scheduler, isolated entitled-canary, PostgreSQL repair, and
+two successful production-browser workflows are retained in
+`evidence/m2/IPLF-025B/release-2026-08-11.md`.
+
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an
 actively maintained program manifest.
