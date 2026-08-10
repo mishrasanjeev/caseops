@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-025A",
     "checkpoint": {
-      "recorded_at": "2026-08-09T22:05:00+05:30",
-      "repository_revision": "9970764378f170760f0a094c9e68a345e1813d40",
-      "environment": "IPLF-024A remains deployment-verified at canonical main 9970764378f170760f0a094c9e68a345e1813d40 after green CI/Security/CodeQL/production Playwright. IPLF-024B repository implementation and local verification are complete on its candidate branch: shared processing, duplicate reuse, version/state locks, privilege/OCR policy, controlled naming/bulk preview, alias import, responsive UI, generated OpenAPI, and dated local Playwright pass. Independent CI, canonical merge, exact deployment, migration-head confirmation, scheduler convergence, and dated production evidence remain open release gates.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, and IPLF-024A have completed repository-controlled implementation and deployment verification. IPLF-024B now implements its bounded IP-DOC-01..12 and UJ-14 workflow over the IPLF-024A owners, but is not deployment-verified yet. Reciprocal IPLF-036B, genuine legal/UAT acceptance, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-10T00:40:00+05:30",
+      "repository_revision": "64f6360b7bd9f4943be56c3d2c28662ce361bf5f",
+      "environment": "IPLF-024B is deployment-verified at canonical main 64f6360b7bd9f4943be56c3d2c28662ce361bf5f after green CI/Security/CodeQL/full Playwright, exact immutable API/web builds, successful migration, six-binding scheduler convergence, 100% Cloud Run traffic, exact-release identity, and production workflow 31329680798. The IPLF-024B dated locked/fail-closed document journey passed in 11.5 seconds; the 59-pass RAM batch and two-case Notice module also passed.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, and IPLF-024B have completed repository-controlled implementation and deployment verification. IPLF-024B closes its bounded IP-DOC-01..12 and UJ-14 workflow over the IPLF-024A owners. Reciprocal IPLF-036B, genuine legal/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-025A",
-      "next_action": "Close IPLF-024B's exact release gates, then implement and release IPLF-025A end to end. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md"
+      "next_action": "Implement and release IPLF-025A end to end while preserving one-writer compatibility and rollback. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md"
     }
   },
   "milestones": [
@@ -881,10 +881,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md",
         "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md"
       ]
     },
@@ -5734,7 +5735,8 @@
         "tests/e2e/ram-2026-08-09-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md"
+        "docs/ip-implementation/IP_DOCUMENT_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md"
       ],
       "evidence_metadata": [
         {
@@ -5745,21 +5747,22 @@
           "assertions": "IP-DOC-01..12 and UJ-14 normal/exception behavior, shared-owner processing, immutable originals, deterministic controlled names, no-overwrite bulk preview, hash-plus-metadata duplicate reuse, multi-record links, all filing states, approval/filed locks, OCR fail-closed, confidentiality policy, alias import, authenticated download, stale-write rejection, and mobile-visible grouped actions",
           "result": "passed",
           "recorded_at": "2026-08-09T22:05:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md",
+          "revision": "64f6360b7bd9f4943be56c3d2c28662ce361bf5f",
+          "environment": "Independent CI/Security/CodeQL/full Playwright; exact Cloud Build images; successful production migration and scheduler reconciliation; Cloud Run API caseops-api-00265-7zt and web caseops-web-00245-6mg at 100% traffic; exact-release production workflow 31329680798",
+          "fixtures": "Dedicated CaseOps QA tenant, stable idempotent trademark docket/document canary, shared processing worker, duplicate bytes, privilege and low-quality policy probes; no client record or real external legal effect",
+          "assertions": "All eight API shards, complete web/build and security gates, immutable exact deployment identity, migration, six scheduler bindings, original and controlled-name downloads, duplicate reuse, processing readiness, accepted-state locking, privilege denial, AI/portal fail-closed policy, RAM regression batch, and Notice module",
+          "result": "passed",
+          "recorded_at": "2026-08-10T00:40:00+05:30"
         }
       ],
       "approvals": [],
-      "blockers": [
-        {
-          "id": "IPLF-024B-REL-001",
-          "summary": "Release evidence is pending independent CI, canonical main merge, exact immutable production images/revisions, migration-head confirmation, current scheduler verification, and dated deployed acceptance.",
-          "owner": "Release Engineering",
-          "evidence_required": "Green independent CI/Security/CodeQL/PostgreSQL/Playwright, exact main commit and image/revision identity, migration head, six current scheduler probes, health/release identity, and dated production UJ-14 plus mobile acceptance.",
-          "state": "open"
-        }
-      ],
+      "blockers": [],
       "next_actions": [
-        "Run independent exact-commit CI, merge the validated commit to main, deploy exact immutable images, confirm migration and scheduler state, and execute dated production acceptance.",
-        "After IPLF-024B deployment verification, continue IPLF-025A while preserving IPLF-036B reciprocal ownership."
+        "Continue IPLF-025A while preserving one-writer compatibility, rollback, and IPLF-036B reciprocal ownership.",
+        "Obtain genuine named legal/pilot/UAT acceptance without treating repository-controlled deployment verification as human approval."
       ],
       "data_impact": [
         "No schema migration is added. Explicit user actions create tenant IP document/version/link/taxonomy-alias rows and shared processing-job rows through the IPLF-024A owners.",
@@ -5788,7 +5791,7 @@
       "allocation_review": "Reviewed against PRD Sections 11.1, 11.2, 13.7, 23, and 25. IPLF-024B implements the bounded UJ-14 document workflow and named exceptions over IPLF-024A owners; reciprocal IPLF-036B retains its later-slice document facets and human opposition-pilot acceptance remains pending.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending"
     },
     {

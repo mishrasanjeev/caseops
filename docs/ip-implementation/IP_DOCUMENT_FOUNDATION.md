@@ -7,8 +7,9 @@
 **IPLF-024A release status:** `deployment_verified` at canonical release
 `65f7c5cd2a669a0751b99280f136a4d18bbc9df2`; detailed evidence is retained in
 `docs/ip-implementation/evidence/m2/IPLF-024A/release-2026-08-09.md`.
-IPLF-024B release status and exact deployed identity are recorded only in its
-own dated evidence after the full release gate passes.
+**IPLF-024B release status:** `deployment_verified` at canonical release
+`64f6360b7bd9f4943be56c3d2c28662ce361bf5f`; detailed evidence is retained in
+`docs/ip-implementation/evidence/m2/IPLF-024B/release-2026-08-10.md`.
 
 ## Purpose and bounded scope
 
@@ -196,18 +197,20 @@ normal UJ-14 workflow and all four named exceptions, including actual download
 bytes, missing-object failure, current-preview invalidation, capability
 composition, stale-version rejection, duplicate reuse, taxonomy-sensitive
 hash matching, low OCR, privilege, tenant isolation, alias dry-run/import, and
-mobile-visible action groups. Exact production evidence is deliberately not
-claimed in this design document.
+mobile-visible action groups.
 
 An arbitrary observation duration such as seven consecutive natural days is
 not an IPLF-024A passing condition. Exact-commit CI, exact image/revision,
 migration completion, current scheduler mapping/health, and dated deployed
 acceptance remain mandatory release gates.
 
-Those repository-controlled gates passed on 9 August 2026: API revision
-`caseops-api-00262-8p5` and web revision `caseops-web-00242-d4j` serve the exact
-canonical release; migration execution `caseops-migrate-job-vpf6g` completed;
-all six scheduler bindings matched the immutable API digest; and production
-workflow `31315434025` passed the 58-case RAM batch plus the two-case Notice
-module. IPLF-024B and genuine human legal/UAT acceptance remain open, so the
-program status stays `PROGRAM INCOMPLETE`.
+IPLF-024A's foundation gates passed on 9 August 2026. IPLF-024B's controlled
+workflow gates passed on 10 August 2026 at canonical release `64f6360b...`:
+API revision `caseops-api-00265-7zt` and web revision
+`caseops-web-00245-6mg` serve 100% traffic; migration execution
+`caseops-migrate-job-ftnfg` completed; all six scheduler bindings matched the
+immutable API digest; and exact-release production workflow `31329680798`
+passed the 59-case RAM batch plus the two-case Notice module. The IPLF-024B
+locked/fail-closed document journey passed in 11.5 seconds. Genuine human
+legal/UAT acceptance and later program slices remain open, so the program
+status stays `PROGRAM INCOMPLETE`.
