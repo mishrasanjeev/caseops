@@ -17,7 +17,7 @@
     "active_slice": "IPLF-025B",
     "checkpoint": {
       "recorded_at": "2026-08-10T07:30:00+05:30",
-      "repository_revision": "dcc31892782cf6f8c17fb8ec6d1098c05881431d",
+      "repository_revision": "feb52bb2dad5fef8156de7212a8f12e7e0806cfc",
       "environment": "IPLF-024B remains deployment-verified at canonical release 64f6360b7bd9f4943be56c3d2c28662ce361bf5f. A focused integrations cold-start remediation is at its final independent Playwright gate after all API, web, Postgres, security, and CodeQL checks passed. IPLF-025A repository implementation and local verification are complete on candidate dcc31892782cf6f8c17fb8ec6d1098c05881431d: ordered expand/backfill/switch migrations, canonical shared-work adapters, generated OpenAPI, governance validation, current-source production build, and dated local Playwright passed. Independent CI, canonical merge, exact deployment, migration/reconciliation, scheduler convergence, and dated production proof remain open release gates.",
       "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, and IPLF-024B have completed repository-controlled implementation and deployment verification. IPLF-025A now has completed repository implementation and local verification but is not deployment-verified. IPLF-025B retains CAL-OPS-01..14 and UJ-10/UJ-62 behavior. Genuine legal/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
@@ -5842,7 +5842,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/SHARED_WORK_FOUNDATION.md",
-          "revision": "dcc31892782cf6f8c17fb8ec6d1098c05881431d",
+          "revision": "feb52bb2dad5fef8156de7212a8f12e7e0806cfc",
           "environment": "Windows 11 focused API and migration tests, ownership/program/ARCH-OPS validators, generated OpenAPI typecheck, exact current-source Next production build, and dated local Playwright over isolated SQLite E2E storage; independent CI, canonical merge, Postgres migration, exact deployment, and production acceptance remain open",
           "fixtures": "Two isolated tenants, complete trademark docket, canonical shared task/hearing/next-hearing/operational-deadline rows, one durable IP notification intent, nullable legacy migration window, explicit null PATCH, and cross-tenant docket lookup; no real client record, external calendar effect, notification delivery, or legal act",
           "assertions": "No duplicate owner tables, exactly-one target and composite tenant integrity, old Matter writer correlation, task/hearing/deadline GET/POST/PATCH adapters, hearing precision and provenance, notification fail-closed boundary, legal-deadline one-writer guard, reconciliation readiness, downgrade/re-upgrade, tenant isolation, generated contract, and dated end-to-end creation",

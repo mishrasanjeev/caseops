@@ -9,6 +9,8 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     IpDocketRecord,
+    Matter,
+    MatterTask,
     User,
 )
 from caseops_api.db.session import get_session_factory
@@ -287,7 +289,37 @@ def test_ip_contract_and_reconciliation_use_shared_rows_and_one_notification_own
     assert other_response.status_code == 200, other_response.text
     other_bootstrap = other_response.json()
     other_headers = auth_headers(str(other_bootstrap["access_token"]))
+    with get_session_factory()() as session:
+        other_matter = Matter(
+            company_id=str(other_bootstrap["company"]["id"]),
+            title="Other tenant legacy tail",
+            matter_code="OTHER-LEGACY-001",
+            practice_area="Litigation",
+            forum_level="district",
+        )
+        session.add(other_matter)
+        session.flush()
+        session.add(
+            MatterTask(
+                company_id=None,
+                matter_id=other_matter.id,
+                title="Other tenant nullable legacy task",
+            )
+        )
+        session.commit()
+
     cross_tenant = client.get(
         f"/api/ip/tasks?docket_id={docket_id}", headers=other_headers
     )
     assert cross_tenant.status_code == 404, cross_tenant.text
+    first_tenant_report = client.get(
+        "/api/ip/shared-work/reconciliation", headers=headers
+    )
+    assert first_tenant_report.status_code == 200, first_tenant_report.text
+    first_tenant_tasks = next(
+        row
+        for row in first_tenant_report.json()["owners"]
+        if row["owner"] == "tasks"
+    )
+    assert first_tenant_tasks["row_count"] == 1
+    assert first_tenant_tasks["legacy_tail_rows"] == 0

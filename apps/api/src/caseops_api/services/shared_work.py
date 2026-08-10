@@ -709,15 +709,6 @@ def reconcile_shared_work_owners(
     rows: list[SharedWorkOwnerReconciliation] = []
     for owner, model in _OWNER_MODELS:
         table = model.__tablename__
-        row_count = _scalar_count(
-            session,
-            select(func.count(model.id)).where(
-                or_(
-                    model.company_id == company_id,
-                    and_(model.company_id.is_(None), model.matter_id.is_not(None)),
-                )
-            ),
-        )
         ip_target_rows = _scalar_count(
             session,
             select(func.count(model.id)).where(
@@ -730,6 +721,13 @@ def reconcile_shared_work_owners(
             select(func.count(model.id))
             .join(Matter, model.matter_id == Matter.id)
             .where(model.company_id.is_(None), Matter.company_id == company_id),
+        )
+        row_count = (
+            _scalar_count(
+                session,
+                select(func.count(model.id)).where(model.company_id == company_id),
+            )
+            + legacy_tail_rows
         )
         invalid_target_rows = _scalar_count(
             session,
