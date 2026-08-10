@@ -41,9 +41,10 @@ contracts, and the dependent IPLF-024B upload, duplicate-reuse, processing,
 review/approval, policy, bulk, and alias workflow. IPLF-024A is
 `deployment_verified` at canonical release `65f7c5cd...`; exact build, image,
 migration, scheduler, and production-browser evidence is retained in
-`evidence/m2/IPLF-024A/release-2026-08-09.md`. IPLF-024B is locally verified
-and remains `ready_for_review` until its independent CI, canonical merge,
-deployment, and dated production evidence close.
+`evidence/m2/IPLF-024A/release-2026-08-09.md`. IPLF-024B is also
+`deployment_verified` at canonical release `64f6360b...`; its exact CI, build,
+image, migration, scheduler, and successful dated production evidence is
+retained in `evidence/m2/IPLF-024B/release-2026-08-10.md`.
 
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an
