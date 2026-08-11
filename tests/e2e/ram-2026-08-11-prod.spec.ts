@@ -59,6 +59,9 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     },
   );
   expect(member.status(), await member.text()).toBe(200);
+  const memberMembershipId = (
+    (await member.json()) as { membership_id: string }
+  ).membership_id;
   const memberApi = await request.newContext();
   const memberLogin = await memberApi.post(
     `${PROD_API_BASE_URL}/api/auth/login`,
@@ -294,4 +297,13 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     uncorrelated_ip_audit_count: 0,
   });
   await memberApi.dispose();
+  const deactivated = await page.request.patch(
+    `${PROD_API_BASE_URL}/api/companies/current/users/${memberMembershipId}`,
+    { headers, data: { is_active: false } },
+  );
+  expect(deactivated.status(), await deactivated.text()).toBe(200);
+  expect(await deactivated.json()).toMatchObject({
+    membership_active: false,
+    user_active: false,
+  });
 });
