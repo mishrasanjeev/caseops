@@ -247,6 +247,7 @@ def test_matter_audit_export_is_scoped_to_current_matter_and_tenant(
     assert any(row["id"] == event_id for row in rows)
     assert all(row["company_id"] == company_a for row in rows)
     assert all(row["matter_id"] == matter_a for row in rows)
+    assert all(row["ip_docket_id"] is None for row in rows)
 
     csv_resp = client.get(
         f"/api/matters/{matter_a}/audit-events/export",
@@ -259,6 +260,7 @@ def test_matter_audit_export_is_scoped_to_current_matter_and_tenant(
     assert "Exported plan" in csv_resp.text
     assert "Other matter" not in csv_resp.text
     csv_rows = list(csv.DictReader(io.StringIO(csv_resp.text)))
+    assert all(row["ip_docket_id"] == "" for row in csv_rows)
     formula_row = next(row for row in csv_rows if row["action"] == "matter.formula_probe")
     assert formula_row["actor_label"] == f"'{formula_label}"
 

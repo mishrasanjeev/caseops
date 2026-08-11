@@ -1371,6 +1371,10 @@ class Matter(Base):
             "lifecycle_version >= 0",
             name="ck_matters_lifecycle_version_nonnegative",
         ),
+        CheckConstraint(
+            "access_policy_version >= 0",
+            name="ck_matters_access_policy_version_nonnegative",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -1464,6 +1468,9 @@ class Matter(Base):
     # the company-level role can see it. Ethical walls always apply
     # regardless of this flag.
     restricted_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    access_policy_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     # Phase C-3 (MOD-TS-016): when False (default), an outside-counsel
     # portal user only sees their OWN work-product, time entries, and
     # invoice submissions on this matter. When True, every OC on the
@@ -10803,6 +10810,11 @@ class AuditEvent(Base):
         ForeignKey("matters.id", ondelete="SET NULL"),
         nullable=True,
     )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     target_type: Mapped[str] = mapped_column(String(80), nullable=False)
     target_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -10830,7 +10842,7 @@ class SourceLinkReport(Base):
     __table_args__ = (
         CheckConstraint(
             "target_type in ('authority_document', 'statute_section', "
-            "'judge_appointment', 'matter_attachment')",
+            "'judge_appointment', 'matter_attachment', 'ip_document_version')",
             name="ck_source_link_reports_target_type",
         ),
         CheckConstraint(
@@ -10889,21 +10901,119 @@ class MatterAccessGrant(Base):
 
     __tablename__ = "matter_access_grants"
     __table_args__ = (
-        UniqueConstraint(
-            "matter_id", "membership_id", name="uq_matter_access_grants_matter_membership"
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_access_grant_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_access_grant_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_access_grant_membership_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["team_id", "company_id"],
+            ["teams.id", "teams.company_id"],
+            name="fk_access_grant_team_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_access_grant_exactly_one_target",
+        ),
+        CheckConstraint(
+            "(CASE WHEN membership_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN team_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_access_grant_exactly_one_subject",
+        ),
+        CheckConstraint(
+            "record_version >= 0",
+            name="ck_access_grant_record_version_nonnegative",
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR effective_from IS NULL OR expires_at > effective_from",
+            name="ck_access_grant_effective_window",
+        ),
+        Index(
+            "uq_access_grant_active_matter_membership",
+            "matter_id",
+            "membership_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL AND membership_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL AND membership_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_access_grant_active_matter_team",
+            "matter_id",
+            "team_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL AND team_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL AND team_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_access_grant_active_ip_membership",
+            "ip_docket_id",
+            "membership_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL AND membership_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL AND membership_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_access_grant_active_ip_team",
+            "ip_docket_id",
+            "team_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL AND team_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL AND team_id IS NOT NULL"
+            ),
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    matter_id: Mapped[str] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    membership_id: Mapped[str] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="CASCADE"),
-        nullable=False,
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
+    )
+    membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True
     )
     access_level: Mapped[str] = mapped_column(
         String(24), nullable=False, default=MatterAccessLevel.MEMBER
@@ -10912,6 +11022,23 @@ class MatterAccessGrant(Base):
     granted_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    effective_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=True, index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    revoked_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -10931,26 +11058,147 @@ class EthicalWall(Base):
 
     __tablename__ = "ethical_walls"
     __table_args__ = (
-        UniqueConstraint(
-            "matter_id", "excluded_membership_id", name="uq_ethical_walls_matter_excluded"
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_ethical_wall_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ethical_wall_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["excluded_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ethical_wall_membership_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["excluded_team_id", "company_id"],
+            ["teams.id", "teams.company_id"],
+            name="fk_ethical_wall_team_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_ethical_wall_exactly_one_target",
+        ),
+        CheckConstraint(
+            "(CASE WHEN excluded_membership_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN excluded_team_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_ethical_wall_exactly_one_subject",
+        ),
+        CheckConstraint(
+            "record_version >= 0",
+            name="ck_ethical_wall_record_version_nonnegative",
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR effective_from IS NULL OR expires_at > effective_from",
+            name="ck_ethical_wall_effective_window",
+        ),
+        Index(
+            "uq_ethical_wall_active_matter_membership",
+            "matter_id",
+            "excluded_membership_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL "
+                "AND excluded_membership_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL "
+                "AND excluded_membership_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_ethical_wall_active_matter_team",
+            "matter_id",
+            "excluded_team_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL AND excluded_team_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND matter_id IS NOT NULL AND excluded_team_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_ethical_wall_active_ip_membership",
+            "ip_docket_id",
+            "excluded_membership_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL "
+                "AND excluded_membership_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL "
+                "AND excluded_membership_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_ethical_wall_active_ip_team",
+            "ip_docket_id",
+            "excluded_team_id",
+            unique=True,
+            sqlite_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL "
+                "AND excluded_team_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL "
+                "AND excluded_team_id IS NOT NULL"
+            ),
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    matter_id: Mapped[str] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    excluded_membership_id: Mapped[str] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="CASCADE"),
-        nullable=False,
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
+    )
+    excluded_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    excluded_team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True
     )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    effective_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=True, index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    revoked_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -12011,7 +12259,10 @@ class TeamKind(StrEnum):
 
 class Team(Base):
     __tablename__ = "teams"
-    __table_args__ = (UniqueConstraint("company_id", "slug", name="uq_team_company_slug"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "slug", name="uq_team_company_slug"),
+        UniqueConstraint("id", "company_id", name="uq_teams_id_company_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -12654,6 +12905,10 @@ class IpDocketRecord(Base):
             name="ck_ip_docket_lifecycle_version_nonnegative",
         ),
         CheckConstraint(
+            "access_policy_version >= 0",
+            name="ck_ip_docket_access_policy_version_nonnegative",
+        ),
+        CheckConstraint(
             "successor_docket_id IS NULL OR successor_docket_id <> id",
             name="ck_ip_docket_successor_not_self",
         ),
@@ -12692,6 +12947,9 @@ class IpDocketRecord(Base):
         Boolean, nullable=False, default=False
     )
     restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    access_policy_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True, index=True

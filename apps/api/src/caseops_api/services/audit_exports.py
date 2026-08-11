@@ -31,13 +31,17 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     AuditEvent,
     AuditExportJob,
     AuditExportJobStatus,
+    Company,
+    CompanyMembership,
+    IpDocketRecord,
+    User,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.audit import record_from_context
@@ -46,12 +50,36 @@ from caseops_api.services.document_storage import (
     persist_workspace_attachment,
     resolve_storage_path,
 )
+from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 
 
 FormatLiteral = Literal["jsonl", "csv"]
+
+
+# Record-scoped IP events must carry an explicit docket correlation before
+# they can enter a tenant-wide export. Historical and multi-target document
+# events that cannot be correlated safely are omitted fail-closed; otherwise
+# an owner excluded by an ethical wall could infer restricted record activity.
+_IP_RECORD_AUDIT_TARGET_TYPES = {
+    "ip_asset",
+    "ip_cost_item",
+    "ip_deadline_coverage",
+    "ip_deadline_incident",
+    "ip_docket_event",
+    "ip_docket_record",
+    "ip_document",
+    "ip_document_bulk",
+    "ip_document_version",
+    "ip_evidence_candidate",
+    "ip_identifier",
+    "ip_proceeding",
+    "ip_related_right_obligation",
+    "ip_title_interest",
+    "trademark_application",
+}
 
 
 _CSV_COLUMNS = [
@@ -62,6 +90,7 @@ _CSV_COLUMNS = [
     "actor_membership_id",
     "actor_label",
     "matter_id",
+    "ip_docket_id",
     "action",
     "target_type",
     "target_id",
@@ -80,6 +109,7 @@ def _event_dict(event: AuditEvent) -> dict[str, object]:
         "actor_membership_id": event.actor_membership_id,
         "actor_label": event.actor_label,
         "matter_id": event.matter_id,
+        "ip_docket_id": event.ip_docket_id,
         "action": event.action,
         "target_type": event.target_type,
         "target_id": event.target_id,
@@ -272,9 +302,51 @@ def run_export_job(job_id: str) -> None:
         session.commit()
 
         try:
+            membership = (
+                session.get(CompanyMembership, job.requested_by_membership_id)
+                if job.requested_by_membership_id
+                else None
+            )
+            company = session.get(Company, job.company_id)
+            user = (
+                session.get(User, membership.user_id)
+                if membership is not None
+                else None
+            )
+            if (
+                membership is None
+                or company is None
+                or user is None
+                or membership.company_id != company.id
+                or not membership.is_active
+            ):
+                raise RuntimeError("Audit export requester is no longer an active tenant member.")
+            context = SessionContext(
+                company=company,
+                user=user,
+                membership=membership,
+            )
+            visible_docket_ids = select(IpDocketRecord.id).where(
+                IpDocketRecord.company_id == company.id,
+                visible_ip_dockets_filter(session, context=context),
+            )
             stmt = (
                 select(AuditEvent)
-                .where(AuditEvent.company_id == job.company_id)
+                .where(
+                    AuditEvent.company_id == job.company_id,
+                    or_(
+                        and_(
+                            AuditEvent.ip_docket_id.is_(None),
+                            AuditEvent.target_type.not_in(
+                                _IP_RECORD_AUDIT_TARGET_TYPES
+                            ),
+                        ),
+                        and_(
+                            AuditEvent.ip_docket_id.is_not(None),
+                            AuditEvent.ip_docket_id.in_(visible_docket_ids),
+                        ),
+                    ),
+                )
                 .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
             )
             if job.since is not None:

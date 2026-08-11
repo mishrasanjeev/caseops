@@ -34,7 +34,7 @@ from caseops_api.schemas.ip_lifecycle import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_records import assert_application_can_enter_filed_phase
-from caseops_api.services.matter_access import can_access
+from caseops_api.services.matter_access import assert_ip_docket_access
 from caseops_api.services.session_context import SessionContext
 
 TERMINAL_IP_DOCKET_STATUSES = frozenset(
@@ -94,6 +94,7 @@ def _authorized_lifecycle_docket(
         docket = session.scalar(statement.with_for_update())
     if docket is None or docket.archived_by_matter_disposal:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
+    assert_ip_docket_access(session, context=context, docket=docket)
     if docket.matter_id:
         matter = session.scalar(
             select(Matter).where(
@@ -101,15 +102,13 @@ def _authorized_lifecycle_docket(
                 Matter.company_id == context.company.id,
             )
         )
-        if matter is None or not can_access(session, context=context, matter=matter):
+        if matter is None:
             raise HTTPException(status_code=404, detail="IP docket record not found.")
         if not matter.is_active:
             raise HTTPException(
                 status_code=409,
                 detail="The linked Matter is terminal; its dedicated lifecycle owns reopening.",
             )
-    elif docket.restricted:
-        raise HTTPException(status_code=404, detail="IP docket record not found.")
     return docket
 
 
@@ -510,6 +509,7 @@ def append_ip_docket_event(
         target_type="ip_docket_event",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "docket_id": docket.id,
             "sequence": row.sequence,
@@ -873,6 +873,7 @@ def transition_ip_docket_lifecycle(
         target_type="ip_docket_record",
         target_id=docket.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "before_status": before_status,
             "after_status": docket.status,

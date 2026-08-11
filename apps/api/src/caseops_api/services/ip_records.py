@@ -135,6 +135,7 @@ def create_ip_asset(
         target_type="ip_asset",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"docket_id": docket.id, "asset_kind": row.asset_kind},
     )
     session.commit()
@@ -213,6 +214,7 @@ def create_trademark_application(
         target_type="trademark_application",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "docket_id": docket.id,
             "asset_id": asset.id,
@@ -265,6 +267,7 @@ def create_ip_proceeding(
         target_type="ip_proceeding",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"docket_id": docket.id, "proceeding_kind": row.proceeding_kind},
     )
     session.commit()
@@ -328,6 +331,7 @@ def create_ip_identifier(
         target_type="ip_identifier",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "docket_id": docket.id,
             "identifier_kind": row.identifier_kind,
@@ -477,6 +481,7 @@ def correct_ip_identifier(
         target_type="ip_identifier",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "docket_id": docket.id,
             "supersedes_identifier_id": previous.id,
@@ -551,6 +556,7 @@ def update_trademark_application_phase(
         target_type="trademark_application",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "filing_phase": row.filing_phase,
             "version": row.version,

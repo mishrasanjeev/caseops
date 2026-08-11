@@ -4,11 +4,9 @@ from pathlib import Path
 
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import Session
 
 from alembic import command
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import Company, Matter
 from caseops_api.db.session import clear_engine_cache
 
 TARGET_TABLES = {
@@ -54,29 +52,40 @@ def test_shared_work_expand_backfill_switch_downgrade_reupgrade(
 
     engine = create_engine(database_url, future=True)
     try:
-        with Session(engine) as session:
-            company = Company(
-                name="Legacy Shared Work LLP",
-                slug="legacy-shared-work",
-                company_type="law_firm",
-                tenant_key="legacy-shared-work",
-                timezone="Asia/Kolkata",
-                is_active=True,
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO companies (
+                        id, name, slug, company_type, tenant_key, timezone,
+                        is_active, team_scoping_enabled, created_at
+                    ) VALUES (
+                        'legacy-shared-work-company', 'Legacy Shared Work LLP',
+                        'legacy-shared-work', 'law_firm', 'legacy-shared-work',
+                        'Asia/Kolkata', true, false, CURRENT_TIMESTAMP
+                    )
+                    """
+                )
             )
-            session.add(company)
-            session.flush()
-            matter = Matter(
-                company_id=company.id,
-                title="Legacy Matter work",
-                matter_code="LEGACY-SHARED-001",
-                practice_area="Litigation",
-                forum_level="district",
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO matters (
+                        id, company_id, title, matter_code, status,
+                        practice_area, forum_level, is_active, lifecycle_version,
+                        restricted_access, created_at, updated_at
+                    ) VALUES (
+                        'legacy-shared-work-matter', 'legacy-shared-work-company',
+                        'Legacy Matter work', 'LEGACY-SHARED-001', 'active',
+                        'Litigation', 'district', true, 0, false,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                )
             )
-            session.add(matter)
-            session.flush()
-            company_id = company.id
-            matter_id = matter.id
-            session.execute(
+            company_id = "legacy-shared-work-company"
+            matter_id = "legacy-shared-work-matter"
+            connection.execute(
                 text(
                     "INSERT INTO matter_tasks "
                     "(id, matter_id, title, status, priority, created_at, updated_at) "
@@ -86,7 +95,6 @@ def test_shared_work_expand_backfill_switch_downgrade_reupgrade(
                 ),
                 {"matter_id": matter_id},
             )
-            session.commit()
     finally:
         engine.dispose()
 

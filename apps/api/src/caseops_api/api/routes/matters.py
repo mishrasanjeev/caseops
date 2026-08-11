@@ -789,6 +789,7 @@ async def export_current_company_matter_audit_events(
                 "created_at",
                 "company_id",
                 "matter_id",
+                "ip_docket_id",
                 "actor_type",
                 "actor_membership_id",
                 "actor_label",

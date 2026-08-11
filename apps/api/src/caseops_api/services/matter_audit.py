@@ -53,6 +53,7 @@ def matter_audit_record(event: AuditEvent) -> MatterAuditEventRecord:
         actor_membership_id=event.actor_membership_id,
         actor_label=event.actor_label,
         matter_id=event.matter_id,
+        ip_docket_id=event.ip_docket_id,
         action=event.action,
         target_type=event.target_type,
         target_id=event.target_id,

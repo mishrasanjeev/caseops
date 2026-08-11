@@ -382,6 +382,7 @@ class IpDocketRecordResponse(BaseModel):
     lifecycle_evidence_ref: str | None
     successor_docket_id: str | None
     restricted: bool
+    access_policy_version: int
     current_version: int
     current_particulars: TrademarkParticularVersionRecord
     notice_links: list[IpNoticeLinkRecord] = Field(default_factory=list)

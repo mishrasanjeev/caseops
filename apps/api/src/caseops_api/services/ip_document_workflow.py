@@ -204,6 +204,21 @@ def _assert_document_targets_accessible(
         )
 
 
+def assert_ip_document_access(
+    session: Session,
+    *,
+    context: SessionContext,
+    document_id: str,
+) -> None:
+    """Authorize every linked target before exposing document/source bytes."""
+
+    _assert_document_targets_accessible(
+        session,
+        context=context,
+        document_id=document_id,
+    )
+
+
 def _policy(document: IpDocument, version: IpDocumentVersion) -> IpDocumentPolicyResponse:
     reasons: list[str] = []
     if document.is_privileged:
