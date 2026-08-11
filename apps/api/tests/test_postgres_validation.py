@@ -265,6 +265,107 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
     )
 
 
+def test_ip_delivery_holds_docket_lock_during_final_authorization(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A concurrent access change cannot pass delivery's final policy check."""
+    from threading import Event, Thread
+
+    from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError
+
+    from caseops_api.db.models import (
+        IpDocketRecord,
+        NotificationDeliveryIntent,
+        NotificationDeliveryStatus,
+    )
+    from caseops_api.services import notification_delivery
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        membership_id = _seed_membership(session, company_id)
+        docket = IpDocketRecord(
+            company_id=company_id,
+            record_type="trademark_application",
+            title="PostgreSQL delivery authorization lock",
+            primary_identifier=f"PG-ACCESS-{str(uuid4())[:8]}",
+            status="draft",
+            is_active=True,
+            restricted=False,
+            created_by_membership_id=membership_id,
+        )
+        session.add(docket)
+        session.flush()
+        intent = NotificationDeliveryIntent(
+            company_id=company_id,
+            recipient_membership_id=membership_id,
+            ip_docket_id=docket.id,
+            channel="in_app",
+            event_type="ip.access.postgres_lock",
+            source_type="ip_docket_record",
+            source_id=docket.id,
+            idempotency_key=str(uuid4()),
+            status=NotificationDeliveryStatus.QUEUED,
+            title="Docket access changed",
+            body="Review the docket in CaseOps.",
+        )
+        session.add(intent)
+        session.commit()
+        docket_id = docket.id
+        intent_id = intent.id
+
+    authorization_entered = Event()
+    authorize_delivery = Event()
+    worker_failures: list[BaseException] = []
+
+    def paused_authorization(_session: Session, _intent: NotificationDeliveryIntent) -> bool:
+        authorization_entered.set()
+        if not authorize_delivery.wait(timeout=10):
+            raise TimeoutError("PostgreSQL delivery authorization test was not released.")
+        return True
+
+    monkeypatch.setattr(
+        notification_delivery,
+        "_recipient_still_permitted",
+        paused_authorization,
+    )
+
+    def process_delivery() -> None:
+        try:
+            with Session(pg_engine) as session:
+                notification_delivery.process_notification_delivery_intent(
+                    session,
+                    intent_id=intent_id,
+                    company_id=company_id,
+                )
+                session.commit()
+        except BaseException as exc:  # pragma: no cover - surfaced in parent thread
+            worker_failures.append(exc)
+
+    worker = Thread(target=process_delivery, name="ip-delivery-lock-proof")
+    worker.start()
+    try:
+        assert authorization_entered.wait(timeout=10), (
+            "Delivery did not reach final authorization while holding the docket lock."
+        )
+        with Session(pg_engine) as access_change_session:
+            access_change_session.execute(text("SET LOCAL lock_timeout = '250ms'"))
+            with pytest.raises(OperationalError, match="lock timeout"):
+                access_change_session.scalar(
+                    select(IpDocketRecord)
+                    .where(IpDocketRecord.id == docket_id)
+                    .with_for_update(of=IpDocketRecord)
+                )
+            access_change_session.rollback()
+    finally:
+        authorize_delivery.set()
+        worker.join(timeout=10)
+
+    assert not worker.is_alive(), "Delivery worker did not release the docket lock."
+    assert worker_failures == []
+
+
 def test_notification_convergence_backfills_boolean_on_postgres(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
