@@ -875,6 +875,22 @@ def process_notification_delivery_intent(
             except MatterNotOperationalError:
                 matter_disposed = True
 
+    # Serialize the final IP authorization decision with access-policy changes.
+    # The access command locks this same parent before it revokes a grant or
+    # adds a wall. Taking the docket lock before the delivery-intent lock gives
+    # both paths one order: a delivery that already owns the parent may finish,
+    # while a committed revocation is observed before any later dispatch.
+    if intent.ip_docket_id is not None:
+        session.scalar(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.id == intent.ip_docket_id,
+                IpDocketRecord.company_id == expected_company_id,
+            )
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        )
+
     intent = session.scalar(
         select(NotificationDeliveryIntent)
         .where(

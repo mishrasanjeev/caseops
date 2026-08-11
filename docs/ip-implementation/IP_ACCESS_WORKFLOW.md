@@ -56,11 +56,11 @@ live list/count/direct/document/source/audit/export surface continues to use
 the shared SQL policy predicate from IPLF-026A; no stale allow-list is copied
 into this workflow.
 
-Notification delivery reauthorizes an internal recipient against the IP docket
-immediately before dispatch. A queued or retry-scheduled intent is blocked with
-zero external calls after access is revoked. An IP portal recipient fails
-closed because this epic does not generalize the existing Matter portal-grant
-owner.
+Notification delivery holds the same docket parent lock as an access-policy
+change while it reauthorizes an internal recipient immediately before dispatch.
+A queued or retry-scheduled intent is blocked with zero external calls after
+access is revoked. An IP portal recipient fails closed because this epic does
+not generalize the existing Matter portal-grant owner.
 
 ## Linked Matter and portal boundary
 
