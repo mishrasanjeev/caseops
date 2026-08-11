@@ -28,13 +28,20 @@ const API_BASE_URL = envOr(
     ? `http://127.0.0.1:${envOr("CASEOPS_E2E_API_PORT", "8000")}`
     : "https://api.caseops.ai",
 );
-const COMPANY_SLUG = envOr("CASEOPS_RAM_PROD_SLUG", "legal");
-const TESTER_EMAIL = envOr("CASEOPS_RAM_PROD_EMAIL", "hari.gupta@gmail.com");
-// Local bootstrap credentials are synthetic and never used for production.
-const LOCAL_TESTER_PASSWORD = "RamAug11Local!";
 const RUN_ID = `${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2, 8)}`.toUpperCase();
+const LOCAL_TENANT_KEY = `ram-aug11-${RUN_ID.toLowerCase()}`;
+const COMPANY_SLUG = envOr(
+  "CASEOPS_RAM_PROD_SLUG",
+  IS_LOCAL ? LOCAL_TENANT_KEY : "legal",
+);
+const TESTER_EMAIL = envOr(
+  "CASEOPS_RAM_PROD_EMAIL",
+  IS_LOCAL ? `${LOCAL_TENANT_KEY}@example.com` : "hari.gupta@gmail.com",
+);
+// Local bootstrap credentials are synthetic and never used for production.
+const LOCAL_TESTER_PASSWORD = "RamAug11Local!";
 
 type MatterRecord = {
   id: string;
