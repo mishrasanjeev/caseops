@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-026B",
     "checkpoint": {
-      "recorded_at": "2026-08-11T06:26:00+05:30",
-      "repository_revision": "28818ad39a4c4950eada4e35bc574c39c76e35a1",
-      "environment": "IPLF-025B remains deployment-verified and its evidence-only canonical release 61f749c037118500f157582dbb2f972675b73d40 now serves exact API caseops-api-00274-phv and web caseops-web-00253-x7f identities; exact-release production workflow 31446233760 passed the complete RAM/IP and Notice suites. IPLF-026A application code is locally verified at immutable rebased revision 9449b00214bc8996a5b6c79921bc7af17c607b8c. Release-candidate revision 28818ad39a4c4950eada4e35bc574c39c76e35a1 includes the Playwright-discovered dated production acceptance, regenerated OpenAPI client, complete Matter CSV audit correlation, revision-accurate historical migration fixtures, and indexed revocation-actor foreign keys with downgrade cleanup; its affected access/migration/document/source/audit/schema batch passed 32 tests, full API Ruff passed, and diff integrity passed. Ownership, manifest, and ARCH-OPS validators pass. Independent replacement-head CI, canonical merge, exact migration/deployment, reconciliation, and execution of the production spec remain open.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, and IPLF-025B have completed repository-controlled implementation and deployment verification. IPLF-026A has completed repository-controlled implementation and local verification but retains independent release gates. Genuine legal/UAT acceptance, IPLF-026B and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-11T17:15:01+05:30",
+      "repository_revision": "f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1",
+      "environment": "IPLF-026A is deployment-verified through reviewed PRs #205 and #206. Current canonical production descendant f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1 serves exact API caseops-api-00278-4rq and web caseops-web-00257-75v identities at 100% traffic from immutable digests; caseops-migrate-job-lck9r, all six scheduler bindings, and IP QA bootstrap caseops-ip-qa-bootstrap-6sv8v passed on the exact API digest. Exact-release production workflows 31466368302 and 31467815420 both executed and passed the IPLF-026A dated access journey plus the complete RAM/IP and Notice suites. IPLF-026B remains the active slice; named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. Genuine legal/security/pilot/UAT acceptance, IPLF-026B and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-026B",
-      "next_action": "Run independent CI/Security/CodeQL/PostgreSQL review on IPLF-026A, merge the exact reviewed head to canonical main, deploy migrations 20260811_0001..0003 and exact images, prove healthy reconciliation and dated production access boundaries, then begin IPLF-026B. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md"
+      "next_action": "Implement IPLF-026B user-facing grant/revoke/preview, warnings, and UJ-46 exception workflows on the IPLF-026A canonical owner, then run its independent release gates. Separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md"
     }
   },
   "milestones": [
@@ -6106,7 +6106,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/IP_ACCESS_FOUNDATION.md",
-        "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md"
+        "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md"
       ],
       "evidence_metadata": [
         {
@@ -6117,14 +6118,23 @@
           "assertions": "One canonical MatterAccessGrant/EthicalWall owner, exactly one Matter-or-IP target and membership-or-team subject, tenant correlation, expand/backfill/switch/downgrade/re-upgrade, independent linked-record policy snapshot, no IP owner bypass, SQL list/count filtering, direct/document/source/audit denial, worker-time audit export reauthorization, fail-closed uncorrelated record audit, and no portal/access-review/emergency persistence",
           "result": "passed",
           "recorded_at": "2026-08-11T06:26:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md",
+          "revision": "f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1",
+          "environment": "Reviewed PRs #205 and #206 merged to canonical main; exact current Cloud Run API caseops-api-00278-4rq and web caseops-web-00257-75v at 100% traffic; immutable images, successful Alembic migration job, six-job scheduler inventory, exact-digest IP QA bootstrap, and two independent exact-release production Playwright workflows",
+          "fixtures": "Dedicated synthetic caseops-ip-qa tenant, timestamp-unique restricted docket and protected text document, seeded IP document taxonomy, correlated source-open and audit events, healthy reconciliation; no real client, provider, recipient, filing, fee, payment, or legal effect",
+          "assertions": "Independent CI/Security/CodeQL/PostgreSQL/web/Playwright review, expected-head merge fencing, migrations 20260811_0001..0003, exact release identity, canonical MatterAccessGrant/EthicalWall owner, no IP owner bypass, restricted list/count/direct/document/source/audit authorization, zero reconciliation defects, repeatable dated production canary, and no portal/access-review/emergency persistence",
+          "result": "passed",
+          "recorded_at": "2026-08-11T17:15:01+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Run independent CI, Security, CodeQL, real-PostgreSQL migration, generated-contract, web, review, and full Playwright gates on the exact final head.",
-        "Merge the exact reviewed head to canonical main; deploy immutable images and migrations 20260811_0001..0003; prove zero reconciliation defects, exact public identity, and dated production access-boundary acceptance.",
-        "Retain all UJ-46 and IP-ACCESS/SEARCH-ACL/SEC-GOV completion claims for IPLF-026B and later allocated slices."
+        "Implement IPLF-026B grant/revoke/preview and exception workflows on this canonical access owner without adding portal, access-review, or emergency-access persistence.",
+        "Retain all UJ-46 and IP-ACCESS/SEARCH-ACL/SEC-GOV completion claims for IPLF-026B and later allocated slices.",
+        "Obtain genuine named legal/security/pilot/UAT acceptance where allocated; do not infer human approval from repository or production evidence."
       ],
       "data_impact": [
         "Migrations 20260811_0001..0003 extend the existing matter_access_grants and ethical_walls owners with tenant-correlated IP targets, team subjects, effective/revocation windows, record versions, checks, composite foreign keys, and active uniqueness.",
@@ -6143,12 +6153,18 @@
           "disposition": "created",
           "owner": "Program control plane",
           "evidence": "Exact implementation revision, focused final-head gates, bounded assertions, and remaining independent release gates"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Reviewed lineage, exact production identity and immutable digests, migration/scheduler/bootstrap convergence, repeatable dated production acceptance, and bounded remaining scope"
         }
       ],
       "allocation_review": "Reviewed against PRD Sections 11, 23, and 25 and the IPLF-026 administrative exception. IPLF-026A delivers only the canonical ownership, persistence, migration, policy predicate, protected backend surfaces, audit correlation, reconciliation, and rollback foundation. IPLF-026B retains every reciprocal IP-ACCESS, SEARCH-ACL, SEC-GOV and UJ-46 row plus user-facing grant/revoke/preview and exception workflows.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
