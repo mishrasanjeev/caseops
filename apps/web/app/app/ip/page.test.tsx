@@ -23,6 +23,11 @@ const {
   confirmIpLegalDeadlineMock,
   proposeIpLegalDeadlineMock,
   createIpSharedHearingMock,
+  fetchIpAccessPanelMock,
+  listEmployeesMock,
+  listTeamsMock,
+  previewIpAccessChangeMock,
+  applyIpAccessChangeMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
@@ -44,6 +49,11 @@ const {
   confirmIpLegalDeadlineMock: vi.fn(),
   proposeIpLegalDeadlineMock: vi.fn(),
   createIpSharedHearingMock: vi.fn(),
+  fetchIpAccessPanelMock: vi.fn(),
+  listEmployeesMock: vi.fn(),
+  listTeamsMock: vi.fn(),
+  previewIpAccessChangeMock: vi.fn(),
+  applyIpAccessChangeMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -98,6 +108,11 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDeadlineRuleImpact: vi.fn(),
   activateIpDeadlineRule: vi.fn(),
   transitionIpDeadlineRule: vi.fn(),
+  fetchIpAccessPanel: fetchIpAccessPanelMock,
+  listEmployees: listEmployeesMock,
+  listTeams: listTeamsMock,
+  previewIpAccessChange: previewIpAccessChangeMock,
+  applyIpAccessChange: applyIpAccessChangeMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -139,6 +154,11 @@ describe("IpDocketPage", () => {
     confirmIpLegalDeadlineMock.mockReset();
     proposeIpLegalDeadlineMock.mockReset();
     createIpSharedHearingMock.mockReset();
+    fetchIpAccessPanelMock.mockReset();
+    listEmployeesMock.mockReset();
+    listTeamsMock.mockReset();
+    previewIpAccessChangeMock.mockReset();
+    applyIpAccessChangeMock.mockReset();
     enableIpWorkspaceMock.mockReset();
     runIpWorkspaceTestMock.mockReset();
     saveIpWorkspaceConfigurationMock.mockReset();
@@ -180,6 +200,22 @@ describe("IpDocketPage", () => {
     });
     fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [] });
     listCalendarConnectionsMock.mockResolvedValue({ connections: [] });
+    listEmployeesMock.mockResolvedValue({ employees: [], total: 0 });
+    listTeamsMock.mockResolvedValue({ teams: [], total: 0 });
+    fetchIpAccessPanelMock.mockResolvedValue({
+      docket_id: "ip-1",
+      restricted: false,
+      access_policy_version: 0,
+      active_internal_membership_count: 1,
+      grants: [],
+      walls: [],
+      linked_matter_id: "matter-1",
+      linked_matter_mismatch_count: 0,
+      persistence_contract: {
+        canonical_owner: "matter_access_grants_and_ethical_walls",
+        excluded: ["portal_access", "access_reviews", "emergency_access"],
+      },
+    });
     previewIpDocketEventMock.mockResolvedValue({
       docket_id: "ip-1", lifecycle_version: 0, current_phase: "draft",
       proposed_phase: "formalities", backdated: false, recalculation_required: false,
@@ -387,7 +423,7 @@ describe("IpDocketPage", () => {
       dockets: [{
         id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
         title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: false,
-        is_active: true, lifecycle_version: 0, lifecycle_effective_at: null,
+        is_active: true, lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null,
         lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
         lifecycle_evidence_ref: null, successor_docket_id: null,
         current_version: 1, created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
@@ -468,7 +504,7 @@ describe("IpDocketPage", () => {
       dockets: [{
         id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
         title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: false,
-        is_active: true, lifecycle_version: 0, lifecycle_effective_at: null,
+        is_active: true, lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null,
         lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
         lifecycle_evidence_ref: null, successor_docket_id: null, current_version: 1,
         created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
@@ -516,7 +552,7 @@ describe("IpDocketPage", () => {
       dockets: [{
         id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
         title: "CASEOPS", primary_identifier: "TM-1", status: "active", is_active: true,
-        lifecycle_version: 0, lifecycle_effective_at: null, lifecycle_reason: null,
+        lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null, lifecycle_reason: null,
         lifecycle_outcome: null, lifecycle_source: null, lifecycle_evidence_ref: null,
         successor_docket_id: null, restricted: false, current_version: 1,
         created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",

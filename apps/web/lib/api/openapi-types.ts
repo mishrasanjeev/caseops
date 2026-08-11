@@ -4016,6 +4016,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect internal IP access grants, ethical walls, and policy history */
+        get: operations["get_ip_docket_access_panel_api_ip_dockets__docket_id__access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/access/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a previewed internal IP access-policy change */
+        post: operations["post_ip_docket_access_change_api_ip_dockets__docket_id__access_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/access/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview an internal IP access-policy change without mutation */
+        post: operations["post_ip_docket_access_preview_api_ip_dockets__docket_id__access_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/applications": {
         parameters: {
             query?: never;
@@ -17404,6 +17455,187 @@ export interface components {
              */
             updated_at: string;
         };
+        /** IpAccessAffectedMembership */
+        IpAccessAffectedMembership: {
+            /** After Visible */
+            after_visible: boolean;
+            /** Before Visible */
+            before_visible: boolean;
+            /** Label */
+            label: string;
+            /** Linked Matter Visible */
+            linked_matter_visible: boolean | null;
+            /** Membership Id */
+            membership_id: string;
+        };
+        /** IpAccessApplyRequest */
+        IpAccessApplyRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "set_restricted" | "grant" | "revoke_grant" | "add_wall" | "revoke_wall";
+            /** Effective From */
+            effective_from?: string | null;
+            /** Expected Access Policy Version */
+            expected_access_policy_version: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Grant Id */
+            grant_id?: string | null;
+            /** Preview Token */
+            preview_token: string;
+            /** Reason */
+            reason: string;
+            /** Restricted */
+            restricted?: boolean | null;
+            /** Subject Id */
+            subject_id?: string | null;
+            /** Subject Type */
+            subject_type?: ("membership" | "team") | null;
+            /** Wall Id */
+            wall_id?: string | null;
+        };
+        /** IpAccessChangeRequest */
+        IpAccessChangeRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "set_restricted" | "grant" | "revoke_grant" | "add_wall" | "revoke_wall";
+            /** Effective From */
+            effective_from?: string | null;
+            /** Expected Access Policy Version */
+            expected_access_policy_version: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Grant Id */
+            grant_id?: string | null;
+            /** Reason */
+            reason: string;
+            /** Restricted */
+            restricted?: boolean | null;
+            /** Subject Id */
+            subject_id?: string | null;
+            /** Subject Type */
+            subject_type?: ("membership" | "team") | null;
+            /** Wall Id */
+            wall_id?: string | null;
+        };
+        /** IpAccessChangeResponse */
+        IpAccessChangeResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "set_restricted" | "grant" | "revoke_grant" | "add_wall" | "revoke_wall";
+            /** Invalidation Operation Id */
+            invalidation_operation_id: string;
+            panel: components["schemas"]["IpAccessPanelResponse"];
+            /** Queued Delivery Recheck Count */
+            queued_delivery_recheck_count: number;
+            /** Visibility Gain Count */
+            visibility_gain_count: number;
+            /** Visibility Loss Count */
+            visibility_loss_count: number;
+        };
+        /** IpAccessGrantRecord */
+        IpAccessGrantRecord: {
+            /**
+             * Access Level
+             * @constant
+             */
+            access_level: "member";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Effective From */
+            effective_from: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Granted By Membership Id */
+            granted_by_membership_id: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Record Version */
+            record_version: number;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revoked By Membership Id */
+            revoked_by_membership_id: string | null;
+            /** Subject Id */
+            subject_id: string;
+            /** Subject Label */
+            subject_label: string;
+            /**
+             * Subject Type
+             * @enum {string}
+             */
+            subject_type: "membership" | "team";
+        };
+        /** IpAccessPanelResponse */
+        IpAccessPanelResponse: {
+            /** Access Policy Version */
+            access_policy_version: number;
+            /** Active Internal Membership Count */
+            active_internal_membership_count: number;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Excluded Persistence */
+            excluded_persistence?: string[];
+            /** Grants */
+            grants: components["schemas"]["IpAccessGrantRecord"][];
+            /** Linked Matter Id */
+            linked_matter_id: string | null;
+            /** Queued Delivery Count */
+            queued_delivery_count: number;
+            /** Restricted */
+            restricted: boolean;
+            /** Walls */
+            walls: components["schemas"]["IpEthicalWallRecord"][];
+        };
+        /** IpAccessPreviewResponse */
+        IpAccessPreviewResponse: {
+            /** Access Policy Version */
+            access_policy_version: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "set_restricted" | "grant" | "revoke_grant" | "add_wall" | "revoke_wall";
+            /** Affected Memberships */
+            affected_memberships: components["schemas"]["IpAccessAffectedMembership"][];
+            /** Docket Id */
+            docket_id: string;
+            /** Document Count */
+            document_count: number;
+            /** Linked Matter Id */
+            linked_matter_id: string | null;
+            /** Linked Matter Mismatch */
+            linked_matter_mismatch: boolean;
+            /** Preview Token */
+            preview_token: string;
+            /** Queued Delivery Recheck Count */
+            queued_delivery_recheck_count: number;
+            /**
+             * Requires Step Up
+             * @default true
+             * @constant
+             */
+            requires_step_up: true;
+            /** Visibility Gain Count */
+            visibility_gain_count: number;
+            /** Visibility Loss Count */
+            visibility_loss_count: number;
+            /** Warnings */
+            warnings: string[];
+        };
         /** IpApplicationNumberCreate */
         IpApplicationNumberCreate: {
             /**
@@ -18814,6 +19046,39 @@ export interface components {
             uploaded_by_membership_id: string;
             /** Version */
             version: number;
+        };
+        /** IpEthicalWallRecord */
+        IpEthicalWallRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Effective From */
+            effective_from: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Record Version */
+            record_version: number;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revoked By Membership Id */
+            revoked_by_membership_id: string | null;
+            /** Subject Id */
+            subject_id: string;
+            /** Subject Label */
+            subject_label: string;
+            /**
+             * Subject Type
+             * @enum {string}
+             */
+            subject_type: "membership" | "team";
         };
         /** IpEvidenceCandidateRecord */
         IpEvidenceCandidateRecord: {
@@ -38419,6 +38684,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_access_panel_api_ip_dockets__docket_id__access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpAccessPanelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_docket_access_change_api_ip_dockets__docket_id__access_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpAccessApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpAccessChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_docket_access_preview_api_ip_dockets__docket_id__access_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpAccessChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpAccessPreviewResponse"];
                 };
             };
             /** @description Validation Error */

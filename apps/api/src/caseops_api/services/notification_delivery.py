@@ -28,7 +28,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
-from caseops_api.services.matter_access import can_access
+from caseops_api.services.matter_access import can_access, can_access_ip_docket
 from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
     assert_operational_matter,
@@ -302,13 +302,30 @@ def _recipient_name(intent: NotificationDeliveryIntent) -> str:
 def _recipient_still_permitted(session: Session, intent: NotificationDeliveryIntent) -> bool:
     if intent.recipient_membership_id:
         membership = intent.recipient_membership
-        return bool(
+        membership_active = bool(
             membership
             and membership.company_id == intent.company_id
             and membership.is_active
             and membership.user
             and membership.user.is_active
         )
+        if not membership_active or membership is None:
+            return False
+        if intent.ip_docket_id is not None:
+            docket = session.get(IpDocketRecord, intent.ip_docket_id)
+            if docket is None or docket.company_id != intent.company_id:
+                return False
+            recipient_context = SessionContext(
+                company=intent.company,
+                user=membership.user,
+                membership=membership,
+            )
+            return can_access_ip_docket(
+                session,
+                context=recipient_context,
+                docket=docket,
+            )
+        return True
     if intent.recipient_portal_user_id:
         portal_user = session.get(PortalUser, intent.recipient_portal_user_id)
         if (
@@ -316,6 +333,11 @@ def _recipient_still_permitted(session: Session, intent: NotificationDeliveryInt
             or portal_user.company_id != intent.company_id
             or not portal_user.is_active
         ):
+            return False
+        # IP portal grants are deliberately not part of the M2 internal-access
+        # slice. A portal recipient linked to an IP docket therefore fails
+        # closed until the existing portal-grant owner is generalized later.
+        if intent.ip_docket_id is not None:
             return False
         if intent.matter_id is None:
             return True
@@ -436,26 +458,20 @@ def enqueue_notification_delivery_intent(
             or ip_docket.archived_by_matter_disposal
         ):
             return None
-        if ip_docket.matter_id:
-            linked_matter = session.get(Matter, ip_docket.matter_id)
-            if linked_matter is None:
-                return None
-            try:
-                linked_matter = assert_operational_matter(session, matter=linked_matter)
-            except MatterNotOperationalError:
-                return None
-            if recipient_membership is not None and not can_access(
+        if recipient_membership is not None:
+            if not can_access_ip_docket(
                 session,
                 context=_recipient_context(
                     actor_context=context,
                     membership=recipient_membership,
                 ),
-                matter=linked_matter,
+                docket=ip_docket,
             ):
                 return None
-        elif ip_docket.restricted:
-            # IPLF-026 introduces the shared restricted-record policy. Until
-            # then an unlinked restricted docket is deliberately fail-closed.
+        elif recipient_portal_user is not None:
+            # The later portal-owner slice must add an explicit target-aware
+            # portal grant. Internal access and linked-Matter visibility never
+            # substitute for it.
             return None
 
     target_key = (

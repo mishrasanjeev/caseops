@@ -55,6 +55,7 @@ const dockets = [{
   restricted: false,
   is_active: true,
   lifecycle_version: 1,
+  access_policy_version: 0,
   lifecycle_effective_at: null,
   lifecycle_reason: null,
   lifecycle_outcome: null,
