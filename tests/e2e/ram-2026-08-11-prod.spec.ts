@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, request, test, type Page } from "@playwright/test";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
@@ -44,6 +44,38 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
 
   await signInIpQa(page);
   const headers = await csrfHeaders(page);
+  const memberPassword = "FoundationDenial2026!";
+  const memberEmail = `ip-foundation-denial-${Date.now()}@example.com`;
+  const member = await page.request.post(
+    `${PROD_API_BASE_URL}/api/companies/current/users`,
+    {
+      headers,
+      data: {
+        full_name: "IP Foundation Denial Reviewer",
+        email: memberEmail,
+        role: "admin",
+        password: memberPassword,
+      },
+    },
+  );
+  expect(member.status(), await member.text()).toBe(200);
+  const memberApi = await request.newContext();
+  const memberLogin = await memberApi.post(
+    `${PROD_API_BASE_URL}/api/auth/login`,
+    {
+      data: {
+        company_slug: process.env.CASEOPS_IP_QA_SLUG ?? "caseops-ip-qa",
+        email: memberEmail,
+        password: memberPassword,
+      },
+    },
+  );
+  expect(memberLogin.status(), await memberLogin.text()).toBe(200);
+  const memberHeaders = {
+    Authorization: `Bearer ${
+      ((await memberLogin.json()) as { access_token: string }).access_token
+    }`,
+  };
 
   const contract = await page.request.get(
     `${PROD_API_BASE_URL}/api/ip/access/foundation-contract`,
@@ -192,6 +224,62 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     expect.arrayContaining(["ip_docket.created", "source_access.opened"]),
   );
 
+  const hiddenDockets = await memberApi.get(
+    `${PROD_API_BASE_URL}/api/ip/dockets`,
+    { headers: memberHeaders },
+  );
+  expect(hiddenDockets.status(), await hiddenDockets.text()).toBe(200);
+  const hiddenDocketBody = (await hiddenDockets.json()) as {
+    dockets: Array<{ id: string }>;
+  };
+  expect(
+    hiddenDocketBody.dockets.some((row) => row.id === docket.id),
+  ).toBe(false);
+  expect(
+    (
+      await memberApi.get(
+        `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}`,
+        { headers: memberHeaders },
+      )
+    ).status(),
+  ).toBe(404);
+  expect(
+    (
+      await memberApi.get(
+        `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}/audit`,
+        { headers: memberHeaders },
+      )
+    ).status(),
+  ).toBe(404);
+
+  const hiddenDocuments = await memberApi.get(
+    `${PROD_API_BASE_URL}/api/ip/documents`,
+    { headers: memberHeaders },
+  );
+  expect(hiddenDocuments.status(), await hiddenDocuments.text()).toBe(200);
+  const hiddenDocumentBody = (await hiddenDocuments.json()) as {
+    items: Array<{ id: string }>;
+  };
+  expect(
+    hiddenDocumentBody.items.some((row) => row.id === document.document.id),
+  ).toBe(false);
+  expect(
+    (
+      await memberApi.get(
+        `${PROD_API_BASE_URL}/api/ip/documents/${document.document.id}`,
+        { headers: memberHeaders },
+      )
+    ).status(),
+  ).toBe(404);
+  expect(
+    (
+      await memberApi.get(
+        `${PROD_API_BASE_URL}/api/source-actions/targets/ip_document_version/${versionId}/open?origin=ip_document`,
+        { headers: memberHeaders, maxRedirects: 0 },
+      )
+    ).status(),
+  ).toBe(404);
+
   const after = await page.request.get(
     `${PROD_API_BASE_URL}/api/ip/access/reconciliation`,
   );
@@ -205,4 +293,5 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     subject_company_mismatch_count: 0,
     uncorrelated_ip_audit_count: 0,
   });
+  await memberApi.dispose();
 });
