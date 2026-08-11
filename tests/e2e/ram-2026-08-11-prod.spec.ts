@@ -1,4 +1,10 @@
-import { expect, request, test, type Page } from "@playwright/test";
+import {
+  expect,
+  request,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
@@ -31,6 +37,23 @@ async function csrfHeaders(page: Page): Promise<Record<string, string>> {
   const csrf = cookies.find((cookie) => cookie.name === "caseops_csrf")?.value;
   expect(csrf, "caseops_csrf cookie must exist after sign-in").toBeTruthy();
   return { "X-CSRF-Token": csrf! };
+}
+
+async function signInIpQaMember(
+  api: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<Record<string, string>> {
+  const response = await api.post(`${PROD_API_BASE_URL}/api/auth/login`, {
+    data: {
+      company_slug: process.env.CASEOPS_IP_QA_SLUG ?? "caseops-ip-qa",
+      email,
+      password,
+    },
+  });
+  expect(response.status(), await response.text()).toBe(200);
+  const body = (await response.json()) as { access_token: string };
+  return { Authorization: `Bearer ${body.access_token}` };
 }
 
 test("IPLF-026A production enforces the record-access foundation across docket, document, source, and audit", async ({
@@ -306,4 +329,246 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     membership_active: false,
     user_active: false,
   });
+});
+
+test("IPLF-026B production previews, grants, and revokes independent IP access at 360px", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const canary = Date.now();
+  const memberPassword = "AccessCanary2026!";
+  const memberEmail = `ip-access-prod-${canary}@example.com`;
+  const memberApi = await request.newContext();
+
+  try {
+    await page.setViewportSize({ width: 360, height: 820 });
+    await signInIpQa(page);
+    const headers = await csrfHeaders(page);
+
+    const member = await page.request.post(
+      `${PROD_API_BASE_URL}/api/companies/current/users`,
+      {
+        headers,
+        data: {
+          full_name: `IP Access Production Reviewer ${canary}`,
+          email: memberEmail,
+          role: "admin",
+          password: memberPassword,
+        },
+      },
+    );
+    expect(member.status(), await member.text()).toBe(200);
+    const membershipId = ((await member.json()) as { membership_id: string })
+      .membership_id;
+    const memberHeaders = await signInIpQaMember(
+      memberApi,
+      memberEmail,
+      memberPassword,
+    );
+
+    const matter = await page.request.post(
+      `${PROD_API_BASE_URL}/api/matters/`,
+      {
+        headers,
+        data: {
+          title: `Independent production Matter ${canary}`,
+          matter_code: `IPLF-026B-PROD-${canary}`,
+          practice_area: "Intellectual Property",
+          forum_level: "high_court",
+          status: "active",
+        },
+      },
+    );
+    expect(matter.status(), await matter.text()).toBe(200);
+    const matterId = ((await matter.json()) as { id: string }).id;
+
+    const created = await page.request.post(
+      `${PROD_API_BASE_URL}/api/ip/dockets`,
+      {
+        headers,
+        data: {
+          title: `Restricted IP access production canary ${canary}`,
+          primary_identifier: `TM-IPLF-026B-PROD-${canary}`,
+          matter_id: matterId,
+          restricted: true,
+          particulars: {
+            form_key: "TM-A",
+            form_version: "2026.1",
+            mark_kind: "word",
+            representation: { text: "ACCESS WORKFLOW" },
+            classes: [
+              {
+                class_number: 42,
+                specification: "Legal workflow software",
+              },
+            ],
+            parties: [
+              { role: "applicant", name: "CaseOps IP QA LLP" },
+            ],
+            filing_manifest: [
+              {
+                key: "representation",
+                label: "Mark representation",
+                required: true,
+                evidence_reference: "qa:iplf-026b-production-access-canary",
+              },
+            ],
+          },
+        },
+      },
+    );
+    expect(created.status(), await created.text()).toBe(201);
+    const docket = (await created.json()) as {
+      id: string;
+      access_policy_version: number;
+    };
+    expect(docket.access_policy_version).toBe(1);
+
+    const restrictedMatter = await page.request.post(
+      `${PROD_API_BASE_URL}/api/matters/${matterId}/access/restricted`,
+      { headers, data: { restricted: true } },
+    );
+    expect(restrictedMatter.status(), await restrictedMatter.text()).toBe(200);
+    expect(
+      (
+        await memberApi.get(
+          `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}`,
+          { headers: memberHeaders },
+        )
+      ).status(),
+    ).toBe(404);
+
+    await page.goto(`/app/ip?docket=${encodeURIComponent(docket.id)}`);
+    const workspace = page.getByTestId("ip-access-workspace");
+    await expect(workspace).toBeVisible();
+    await expect(
+      workspace.getByRole("heading", {
+        name: "Internal access and ethical walls",
+      }),
+    ).toBeVisible();
+    await expect(
+      workspace.getByText(/Linked Matter permissions are never copied/i),
+    ).toBeVisible();
+    await expect(
+      workspace.getByRole("button", { name: "Preview grant" }),
+    ).toBeVisible();
+    await expect(
+      workspace.getByRole("button", { name: "Preview default access" }),
+    ).toBeVisible();
+
+    await workspace
+      .getByLabel("Reason for change")
+      .fill("Assigned for the dated production IP access review.");
+    await workspace.getByLabel("Person or team").selectOption(membershipId);
+    await workspace.getByRole("button", { name: "Preview grant" }).click();
+    const preview = workspace.getByTestId("ip-access-preview");
+    await expect(preview).toContainText("Gains: 1");
+    await expect(preview).toContainText("this change never copies permissions");
+    await expect(
+      preview.getByRole("button", { name: "Apply access change" }),
+    ).toBeVisible();
+    await preview.getByRole("button", { name: "Apply access change" }).click();
+    await expect(workspace.getByText("v2")).toBeVisible();
+
+    expect(
+      (
+        await memberApi.get(
+          `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}`,
+          { headers: memberHeaders },
+        )
+      ).status(),
+    ).toBe(200);
+    expect(
+      (
+        await memberApi.get(`${PROD_API_BASE_URL}/api/matters/${matterId}`, {
+          headers: memberHeaders,
+        })
+      ).status(),
+    ).toBe(404);
+
+    await workspace
+      .getByLabel("Reason for change")
+      .fill("The dated production review assignment has ended.");
+    await workspace
+      .getByRole("button", {
+        name: new RegExp(
+          `Preview revoke access for IP Access Production Reviewer ${canary}`,
+        ),
+      })
+      .click();
+    await expect(preview).toContainText("Losses: 1");
+    await preview.getByRole("button", { name: "Apply access change" }).click();
+    await expect(workspace.getByText("v3")).toBeVisible();
+    await expect(workspace.getByText("Revoked")).toBeVisible();
+    expect(
+      (
+        await memberApi.get(
+          `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}`,
+          { headers: memberHeaders },
+        )
+      ).status(),
+    ).toBe(404);
+    const hiddenList = await memberApi.get(
+      `${PROD_API_BASE_URL}/api/ip/dockets`,
+      { headers: memberHeaders },
+    );
+    expect(hiddenList.status(), await hiddenList.text()).toBe(200);
+    const hiddenListBody = (await hiddenList.json()) as {
+      dockets: Array<{ id: string }>;
+    };
+    expect(hiddenListBody.dockets.some((row) => row.id === docket.id)).toBe(
+      false,
+    );
+
+    const panel = await page.request.get(
+      `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}/access`,
+    );
+    expect(panel.status(), await panel.text()).toBe(200);
+    const panelBody = (await panel.json()) as {
+      excluded_persistence: string[];
+      grants: Array<{
+        id: string;
+        subject_id: string;
+        revoked_at: string | null;
+      }>;
+    };
+    expect(panelBody.excluded_persistence).toEqual([
+      "portal_grants",
+      "access_review_campaigns",
+      "emergency_access_sessions",
+    ]);
+
+    const currentMembership = await page.request.get(
+      `${PROD_API_BASE_URL}/api/auth/me`,
+    );
+    expect(currentMembership.status(), await currentMembership.text()).toBe(
+      200,
+    );
+    const currentMembershipId = (
+      (await currentMembership.json()) as { membership: { id: string } }
+    ).membership.id;
+    const creatorGrant = panelBody.grants.find(
+      (row) =>
+        row.subject_id === currentMembershipId && row.revoked_at === null,
+    );
+    expect(
+      creatorGrant,
+      "restricted docket must retain its creator grant",
+    ).toBeTruthy();
+    const selfLockout = await page.request.post(
+      `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}/access/preview`,
+      {
+        headers,
+        data: {
+          action: "revoke_grant",
+          expected_access_policy_version: 3,
+          reason: "Attempt to remove final production owner access.",
+          grant_id: creatorGrant!.id,
+        },
+      },
+    );
+    expect(selfLockout.status()).toBe(409);
+  } finally {
+    await memberApi.dispose();
+  }
 });
