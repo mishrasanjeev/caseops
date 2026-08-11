@@ -771,6 +771,7 @@ def propose_deadline(
         target_type="ip_deadline",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"state": row.state, "result_on": row.result_on, "rule_version_id": rule.id},
     )
     session.commit()

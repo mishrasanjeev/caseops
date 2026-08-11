@@ -67,7 +67,12 @@ from caseops_api.schemas.ip_operations import (
     TrademarkParticularVersionRecord,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.matter_access import (
+    assert_access,
+    assert_ip_docket_access,
+    seed_restricted_ip_creator_access,
+    visible_ip_dockets_filter,
+)
 from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
     assert_operational_matter,
@@ -132,16 +137,15 @@ def _docket_or_404(
         raise HTTPException(status_code=404, detail="IP docket record not found.")
     if docket.archived_by_matter_disposal or not docket.is_active:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
+    assert_ip_docket_access(session, context=context, docket=docket)
     if docket.matter_id:
         matter = session.get(Matter, docket.matter_id)
-        if matter is None or not can_access(session, context=context, matter=matter):
+        if matter is None:
             raise HTTPException(status_code=404, detail="IP docket record not found.")
         try:
             assert_operational_matter(session, matter=matter)
         except MatterNotOperationalError as exc:
             raise HTTPException(status_code=404, detail="IP docket record not found.") from exc
-    elif docket.restricted:
-        raise HTTPException(status_code=404, detail="IP docket record not found.")
     return docket
 
 
@@ -229,6 +233,7 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
         lifecycle_evidence_ref=docket.lifecycle_evidence_ref,
         successor_docket_id=docket.successor_docket_id,
         restricted=docket.restricted,
+        access_policy_version=docket.access_policy_version,
         current_version=docket.current_version,
         current_particulars=TrademarkParticularVersionRecord.model_validate(particulars),
         notice_links=[IpNoticeLinkRecord.model_validate(row) for row in notice_links],
@@ -253,11 +258,6 @@ def create_ip_docket(
     context: SessionContext,
     payload: IpDocketCreateRequest,
 ) -> IpDocketRecordResponse:
-    if payload.restricted and not payload.matter_id:
-        raise HTTPException(
-            status_code=422,
-            detail="Restricted IP records require a Matter policy anchor.",
-        )
     _matter_for_docket(session, context=context, matter_id=payload.matter_id)
     errors = _readiness_errors(payload.particulars)
     docket = IpDocketRecord(
@@ -282,6 +282,11 @@ def create_ip_docket(
             status_code=status.HTTP_409_CONFLICT,
             detail="That IP identifier already exists in this company.",
         ) from exc
+    seed_restricted_ip_creator_access(
+        session,
+        context=context,
+        docket=docket,
+    )
     version = _new_version(
         docket=docket,
         context=context,
@@ -299,6 +304,7 @@ def create_ip_docket(
         target_type="ip_docket_record",
         target_id=docket.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"record_type": "trademark", "readiness_status": version.readiness_status},
     )
     session.commit()
@@ -372,6 +378,7 @@ def append_ip_docket_version(
         target_type="ip_docket_record",
         target_id=docket.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"version": next_version, "status": docket.status},
     )
     session.commit()
@@ -383,7 +390,10 @@ def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketLis
     rows = list(
         session.scalars(
             select(IpDocketRecord)
-            .where(IpDocketRecord.company_id == context.company.id)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                visible_ip_dockets_filter(session, context=context),
+            )
             .order_by(IpDocketRecord.updated_at.desc())
         ).all()
     )
@@ -393,14 +403,12 @@ def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketLis
             continue
         if row.matter_id:
             matter = session.get(Matter, row.matter_id)
-            if matter is None or not can_access(session, context=context, matter=matter):
+            if matter is None:
                 continue
             try:
                 assert_operational_matter(session, matter=matter)
             except MatterNotOperationalError:
                 continue
-        elif row.restricted:
-            continue
         visible.append(_serialize_docket(session, row))
     return IpDocketListResponse(dockets=visible, count=len(visible))
 
@@ -461,6 +469,7 @@ def add_ip_notice_link(
         target_type="company_notice",
         target_id=notice.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"docket_id": docket.id, "link_kind": payload.link_kind},
     )
     try:
@@ -671,6 +680,7 @@ def discover_ip_evidence_candidates(
         target_type="ip_docket_record",
         target_id=docket.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"discovered_count": discovered, "duplicate_count": duplicates},
     )
     session.commit()
@@ -802,6 +812,7 @@ def review_ip_evidence_candidate(
         target_type="ip_evidence_candidate",
         target_id=candidate.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "source_type": candidate.source_type,
             "source_ref": candidate.source_fingerprint[:16],
@@ -893,6 +904,7 @@ def add_ip_deadline_coverage(
         target_type="ip_deadline_coverage",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "matter_deadline_id": payload.matter_deadline_id,
             "calendar_projection_count": len(connections),
@@ -949,6 +961,7 @@ def reassign_ip_deadline_coverage(
         target_type="ip_deadline_coverage",
         target_id=coverage.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "old_responsible_membership_id": old_responsible,
             "new_responsible_membership_id": payload.responsible_membership_id,
@@ -1052,6 +1065,7 @@ def bulk_reassign_ip_deadline_coverages(
             target_type="ip_deadline_coverage",
             target_id=row.id,
             matter_id=docket.matter_id if docket else None,
+            ip_docket_id=docket.id if docket else None,
             metadata={
                 "from_membership_id": source.id,
                 "to_membership_id": replacement.id,
@@ -1102,6 +1116,7 @@ def add_ip_deadline_incident(
         target_type="ip_deadline_incident",
         target_id=incident.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"severity": payload.severity, "status": incident.status},
     )
     session.commit()
@@ -1141,6 +1156,7 @@ def verify_ip_deadline_incident(
         target_type="ip_deadline_incident",
         target_id=incident.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"severity": incident.severity},
     )
     session.commit()
@@ -1210,6 +1226,7 @@ def add_ip_title_interest(
         target_type="ip_title_interest",
         target_id=interest.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "interest_type": payload.interest_type,
             "conflict_count": len(flags),
@@ -1265,6 +1282,7 @@ def add_ip_related_right_obligation(
         target_type="ip_related_right_obligation",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "obligation_type": row.obligation_type,
             "due_on": row.due_on.isoformat() if row.due_on else None,
@@ -1308,6 +1326,7 @@ def complete_ip_related_right_obligation(
         target_type="ip_related_right_obligation",
         target_id=row.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"obligation_type": row.obligation_type},
     )
     session.commit()
@@ -1424,6 +1443,7 @@ def add_ip_cost_item(
         target_type="ip_cost_item",
         target_id=cost.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={"category": payload.category, "currency": payload.currency.upper()},
     )
     session.commit()
@@ -1460,6 +1480,7 @@ def reconcile_ip_cost_items(
         target_type="ip_docket_record",
         target_id=docket.id,
         matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
         metadata={
             "accounting_owner": "matter_billing",
             "row_count": len(rows),

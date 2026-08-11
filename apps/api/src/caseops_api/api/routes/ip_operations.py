@@ -18,6 +18,11 @@ from pydantic import ValidationError
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.core.settings import get_settings
+from caseops_api.schemas.audit import IpDocketAuditListResponse
+from caseops_api.schemas.ip_access import (
+    RecordAccessFoundationContract,
+    RecordAccessReconciliationReport,
+)
 from caseops_api.schemas.ip_deadlines import (
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
@@ -128,6 +133,7 @@ from caseops_api.schemas.shared_work import (
 )
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.document_storage import resolve_storage_path
+from caseops_api.services.ip_audit import list_ip_docket_audit_events
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
 from caseops_api.services.ip_deadline_workflow import (
     activate_calendar_version,
@@ -209,6 +215,10 @@ from caseops_api.services.ip_workspace import (
     run_ip_workspace_test,
     upsert_ip_workspace_configuration,
 )
+from caseops_api.services.matter_access import (
+    reconcile_record_access,
+    record_access_foundation_contract,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import (
     create_ip_operational_deadline,
@@ -241,6 +251,10 @@ IpWorkspaceAdmin = Annotated[
     SessionContext,
     Depends(require_capability("ip:taxonomy_admin")),
 ]
+IpAccessManager = Annotated[
+    SessionContext,
+    Depends(require_capability("matter_access:manage")),
+]
 
 
 @router.get(
@@ -252,6 +266,28 @@ async def get_shared_work_foundation_contract(
 ) -> SharedWorkFoundationContract:
     del context
     return shared_work_foundation_contract()
+
+
+@router.get(
+    "/access/foundation-contract",
+    response_model=RecordAccessFoundationContract,
+)
+async def get_record_access_foundation_contract(
+    context: IpViewer,
+) -> RecordAccessFoundationContract:
+    del context
+    return record_access_foundation_contract()
+
+
+@router.get(
+    "/access/reconciliation",
+    response_model=RecordAccessReconciliationReport,
+)
+async def get_record_access_reconciliation(
+    context: IpAccessManager,
+    session: DbSession,
+) -> RecordAccessReconciliationReport:
+    return reconcile_record_access(session, context=context)
 
 
 @router.get(
@@ -974,6 +1010,26 @@ async def get_ip_docket_record(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return get_ip_docket(session, context=context, docket_id=docket_id)
+
+
+@router.get(
+    "/dockets/{docket_id}/audit",
+    response_model=IpDocketAuditListResponse,
+)
+async def get_ip_docket_audit(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> IpDocketAuditListResponse:
+    return list_ip_docket_audit_events(
+        session,
+        context=context,
+        docket_id=docket_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(

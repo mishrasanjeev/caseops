@@ -53,6 +53,8 @@ STEP_UP_PURPOSES = {
     "connector_credential_change",
     "provider_operation_replay",
     "role_capability_change",
+    "record_access_change",
+    "record_access_emergency",
     "bulk_export",
     "destructive_action",
     "step_up",

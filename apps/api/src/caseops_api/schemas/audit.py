@@ -61,6 +61,7 @@ class MatterAuditEventRecord(BaseModel):
     actor_membership_id: str | None
     actor_label: str | None
     matter_id: str | None
+    ip_docket_id: str | None = None
     action: str
     target_type: str
     target_id: str | None
@@ -72,6 +73,14 @@ class MatterAuditEventRecord(BaseModel):
 
 class MatterAuditListResponse(BaseModel):
     matter_id: str
+    events: list[MatterAuditEventRecord]
+    total: int
+    limit: int
+    offset: int
+
+
+class IpDocketAuditListResponse(BaseModel):
+    ip_docket_id: str
     events: list[MatterAuditEventRecord]
     total: int
     limit: int

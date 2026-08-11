@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     AuthorityDocument,
+    IpDocument,
+    IpDocumentLink,
+    IpDocumentVersion,
     JudgeAppointment,
     Matter,
     MatterAttachment,
@@ -24,6 +27,7 @@ from caseops_api.schemas.source_actions import (
     SourceTargetType,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_document_workflow import assert_ip_document_access
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.session_context import SessionContext
 
@@ -46,6 +50,7 @@ class ResolvedSourceTarget:
     quarantined: bool
     source_version: str
     provider: str | None
+    ip_docket_id: str | None = None
 
 
 def _is_official_host(hostname: str) -> bool:
@@ -205,6 +210,41 @@ def resolve_source_target(
             source_version=row.sha256_hex,
             provider="caseops_matter_document",
         )
+    if target_type == "ip_document_version":
+        row = session.get(IpDocumentVersion, target_id)
+        if row is None or context is None or row.company_id != context.company.id:
+            return None
+        document = session.get(IpDocument, row.document_id)
+        if document is None or document.company_id != context.company.id:
+            return None
+        assert_ip_document_access(
+            session,
+            context=context,
+            document_id=document.id,
+        )
+        docket_ids = set(
+            session.scalars(
+                select(IpDocumentLink.docket_id).where(
+                    IpDocumentLink.company_id == context.company.id,
+                    IpDocumentLink.document_id == document.id,
+                    IpDocumentLink.docket_id.is_not(None),
+                )
+            ).all()
+        )
+        return ResolvedSourceTarget(
+            target_type=target_type,
+            target_id=row.id,
+            source_reference=(
+                f"/api/ip/documents/{document.id}/versions/{row.version}/download"
+            ),
+            verified=True,
+            quarantined=False,
+            source_version=row.sha256_hex,
+            provider="caseops_ip_document",
+            ip_docket_id=(
+                str(next(iter(docket_ids))) if len(docket_ids) == 1 else None
+            ),
+        )
     row = session.get(JudgeAppointment, target_id)
     if row is None:
         return None
@@ -260,6 +300,7 @@ def audit_source_open(
         action="source_access.opened",
         target_type=target.target_type,
         target_id=target.target_id,
+        ip_docket_id=target.ip_docket_id,
         result=outcome,
         metadata={
             "origin_surface": origin_surface,

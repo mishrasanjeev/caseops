@@ -17,6 +17,7 @@ SourceTargetType = Literal[
     "statute_section",
     "judge_appointment",
     "matter_attachment",
+    "ip_document_version",
 ]
 SourceOriginSurface = Literal[
     "research",
@@ -25,6 +26,7 @@ SourceOriginSurface = Literal[
     "uploaded_case_analysis",
     "intelligent_review",
     "statute",
+    "ip_document",
     "other",
 ]
 SourceIssueType = Literal[
