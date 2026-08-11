@@ -568,6 +568,16 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       },
     );
     expect(selfLockout.status()).toBe(409);
+
+    const deactivated = await page.request.patch(
+      `${PROD_API_BASE_URL}/api/companies/current/users/${membershipId}`,
+      { headers, data: { is_active: false } },
+    );
+    expect(deactivated.status(), await deactivated.text()).toBe(200);
+    expect(await deactivated.json()).toMatchObject({
+      membership_active: false,
+      user_active: false,
+    });
   } finally {
     await memberApi.dispose();
   }
