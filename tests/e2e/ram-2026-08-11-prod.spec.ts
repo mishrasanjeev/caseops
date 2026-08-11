@@ -151,15 +151,19 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
         upload: {
           name: `iplf-026a-${canary}.txt`,
           mimeType: "text/plain",
-          buffer: Buffer.from("Synthetic IPLF-026A access canary."),
+          buffer: Buffer.from(
+            `Synthetic IPLF-026A access canary ${canary}.`,
+          ),
         },
       },
     },
   );
   expect(uploaded.status(), await uploaded.text()).toBe(200);
   const document = (await uploaded.json()) as {
+    outcome: "created" | "duplicate_found";
     document: { id: string; versions: Array<{ id: string }> };
   };
+  expect(document.outcome).toBe("created");
   const versionId = document.document.versions[0]?.id;
   expect(versionId).toBeTruthy();
 
