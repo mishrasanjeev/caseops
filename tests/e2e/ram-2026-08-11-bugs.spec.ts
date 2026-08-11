@@ -324,6 +324,13 @@ test.describe.serial("Ram 2026-08-11 local and deployed regressions", () => {
     page,
   }) => {
     await signIn(page);
+    let researchStatsRequests = 0;
+    await page.route("**/api/authorities/stats", async (route) => {
+      if (new URL(page.url()).pathname === "/app/research") {
+        researchStatsRequests += 1;
+      }
+      await route.continue();
+    });
     await page.goto(`${BASE_URL}/app/research`);
     await expect(
       page.getByRole("heading", { name: "Grounded legal research" }),
@@ -356,8 +363,29 @@ test.describe.serial("Ram 2026-08-11 local and deployed regressions", () => {
       const response = await responsePromise;
       const elapsedMs = Date.now() - startedAt;
       await expectStatus(response, 200, `${mode} research response`);
+      const responseBody = (await response.json()) as {
+        outcome: string;
+        diagnostics: { total_latency_ms?: number };
+        corpus_coverage: { document_count: number; index_state: string };
+      };
       expect(elapsedMs, `${mode} must finish before the UI abort`).toBeLessThan(
         20_000,
+      );
+      expect(
+        responseBody.diagnostics.total_latency_ms,
+        `${mode} must report its server-side latency budget`,
+      ).toBeLessThan(20_000);
+      if (!IS_LOCAL) {
+        expect(
+          responseBody.corpus_coverage.document_count,
+          `${mode} production replay must exercise the real corpus`,
+        ).toBeGreaterThan(100_000);
+        expect(responseBody.corpus_coverage.index_state).toBe("current");
+        expect(responseBody.outcome).not.toBe("corpus_unavailable");
+        expect(responseBody.outcome).not.toBe("provider_unavailable");
+      }
+      console.log(
+        `[BUG-002] ${mode}: browser=${elapsedMs}ms server=${responseBody.diagnostics.total_latency_ms}ms outcome=${responseBody.outcome}`,
       );
       await expect(page.getByTestId("research-query-submit")).toBeEnabled();
       await expect(page.getByTestId("research-corpus-coverage")).toBeVisible();
@@ -365,6 +393,10 @@ test.describe.serial("Ram 2026-08-11 local and deployed regressions", () => {
         page.getByText("Request timed out", { exact: true }),
       ).toHaveCount(0);
     }
+    expect(
+      researchStatsRequests,
+      "Research must use coverage from search instead of racing a duplicate stats request",
+    ).toBe(0);
   });
 
   test("ENH-001: manual create/edit and bulk import use the same exact forum catalog", async ({

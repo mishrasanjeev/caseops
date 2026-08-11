@@ -299,24 +299,24 @@ class VoyageProvider:
         # it mid-call we'd at most overshoot by one batch.
         _voyage_usage.assert_under_daily_cap()
 
-        # Count tokens per text using voyage's own tokenizer (loaded
-        # from HF on first use). `tokenize` returns one token-list per
-        # input; we take len() of each. `count_tokens` is intentionally
-        # NOT used here: it returns an int total for the whole batch,
-        # which if divided evenly understates outlier chunks — exactly
-        # the case where we need per-text sizing to avoid overshooting
-        # Voyage's 120K-token request ceiling.
+        # Exact tokenizer accounting is needed for large ingestion batches,
+        # but never for interactive queries: the API caps each query at 600
+        # characters and query variants stay far below Voyage's 100K-token
+        # batch budget. Calling the SDK tokenizer for that tiny path performs
+        # a Hugging Face cache/network resolution on every cold instance and
+        # previously consumed most of the browser's 20-second deadline.
         per_text_tokens: list[int] | None = None
-        try:
-            tokenised = self._client.tokenize(texts, model=self.model)
-            # SDK returns a list of per-text token lists; be defensive
-            # about future shape changes by falling back if it isn't.
-            if isinstance(tokenised, list) and all(
-                hasattr(item, "__len__") for item in tokenised
-            ):
-                per_text_tokens = [len(item) for item in tokenised]
-        except Exception:
-            per_text_tokens = None
+        if input_type != "query":
+            try:
+                tokenised = self._client.tokenize(texts, model=self.model)
+                # SDK returns a list of per-text token lists; be defensive
+                # about future shape changes by falling back if it isn't.
+                if isinstance(tokenised, list) and all(
+                    hasattr(item, "__len__") for item in tokenised
+                ):
+                    per_text_tokens = [len(item) for item in tokenised]
+            except Exception:
+                per_text_tokens = None
 
         groups: list[list[int]] = []
         current: list[int] = []

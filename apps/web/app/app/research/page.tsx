@@ -44,7 +44,6 @@ import {
   type AuthoritySearchResult,
   createAuthorityResearchReport,
   createAuthorityAnnotation,
-  fetchAuthorityCorpusStats,
   searchAuthorities,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
@@ -118,13 +117,6 @@ export default function ResearchPage() {
   const [savedAuthorityIds, setSavedAuthorityIds] = useState<Set<string>>(
     () => new Set(),
   );
-
-  const statsQuery = useQuery({
-    queryKey: ["authorities", "stats"],
-    queryFn: () => fetchAuthorityCorpusStats(),
-    enabled: canSearch,
-    staleTime: 5 * 60 * 1000,
-  });
 
   const searchQuery = useQuery({
     queryKey: [
@@ -241,8 +233,8 @@ export default function ResearchPage() {
         eyebrow="Research"
         title="Grounded legal research"
         description={
-          statsQuery.data
-            ? `Searching ${statsQuery.data.document_count.toLocaleString()} judgments across SC + HCs. Every result links to source.`
+          corpusCoverage
+            ? `Searching ${corpusCoverage.document_count.toLocaleString()} judgments across SC + HCs. Every result links to source.`
             : "Hybrid retrieval across statutes, judgments, and your own precedents — every answer cited and traceable."
         }
         actions={
@@ -254,35 +246,6 @@ export default function ResearchPage() {
           </Link>
         }
       />
-
-      {/* BUG-018 Hari 2026-04-21: if the corpus-stats API fails we
-          previously fell back silently to the generic header and users
-          couldn't tell whether the page was broken or just quiet.
-          Surface it as a non-blocking banner so users can retry or
-          report without guessing. Search itself stays independent of
-          stats. */}
-      {statsQuery.isError ? (
-        <div
-          className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] px-3 py-2 text-xs text-[var(--color-warn-700)]"
-          role="alert"
-        >
-          <span>
-            Could not load corpus stats —{" "}
-            {statsQuery.error instanceof ApiError
-              ? statsQuery.error.detail
-              : "network or API error."}{" "}
-            Search itself may still work.
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => statsQuery.refetch()}
-            data-testid="research-stats-retry"
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
 
       <Card>
         <CardHeader>

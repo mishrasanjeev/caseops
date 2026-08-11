@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import hashlib
+import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -8,7 +10,7 @@ from threading import Lock
 from time import perf_counter
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal_column, or_, select, text
 from sqlalchemy.orm import Session, defer, raiseload
 
 # NOTE for reviewers: the task spec asked for this wiring to land in
@@ -66,6 +68,8 @@ from caseops_api.services.retrieval import (
 from caseops_api.services.retrieval_normalisers import build_query_variants
 from caseops_api.services.session_context import SessionContext
 
+logger = logging.getLogger(__name__)
+
 # Search is an interactive request, not a corpus-export endpoint. The old
 # implementation could union 300 documents per query variant and then lazily
 # load every chunk on every document. At production scale that created an
@@ -76,7 +80,7 @@ _AUTHORITY_MAX_DOCUMENT_CANDIDATES = 180
 _AUTHORITY_MIN_DOCUMENT_CANDIDATES = 30
 _AUTHORITY_DOCUMENT_CANDIDATE_MULTIPLIER = 3
 _AUTHORITY_FALLBACK_CHUNKS_PER_DOCUMENT = 2
-_AUTHORITY_COVERAGE_CACHE_TTL_SECONDS = 30.0
+_AUTHORITY_COVERAGE_CACHE_TTL_SECONDS = 300.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +97,14 @@ class _CorpusMetrics:
     last_ingested_at: datetime | None
     last_indexed_at: datetime | None
     latest_ingestion_status: str | None
+    forum_counts: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class _PostgresCorpusEstimates:
+    document_count: int
+    chunk_count: int
+    embedded_chunk_count: int
     forum_counts: dict[str, int]
 
 
@@ -763,15 +775,89 @@ def _invalidate_corpus_metrics_cache() -> None:
         _CORPUS_METRICS_CACHE = None
 
 
-def _corpus_metrics(session: Session) -> _CorpusMetrics:
-    """Read corpus health with one aggregate per large table.
+def _parse_postgres_array_literal(raw: object) -> list[str]:
+    """Parse the catalog's text rendering of a one-dimensional array.
 
-    The prior request path scanned the chunk table three separate times for
-    count, embedded count, and latest index time. The Research page also asks
-    for stats alongside search, so a short Postgres-only cache prevents two
-    simultaneous first-page requests from repeating the same 1.8M-row work.
-    SQLite remains uncached to keep isolated tests and local seed changes
-    immediately visible.
+    ``pg_stats.most_common_vals`` is exposed as ``anyarray`` and cannot be
+    decoded generically by psycopg. Forum levels are short scalar strings, so
+    asking PostgreSQL for its canonical text form and applying CSV escaping is
+    both deterministic and independent of the column's concrete SQL type.
+    """
+    value = str(raw or "")
+    if len(value) < 2 or not value.startswith("{") or not value.endswith("}"):
+        return []
+    inner = value[1:-1]
+    if not inner:
+        return []
+    return next(csv.reader([inner], delimiter=",", quotechar='"', escapechar="\\"))
+
+
+def _postgres_corpus_estimates(session: Session) -> _PostgresCorpusEstimates:
+    """Return fast planner estimates without scanning the corpus tables.
+
+    ``COUNT`` and ``MAX`` on the multi-million-row chunk table took tens of
+    seconds on a cold production instance. PostgreSQL maintains relation cardinality and
+    column null fractions for its planner; those estimates are appropriate for
+    a user-facing coverage summary and remain constant-time as the corpus grows.
+    """
+    row = session.execute(
+        text(
+            "WITH relation_estimates AS ("
+            " SELECT c.relname, greatest(c.reltuples, 0)::bigint AS row_estimate"
+            " FROM pg_class c"
+            " JOIN pg_namespace n ON n.oid = c.relnamespace"
+            " WHERE n.nspname = current_schema()"
+            " AND c.relname IN ('authority_documents', 'authority_document_chunks')"
+            "), embedding_stats AS ("
+            " SELECT coalesce(null_frac, 1.0) AS null_frac"
+            " FROM pg_stats"
+            " WHERE schemaname = current_schema()"
+            " AND tablename = 'authority_document_chunks'"
+            " AND attname = 'embedding_model'"
+            "), forum_stats AS ("
+            " SELECT most_common_vals::text AS values_text,"
+            "        most_common_freqs::text AS frequencies_text"
+            " FROM pg_stats"
+            " WHERE schemaname = current_schema()"
+            " AND tablename = 'authority_documents'"
+            " AND attname = 'forum_level'"
+            ")"
+            " SELECT"
+            " coalesce((SELECT row_estimate FROM relation_estimates"
+            "           WHERE relname = 'authority_documents'), 0),"
+            " coalesce((SELECT row_estimate FROM relation_estimates"
+            "           WHERE relname = 'authority_document_chunks'), 0),"
+            " round(coalesce((SELECT row_estimate FROM relation_estimates"
+            "                 WHERE relname = 'authority_document_chunks'), 0)"
+            "       * (1.0 - coalesce((SELECT null_frac FROM embedding_stats), 1.0))),"
+            " (SELECT values_text FROM forum_stats),"
+            " (SELECT frequencies_text FROM forum_stats)"
+        )
+    ).one()
+    document_count = max(0, int(row[0] or 0))
+    forum_values = _parse_postgres_array_literal(row[3])
+    forum_frequencies = _parse_postgres_array_literal(row[4])
+    forum_counts: dict[str, int] = {}
+    for forum, frequency in zip(forum_values, forum_frequencies, strict=False):
+        try:
+            forum_counts[forum] = max(0, round(document_count * float(frequency)))
+        except ValueError:
+            continue
+    return _PostgresCorpusEstimates(
+        document_count=document_count,
+        chunk_count=max(0, int(row[1] or 0)),
+        embedded_chunk_count=max(0, int(row[2] or 0)),
+        forum_counts=forum_counts,
+    )
+
+
+def _corpus_metrics(session: Session) -> _CorpusMetrics:
+    """Read corpus health without a production corpus-table scan.
+
+    PostgreSQL serves approximate dashboard counters from planner catalogs and
+    caches them for five minutes. Exact ``COUNT``/``MAX`` remains limited to
+    SQLite's small, isolated test databases, where immediate seed visibility is
+    more valuable than planner parity.
     """
     global _CORPUS_METRICS_CACHE
     try:
@@ -788,52 +874,74 @@ def _corpus_metrics(session: Session) -> _CorpusMetrics:
             if now - cached_at <= _AUTHORITY_COVERAGE_CACHE_TTL_SECONDS:
                 return metrics
 
-        document_row = session.execute(
+        latest_run = session.execute(
             select(
-                func.count(AuthorityDocument.id),
-                func.max(AuthorityDocument.ingested_at),
+                AuthorityIngestionRun.status,
+                AuthorityIngestionRun.completed_at,
+                AuthorityIngestionRun.started_at,
             )
-        ).one()
-        chunk_row = session.execute(
-            select(
-                func.count(AuthorityDocumentChunk.id),
-                func.count(AuthorityDocumentChunk.id).filter(
-                    AuthorityDocumentChunk.embedding_model.is_not(None)
-                ),
-                func.max(
-                    func.coalesce(
-                        AuthorityDocumentChunk.embedded_at,
-                        AuthorityDocumentChunk.created_at,
-                    )
-                ),
-            )
-        ).one()
-        latest_status = session.scalar(
-            select(AuthorityIngestionRun.status)
             .order_by(
                 AuthorityIngestionRun.completed_at.desc(),
                 AuthorityIngestionRun.started_at.desc(),
             )
             .limit(1)
-        )
-        forum_rows = session.execute(
-            select(AuthorityDocument.forum_level, func.count())
-            .group_by(AuthorityDocument.forum_level)
-        ).all()
+        ).one_or_none()
+        if cache_enabled:
+            estimates = _postgres_corpus_estimates(session)
+            document_count = estimates.document_count
+            chunk_count = estimates.chunk_count
+            embedded_chunk_count = estimates.embedded_chunk_count
+            forum_counts = estimates.forum_counts
+            last_corpus_change = (
+                (latest_run.completed_at or latest_run.started_at)
+                if latest_run is not None
+                else None
+            )
+        else:
+            document_row = session.execute(
+                select(
+                    func.count(AuthorityDocument.id),
+                    func.max(AuthorityDocument.ingested_at),
+                )
+            ).one()
+            chunk_row = session.execute(
+                select(
+                    func.count(AuthorityDocumentChunk.id),
+                    func.count(AuthorityDocumentChunk.id).filter(
+                        AuthorityDocumentChunk.embedding_model.is_not(None)
+                    ),
+                    func.max(
+                        func.coalesce(
+                            AuthorityDocumentChunk.embedded_at,
+                            AuthorityDocumentChunk.created_at,
+                        )
+                    ),
+                )
+            ).one()
+            document_count = int(document_row[0] or 0)
+            chunk_count = int(chunk_row[0] or 0)
+            embedded_chunk_count = int(chunk_row[1] or 0)
+            last_corpus_change = document_row[1]
+            last_indexed_at = chunk_row[2]
+            forum_rows = session.execute(
+                select(AuthorityDocument.forum_level, func.count())
+                .group_by(AuthorityDocument.forum_level)
+            ).all()
+            forum_counts = {
+                str(forum): int(count) for forum, count in forum_rows if forum
+            }
         metrics = _CorpusMetrics(
-            document_count=int(document_row[0] or 0),
-            last_ingested_at=document_row[1],
-            chunk_count=int(chunk_row[0] or 0),
-            embedded_chunk_count=int(chunk_row[1] or 0),
-            last_indexed_at=chunk_row[2],
+            document_count=document_count,
+            last_ingested_at=last_corpus_change,
+            chunk_count=chunk_count,
+            embedded_chunk_count=embedded_chunk_count,
+            last_indexed_at=(last_corpus_change if cache_enabled else last_indexed_at),
             latest_ingestion_status=(
-                str(getattr(latest_status, "value", latest_status))
-                if latest_status is not None
+                str(getattr(latest_run.status, "value", latest_run.status))
+                if latest_run is not None
                 else None
             ),
-            forum_counts={
-                str(forum): int(count) for forum, count in forum_rows if forum
-            },
+            forum_counts=forum_counts,
         )
         if cache_enabled:
             _CORPUS_METRICS_CACHE = (now, metrics)
@@ -882,7 +990,11 @@ def search_authority_catalog(
     structured_mode = search_mode not in {"keyword", "contextual"}
     candidate_limit = min(
         max(
-            limit * _AUTHORITY_DOCUMENT_CANDIDATE_MULTIPLIER,
+            (
+                limit
+                if structured_mode
+                else limit * _AUTHORITY_DOCUMENT_CANDIDATE_MULTIPLIER
+            ),
             _AUTHORITY_MIN_DOCUMENT_CANDIDATES,
         ),
         _AUTHORITY_MAX_DOCUMENT_CANDIDATES,
@@ -1270,8 +1382,11 @@ def search_authorities(
         max((payload.offset + payload.limit) * 5, 50),
         _AUTHORITY_MAX_DOCUMENT_CANDIDATES,
     )
+    coverage_started_at = perf_counter()
     coverage = _authority_search_coverage(session, payload=payload)
+    coverage_ms = max(0, round((perf_counter() - coverage_started_at) * 1000))
     provider_unavailable = False
+    retrieval_started_at = perf_counter()
     try:
         raw = search_authority_catalog(
             session,
@@ -1286,6 +1401,7 @@ def search_authorities(
     except EmbeddingProviderError:
         raw = []
         provider_unavailable = True
+    retrieval_ms = max(0, round((perf_counter() - retrieval_started_at) * 1000))
     if payload.language == "en":
         filtered = [r for r in raw if _title_is_predominantly_ascii(r.title)]
     else:
@@ -1381,10 +1497,24 @@ def search_authorities(
                 "has_forum_filter": bool(payload.forum_level),
                 "has_document_type_filter": bool(payload.document_type),
                 "language": payload.language,
+                "coverage_ms": coverage_ms,
+                "retrieval_ms": retrieval_ms,
             },
         )
     )
     session.commit()
+
+    logger.info(
+        "authority_search_timing mode=%s coverage_ms=%d retrieval_ms=%d total_ms=%d "
+        "raw_candidates=%d returned=%d outcome=%s",
+        payload.mode,
+        coverage_ms,
+        retrieval_ms,
+        max(0, round((perf_counter() - started_at) * 1000)),
+        len(raw),
+        len(enriched_page),
+        outcome,
+    )
 
     return AuthoritySearchResponse(
         query=payload.query,
@@ -1416,6 +1546,9 @@ def search_authorities(
             "unreadable_omitted_count": unreadable_omitted_count,
             "returned_count": len(enriched_page),
             "has_more": payload.offset + payload.limit < total,
+            "coverage_ms": coverage_ms,
+            "retrieval_ms": retrieval_ms,
+            "total_latency_ms": max(0, round((perf_counter() - started_at) * 1000)),
         },
         corpus_coverage=coverage,
     )
@@ -1435,31 +1568,42 @@ def _authority_mode_filter_clause(search_mode: str, query: str):
     if search_mode == "exact_citation":
         normalized = _normalize_case_reference(cleaned)
         normalized_pattern = f"%{normalized}%" if normalized else pattern
+        citation_text = _indexed_search_text(
+            AuthorityDocument.case_reference,
+            AuthorityDocument.neutral_citation,
+        )
         return or_(
-            AuthorityDocument.case_reference.ilike(pattern),
-            AuthorityDocument.neutral_citation.ilike(pattern),
-            AuthorityDocument.case_reference.ilike(normalized_pattern),
-            AuthorityDocument.neutral_citation.ilike(normalized_pattern),
+            citation_text.ilike(pattern),
+            citation_text.ilike(normalized_pattern),
         )
     if search_mode == "party":
-        return or_(
-            AuthorityDocument.parties_json.ilike(pattern),
-            AuthorityDocument.title.ilike(pattern),
-        )
+        return _indexed_search_text(
+            AuthorityDocument.parties_json,
+            AuthorityDocument.title,
+        ).ilike(pattern)
     if search_mode == "court":
         return AuthorityDocument.court_name.ilike(pattern)
     if search_mode == "judge":
-        return or_(
-            AuthorityDocument.bench_name.ilike(pattern),
-            AuthorityDocument.judges_json.ilike(pattern),
-        )
+        return _indexed_search_text(
+            AuthorityDocument.bench_name,
+            AuthorityDocument.judges_json,
+        ).ilike(pattern)
     if search_mode == "act_section":
-        return or_(
-            AuthorityDocument.sections_cited_json.ilike(pattern),
-            AuthorityDocument.title.ilike(pattern),
-            AuthorityDocument.summary.ilike(pattern),
-        )
+        return _indexed_search_text(
+            AuthorityDocument.sections_cited_json,
+            AuthorityDocument.title,
+        ).ilike(pattern)
     return None
+
+
+def _indexed_search_text(*columns):
+    """Match the immutable expression used by the production GIN indexes."""
+    empty = literal_column("''")
+    separator = literal_column("' '")
+    expression = func.coalesce(columns[0], empty)
+    for column in columns[1:]:
+        expression = expression + separator + func.coalesce(column, empty)
+    return expression
 
 
 def _explain_authority_match(
@@ -1660,25 +1804,24 @@ def _exact_name_match_document_ids(
         return []
 
     # Build a WHERE clause that requires EVERY token (AND) to appear in
-    # parties_json OR title OR bench_name — ILIKE '%token%' across all
-    # three columns. The bench_name axis was added 2026-04-21 after the
+    # the one immutable parties/title/bench expression covered by the
+    # production trigram index. The bench_name axis was added 2026-04-21 after the
     # sc-2023 probe: queries like 'DHARWAD BENCH' hit docs whose
     # bench_name is 'Dharwad Bench' but whose parties_json / title
     # carries only party strings. Without the bench_name column in the
     # prefilter, the exact-name path dropped those candidates and the
     # vector-only fallback missed them.
-    # PG will use a seq scan without a trigram index but at ~20k rows
-    # the whole table fits in memory and the scan is <10 ms.
+    # The corpus is now >800K documents, so an unindexed token probe is not an
+    # acceptable interactive fallback.
     filters = []
+    name_search_text = _indexed_search_text(
+        AuthorityDocument.parties_json,
+        AuthorityDocument.title,
+        AuthorityDocument.bench_name,
+    )
     for tok in tokens:
         pattern = f"%{tok}%"
-        filters.append(
-            or_(
-                AuthorityDocument.parties_json.ilike(pattern),
-                AuthorityDocument.title.ilike(pattern),
-                AuthorityDocument.bench_name.ilike(pattern),
-            )
-        )
+        filters.append(name_search_text.ilike(pattern))
     if forum_level is not None:
         filters.append(AuthorityDocument.forum_level == forum_level)
     court_clause = _court_name_filter_clause(court_name)
@@ -1718,7 +1861,14 @@ def _pg_embedding_scope_available(
     court_name: str | None,
     document_type: str | None,
 ) -> bool:
-    """Probe the filtered pgvector scope once per interactive search."""
+    """Probe global pgvector availability once without a corpus join.
+
+    Filtered availability used to walk the 5.3M-row chunk table when a court
+    scope had no match. The bounded HNSW query already applies the requested
+    filters and truthfully returns no hits, so this guard only needs to know
+    whether the vector path exists at all.
+    """
+    del forum_level, court_name, document_type
     try:
         if session.bind is None or session.bind.dialect.name != "postgresql":
             return False
@@ -1727,25 +1877,13 @@ def _pg_embedding_scope_available(
 
     from sqlalchemy import text
 
-    court_contains = _normalize_court_filter(court_name)
-    court_contains = court_contains.casefold() if court_contains else None
     try:
         probe = session.execute(
             text(
-                "SELECT 1 FROM authority_document_chunks c "
-                "JOIN authority_documents d ON d.id = c.authority_document_id "
-                "WHERE c.embedding_vector IS NOT NULL "
-                "AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
-                "AND (cast(:court_contains as text) IS NULL "
-                "OR position(:court_contains in lower(coalesce(d.court_name, ''))) > 0) "
-                "AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
+                "SELECT 1 FROM authority_document_chunks "
+                "WHERE embedding_vector IS NOT NULL "
                 "LIMIT 1"
-            ),
-            {
-                "forum": forum_level,
-                "court_contains": court_contains,
-                "dtype": document_type,
-            },
+            )
         ).first()
     except Exception:
         session.rollback()

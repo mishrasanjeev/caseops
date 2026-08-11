@@ -20,10 +20,9 @@ Providers shipped in v1:
   relevance-descending order. One LLM round-trip per retrieval,
   regardless of candidate count.
 
-We deliberately do NOT ship a local cross-encoder (BGE-reranker,
-Jina-reranker) in v1 — they add ~500 MB of model weights to the
-container image. If a deployment later wants native inference it can
-add a new provider here without changing call sites.
+The production image preloads the small Jina cross-encoder. Runtime model
+resolution is local-only and the provider is process-cached: an interactive
+request must never perform a model download or reconstruct an ONNX session.
 """
 from __future__ import annotations
 
@@ -33,6 +32,7 @@ import os
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Protocol
 
 from caseops_api.services.llm import (
@@ -102,6 +102,7 @@ class FastembedReranker:
         *,
         model: str = "jinaai/jina-reranker-v1-tiny-en",
         cache_dir: str | None = None,
+        local_files_only: bool = False,
     ) -> None:
         try:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
@@ -112,6 +113,7 @@ class FastembedReranker:
         self._encoder = TextCrossEncoder(
             model_name=model,
             cache_dir=cache_dir,
+            local_files_only=local_files_only,
         )
         self.model = model
 
@@ -261,6 +263,18 @@ def _parse_order(text: str, *, expected: int) -> list[int]:
     return out
 
 
+@lru_cache(maxsize=4)
+def _cached_fastembed_reranker(
+    model: str,
+    local_files_only: bool,
+) -> FastembedReranker:
+    """Build one ONNX session per process and model configuration."""
+    return FastembedReranker(
+        model=model,
+        local_files_only=local_files_only,
+    )
+
+
 def build_reranker(provider: LLMProvider | None = None) -> RerankerProvider:
     """Pick the reranker that matches the environment.
 
@@ -301,8 +315,14 @@ def build_reranker(provider: LLMProvider | None = None) -> RerankerProvider:
         model = os.environ.get(
             "CASEOPS_RERANK_MODEL", "jinaai/jina-reranker-v1-tiny-en"
         )
+        local_files_only = (
+            os.environ.get("CASEOPS_RERANK_LOCAL_FILES_ONLY", "true")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on"}
+        )
         try:
-            return FastembedReranker(model=model)
+            return _cached_fastembed_reranker(model, local_files_only)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "fastembed reranker unavailable; falling back to mock: %s", exc
@@ -311,6 +331,17 @@ def build_reranker(provider: LLMProvider | None = None) -> RerankerProvider:
 
     logger.warning("unknown CASEOPS_RERANK_BACKEND=%s; using mock", backend)
     return MockReranker()
+
+
+def warm_reranker() -> RerankerProvider:
+    """Resolve the configured reranker during application startup.
+
+    Cloud Run can hold the instance in startup until the baked ONNX model is
+    ready instead of charging model initialization to a user's search.
+    """
+    reranker = build_reranker()
+    logger.info("reranker_warmup_complete provider=%s", reranker.name)
+    return reranker
 
 
 def candidates_from_iterable(
@@ -340,4 +371,5 @@ __all__ = [
     "RerankerProvider",
     "build_reranker",
     "candidates_from_iterable",
+    "warm_reranker",
 ]

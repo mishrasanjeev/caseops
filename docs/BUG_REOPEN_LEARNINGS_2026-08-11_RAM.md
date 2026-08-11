@@ -35,10 +35,25 @@
    loop. A browser abort did not cancel that server work. On a production corpus
    and a concurrency-one service, abandoned searches could therefore occupy the
    API long enough to make login and Matter requests appear broken too.
-4. **The forum hierarchy had two sources of truth.** Manual entry used the
+   The first corrective production replay exposed two more cold-path faults:
+   the Research page requested corpus stats in parallel even though search
+   already returned coverage, and PostgreSQL stats still performed an exact
+   scan over the live 5,366,835-chunk / 827,758-document corpus. Interactive
+   query tokenization also resolved a Hugging Face asset, while each reranked
+   request reconstructed an ONNX session. The live planner then exposed full
+   scans in exact-citation, judge, and Act/section paths; catalog estimates,
+   bounded global vector probing, and concurrent trigram indexes now protect
+   every shared search mode rather than only the originally failing keyword path.
+4. **Release infrastructure retained stale revisions.** Historical preview
+   tags combined with revision-level `minScale=1` kept old API revisions alive.
+   Secret references are pinned when a revision is created, so those old
+   instances repeatedly restarted with obsolete database credentials after
+   rotation. That background churn amplified cold scaling and made one warm
+   revision look healthy while the service as a whole was not converged.
+5. **The forum hierarchy had two sources of truth.** Manual entry used the
    catalog while bulk import accepted category/name strings. A UI-only addition
    would have left bulk import able to create invalid or unlinked forum data.
-5. **The word “reopen” was underspecified.** A controlled
+6. **The word “reopen” was underspecified.** A controlled
    `Disposed -> Intake` lifecycle transition is intentional. A later explicit
    `Intake -> Active` transition is also distinct from a disposed row being
    silently reactivated. The regression must prove the actual invariant at the
@@ -84,3 +99,13 @@ audited non-terminal transition; that is not an automatic terminal escape.
 6. Never classify a release as fixed from source tests alone. Record commit,
    image/revision, migration, traffic, local build, local replay, production
    replay, cleanup, and final persisted state.
+7. A concurrency-one UI must not make a supporting request race its primary
+   action when the primary response contains the same facts. Production corpus
+   counters must be constant-time (catalog estimates or materialized state),
+   and interactive requests must not download/resolve tokenizers or models or
+   initialize an ONNX session. Warm those assets before readiness and retain a
+   process singleton.
+8. Use Cloud Run service-level minimum capacity. Clear obsolete traffic tags on
+   every canonical production deploy and verify only latest receives traffic;
+   do not let tagged revisions preserve revision-level minimum instances or
+   pinned, obsolete secret versions.

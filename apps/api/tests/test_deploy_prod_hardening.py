@@ -72,6 +72,19 @@ def test_deploy_prod_uses_api_gcloudignore_explicitly() -> None:
     assert '[[ ! -f "${API_GCLOUDIGNORE_PATH}" ]]' in script
 
 
+def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+
+    assert '--min "${API_MIN_INSTANCES}"' in script
+    assert '--min "${WEB_MIN_INSTANCES}"' in script
+    assert script.count("--min-instances default") == 2
+    assert "--to-latest --clear-tags --quiet" in script
+    assert "--min-instances \"${API_MIN_INSTANCES}\"" not in script
+    assert "--min-instances \"${WEB_MIN_INSTANCES}\"" not in script
+    assert "MIGRATION_TASK_TIMEOUT=30m" in script
+    assert '--task-timeout "${MIGRATION_TASK_TIMEOUT}"' in script
+
+
 def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
     """Evaluate the root-level canary subset used by these ignore files."""
     ignored = False

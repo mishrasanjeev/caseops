@@ -10,6 +10,7 @@ from caseops_api.services.reranker import (
     LLMReranker,
     MockReranker,
     RerankerCandidate,
+    _cached_fastembed_reranker,
     _parse_order,
     build_reranker,
     candidates_from_iterable,
@@ -149,6 +150,33 @@ class TestBuildReranker:
         monkeypatch.setenv("CASEOPS_RERANK_ENABLED", "true")
         monkeypatch.setenv("CASEOPS_RERANK_BACKEND", "does-not-exist")
         assert isinstance(build_reranker(), MockReranker)
+
+    def test_fastembed_is_local_only_and_process_cached(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from caseops_api.services import reranker as module
+
+        calls: list[tuple[str, bool]] = []
+
+        class _StubFastembedReranker:
+            name = "fastembed"
+
+            def __init__(self, *, model: str, local_files_only: bool) -> None:
+                calls.append((model, local_files_only))
+
+        monkeypatch.setenv("CASEOPS_RERANK_ENABLED", "true")
+        monkeypatch.setenv("CASEOPS_RERANK_BACKEND", "fastembed")
+        monkeypatch.delenv("CASEOPS_RERANK_LOCAL_FILES_ONLY", raising=False)
+        monkeypatch.setattr(module, "FastembedReranker", _StubFastembedReranker)
+        _cached_fastembed_reranker.cache_clear()
+        try:
+            first = build_reranker()
+            second = build_reranker()
+        finally:
+            _cached_fastembed_reranker.cache_clear()
+
+        assert first is second
+        assert calls == [("jinaai/jina-reranker-v1-tiny-en", True)]
 
 
 @pytest.mark.skipif(

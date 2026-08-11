@@ -1338,6 +1338,82 @@ def test_authority_search_route_runs_in_fastapi_threadpool() -> None:
     assert not iscoroutinefunction(post_authority_search)
 
 
+def test_authority_stats_route_runs_in_fastapi_threadpool() -> None:
+    from caseops_api.api.routes.authorities import get_authority_stats
+
+    assert not iscoroutinefunction(get_authority_stats)
+
+
+def test_postgres_corpus_estimates_use_only_constant_time_catalog_reads() -> None:
+    from caseops_api.services import authorities as svc
+
+    statements: list[str] = []
+
+    class _Result:
+        def one(self):
+            return (
+                20_000,
+                1_800_000,
+                1_710_000,
+                "{high_court,supreme_court}",
+                "{0.75,0.25}",
+            )
+
+    class _Session:
+        def execute(self, statement):
+            statements.append(str(statement))
+            return _Result()
+
+    estimates = svc._postgres_corpus_estimates(_Session())  # type: ignore[arg-type]
+
+    assert estimates.document_count == 20_000
+    assert estimates.chunk_count == 1_800_000
+    assert estimates.embedded_chunk_count == 1_710_000
+    assert estimates.forum_counts == {
+        "high_court": 15_000,
+        "supreme_court": 5_000,
+    }
+    sql = " ".join(statements).casefold()
+    assert "pg_class" in sql
+    assert "pg_stats" in sql
+    assert "count(" not in sql
+    assert "max(" not in sql
+
+
+def test_pgvector_availability_probe_never_joins_the_corpus() -> None:
+    from caseops_api.services import authorities as svc
+
+    statements: list[str] = []
+
+    class _Dialect:
+        name = "postgresql"
+
+    class _Bind:
+        dialect = _Dialect()
+
+    class _Result:
+        def first(self):
+            return (1,)
+
+    class _Session:
+        bind = _Bind()
+
+        def execute(self, statement):
+            statements.append(str(statement))
+            return _Result()
+
+    assert svc._pg_embedding_scope_available(  # type: ignore[arg-type]
+        _Session(),
+        forum_level="high_court",
+        court_name="A court that does not exist",
+        document_type="judgment",
+    )
+    sql = " ".join(statements).casefold()
+    assert "authority_document_chunks" in sql
+    assert "authority_documents" not in sql
+    assert "join" not in sql
+
+
 def test_contextual_search_returns_limited_coverage_without_model_memory(
     client: TestClient,
     monkeypatch,

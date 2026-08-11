@@ -79,6 +79,24 @@ describe("ResearchPage", () => {
     expect(screen.getByTestId("research-query-submit")).toBeInTheDocument();
   });
 
+  it("uses search coverage without issuing a competing corpus-stats request", async () => {
+    render(withClient(<ResearchPage />));
+
+    expect(statsMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: { value: "bail application" },
+    });
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+
+    await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1));
+    expect(statsMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Searching 0 judgments across SC + HCs. Every result links to source.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("submits contextual mode for fact-pattern research", async () => {
     render(withClient(<ResearchPage />));
 

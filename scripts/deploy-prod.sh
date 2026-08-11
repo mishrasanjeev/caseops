@@ -39,6 +39,7 @@ API_GCLOUDIGNORE_FILE=.gcloudignore
 API_GCLOUDIGNORE_PATH="${API_SOURCE_DIR}/${API_GCLOUDIGNORE_FILE}"
 WEB_GCLOUDIGNORE_FILE=.gcloudignore
 WEB_GCLOUDIGNORE_PATH="${WEB_SOURCE_DIR}/${WEB_GCLOUDIGNORE_FILE}"
+MIGRATION_TASK_TIMEOUT=30m
 # 2026-06-08 incident: a blocking request pinned the single Uvicorn
 # event loop and Cloud Run kept routing unrelated API calls to that
 # same instance until each hit the 300s service timeout. Keep
@@ -50,9 +51,11 @@ API_TIMEOUT=300s
 # caseops-api previously had no minScale (scaled to 0), so the first
 # login after any idle window paid a 3-8s Python + SQLAlchemy + Cloud
 # SQL + clamav-sidecar cold start — the dominant cause of "login is
-# slow". One always-on cpu=2/4Gi instance trades ~$35-50/mo for a
-# consistently warm auth path. Override with API_MIN_INSTANCES=0 for a
-# cost-only deploy.
+# slow". This must be SERVICE-level minimum capacity (gcloud --min),
+# not revision-level --min-instances. Historical tagged revisions inherited
+# revision minScale=1 and kept restarting with pinned, obsolete DB secrets.
+# One service-level warm instance follows traffic to the current revision.
+# Override with API_MIN_INSTANCES=0 for a cost-only deploy.
 API_MIN_INSTANCES="${API_MIN_INSTANCES:-1}"
 # P1-2b (2026-05-15 perf review): keep one web instance warm too.
 # /sign-in is `dynamic = "force-dynamic"` (SSR per request, no CDN
@@ -142,7 +145,9 @@ echo "  immutable api image=${API_IMMUTABLE_IMAGE}"
 # is already at head; mandatory when there's a pending migration.
 echo "--- 2/6 migrate-job (alembic upgrade head) ---"
 gcloud run jobs update caseops-migrate-job \
-  --image "${API_IMMUTABLE_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet
+  --image "${API_IMMUTABLE_IMAGE}" \
+  --task-timeout "${MIGRATION_TASK_TIMEOUT}" \
+  --region "${REGION}" --project "${PROJECT}" --quiet
 gcloud run jobs execute caseops-migrate-job \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
@@ -174,7 +179,8 @@ gcloud run deploy caseops-api \
   --quiet \
   --concurrency "${API_CONCURRENCY}" \
   --timeout "${API_TIMEOUT}" \
-  --min-instances "${API_MIN_INSTANCES}" \
+  --min "${API_MIN_INSTANCES}" \
+  --min-instances default \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
@@ -184,15 +190,27 @@ gcloud run deploy caseops-api \
   --container clamav \
   --image "${CLAMAV_IMAGE}" \
   --startup-probe "tcpSocket.port=3310,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120"
-echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
+echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, service-min ${API_MIN_INSTANCES})."
 
 # Step 4 — deploy web.
 echo "--- 5/6 deploy caseops-web ---"
 gcloud run deploy caseops-web \
   --image "${WEB_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet \
   --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA}" \
-  --min-instances "${WEB_MIN_INSTANCES}"
-echo "  caseops-web at 100% traffic on ${TAG} (min-instances ${WEB_MIN_INSTANCES})."
+  --min "${WEB_MIN_INSTANCES}" \
+  --min-instances default
+echo "  caseops-web at 100% traffic on ${TAG} (service-min ${WEB_MIN_INSTANCES})."
+
+# Preview tags pin old revisions as externally routable targets. Combined with
+# revision-level minScale left by historical deploys, those tags kept obsolete
+# API containers alive after DB-secret rotation. They repeatedly failed startup
+# and consumed Cloud Run/Cloud SQL capacity. A production release has one
+# canonical target, so converge both services to latest-only routing.
+gcloud run services update-traffic caseops-api \
+  --region "${REGION}" --project "${PROJECT}" --to-latest --clear-tags --quiet
+gcloud run services update-traffic caseops-web \
+  --region "${REGION}" --project "${PROJECT}" --to-latest --clear-tags --quiet
+echo "  stale API/web revision tags cleared; 100% traffic remains on latest."
 
 # Step 5 — staleness sweep. Fails the script if the public domain
 # doesn't return the new image tag, so you don't think you deployed

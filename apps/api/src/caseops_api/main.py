@@ -13,6 +13,7 @@ from caseops_api.core.rate_limit import RateLimitExceeded, configure_limiter
 from caseops_api.core.request_context import RequestContextMiddleware
 from caseops_api.core.settings import get_settings
 from caseops_api.db.migrations import run_migrations
+from caseops_api.services.reranker import warm_reranker
 
 
 @asynccontextmanager
@@ -20,6 +21,7 @@ async def lifespan(_: FastAPI):
     settings = get_settings()
     if settings.auto_migrate:
         run_migrations()
+    warm_reranker()
     yield
 
 

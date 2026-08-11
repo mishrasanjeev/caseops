@@ -146,9 +146,12 @@ def test_voyage_provider_uses_bounded_zero_retry_client_for_queries(
     from caseops_api.services.embeddings import VoyageProvider
 
     constructor_calls: list[dict[str, object]] = []
+    tokenize_calls = 0
 
     class _StubVoyageClient:
         def tokenize(self, texts, model):  # noqa: ARG002
+            nonlocal tokenize_calls
+            tokenize_calls += 1
             return [[1] for _ in texts]
 
         def embed(self, texts, model, input_type, output_dimension):  # noqa: ARG002
@@ -180,3 +183,4 @@ def test_voyage_provider_uses_bounded_zero_retry_client_for_queries(
         {},
         {"max_retries": 0, "timeout": 3.5},
     ]
+    assert tokenize_calls == 0

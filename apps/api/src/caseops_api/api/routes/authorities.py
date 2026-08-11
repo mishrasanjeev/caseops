@@ -124,7 +124,7 @@ async def get_recent_authority_documents(
     response_model=AuthorityCorpusStats,
     summary="Aggregate counters for the authority corpus",
 )
-async def get_authority_stats(
+def get_authority_stats(
     context: CurrentContext,
     session: DbSession,
 ) -> AuthorityCorpusStats:

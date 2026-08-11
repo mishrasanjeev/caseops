@@ -38,6 +38,16 @@ requirements when using the fallback.
   give interactive provider calls a deadline, and test production-scale query
   counts. After an abandoned request, verify an unrelated endpoint remains
   responsive so server-side starvation is not missed.
+- On a concurrency-one service, a page must not fan out duplicate supporting
+  requests when the primary response already contains that data. Interactive
+  paths may not scan corpus-scale tables, resolve/download models or tokenizers
+  over the network, or initialize model sessions on demand; use catalog
+  estimates/materialized counters, baked local assets, process caches, and
+  startup warm-up, then assert the end-to-end production latency budget.
+- Cloud Run warm capacity must be configured at service level, not pinned to
+  each revision. Production deploys must clear obsolete revision tags and
+  verify latest-only traffic; otherwise tagged revisions with old pinned secret
+  versions can keep restarting and consume capacity after credential rotation.
 - When manual and bulk workflows select the same legal hierarchy, they must
   resolve one server-owned active catalog, persist the catalog ID and derived
   lineage, and reject inactive, ambiguous, mismatched, or invented entries.
