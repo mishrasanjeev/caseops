@@ -94,7 +94,11 @@ def test_voyage_provider_splits_oversized_batches(
     """VoyageProvider groups texts so no single request exceeds the
     120K-token server ceiling. We stub the voyageai client to avoid the
     network call but verify the batching decision."""
+    from caseops_api.services import embeddings
     from caseops_api.services.embeddings import VoyageProvider
+
+    monkeypatch.setattr(embeddings._voyage_usage, "assert_under_daily_cap", lambda: None)
+    monkeypatch.setattr(embeddings._voyage_usage, "record_call", lambda **kwargs: None)
 
     class _StubVoyageClient:
         def __init__(self) -> None:
@@ -119,7 +123,7 @@ def test_voyage_provider_splits_oversized_batches(
     # Monkeypatch voyageai.Client so VoyageProvider picks up our stub.
     import voyageai
 
-    monkeypatch.setattr(voyageai, "Client", lambda api_key: stub)
+    monkeypatch.setattr(voyageai, "Client", lambda api_key, **kwargs: stub)
 
     provider = VoyageProvider(
         model="voyage-4-large",
@@ -133,3 +137,46 @@ def test_voyage_provider_splits_oversized_batches(
     assert len(result.vectors) == 4
     assert len(stub.batches) >= 2, stub.batches
     assert all(b <= provider._MAX_BATCH_TOKENS for b in stub.batches), stub.batches
+
+
+def test_voyage_provider_uses_bounded_zero_retry_client_for_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services import embeddings
+    from caseops_api.services.embeddings import VoyageProvider
+
+    constructor_calls: list[dict[str, object]] = []
+
+    class _StubVoyageClient:
+        def tokenize(self, texts, model):  # noqa: ARG002
+            return [[1] for _ in texts]
+
+        def embed(self, texts, model, input_type, output_dimension):  # noqa: ARG002
+            class _Result:
+                embeddings = [[0.1] * output_dimension for _ in texts]
+
+            return _Result()
+
+    def _build_stub_client(*, api_key, **kwargs):  # noqa: ARG001
+        constructor_calls.append(kwargs)
+        return _StubVoyageClient()
+
+    import voyageai
+
+    monkeypatch.setattr(voyageai, "Client", _build_stub_client)
+    monkeypatch.setattr(embeddings._voyage_usage, "assert_under_daily_cap", lambda: None)
+    monkeypatch.setattr(embeddings._voyage_usage, "record_call", lambda **kwargs: None)
+
+    provider = VoyageProvider(
+        model="voyage-4-large",
+        api_key="dummy",
+        dimensions=16,
+        query_timeout_seconds=3.5,
+    )
+    result = provider.embed(["bounded query"], input_type="query", purpose="search")
+
+    assert len(result.vectors) == 1
+    assert constructor_calls == [
+        {},
+        {"max_retries": 0, "timeout": 3.5},
+    ]

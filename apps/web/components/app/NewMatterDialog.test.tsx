@@ -4,12 +4,13 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createMatterMock, fetchForumCatalogMock, toastSuccess, toastError } = vi.hoisted(() => ({
-  createMatterMock: vi.fn(),
-  fetchForumCatalogMock: vi.fn(),
-  toastSuccess: vi.fn(),
-  toastError: vi.fn(),
-}));
+const { createMatterMock, fetchForumCatalogMock, toastSuccess, toastError } =
+  vi.hoisted(() => ({
+    createMatterMock: vi.fn(),
+    fetchForumCatalogMock: vi.fn(),
+    toastSuccess: vi.fn(),
+    toastError: vi.fn(),
+  }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   createMatter: createMatterMock,
@@ -36,7 +37,9 @@ async function openDialog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("new-matter-trigger"));
 }
 
-async function fillRequiredMatterFields(user: ReturnType<typeof userEvent.setup>) {
+async function fillRequiredMatterFields(
+  user: ReturnType<typeof userEvent.setup>,
+) {
   await user.type(await screen.findByLabelText("Title"), "Spine matter");
   await user.type(screen.getByLabelText("Matter code"), "blr-001");
   await user.type(screen.getByLabelText("Practice area"), "Commercial");
@@ -160,7 +163,9 @@ describe("NewMatterDialog", () => {
     await openDialog(user);
     await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
     // Submitting the dialog with no fields filled trips the zod schema.
-    await user.click(await screen.findByRole("button", { name: /Create matter/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /Create matter/i }),
+    );
 
     const titleInput = await screen.findByLabelText("Title");
     expect(titleInput).toHaveAttribute("aria-invalid", "true");
@@ -186,7 +191,9 @@ describe("NewMatterDialog", () => {
 
     await openDialog(user);
 
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
     resolveCatalog({ entries: [] });
   });
 
@@ -207,12 +214,22 @@ describe("NewMatterDialog", () => {
       /Forum catalog could not be loaded/i,
     );
     await fillRequiredMatterFields(user);
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
 
-    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "legacy");
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-category"),
+      "legacy",
+    );
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
 
-    await user.type(screen.getByTestId("new-matter-forum-legacy-court"), "SIAC");
+    await user.type(
+      screen.getByTestId("new-matter-forum-legacy-court"),
+      "SIAC",
+    );
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
 
     await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
@@ -231,10 +248,14 @@ describe("NewMatterDialog", () => {
     render(withClient(<NewMatterDialog />));
 
     await openDialog(user);
-    expect(await screen.findByText(/Forum catalog is empty/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Forum catalog is empty/i),
+    ).toBeInTheDocument();
     await fillRequiredMatterFields(user);
 
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
     expect(createMatterMock).not.toHaveBeenCalled();
   });
 
@@ -257,7 +278,10 @@ describe("NewMatterDialog", () => {
     await user.type(screen.getByLabelText("Matter code"), "  blr-001  ");
     await user.type(screen.getByLabelText("Practice area"), "Commercial");
     await user.type(screen.getByLabelText("Case number"), " WP(C) 1/2026 ");
-    await user.type(screen.getByLabelText("CNR number"), " dlhc-0100-1234-2026 ");
+    await user.type(
+      screen.getByLabelText("CNR number"),
+      " dlhc-0100-1234-2026 ",
+    );
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
 
     await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
@@ -290,7 +314,10 @@ describe("NewMatterDialog", () => {
     await waitFor(() =>
       expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await user.type(await screen.findByLabelText("Title"), "Invalid code matter");
+    await user.type(
+      await screen.findByLabelText("Title"),
+      "Invalid code matter",
+    );
     await user.type(screen.getByLabelText("Matter code"), "BAD CODE/1");
     await user.type(screen.getByLabelText("Practice area"), "Commercial");
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
@@ -340,7 +367,9 @@ describe("NewMatterDialog", () => {
   it("closes after successful creation without waiting for a slow matters refetch", async () => {
     const user = userEvent.setup();
     const client = createTestClient();
-    vi.spyOn(client, "invalidateQueries").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(client, "invalidateQueries").mockReturnValue(
+      new Promise(() => {}),
+    );
     createMatterMock.mockResolvedValue({
       id: "m-1",
       matter_code: "BLR-001",
@@ -358,9 +387,13 @@ describe("NewMatterDialog", () => {
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
 
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: /New matter/i })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("dialog", { name: /New matter/i }),
+      ).not.toBeInTheDocument(),
     );
-    expect(client.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["matters"] });
+    expect(client.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["matters"],
+    });
   });
 
   it("can create a district court matter for a state missing from the catalog", async () => {
@@ -379,19 +412,34 @@ describe("NewMatterDialog", () => {
     await waitFor(() =>
       expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "district_court");
-    await user.selectOptions(screen.getByTestId("new-matter-forum-district-state"), "Assam");
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-category"),
+      "district_court",
+    );
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-district-state"),
+      "Assam",
+    );
 
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-district-state")).toHaveValue("Assam"),
+      expect(screen.getByTestId("new-matter-forum-district-state")).toHaveValue(
+        "Assam",
+      ),
     );
     expect(screen.getByTestId("new-matter-forum-district")).toHaveValue(
       "__uncatalogued_district_court__",
     );
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
 
-    await user.type(screen.getByTestId("new-matter-forum-district-name"), "Kamrup Metro");
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    await user.type(
+      screen.getByTestId("new-matter-forum-district-name"),
+      "Kamrup Metro",
+    );
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
 
     await user.type(
       screen.getByTestId("new-matter-forum-district-court"),
@@ -430,13 +478,18 @@ describe("NewMatterDialog", () => {
     await waitFor(() =>
       expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "consumer_forum");
-    await user.selectOptions(screen.getByTestId("new-matter-forum-consumer-level"), "district");
-    await user.selectOptions(screen.getByTestId("new-matter-forum-consumer-state"), "Rajasthan");
-
-    expect(screen.getByTestId("new-matter-forum-consumer-district")).toHaveValue(
-      "consumer:dcdrc:11080086",
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-category"),
+      "district_commission",
     );
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-consumer-state"),
+      "Rajasthan",
+    );
+
+    expect(
+      screen.getByTestId("new-matter-forum-consumer-district"),
+    ).toHaveValue("consumer:dcdrc:11080086");
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
 
     await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
@@ -456,18 +509,35 @@ describe("NewMatterDialog", () => {
     createMatterMock.mockClear();
     await openDialog(user);
     await fillRequiredMatterFields(user);
-    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "consumer_forum");
-    await user.selectOptions(screen.getByTestId("new-matter-forum-consumer-level"), "district");
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-category"),
+      "district_commission",
+    );
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-consumer-state"),
+      "Rajasthan",
+    );
     await user.selectOptions(
       screen.getByTestId("new-matter-forum-consumer-district"),
       "__uncatalogued_consumer_district__",
     );
-    expect(screen.getByTestId("new-matter-forum-consumer-district-name")).toHaveValue("");
-    expect(screen.getByTestId("new-matter-forum-consumer-forum-name")).toHaveValue("");
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    expect(
+      screen.getByTestId("new-matter-forum-consumer-district-name"),
+    ).toHaveValue("");
+    expect(
+      screen.getByTestId("new-matter-forum-consumer-forum-name"),
+    ).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
 
-    await user.type(screen.getByTestId("new-matter-forum-consumer-district-name"), "South II");
-    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    await user.type(
+      screen.getByTestId("new-matter-forum-consumer-district-name"),
+      "South II",
+    );
+    expect(
+      screen.getByRole("button", { name: /Create matter/i }),
+    ).toBeDisabled();
     await user.type(
       screen.getByTestId("new-matter-forum-consumer-forum-name"),
       "South II DCDRC Annex",
@@ -502,7 +572,10 @@ describe("NewMatterDialog", () => {
 
     await openDialog(user);
     await fillRequiredMatterFields(user);
-    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "district_court");
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-category"),
+      "district_court",
+    );
     await waitFor(() =>
       expect(screen.getByTestId("new-matter-forum-district")).toHaveValue(
         "district:delhi:dwarka",

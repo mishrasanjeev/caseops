@@ -30,10 +30,14 @@ function selectionFromMatter(matter: WorkspaceMatter): ForumSelection {
     forum_category: matter.forum_catalog_entry_id
       ? undefined
       : matter.forum_level === "tribunal" && matter.forum_consumer_level
-        ? "consumer_forum"
-      : matter.forum_level === "lower_court" && matter.forum_state
-        ? "district_court"
-        : "legacy",
+        ? matter.forum_consumer_level === "national"
+          ? "ncdrc"
+          : matter.forum_consumer_level === "state"
+            ? "state_commission"
+            : "district_commission"
+        : matter.forum_level === "lower_court" && matter.forum_state
+          ? "district_court"
+          : "legacy",
     forum_level: matter.forum_level ?? "high_court",
     court_id: matter.court_id ?? null,
     court_name: matter.court_name ?? null,
@@ -50,7 +54,9 @@ function metadataLine(matter: WorkspaceMatter): string {
     matter.forum_state,
     matter.forum_district,
     matter.forum_city,
-    matter.forum_consumer_level ? matter.forum_consumer_level.toUpperCase() : null,
+    matter.forum_consumer_level
+      ? matter.forum_consumer_level.toUpperCase()
+      : null,
   ]
     .filter(Boolean)
     .join(" / ");
@@ -60,7 +66,9 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
   const canEdit = useCapability("matters:edit");
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [editBaseUpdatedAt, setEditBaseUpdatedAt] = useState<string | null>(null);
+  const [editBaseUpdatedAt, setEditBaseUpdatedAt] = useState<string | null>(
+    null,
+  );
   const [selection, setSelection] = useState<ForumSelection>(() =>
     selectionFromMatter(matter),
   );
@@ -76,7 +84,9 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
   const selectedCatalogEntryMissing =
     catalogQuery.isSuccess &&
     Boolean(selection.forum_catalog_entry_id) &&
-    !catalogEntries.some((entry) => entry.id === selection.forum_catalog_entry_id);
+    !catalogEntries.some(
+      (entry) => entry.id === selection.forum_catalog_entry_id,
+    );
   const normalizedSelection: ForumSelection =
     selectedCatalogEntryMissing &&
     selection.forum_level === "lower_court" &&
@@ -92,11 +102,16 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
           Boolean(selection.forum_consumer_level)
         ? {
             ...selection,
-            forum_category: "consumer_forum",
+            forum_category:
+              selection.forum_consumer_level === "national"
+                ? "ncdrc"
+                : selection.forum_consumer_level === "state"
+                  ? "state_commission"
+                  : "district_commission",
             court_id: null,
             forum_catalog_entry_id: null,
           }
-      : selection;
+        : selection;
 
   useEffect(() => {
     if (matter.status === "disposed") {
@@ -124,7 +139,9 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["matters", matter.id, "workspace"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["matters", matter.id, "workspace"],
+        }),
         queryClient.invalidateQueries({ queryKey: ["matters"] }),
       ]);
       toast.success("Forum updated.");
@@ -163,7 +180,11 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
       : catalogEmpty
         ? "Forum catalog is empty. Select Other / uncatalogued and enter a court or forum name to use the legacy fallback."
         : null;
-  const catalogStatusTone = catalogFailed ? "error" : catalogEmpty ? "warning" : "info";
+  const catalogStatusTone = catalogFailed
+    ? "error"
+    : catalogEmpty
+      ? "warning"
+      : "info";
 
   return (
     <Card data-testid="matter-forum-card">

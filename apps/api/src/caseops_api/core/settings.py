@@ -367,6 +367,11 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="caseops-mock-embed")
     embedding_api_key: str | None = Field(default=None)
     embedding_dimensions: int = Field(default=1024, ge=64, le=4096)
+    # Interactive query embeddings must leave time for HNSW retrieval,
+    # ranking, and response serialization inside the web client's 20-second
+    # deadline. Ingestion uses the provider's normal client because large
+    # document batches legitimately take longer.
+    embedding_query_timeout_seconds: float = Field(default=8.0, ge=1.0, le=15.0)
     # 2026-04-21 retrieval-quality gap — see
     # docs/SC_2023_QUALITY_INVESTIGATION_2026-04-21.md. The 2026-04-20
     # SC-2023 HNSW probe ran recall@10 = 83.3 % (25/30). Five misses

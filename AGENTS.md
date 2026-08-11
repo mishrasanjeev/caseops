@@ -33,3 +33,16 @@ requirements when using the fallback.
   onto `main`, push `main` when remote publication is in scope, and verify
   that local `main` and `origin/main` resolve to the released commit. Do not
   leave completed fixes only on an agent branch.
+- Performance acceptance must bound total work, not merely raise timeouts:
+  cap candidates and child rows, prevent N+1 loading, batch provider calls,
+  give interactive provider calls a deadline, and test production-scale query
+  counts. After an abandoned request, verify an unrelated endpoint remains
+  responsive so server-side starvation is not missed.
+- When manual and bulk workflows select the same legal hierarchy, they must
+  resolve one server-owned active catalog, persist the catalog ID and derived
+  lineage, and reject inactive, ambiguous, mismatched, or invented entries.
+  A UI-only hierarchy fix is incomplete.
+- A controlled `Disposed -> Intake` transition and a later explicit
+  `Intake -> Active` transition are not silent reactivation. Reopen audits must
+  distinguish those events and prove terminal immutability across generic
+  PATCHes, imports, workers, children, operational views, audits, and reloads.

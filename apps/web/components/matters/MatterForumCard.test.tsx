@@ -89,7 +89,8 @@ const CATALOG = {
       consumer_level: null,
       source_name: "India.gov.in District Courts Contact Directory",
       source_url: "https://southwestdelhi.dcourts.gov.in",
-      lineage: "District Court > Delhi > South West Delhi > Dwarka Court South West Delhi | India",
+      lineage:
+        "District Court > Delhi > South West Delhi > Dwarka Court South West Delhi | India",
       display_order: 9004,
     },
     {
@@ -104,7 +105,8 @@ const CATALOG = {
       city: "New Delhi",
       consumer_level: "national",
       source_name: "e-Jagriti master commission directory",
-      source_url: "https://e-jagriti.gov.in/services/master/master/v2/getAllCommission",
+      source_url:
+        "https://e-jagriti.gov.in/services/master/master/v2/getAllCommission",
       lineage: "Consumer Forum > NCDRC",
       display_order: 200,
     },
@@ -152,7 +154,9 @@ describe("MatterForumCard", () => {
     updateMatterMock.mockReset();
     updateMatterMock.mockResolvedValue({ id: "m-1" });
     useCapabilityMock.mockReset();
-    useCapabilityMock.mockImplementation((capability: string) => capability === "matters:edit");
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:edit",
+    );
     toastSuccess.mockReset();
     toastError.mockReset();
   });
@@ -188,7 +192,10 @@ describe("MatterForumCard", () => {
       screen.getByTestId("matter-edit-forum-category"),
       "high_court",
     );
-    await user.selectOptions(screen.getByTestId("matter-edit-forum-state"), "Karnataka");
+    await user.selectOptions(
+      screen.getByTestId("matter-edit-forum-state"),
+      "Karnataka",
+    );
     await user.click(screen.getByTestId("matter-forum-save"));
 
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
@@ -204,7 +211,9 @@ describe("MatterForumCard", () => {
       forum_city: "Bengaluru",
       forum_consumer_level: null,
     });
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Forum updated."));
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Forum updated."),
+    );
   });
 
   it("edits an uncatalogued district court matter without dropping its state metadata", async () => {
@@ -354,7 +363,8 @@ describe("MatterForumCard", () => {
               practice_area: "Consumer",
               forum_level: "tribunal",
               court_id: null,
-              court_name: "Central Delhi District Consumer Disputes Redressal Commission",
+              court_name:
+                "Central Delhi District Consumer Disputes Redressal Commission",
               forum_catalog_entry_id: "consumer:dcdrc:central-delhi",
               forum_state: "Delhi",
               forum_district: "Central Delhi",
@@ -373,25 +383,26 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
 
     expect(screen.getByTestId("matter-edit-forum-category")).toHaveValue(
-      "consumer_forum",
-    );
-    expect(screen.getByTestId("matter-edit-forum-consumer-level")).toHaveValue(
-      "district",
+      "district_commission",
     );
     expect(screen.getByTestId("matter-edit-forum-consumer-state")).toHaveValue(
       "Delhi",
     );
-    expect(screen.getByTestId("matter-edit-forum-consumer-district")).toHaveValue(
-      "__uncatalogued_consumer_district__",
-    );
-    expect(screen.getByTestId("matter-edit-forum-consumer-district-name")).toHaveValue(
-      "Central Delhi",
-    );
-    expect(screen.getByTestId("matter-edit-forum-consumer-forum-name")).toHaveValue(
+    expect(
+      screen.getByTestId("matter-edit-forum-consumer-district"),
+    ).toHaveValue("__uncatalogued_consumer_district__");
+    expect(
+      screen.getByTestId("matter-edit-forum-consumer-district-name"),
+    ).toHaveValue("Central Delhi");
+    expect(
+      screen.getByTestId("matter-edit-forum-consumer-forum-name"),
+    ).toHaveValue(
       "Central Delhi District Consumer Disputes Redressal Commission",
     );
 
-    await user.clear(screen.getByTestId("matter-edit-forum-consumer-forum-name"));
+    await user.clear(
+      screen.getByTestId("matter-edit-forum-consumer-forum-name"),
+    );
     expect(screen.getByTestId("matter-forum-save")).toBeDisabled();
     await user.type(
       screen.getByTestId("matter-edit-forum-consumer-forum-name"),
@@ -442,8 +453,8 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
 
     await user.selectOptions(
-      screen.getByTestId("matter-edit-forum-consumer-level"),
-      "district",
+      screen.getByTestId("matter-edit-forum-category"),
+      "district_commission",
     );
     await user.selectOptions(
       screen.getByTestId("matter-edit-forum-consumer-state"),

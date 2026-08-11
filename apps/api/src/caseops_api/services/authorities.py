@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Lock
 from time import perf_counter
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, raiseload
 
 # NOTE for reviewers: the task spec asked for this wiring to land in
 # ``services/retrieval.py``, but ``search_authority_catalog`` (the
@@ -63,6 +65,39 @@ from caseops_api.services.retrieval import (
 )
 from caseops_api.services.retrieval_normalisers import build_query_variants
 from caseops_api.services.session_context import SessionContext
+
+# Search is an interactive request, not a corpus-export endpoint. The old
+# implementation could union 300 documents per query variant and then lazily
+# load every chunk on every document. At production scale that created an
+# unbounded N+1 query/read-amplification path which routinely outlived the
+# browser's 20-second deadline. Keep the candidate set explicit and small;
+# the HNSW prefilter still supplies the best matching chunk for each document.
+_AUTHORITY_MAX_DOCUMENT_CANDIDATES = 180
+_AUTHORITY_MIN_DOCUMENT_CANDIDATES = 30
+_AUTHORITY_DOCUMENT_CANDIDATE_MULTIPLIER = 3
+_AUTHORITY_FALLBACK_CHUNKS_PER_DOCUMENT = 2
+_AUTHORITY_COVERAGE_CACHE_TTL_SECONDS = 30.0
+
+
+@dataclass(frozen=True, slots=True)
+class _VectorDocumentHit:
+    document_id: str
+    chunk_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _CorpusMetrics:
+    document_count: int
+    chunk_count: int
+    embedded_chunk_count: int
+    last_ingested_at: datetime | None
+    last_indexed_at: datetime | None
+    latest_ingestion_status: str | None
+    forum_counts: dict[str, int]
+
+
+_CORPUS_METRICS_CACHE_LOCK = Lock()
+_CORPUS_METRICS_CACHE: tuple[float, _CorpusMetrics] | None = None
 
 # P4 (Sprint P, 2026-04-25). Forum-aware precedent boost. Indian
 # court hierarchy (highest precedential weight first):
@@ -689,6 +724,7 @@ def ingest_authority_source(
         run.imported_document_count = imported_document_count
         run.completed_at = datetime.now(UTC)
         session.commit()
+        _invalidate_corpus_metrics_cache()
         session.refresh(run)
         return _ingestion_run_record(run)
     except Exception as exc:
@@ -697,6 +733,7 @@ def ingest_authority_source(
         run.completed_at = datetime.now(UTC)
         session.add(run)
         session.commit()
+        _invalidate_corpus_metrics_cache()
         session.refresh(run)
         return _ingestion_run_record(run)
 
@@ -720,6 +757,89 @@ def list_recent_authority_documents(
     )
 
 
+def _invalidate_corpus_metrics_cache() -> None:
+    global _CORPUS_METRICS_CACHE
+    with _CORPUS_METRICS_CACHE_LOCK:
+        _CORPUS_METRICS_CACHE = None
+
+
+def _corpus_metrics(session: Session) -> _CorpusMetrics:
+    """Read corpus health with one aggregate per large table.
+
+    The prior request path scanned the chunk table three separate times for
+    count, embedded count, and latest index time. The Research page also asks
+    for stats alongside search, so a short Postgres-only cache prevents two
+    simultaneous first-page requests from repeating the same 1.8M-row work.
+    SQLite remains uncached to keep isolated tests and local seed changes
+    immediately visible.
+    """
+    global _CORPUS_METRICS_CACHE
+    try:
+        cache_enabled = (
+            session.bind is not None and session.bind.dialect.name == "postgresql"
+        )
+    except Exception:
+        cache_enabled = False
+
+    with _CORPUS_METRICS_CACHE_LOCK:
+        now = perf_counter()
+        if cache_enabled and _CORPUS_METRICS_CACHE is not None:
+            cached_at, metrics = _CORPUS_METRICS_CACHE
+            if now - cached_at <= _AUTHORITY_COVERAGE_CACHE_TTL_SECONDS:
+                return metrics
+
+        document_row = session.execute(
+            select(
+                func.count(AuthorityDocument.id),
+                func.max(AuthorityDocument.ingested_at),
+            )
+        ).one()
+        chunk_row = session.execute(
+            select(
+                func.count(AuthorityDocumentChunk.id),
+                func.count(AuthorityDocumentChunk.id).filter(
+                    AuthorityDocumentChunk.embedding_model.is_not(None)
+                ),
+                func.max(
+                    func.coalesce(
+                        AuthorityDocumentChunk.embedded_at,
+                        AuthorityDocumentChunk.created_at,
+                    )
+                ),
+            )
+        ).one()
+        latest_status = session.scalar(
+            select(AuthorityIngestionRun.status)
+            .order_by(
+                AuthorityIngestionRun.completed_at.desc(),
+                AuthorityIngestionRun.started_at.desc(),
+            )
+            .limit(1)
+        )
+        forum_rows = session.execute(
+            select(AuthorityDocument.forum_level, func.count())
+            .group_by(AuthorityDocument.forum_level)
+        ).all()
+        metrics = _CorpusMetrics(
+            document_count=int(document_row[0] or 0),
+            last_ingested_at=document_row[1],
+            chunk_count=int(chunk_row[0] or 0),
+            embedded_chunk_count=int(chunk_row[1] or 0),
+            last_indexed_at=chunk_row[2],
+            latest_ingestion_status=(
+                str(getattr(latest_status, "value", latest_status))
+                if latest_status is not None
+                else None
+            ),
+            forum_counts={
+                str(forum): int(count) for forum, count in forum_rows if forum
+            },
+        )
+        if cache_enabled:
+            _CORPUS_METRICS_CACHE = (now, metrics)
+        return metrics
+
+
 def get_authority_corpus_stats(
     session: Session, *, context: SessionContext
 ) -> AuthorityCorpusStats:
@@ -731,34 +851,13 @@ def get_authority_corpus_stats(
     for auth + audit consistency with the sibling endpoints.
     """
     del context
-    doc_count = (
-        session.scalar(select(func.count()).select_from(AuthorityDocument)) or 0
-    )
-    chunk_count = (
-        session.scalar(select(func.count()).select_from(AuthorityDocumentChunk)) or 0
-    )
-    embedded_count = (
-        session.scalar(
-            select(func.count())
-            .select_from(AuthorityDocumentChunk)
-            .where(AuthorityDocumentChunk.embedding_model.is_not(None))
-        )
-        or 0
-    )
-    last_ingested = session.scalar(
-        select(func.max(AuthorityDocument.ingested_at))
-    )
-    forum_rows = session.execute(
-        select(AuthorityDocument.forum_level, func.count())
-        .group_by(AuthorityDocument.forum_level)
-    ).all()
-    forum_counts = {str(forum): int(count) for forum, count in forum_rows if forum}
+    metrics = _corpus_metrics(session)
     return AuthorityCorpusStats(
-        document_count=int(doc_count),
-        chunk_count=int(chunk_count),
-        embedded_chunk_count=int(embedded_count),
-        forum_counts=forum_counts,
-        last_ingested_at=last_ingested,
+        document_count=metrics.document_count,
+        chunk_count=metrics.chunk_count,
+        embedded_chunk_count=metrics.embedded_chunk_count,
+        forum_counts=metrics.forum_counts,
+        last_ingested_at=metrics.last_ingested_at,
     )
 
 
@@ -781,6 +880,13 @@ def search_authority_catalog(
     # away from a short, semantically-thin case name. Topic queries
     # ("bail triple test") return zero exact hits → fall through.
     structured_mode = search_mode not in {"keyword", "contextual"}
+    candidate_limit = min(
+        max(
+            limit * _AUTHORITY_DOCUMENT_CANDIDATE_MULTIPLIER,
+            _AUTHORITY_MIN_DOCUMENT_CANDIDATES,
+        ),
+        _AUTHORITY_MAX_DOCUMENT_CANDIDATES,
+    )
     name_match_ids = (
         []
         if structured_mode
@@ -790,7 +896,7 @@ def search_authority_catalog(
             forum_level=forum_level,
             court_name=court_name,
             document_type=document_type,
-            limit=max(limit * 6, 30),
+            limit=candidate_limit,
         )
     )
 
@@ -813,27 +919,48 @@ def search_authority_catalog(
         query_variants = [query]
 
     pg_document_ids: list[str] | None = None
+    preferred_chunk_ids: list[str] = []
     pg_any_attempted = False
-    for variant in ([] if structured_mode else query_variants):
-        variant_ids = _pg_prefilter_document_ids(
+    query_embedding_attempted = False
+    precomputed_query_vector: list[float] | None = None
+    query_vectors: list[list[float]] = []
+    if not structured_mode and _pg_embedding_scope_available(
+        session,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+    ):
+        # One bounded provider call embeds every normalised query variant. The
+        # previous loop made one external call per variant and then made the
+        # original call again in ``_embed_query`` during reranking.
+        query_embedding_attempted = True
+        query_vectors = _embed_query_variants(query_variants)
+        if query_vectors:
+            precomputed_query_vector = query_vectors[0]
+
+    for query_vector in query_vectors:
+        variant_hits = _pg_prefilter_document_hits(
             session,
-            query=variant,
+            query_vector=query_vector,
             forum_level=forum_level,
             court_name=court_name,
             document_type=document_type,
-            limit=max(limit * 6, 30),
+            limit=candidate_limit,
         )
-        if variant_ids is None:
+        if variant_hits is None:
             continue
         pg_any_attempted = True
         if pg_document_ids is None:
             pg_document_ids = []
         seen_ids = set(pg_document_ids)
-        for doc_id in variant_ids:
-            if doc_id in seen_ids:
-                continue
-            seen_ids.add(doc_id)
-            pg_document_ids.append(doc_id)
+        seen_chunks = set(preferred_chunk_ids)
+        for hit in variant_hits:
+            if hit.chunk_id not in seen_chunks:
+                seen_chunks.add(hit.chunk_id)
+                preferred_chunk_ids.append(hit.chunk_id)
+            if hit.document_id not in seen_ids:
+                seen_ids.add(hit.document_id)
+                pg_document_ids.append(hit.document_id)
     # Preserve prior behaviour: when no variant triggered the fast path
     # (SQLite tests, no embeddings yet), leave ``pg_document_ids`` as
     # None so the fallback 300-row scan runs.
@@ -851,8 +978,16 @@ def search_authority_catalog(
                 continue
             seen.add(doc_id)
             merged_ids.append(doc_id)
+            if len(merged_ids) >= candidate_limit:
+                break
 
-    stmt = select(AuthorityDocument)
+    stmt = select(AuthorityDocument).options(
+        # Judgment bodies and lazy relationships are deliberately excluded
+        # from the candidate read. Relevant chunks are loaded in one bounded
+        # query below; structured modes rank canonical metadata directly.
+        defer(AuthorityDocument.document_text),
+        raiseload(AuthorityDocument.chunks),
+    )
     if merged_ids is not None:
         if not merged_ids:
             return []
@@ -873,8 +1008,7 @@ def search_authority_catalog(
     if mode_clause is not None:
         stmt = stmt.where(mode_clause)
 
-    if pg_document_ids is None:
-        stmt = stmt.limit(300)
+    stmt = stmt.limit(candidate_limit)
     documents = list(session.scalars(stmt))
     query_ref_tokens = set(_extract_case_references(query))
     normalized_query = _normalize_case_reference(query)
@@ -882,10 +1016,20 @@ def search_authority_catalog(
         query_ref_tokens.add(normalized_query)
     candidates: list[RetrievalCandidate] = []
     candidate_to_document: dict[str, AuthorityDocument] = {}
+    chunks_by_document = (
+        {}
+        if structured_mode
+        else _load_bounded_candidate_chunks(
+            session,
+            document_ids=[document.id for document in documents],
+            preferred_chunk_ids=preferred_chunk_ids,
+        )
+    )
 
     for document in documents:
-        if document.chunks:
-            for chunk in document.chunks:
+        document_chunks = chunks_by_document.get(document.id, [])
+        if document_chunks:
+            for chunk in document_chunks:
                 candidate_id = f"{document.id}:{chunk.chunk_index}"
                 candidates.append(
                     RetrievalCandidate(
@@ -931,16 +1075,23 @@ def search_authority_catalog(
                         document.judges_json or "",
                         document.sections_cited_json or "",
                         document.summary,
-                        document.document_text or "",
                     ]
                     if part
                 ),
-                quality_text=document.document_text or document.summary,
+                quality_text=document.summary,
             )
         )
         candidate_to_document[candidate_id] = document
 
-    query_vector = _embed_query(query, candidates=candidates)
+    query_vector = (
+        None
+        if structured_mode
+        else (
+            precomputed_query_vector
+            if query_embedding_attempted
+            else _embed_query(query, candidates=candidates)
+        )
+    )
     ranked = rank_candidates(
         query=query,
         candidates=candidates,
@@ -1115,7 +1266,10 @@ def search_authorities(
     search_query = (
         contextual_plan.planned_query if contextual_plan is not None else payload.query
     )
-    overfetch = max((payload.offset + payload.limit) * 5, 50)
+    overfetch = min(
+        max((payload.offset + payload.limit) * 5, 50),
+        _AUTHORITY_MAX_DOCUMENT_CANDIDATES,
+    )
     coverage = _authority_search_coverage(session, payload=payload)
     provider_unavailable = False
     try:
@@ -1351,45 +1505,16 @@ def _authority_search_coverage(
     *,
     payload: AuthoritySearchRequest,
 ) -> AuthoritySearchCoverage:
-    document_count = int(
-        session.scalar(select(func.count()).select_from(AuthorityDocument)) or 0
-    )
-    chunk_count = int(
-        session.scalar(select(func.count()).select_from(AuthorityDocumentChunk)) or 0
-    )
-    embedded_chunk_count = int(
-        session.scalar(
-            select(func.count())
-            .select_from(AuthorityDocumentChunk)
-            .where(AuthorityDocumentChunk.embedding_model.is_not(None))
-        ) or 0
-    )
-    last_ingested_at = session.scalar(select(func.max(AuthorityDocument.ingested_at)))
-    last_indexed_at = session.scalar(
-        select(func.max(func.coalesce(
-            AuthorityDocumentChunk.embedded_at,
-            AuthorityDocumentChunk.created_at,
-        )))
-    )
-    latest_run = session.scalar(
-        select(AuthorityIngestionRun).order_by(
-            AuthorityIngestionRun.completed_at.desc(),
-            AuthorityIngestionRun.started_at.desc(),
-        ).limit(1)
-    )
-    if document_count == 0:
+    metrics = _corpus_metrics(session)
+    if metrics.document_count == 0:
         index_state = "unavailable"
-    elif chunk_count == 0 or last_indexed_at is None:
+    elif metrics.chunk_count == 0 or metrics.last_indexed_at is None:
         index_state = "stale"
-    elif latest_run is not None and latest_run.status == AuthorityIngestionStatus.FAILED:
+    elif metrics.latest_ingestion_status == AuthorityIngestionStatus.FAILED.value:
         index_state = "stale"
     else:
         index_state = "current"
 
-    forum_rows = session.execute(
-        select(AuthorityDocument.forum_level, func.count())
-        .group_by(AuthorityDocument.forum_level)
-    ).all()
     scope_parts = ["indexed authority corpus"]
     if payload.forum_level:
         scope_parts.append(payload.forum_level.replace("_", " "))
@@ -1399,12 +1524,12 @@ def _authority_search_coverage(
         scope_parts.append(payload.document_type.replace("_", " "))
     scope_parts.append(f"{payload.language} language scope")
     return AuthoritySearchCoverage(
-        document_count=document_count,
-        chunk_count=chunk_count,
-        embedded_chunk_count=embedded_chunk_count,
-        forum_counts={str(forum): int(count) for forum, count in forum_rows if forum},
-        last_ingested_at=last_ingested_at,
-        last_indexed_at=last_indexed_at,
+        document_count=metrics.document_count,
+        chunk_count=metrics.chunk_count,
+        embedded_chunk_count=metrics.embedded_chunk_count,
+        forum_counts=metrics.forum_counts,
+        last_ingested_at=metrics.last_ingested_at,
+        last_indexed_at=metrics.last_indexed_at,
         index_state=index_state,
         scope_summary="; ".join(scope_parts),
     )
@@ -1586,37 +1711,21 @@ def _exact_name_match_document_ids(
     return ids
 
 
-def _pg_prefilter_document_ids(
+def _pg_embedding_scope_available(
     session: Session,
     *,
-    query: str,
     forum_level: str | None,
     court_name: str | None,
     document_type: str | None,
-    limit: int,
-) -> list[str] | None:
-    """Return a list of document ids ordered by pgvector cosine distance.
-
-    Returns ``None`` when the fast path is not applicable:
-
-    - connection is not Postgres (e.g., SQLite in tests),
-    - embeddings backend is not configured / build_provider raises,
-    - no chunk in the filter scope carries an ``embedding_vector`` yet.
-
-    The HNSW index on ``authority_document_chunks.embedding_vector`` drives
-    the sort so this stays fast at 10M+ chunks.
-    """
+) -> bool:
+    """Probe the filtered pgvector scope once per interactive search."""
     try:
         if session.bind is None or session.bind.dialect.name != "postgresql":
-            return None
+            return False
     except Exception:
-        return None
-    if not query.strip():
-        return None
+        return False
 
-    # Do at least one chunk actually have a vector in-scope? If not there is
-    # nothing for HNSW to rank, so skip the fast path.
-    from sqlalchemy import and_, text
+    from sqlalchemy import text
 
     court_contains = _normalize_court_filter(court_name)
     court_contains = court_contains.casefold() if court_contains else None
@@ -1640,24 +1749,48 @@ def _pg_prefilter_document_ids(
         ).first()
     except Exception:
         session.rollback()
-        return None
-    if probe is None:
-        return None
-    _ = and_  # silence unused-import on some linters
+        return False
+    return probe is not None
 
+
+def _embed_query_variants(queries: list[str]) -> list[list[float]]:
+    """Embed all query variants in one provider round-trip.
+
+    A provider failure is a bounded degradation to lexical retrieval, not a
+    reason to repeat the same external call later in the request.
+    """
+    cleaned = [query.strip() for query in queries if query.strip()]
+    if not cleaned:
+        return []
     try:
         provider = build_provider()
-    except EmbeddingProviderError:
-        return None
-    try:
-        result = provider.embed([query], input_type="query")
+        result = provider.embed(cleaned, input_type="query")
     except Exception:
-        return None
-    if not result.vectors:
-        return None
+        return []
+    return result.vectors if len(result.vectors) == len(cleaned) else []
 
-    vector = result.vectors[0]
-    vec_literal = "[" + ",".join(f"{v:.6f}" for v in vector) + "]"
+
+def _pg_prefilter_document_hits(
+    session: Session,
+    *,
+    query_vector: list[float],
+    forum_level: str | None,
+    court_name: str | None,
+    document_type: str | None,
+    limit: int,
+) -> list[_VectorDocumentHit] | None:
+    """Return the best HNSW chunk for each candidate document.
+
+    Returning the chunk identity is important: the old document-only result
+    forced the caller to reload *every* chunk for every selected judgment.
+    """
+    if not query_vector:
+        return None
+    from sqlalchemy import text
+
+    court_contains = _normalize_court_filter(court_name)
+    court_contains = court_contains.casefold() if court_contains else None
+    vec_literal = "[" + ",".join(f"{value:.6f}" for value in query_vector) + "]"
     # BUG-015 root cause (2026-04-30): the prior single-CTE shape did
     # GROUP BY authority_document_id BEFORE ORDER BY MIN(distance), which
     # forced the planner off the HNSW index — every concurrent INSERT on
@@ -1675,23 +1808,27 @@ def _pg_prefilter_document_ids(
         rows = session.execute(
             text(
                 "WITH top_chunks AS ("
-                " SELECT c.authority_document_id AS id, "
+                " SELECT c.authority_document_id AS id, c.id AS chunk_id, "
                 "        c.embedding_vector <=> cast(:q as vector) AS dist"
                 " FROM authority_document_chunks c "
                 " WHERE c.embedding_vector IS NOT NULL "
                 " ORDER BY c.embedding_vector <=> cast(:q as vector) "
                 " LIMIT :chunk_limit"
                 "), filtered AS ("
-                " SELECT tc.id, MIN(tc.dist) AS distance "
+                " SELECT tc.id, tc.chunk_id, tc.dist AS distance "
                 " FROM top_chunks tc "
                 " JOIN authority_documents d ON d.id = tc.id "
                 " WHERE (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
                 " AND (cast(:court_contains as text) IS NULL "
                 "OR position(:court_contains in lower(coalesce(d.court_name, ''))) > 0) "
-                " AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
-                " GROUP BY tc.id"
+                " AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype)"
+                "), ranked AS ("
+                " SELECT id, chunk_id, distance, "
+                " row_number() OVER (PARTITION BY id ORDER BY distance) AS doc_rank "
+                " FROM filtered"
                 ") "
-                "SELECT id FROM filtered ORDER BY distance LIMIT :limit"
+                "SELECT id, chunk_id FROM ranked WHERE doc_rank = 1 "
+                "ORDER BY distance LIMIT :limit"
             ),
             {
                 "q": vec_literal,
@@ -1705,7 +1842,79 @@ def _pg_prefilter_document_ids(
     except Exception:
         session.rollback()
         return None
-    return [row.id for row in rows]
+    return [
+        _VectorDocumentHit(document_id=str(row.id), chunk_id=str(row.chunk_id))
+        for row in rows
+    ]
+
+
+def _load_bounded_candidate_chunks(
+    session: Session,
+    *,
+    document_ids: list[str],
+    preferred_chunk_ids: list[str],
+) -> dict[str, list[AuthorityDocumentChunk]]:
+    """Load at most a few chunks per candidate in a constant query count."""
+    if not document_ids:
+        return {}
+
+    document_id_set = set(document_ids)
+    by_document: dict[str, list[AuthorityDocumentChunk]] = {}
+    if preferred_chunk_ids:
+        preferred_order = {
+            chunk_id: index
+            for index, chunk_id in enumerate(
+                preferred_chunk_ids[
+                    : _AUTHORITY_MAX_DOCUMENT_CANDIDATES
+                    * _AUTHORITY_FALLBACK_CHUNKS_PER_DOCUMENT
+                ]
+            )
+        }
+        preferred = list(
+            session.scalars(
+                select(AuthorityDocumentChunk).where(
+                    AuthorityDocumentChunk.id.in_(preferred_order),
+                    AuthorityDocumentChunk.authority_document_id.in_(document_id_set),
+                )
+            )
+        )
+        preferred.sort(key=lambda chunk: preferred_order.get(chunk.id, len(preferred_order)))
+        for chunk in preferred:
+            bucket = by_document.setdefault(chunk.authority_document_id, [])
+            if len(bucket) < _AUTHORITY_FALLBACK_CHUNKS_PER_DOCUMENT:
+                bucket.append(chunk)
+
+    missing_document_ids = document_id_set - set(by_document)
+    if missing_document_ids:
+        ranked_ids = (
+            select(
+                AuthorityDocumentChunk.id.label("chunk_id"),
+                func.row_number()
+                .over(
+                    partition_by=AuthorityDocumentChunk.authority_document_id,
+                    order_by=AuthorityDocumentChunk.chunk_index.asc(),
+                )
+                .label("candidate_rank"),
+            )
+            .where(AuthorityDocumentChunk.authority_document_id.in_(missing_document_ids))
+            .subquery()
+        )
+        fallback_chunks = list(
+            session.scalars(
+                select(AuthorityDocumentChunk)
+                .join(ranked_ids, ranked_ids.c.chunk_id == AuthorityDocumentChunk.id)
+                .where(
+                    ranked_ids.c.candidate_rank
+                    <= _AUTHORITY_FALLBACK_CHUNKS_PER_DOCUMENT
+                )
+            )
+        )
+        for chunk in fallback_chunks:
+            by_document.setdefault(chunk.authority_document_id, []).append(chunk)
+
+    for chunks in by_document.values():
+        chunks.sort(key=lambda chunk: chunk.chunk_index)
+    return by_document
 
 
 def _decode_embedding(raw: str | None) -> list[float] | None:

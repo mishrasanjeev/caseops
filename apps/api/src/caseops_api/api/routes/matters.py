@@ -373,10 +373,11 @@ async def create_current_company_matter(
 )
 async def download_current_company_matter_import_template(
     context: MatterBulkImporter,
+    session: DbSession,
     format: Literal["csv", "xlsx"] = Query(default="xlsx"),
 ) -> Response:
     del context
-    body, content_type, filename = matter_import_template(format)
+    body, content_type, filename = matter_import_template(session, format)
     return Response(
         content=body,
         media_type=content_type,

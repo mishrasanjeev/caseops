@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -59,9 +65,14 @@ describe("MattersPage", () => {
     transitionMatterStatusMock.mockReset();
     useCapabilityMock.mockReset();
     listMatterTagsMock.mockResolvedValue({
-      tags: [{ id: "tag-1", company_id: "c-1", name: "Urgent", slug: "urgent" }],
+      tags: [
+        { id: "tag-1", company_id: "c-1", name: "Urgent", slug: "urgent" },
+      ],
     });
-    bulkAssignMatterTagMock.mockResolvedValue({ assigned_count: 1, skipped_count: 0 });
+    bulkAssignMatterTagMock.mockResolvedValue({
+      assigned_count: 1,
+      skipped_count: 0,
+    });
     updateMatterMock.mockResolvedValue({
       id: "m1",
       matter_code: "ACME-1",
@@ -73,7 +84,9 @@ describe("MattersPage", () => {
       created_at: "2026-04-01T00:00:00Z",
       updated_at: "2026-04-15T00:00:00Z",
     });
-    useCapabilityMock.mockImplementation((capability: string) => capability === "matters:edit");
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:edit",
+    );
     useRouterMock.mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),
@@ -93,7 +106,9 @@ describe("MattersPage", () => {
           forum_level: "high_court",
           claim_amount_minor: 25000000,
           claim_currency: "INR",
-          tags: [{ id: "tag-1", company_id: "c-1", name: "Urgent", slug: "urgent" }],
+          tags: [
+            { id: "tag-1", company_id: "c-1", name: "Urgent", slug: "urgent" },
+          ],
           has_stay: true,
           has_interim_order: true,
           next_hearing_on: null,
@@ -153,7 +168,9 @@ describe("MattersPage", () => {
     render(withClient(<MattersPage />));
 
     const statusSelect = await screen.findByLabelText("Status for ACME-1");
-    expect(within(statusSelect).queryByRole("option", { name: "Dispose" })).toBeNull();
+    expect(
+      within(statusSelect).queryByRole("option", { name: "Dispose" }),
+    ).toBeNull();
     expect(screen.getByTestId("matter-dispose-trigger")).toBeInTheDocument();
   });
 
@@ -189,7 +206,9 @@ describe("MattersPage", () => {
 
     render(withClient(<MattersPage />));
 
-    expect(await screen.findByText(/Legacy malformed currency/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Legacy malformed currency/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/12,500/)).toBeInTheDocument();
   });
 
@@ -229,6 +248,34 @@ describe("MattersPage", () => {
           min_claim_amount_minor: 10000000,
         }),
       ),
+    );
+  });
+
+  it("keeps the complete filter surface shrinkable and wrapped across breakpoints", async () => {
+    listMattersMock.mockResolvedValue({ matters: [], next_cursor: null });
+    render(withClient(<MattersPage />));
+
+    const grid = await screen.findByTestId("matter-filter-grid");
+    expect(grid).toHaveClass("min-w-0", "sm:grid-cols-2", "lg:grid-cols-3");
+    expect(grid).toHaveClass("2xl:grid-cols-6");
+    expect(screen.getByLabelText("Search")).toBeInTheDocument();
+    expect(screen.getByLabelText("Matter status filter")).toBeInTheDocument();
+    expect(screen.getByLabelText("Forum filter")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tag filter")).toBeInTheDocument();
+    expect(screen.getByLabelText("Min claim")).toBeInTheDocument();
+    expect(screen.getByLabelText("Max claim")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Apply/i })).toHaveClass(
+      "w-full",
+      "sm:w-auto",
+    );
+
+    fireEvent.change(screen.getByLabelText("Search"), {
+      target: { value: "visible reset" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Apply/i }));
+    expect(await screen.findByRole("button", { name: /^Reset$/i })).toHaveClass(
+      "w-full",
+      "sm:w-auto",
     );
   });
 

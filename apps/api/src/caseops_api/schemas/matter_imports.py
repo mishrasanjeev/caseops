@@ -54,6 +54,11 @@ class BulkMatterImportRowPlan(BaseModel):
     opposing_counsel: str | None = None
     forum_level: str | None = None
     court_name: str | None = None
+    forum_catalog_entry_id: str | None = None
+    forum_state: str | None = None
+    forum_district: str | None = None
+    forum_city: str | None = None
+    forum_consumer_level: str | None = None
     court_forum_number: str | None = None
     case_number: str | None = None
     filing_number: str | None = None

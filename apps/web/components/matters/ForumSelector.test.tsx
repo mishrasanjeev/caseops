@@ -105,7 +105,8 @@ const ENTRIES: ForumCatalogEntry[] = [
     consumer_level: null,
     source_name: "CaseOps LW-S4 baseline forum catalog",
     source_url: null,
-    lineage: "District Court > Delhi > East, North-East & Shahdara > Karkardooma",
+    lineage:
+      "District Court > Delhi > East, North-East & Shahdara > Karkardooma",
     display_order: 102,
   },
   {
@@ -256,6 +257,38 @@ const ENTRIES: ForumCatalogEntry[] = [
     lineage: "Consumer Forum > DCDRC > Rajasthan > Ajmer",
     display_order: 108001,
   },
+  {
+    id: "drt:delhi:drt-1",
+    parent_id: "drt:delhi:drat",
+    court_id: null,
+    name: "DRT-1",
+    forum_type: "drt_drat",
+    forum_level: "tribunal",
+    state: "Delhi",
+    district: null,
+    city: "New Delhi",
+    consumer_level: null,
+    source_name: "Department of Financial Services DRT/DRAT portal",
+    source_url: "https://drt.gov.in/",
+    lineage: "DRAT / DRT > Delhi > DRT-1",
+    display_order: 401,
+  },
+  {
+    id: "drt:delhi:drt-2",
+    parent_id: "drt:delhi:drat",
+    court_id: null,
+    name: "DRT-2",
+    forum_type: "drt_drat",
+    forum_level: "tribunal",
+    state: "Delhi",
+    district: null,
+    city: "New Delhi",
+    consumer_level: null,
+    source_name: "Department of Financial Services DRT/DRAT portal",
+    source_url: "https://drt.gov.in/",
+    lineage: "DRAT / DRT > Delhi > DRT-2",
+    display_order: 402,
+  },
 ];
 
 function Harness({ initial }: { initial?: ForumSelection }) {
@@ -277,7 +310,10 @@ describe("ForumSelector", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByTestId("test-forum-category"), "supreme_court");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "supreme_court",
+    );
 
     expect(screen.getByTestId("test-forum-supreme")).toHaveValue("sc:india");
     expect(screen.queryByTestId("test-forum-state")).toBeNull();
@@ -289,7 +325,10 @@ describe("ForumSelector", () => {
     render(<Harness />);
 
     expect(screen.getByTestId("test-forum-state")).toHaveValue("Delhi");
-    await user.selectOptions(screen.getByTestId("test-forum-state"), "Karnataka");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-state"),
+      "Karnataka",
+    );
 
     await waitFor(() =>
       expect(screen.getByTestId("test-forum-state")).toHaveValue("Karnataka"),
@@ -301,9 +340,14 @@ describe("ForumSelector", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByTestId("test-forum-category"), "district_court");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "district_court",
+    );
 
-    expect(screen.getByTestId("test-forum-district-state")).toHaveValue("Delhi");
+    expect(screen.getByTestId("test-forum-district-state")).toHaveValue(
+      "Delhi",
+    );
     expect(screen.getByTestId("test-forum-district")).toHaveValue(
       "district:delhi:central",
     );
@@ -336,7 +380,10 @@ describe("ForumSelector", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByTestId("test-forum-category"), "district_court");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "district_court",
+    );
 
     const stateSelect = screen.getByTestId(
       "test-forum-district-state",
@@ -392,36 +439,59 @@ describe("ForumSelector", () => {
       "test-forum-district",
     ) as HTMLSelectElement;
     expect(districtSelect).toHaveValue("__uncatalogued_district_court__");
-    expect(Array.from(districtSelect.options).map((option) => option.textContent)).toEqual([
-      "Other district court in Assam",
-    ]);
+    expect(
+      Array.from(districtSelect.options).map((option) => option.textContent),
+    ).toEqual(["Other district court in Assam"]);
     expect(screen.getByTestId("test-forum-district-name")).toHaveValue("");
     expect(screen.getByTestId("test-forum-district-court")).toHaveValue("");
 
-    await user.type(screen.getByTestId("test-forum-district-name"), "Kamrup Metro");
+    await user.type(
+      screen.getByTestId("test-forum-district-name"),
+      "Kamrup Metro",
+    );
     await user.type(
       screen.getByTestId("test-forum-district-court"),
       "Kamrup Metro District Court",
     );
 
-    expect(screen.getByTestId("test-forum-district-name")).toHaveValue("Kamrup Metro");
+    expect(screen.getByTestId("test-forum-district-name")).toHaveValue(
+      "Kamrup Metro",
+    );
     expect(screen.getByTestId("test-forum-district-court")).toHaveValue(
       "Kamrup Metro District Court",
     );
   });
-  it("supports national, state, and district consumer forum levels", async () => {
+  it("exposes national, state, and district commissions as distinct hierarchies", async () => {
     const user = userEvent.setup();
     render(<Harness initial={EMPTY_FORUM_SELECTION} />);
 
-    await user.selectOptions(screen.getByTestId("test-forum-category"), "consumer_forum");
-    expect(screen.getByTestId("test-forum-consumer-level")).toHaveValue("national");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "ncdrc",
+    );
+    expect(screen.getByTestId("test-forum-consumer-national")).toHaveValue(
+      "consumer:ncdrc",
+    );
     expect(screen.queryByTestId("test-forum-consumer-state")).toBeNull();
 
-    await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "state");
-    expect(screen.getByTestId("test-forum-consumer-state")).toHaveValue("Delhi");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "state_commission",
+    );
+    expect(screen.getByTestId("test-forum-consumer-state")).toHaveValue(
+      "Delhi",
+    );
+    expect(screen.getByTestId("test-forum-consumer-commission")).toHaveValue(
+      "consumer:scdrc:11070000",
+    );
 
-    await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "district");
-    expect(screen.getByTestId("test-forum-consumer-state")).toHaveValue("Delhi");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "district_commission",
+    );
+    expect(screen.getByTestId("test-forum-consumer-state")).toHaveValue(
+      "Delhi",
+    );
     expect(screen.getByTestId("test-forum-consumer-district")).toHaveValue(
       "consumer:dcdrc:11070077",
     );
@@ -431,13 +501,17 @@ describe("ForumSelector", () => {
     const user = userEvent.setup();
     render(<Harness initial={EMPTY_FORUM_SELECTION} />);
 
-    await user.selectOptions(screen.getByTestId("test-forum-category"), "consumer_forum");
-    await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "state");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "state_commission",
+    );
 
     const stateSelect = screen.getByTestId(
       "test-forum-consumer-state",
     ) as HTMLSelectElement;
-    expect(Array.from(stateSelect.options).map((option) => option.textContent)).toEqual(
+    expect(
+      Array.from(stateSelect.options).map((option) => option.textContent),
+    ).toEqual(
       [
         "Andaman and Nicobar Islands",
         "Andhra Pradesh",
@@ -480,29 +554,45 @@ describe("ForumSelector", () => {
 
     await user.selectOptions(stateSelect, "Rajasthan");
     await waitFor(() => expect(stateSelect).toHaveValue("Rajasthan"));
-    expect(screen.getByText(/Consumer Forum > SCDRC > Rajasthan/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Consumer Forum > SCDRC > Rajasthan/i),
+    ).toBeInTheDocument();
   });
 
   it("supports DCDRC fallback without inheriting catalog district metadata", async () => {
     const user = userEvent.setup();
     render(<Harness initial={EMPTY_FORUM_SELECTION} />);
 
-    await user.selectOptions(screen.getByTestId("test-forum-category"), "consumer_forum");
-    await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "district");
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "district_commission",
+    );
 
     const districtSelect = screen.getByTestId(
       "test-forum-consumer-district",
     ) as HTMLSelectElement;
-    expect(Array.from(districtSelect.options).map((option) => option.textContent)).toEqual([
+    expect(
+      Array.from(districtSelect.options).map((option) => option.textContent),
+    ).toEqual([
       "Central Delhi District Consumer Disputes Redressal Commission (Central Delhi)",
       "Other DCDRC in Delhi",
     ]);
 
-    await user.selectOptions(districtSelect, "__uncatalogued_consumer_district__");
-    expect(screen.getByTestId("test-forum-consumer-district-name")).toHaveValue("");
-    expect(screen.getByTestId("test-forum-consumer-forum-name")).toHaveValue("");
+    await user.selectOptions(
+      districtSelect,
+      "__uncatalogued_consumer_district__",
+    );
+    expect(screen.getByTestId("test-forum-consumer-district-name")).toHaveValue(
+      "",
+    );
+    expect(screen.getByTestId("test-forum-consumer-forum-name")).toHaveValue(
+      "",
+    );
 
-    await user.type(screen.getByTestId("test-forum-consumer-district-name"), "South II");
+    await user.type(
+      screen.getByTestId("test-forum-consumer-district-name"),
+      "South II",
+    );
     await user.type(
       screen.getByTestId("test-forum-consumer-forum-name"),
       "South II DCDRC Annex",
@@ -514,5 +604,27 @@ describe("ForumSelector", () => {
     expect(screen.getByTestId("test-forum-consumer-forum-name")).toHaveValue(
       "South II DCDRC Annex",
     );
+  });
+
+  it("selects an exact specialist tribunal and retains its catalog lineage", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(
+      screen.getByTestId("test-forum-category"),
+      "drt_drat",
+    );
+    expect(screen.getByTestId("test-forum-specialist-state")).toHaveValue(
+      "Delhi",
+    );
+    await user.selectOptions(
+      screen.getByTestId("test-forum-specialist-forum"),
+      "drt:delhi:drt-2",
+    );
+
+    expect(screen.getByTestId("test-forum-specialist-forum")).toHaveValue(
+      "drt:delhi:drt-2",
+    );
+    expect(screen.getByText(/DRAT \/ DRT > Delhi > DRT-2/)).toBeInTheDocument();
   });
 });

@@ -1173,12 +1173,16 @@ def test_bulk_matter_creation_template_preview_commit_history_and_notifications(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     with zipfile.ZipFile(io.BytesIO(xlsx_template.content)) as workbook:
-        assert {f"xl/worksheets/sheet{index}.xml" for index in range(1, 4)}.issubset(
+        assert {f"xl/worksheets/sheet{index}.xml" for index in range(1, 5)}.issubset(
             workbook.namelist()
         )
         import_sheet = workbook.read("xl/worksheets/sheet1.xml")
         assert b"Matter Title" in import_sheet
         assert b"Court Forum Number" in import_sheet
+        assert b"Forum Catalog" in workbook.read("xl/workbook.xml")
+        forum_catalog_sheet = workbook.read("xl/worksheets/sheet3.xml")
+        assert b"DRAT / DRT" in forum_catalog_sheet
+        assert b"DRT-2" in forum_catalog_sheet
 
     csv_template = client.get(
         "/api/matters/imports/template?format=csv",
@@ -1286,6 +1290,69 @@ def test_bulk_matter_creation_template_preview_commit_history_and_notifications(
         )
     assert "matter_import.upload_succeeded" in events
     assert "matter_import.completed" in events
+
+
+def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    csv_body = (
+        b"Matter Title,Matter Code,Practice Area,Forum,Court\n"
+        b"Catalog-backed recovery,CATALOG-DRT-2,Commercial,DRAT / DRT,DRT-2\n"
+        b"Catalog-backed High Court,CATALOG-HC-DELHI,Commercial,High Court,Delhi High Court\n"
+        b"Invalid invented tribunal,CATALOG-DRT-99,Commercial,DRAT / DRT,DRT-99\n"
+    )
+
+    preview = client.post(
+        "/api/matters/imports/preview",
+        headers=auth_headers(token),
+        files={"file": ("catalog-matters.csv", csv_body, "text/csv")},
+    )
+
+    assert preview.status_code == 200, preview.text
+    job = preview.json()
+    assert job["valid_rows"] == 2
+    assert job["invalid_rows"] == 1
+    valid_row, high_court_row, invalid_row = job["rows"]
+    assert valid_row["normalized"]["forum_catalog_entry_id"] == "drt:delhi:drt-2"
+    assert valid_row["normalized"]["forum_level"] == "tribunal"
+    assert valid_row["normalized"]["court_name"] == "DRT-2"
+    assert valid_row["normalized"]["forum_state"] == "Delhi"
+    assert high_court_row["normalized"]["forum_catalog_entry_id"] == "hc:delhi"
+    assert high_court_row["normalized"]["forum_level"] == "high_court"
+    assert high_court_row["normalized"]["court_name"] == "Delhi High Court"
+    assert invalid_row["errors"] == [
+        "Court is not an active DRAT / DRT catalog selection."
+    ]
+
+    committed = client.post(
+        f"/api/matters/imports/{job['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert committed.status_code == 200, committed.text
+    result = committed.json()
+    assert result["job"]["status"] == "completed_with_errors"
+    assert len(result["created_matter_ids"]) == 2
+
+    records = []
+    for matter_id in result["created_matter_ids"]:
+        matter = client.get(
+            f"/api/matters/{matter_id}",
+            headers=auth_headers(token),
+        )
+        assert matter.status_code == 200, matter.text
+        records.append(matter.json())
+    record = next(item for item in records if item["matter_code"] == "CATALOG-DRT-2")
+    assert record["forum_catalog_entry_id"] == "drt:delhi:drt-2"
+    assert record["forum_level"] == "tribunal"
+    assert record["court_name"] == "DRT-2"
+    assert record["forum_state"] == "Delhi"
+    high_court = next(
+        item for item in records if item["matter_code"] == "CATALOG-HC-DELHI"
+    )
+    assert high_court["forum_catalog_entry_id"] == "hc:delhi"
+    assert high_court["court_name"] == "Delhi High Court"
 
 
 def test_bulk_matter_creation_normalizes_business_values_and_preserves_punctuation(

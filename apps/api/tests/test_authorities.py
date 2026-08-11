@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from inspect import iscoroutinefunction
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.db.models import (
     AuditEvent,
@@ -1238,6 +1240,102 @@ def test_structured_research_modes_and_immutable_report_snapshot(
     )
     assert isolated.status_code == 200, isolated.text
     assert isolated.json()["reports"] == []
+
+
+def test_all_seven_research_modes_share_a_bounded_interactive_path(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    authority_id = _seed_madras_bail_authority()
+    with get_session_factory()() as session:
+        document = session.get(AuthorityDocument, authority_id)
+        assert document is not None
+        document.neutral_citation = "2026:MHC:811"
+        document.parties_json = json.dumps(["Aster Labs", "Registrar of Trade Marks"])
+        document.judges_json = json.dumps(["Justice M. Sundar"])
+        document.sections_cited_json = json.dumps(["Section 483 BNSS"])
+        session.commit()
+
+    mode_queries = {
+        "keyword": "triple test bail BNSS 483",
+        "contextual": "custody duration and parity justify bail under BNSS 483",
+        "exact_citation": "2026:MHC:811",
+        "party": "Aster Labs",
+        "court": "Madras High Court",
+        "judge": "Justice M. Sundar",
+        "act_section": "Section 483 BNSS",
+    }
+    started = perf_counter()
+    for mode, query in mode_queries.items():
+        response = client.post(
+            "/api/authorities/search",
+            headers=auth_headers(token),
+            json={"query": query, "mode": mode, "language": "any", "limit": 10},
+        )
+        assert response.status_code == 200, (mode, response.text)
+        body = response.json()
+        assert body["outcome"] == "results_found", (mode, body)
+        assert authority_id in {
+            result["authority_document_id"] for result in body["results"]
+        }
+    assert perf_counter() - started < 5.0
+
+
+def test_keyword_research_loads_bounded_chunks_in_constant_queries(
+    client: TestClient,  # noqa: ARG001 - fixture installs the isolated test database
+    monkeypatch,
+) -> None:
+    from caseops_api.services import authorities as svc
+
+    authority_id = _seed_madras_bail_authority()
+    with get_session_factory()() as session:
+        document = session.get(AuthorityDocument, authority_id)
+        assert document is not None
+        document.chunks.extend(
+            AuthorityDocumentChunk(
+                chunk_index=index,
+                content=f"Bounded candidate chunk {index} about BNSS bail.",
+                token_count=10,
+            )
+            for index in range(1, 75)
+        )
+        session.commit()
+
+    captured_candidates = []
+
+    def _capture_rank(*, query, candidates, limit, query_vector=None):  # noqa: ARG001
+        captured_candidates.extend(candidates)
+        return []
+
+    monkeypatch.setattr(svc, "rank_candidates", _capture_rank)
+    with get_session_factory()() as session:
+        assert session.bind is not None
+        query_count = 0
+
+        def _count_query(*args, **kwargs):  # noqa: ARG001
+            nonlocal query_count
+            query_count += 1
+
+        event.listen(session.bind, "before_cursor_execute", _count_query)
+        try:
+            svc.search_authority_catalog(
+                session,
+                query="BNSS bail",
+                search_mode="keyword",
+                limit=10,
+            )
+        finally:
+            event.remove(session.bind, "before_cursor_execute", _count_query)
+
+    assert query_count <= 3
+    assert len(captured_candidates) == 2
+
+
+def test_authority_search_route_runs_in_fastapi_threadpool() -> None:
+    from caseops_api.api.routes.authorities import post_authority_search
+
+    assert not iscoroutinefunction(post_authority_search)
 
 
 def test_contextual_search_returns_limited_coverage_without_model_memory(

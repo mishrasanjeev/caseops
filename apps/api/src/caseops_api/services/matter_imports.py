@@ -25,6 +25,7 @@ from caseops_api.db.models import (
     DEFAULT_MATTER_STATUS,
     AuditResult,
     CompanyMembership,
+    ForumCatalogEntry,
     Matter,
     MatterBulkImportJob,
     MatterBulkImportRow,
@@ -188,6 +189,11 @@ _FIELD_ALIASES = {
     "forum": "forum_level",
     "forumlevel": "forum_level",
     "courtforum": "forum_level",
+    "forumcatalogentryid": "forum_catalog_entry_id",
+    "forumstate": "forum_state",
+    "forumdistrict": "forum_district",
+    "forumcity": "forum_city",
+    "forumconsumerlevel": "forum_consumer_level",
     "court": "court_name",
     "courtname": "court_name",
     "forumname": "court_name",
@@ -1237,6 +1243,202 @@ _FORUM_LEVEL_ALIASES = {
     "advisory": "advisory",
 }
 
+_FORUM_CATEGORY_ALIASES = {
+    "supremecourt": "supreme_court",
+    "supremecourtofindia": "supreme_court",
+    "highcourt": "high_court",
+    "districtcourt": "district_court",
+    "districtandsessionscourt": "district_court",
+    "districtsessionscourt": "district_court",
+    "sessionscourt": "district_court",
+    "ncdrc": "ncdrc",
+    "nationalcommission": "ncdrc",
+    "statecommission": "state_commission",
+    "scdrc": "state_commission",
+    "districtcommission": "district_commission",
+    "dcdrc": "district_commission",
+    "dratdrt": "drt_drat",
+    "drat": "drt_drat",
+    "drt": "drt_drat",
+    "recoveryforum": "recovery_forum",
+    "recoveryforums": "recovery_forum",
+    "nclatnclt": "company_law_tribunal",
+    "nclat": "company_law_tribunal",
+    "nclt": "company_law_tribunal",
+    "tdsat": "tdsat",
+    "appellatetribunal": "appellate_tribunal",
+}
+
+_FORUM_CATEGORY_LABELS = {
+    "supreme_court": "Supreme Court",
+    "high_court": "High Court",
+    "district_court": "District Court",
+    "ncdrc": "NCDRC",
+    "state_commission": "State Commission",
+    "district_commission": "District Commission",
+    "drt_drat": "DRAT / DRT",
+    "recovery_forum": "Recovery Forums",
+    "company_law_tribunal": "NCLAT / NCLT",
+    "tdsat": "TDSAT",
+    "appellate_tribunal": "Appellate Tribunal",
+}
+
+# Client-maintained files predating the catalog used human common-court labels
+# and sometimes a descriptive bench name. Rejecting those rows would break the
+# established import contract. Exact values still resolve to catalog IDs, while
+# only these three historical court families retain the old level/name fallback.
+# Specialist and consumer categories introduced by the catalog are fail-closed.
+_LEGACY_CATALOG_OPTIONAL_CATEGORIES = {
+    "supreme_court",
+    "high_court",
+    "district_court",
+}
+
+
+@dataclass(frozen=True)
+class _ResolvedImportForum:
+    forum_level: str | None
+    court_name: str | None
+    forum_catalog_entry_id: str | None = None
+    forum_state: str | None = None
+    forum_district: str | None = None
+    forum_city: str | None = None
+    forum_consumer_level: str | None = None
+    error: str | None = None
+
+
+def _catalog_category(entry: ForumCatalogEntry) -> str:
+    if entry.forum_type != "consumer_forum":
+        return entry.forum_type
+    return {
+        "national": "ncdrc",
+        "state": "state_commission",
+        "district": "district_commission",
+    }.get(entry.consumer_level or "", "consumer_forum")
+
+
+def _forum_entry_match_keys(entry: ForumCatalogEntry) -> set[str]:
+    values = {
+        entry.id,
+        entry.name,
+        entry.lineage,
+        entry.state,
+        entry.district,
+        entry.city,
+    }
+    return {_controlled_value_key(value) for value in values if value}
+
+
+def _resolved_catalog_entry(entry: ForumCatalogEntry) -> _ResolvedImportForum:
+    return _ResolvedImportForum(
+        forum_level=entry.forum_level,
+        court_name=entry.name,
+        forum_catalog_entry_id=entry.id,
+        forum_state=entry.state,
+        forum_district=entry.district,
+        forum_city=entry.city,
+        forum_consumer_level=entry.consumer_level,
+    )
+
+
+def _resolve_import_forum(
+    *,
+    catalog_entries: list[ForumCatalogEntry],
+    supplied_forum: str | None,
+    supplied_court: str | None,
+    supplied_catalog_entry_id: str | None,
+) -> _ResolvedImportForum:
+    """Resolve bulk input through the same active catalog as manual entry."""
+    forum_text = (supplied_forum or "").strip()
+    court_text = (supplied_court or "").strip()
+    catalog_id = (supplied_catalog_entry_id or "").strip()
+    entries_by_id = {entry.id: entry for entry in catalog_entries}
+
+    if catalog_id:
+        entry = entries_by_id.get(catalog_id)
+        if entry is None:
+            return _ResolvedImportForum(
+                forum_level=None,
+                court_name=court_text or None,
+                error="Forum catalog selection is inactive or does not exist.",
+            )
+        category = _FORUM_CATEGORY_ALIASES.get(_controlled_value_key(forum_text))
+        normalized_level = _normalise_forum_level(forum_text)
+        if category and _catalog_category(entry) != category:
+            return _ResolvedImportForum(
+                forum_level=None,
+                court_name=court_text or None,
+                error="Forum category does not match the selected catalog entry.",
+            )
+        if not category and normalized_level and normalized_level != entry.forum_level:
+            return _ResolvedImportForum(
+                forum_level=None,
+                court_name=court_text or None,
+                error="Forum level does not match the selected catalog entry.",
+            )
+        if court_text and _controlled_value_key(court_text) not in _forum_entry_match_keys(entry):
+            return _ResolvedImportForum(
+                forum_level=None,
+                court_name=court_text,
+                error="Court does not match the selected forum catalog entry.",
+            )
+        return _resolved_catalog_entry(entry)
+
+    # Preserve imports generated by earlier CaseOps templates, which used the
+    # canonical enum tokens directly. New human-readable category labels use
+    # the catalog resolver below and therefore require an exact selection.
+    if forum_text.casefold() in {
+        "lower_court",
+        "high_court",
+        "supreme_court",
+        "tribunal",
+        "arbitration",
+        "advisory",
+    }:
+        return _ResolvedImportForum(
+            forum_level=_normalise_forum_level(forum_text),
+            court_name=court_text or None,
+        )
+
+    category = _FORUM_CATEGORY_ALIASES.get(_controlled_value_key(forum_text))
+    if category is None:
+        return _ResolvedImportForum(
+            forum_level=_normalise_forum_level(forum_text),
+            court_name=court_text or None,
+        )
+
+    candidates = [entry for entry in catalog_entries if _catalog_category(entry) == category]
+    match_key = _controlled_value_key(court_text)
+    if match_key:
+        candidates = [
+            entry for entry in candidates if match_key in _forum_entry_match_keys(entry)
+        ]
+    if len(candidates) == 1:
+        return _resolved_catalog_entry(candidates[0])
+
+    if category in _LEGACY_CATALOG_OPTIONAL_CATEGORIES:
+        return _ResolvedImportForum(
+            forum_level={
+                "supreme_court": "supreme_court",
+                "high_court": "high_court",
+                "district_court": "lower_court",
+            }[category],
+            court_name=court_text or None,
+        )
+
+    label = _FORUM_CATEGORY_LABELS[category]
+    if not match_key:
+        reason = f"Court is required for {label} and must use the active forum catalog."
+    elif not candidates:
+        reason = f"Court is not an active {label} catalog selection."
+    else:
+        reason = f"Court matches multiple {label} catalog selections; use the exact name."
+    return _ResolvedImportForum(
+        forum_level=None,
+        court_name=court_text or None,
+        error=reason,
+    )
+
 
 def _normalise_matter_status(value: str | None) -> str | None:
     cleaned = (value or "").strip()
@@ -1422,6 +1624,13 @@ def dry_run_bulk_matter_import(
         practice_areas_by_exact_key,
         practice_areas_by_normalized_key,
     ) = _directory_lookups(session, context=context)
+    forum_catalog_entries = list(
+        session.scalars(
+            select(ForumCatalogEntry)
+            .where(ForumCatalogEntry.is_active.is_(True))
+            .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
+        )
+    )
     canonical_rows: list[tuple[ParsedMatterImportRow, dict[str, str], bool]] = []
     for row in parsed_import.rows:
         unsafe_headers = set(row.unsafe_headers)
@@ -1517,8 +1726,19 @@ def dry_run_bulk_matter_import(
             _normalise_matter_status(supplied_status) or DEFAULT_MATTER_STATUS.value
         )
         description = row.get("description", "").strip() or None
-        forum_level = _normalise_forum_level(row.get("forum_level"))
-        court_name = row.get("court_name", "").strip() or None
+        resolved_forum = _resolve_import_forum(
+            catalog_entries=forum_catalog_entries,
+            supplied_forum=row.get("forum_level"),
+            supplied_court=row.get("court_name"),
+            supplied_catalog_entry_id=row.get("forum_catalog_entry_id"),
+        )
+        forum_level = resolved_forum.forum_level
+        court_name = resolved_forum.court_name
+        forum_catalog_entry_id = resolved_forum.forum_catalog_entry_id
+        forum_state = resolved_forum.forum_state
+        forum_district = resolved_forum.forum_district
+        forum_city = resolved_forum.forum_city
+        forum_consumer_level = resolved_forum.forum_consumer_level
         court_forum_number = row.get("court_forum_number", "").strip() or None
         case_number = row.get("case_number", "").strip() or None
         filing_number = row.get("filing_number", "").strip() or None
@@ -1547,8 +1767,10 @@ def dry_run_bulk_matter_import(
             errors.append("Matter code is required.")
         if practice_area is None:
             errors.append("Practice area is required.")
-        if forum_level is None:
+        if forum_level is None and not resolved_forum.error:
             errors.append("Forum level is required.")
+        if resolved_forum.error:
+            errors.append(resolved_forum.error)
         if filing_date_error:
             errors.append(filing_date_error)
         if not _valid_phone(client_contact_number):
@@ -1656,6 +1878,11 @@ def dry_run_bulk_matter_import(
                         "practice_area": practice_area,
                         "forum_level": forum_level,
                         "court_name": court_name,
+                        "forum_catalog_entry_id": forum_catalog_entry_id,
+                        "forum_state": forum_state,
+                        "forum_district": forum_district,
+                        "forum_city": forum_city,
+                        "forum_consumer_level": forum_consumer_level,
                         "court_forum_number": court_forum_number,
                         "description": description,
                         "assignee_membership_id": (
@@ -1695,6 +1922,11 @@ def dry_run_bulk_matter_import(
                 opposing_counsel=opposing_counsel,
                 forum_level=forum_level,
                 court_name=court_name,
+                forum_catalog_entry_id=forum_catalog_entry_id,
+                forum_state=forum_state,
+                forum_district=forum_district,
+                forum_city=forum_city,
+                forum_consumer_level=forum_consumer_level,
                 court_forum_number=court_forum_number,
                 case_number=case_number,
                 filing_number=filing_number,
@@ -1845,7 +2077,7 @@ def _matter_template_csv_bytes() -> bytes:
             "legal@acme.example",
             "Northstar Supplies",
             "Rao Chambers",
-            "high_court",
+            "High Court",
             "Delhi High Court",
             "COURT-FORUM-123/2026",
             "CS(COMM) 123/2026",
@@ -1859,7 +2091,9 @@ def _matter_template_csv_bytes() -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
-def _matter_template_xlsx_bytes() -> bytes:
+def _matter_template_xlsx_bytes(
+    forum_catalog_entries: list[ForumCatalogEntry],
+) -> bytes:
     import_rows = [
         MATTER_IMPORT_TEMPLATE_HEADERS,
         [
@@ -1875,7 +2109,7 @@ def _matter_template_xlsx_bytes() -> bytes:
             "legal@acme.example",
             "Northstar Supplies",
             "Rao Chambers",
-            "high_court",
+            "High Court",
             "Delhi High Court",
             "COURT-FORUM-123/2026",
             "CS(COMM) 123/2026",
@@ -1888,7 +2122,12 @@ def _matter_template_xlsx_bytes() -> bytes:
     ]
     reference_rows = [["Matter Status", "Forum", "Practice Area"]]
     statuses = ["active", "intake", "on_hold"]
-    forums = ["lower_court", "high_court", "supreme_court", "tribunal", "arbitration", "advisory"]
+    forums = [
+        *_FORUM_CATEGORY_LABELS.values(),
+        "Tribunal",
+        "Arbitration",
+        "Advisory",
+    ]
     max_reference_rows = max(len(statuses), len(forums), len(_DEFAULT_PRACTICE_AREAS))
     for index in range(max_reference_rows):
         reference_rows.append(
@@ -1940,6 +2179,13 @@ def _matter_template_xlsx_bytes() -> bytes:
         ],
         ["Import", "Upload this file, review every validation error, then confirm import."],
         [
+            "Forum catalog",
+            (
+                "Use Forum Catalog for the exact Court value. Manual creation, editing, "
+                + "CSV, and XLSX uploads are validated against this same active master."
+            ),
+        ],
+        [
             "Security",
             (
                 "Formula cells and values beginning with =, +, -, or @ are rejected. "
@@ -1958,14 +2204,40 @@ def _matter_template_xlsx_bytes() -> bytes:
         '<dataValidation type="list" allowBlank="1" sqref="E2:E501">'
         "<formula1>'Reference Values'!$A$2:$A$4</formula1></dataValidation>"
         '<dataValidation type="list" allowBlank="0" sqref="M2:M501">'
-        "<formula1>'Reference Values'!$B$2:$B$7</formula1></dataValidation>"
+        f"<formula1>'Reference Values'!$B$2:$B${len(forums) + 1}</formula1></dataValidation>"
         '<dataValidation type="list" allowBlank="0" sqref="D2:D501">'
         "<formula1>'Reference Values'!$C$2:$C$16</formula1></dataValidation>"
         "</dataValidations>"
     )
+    forum_catalog_rows = [
+        [
+            "Forum",
+            "Exact Court / Tribunal",
+            "Forum Level",
+            "State",
+            "District",
+            "City",
+            "Catalog ID",
+            "Source",
+        ],
+        *[
+            [
+                _FORUM_CATEGORY_LABELS.get(_catalog_category(entry), entry.forum_type),
+                entry.name,
+                entry.forum_level,
+                entry.state or "",
+                entry.district or "",
+                entry.city or "",
+                entry.id,
+                entry.source_url or "",
+            ]
+            for entry in forum_catalog_entries
+        ],
+    ]
     worksheets = [
         _worksheet_xml(import_rows, freeze_header=True, data_validations=validations),
         _worksheet_xml(reference_rows, freeze_header=True),
+        _worksheet_xml(forum_catalog_rows, freeze_header=True),
         _worksheet_xml(instruction_rows, freeze_header=True),
     ]
     workbook = (
@@ -1974,7 +2246,8 @@ def _matter_template_xlsx_bytes() -> bytes:
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
         '<sheets><sheet name="Matter Import" sheetId="1" r:id="rId1"/>'
         '<sheet name="Reference Values" sheetId="2" r:id="rId2"/>'
-        '<sheet name="Instructions" sheetId="3" r:id="rId3"/></sheets></workbook>'
+        '<sheet name="Forum Catalog" sheetId="3" r:id="rId3"/>'
+        '<sheet name="Instructions" sheetId="4" r:id="rId4"/></sheets></workbook>'
     )
     workbook_relationships = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -1984,7 +2257,7 @@ def _matter_template_xlsx_bytes() -> bytes:
             f'Id="rId{index}" Type="http://schemas.openxmlformats.org/'
             'officeDocument/2006/relationships/worksheet" '
             f'Target="worksheets/sheet{index}.xml"/>'
-            for index in range(1, 4)
+            for index in range(1, 5)
         )
         + "</Relationships>"
     )
@@ -2006,7 +2279,7 @@ def _matter_template_xlsx_bytes() -> bytes:
         + "".join(
             f'<Override PartName="/xl/worksheets/sheet{index}.xml" '
             'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-            for index in range(1, 4)
+            for index in range(1, 5)
         )
         + "</Types>"
     )
@@ -2021,10 +2294,20 @@ def _matter_template_xlsx_bytes() -> bytes:
     return buffer.getvalue()
 
 
-def matter_import_template(format_value: Literal["csv", "xlsx"]) -> tuple[bytes, str, str]:
+def matter_import_template(
+    session: Session,
+    format_value: Literal["csv", "xlsx"],
+) -> tuple[bytes, str, str]:
     if format_value == "xlsx":
+        entries = list(
+            session.scalars(
+                select(ForumCatalogEntry)
+                .where(ForumCatalogEntry.is_active.is_(True))
+                .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
+            )
+        )
         return (
-            _matter_template_xlsx_bytes(),
+            _matter_template_xlsx_bytes(entries),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "caseops-matter-import-template.xlsx",
         )
@@ -2380,6 +2663,11 @@ def _payload_from_normalized(normalized: dict[str, object]) -> MatterCreateReque
             "opposing_counsel": normalized.get("opposing_counsel"),
             "forum_level": normalized.get("forum_level"),
             "court_name": normalized.get("court_name"),
+            "forum_catalog_entry_id": normalized.get("forum_catalog_entry_id"),
+            "forum_state": normalized.get("forum_state"),
+            "forum_district": normalized.get("forum_district"),
+            "forum_city": normalized.get("forum_city"),
+            "forum_consumer_level": normalized.get("forum_consumer_level"),
             "court_forum_number": normalized.get("court_forum_number"),
             "case_number": normalized.get("case_number"),
             "filing_number": normalized.get("filing_number"),

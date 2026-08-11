@@ -136,7 +136,7 @@ async def get_authority_stats(
     response_model=AuthoritySearchResponse,
     summary="Search the authority corpus",
 )
-async def post_authority_search(
+def post_authority_search(
     payload: AuthoritySearchRequest,
     context: AuthoritySearcher,
     session: DbSession,

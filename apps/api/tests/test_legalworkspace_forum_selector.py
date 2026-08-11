@@ -147,6 +147,17 @@ def test_lw_s4_forum_catalog_returns_public_hierarchy(
     assert entries["consumer:dcdrc:11070077"]["state"] == "Delhi"
     assert entries["consumer:dcdrc:11070077"]["district"] == "Central Delhi"
     assert entries["consumer:dcdrc:11070077"]["parent_id"] == "consumer:scdrc:11070000"
+    assert entries["consumer:dcdrc:delhi:dwarka"]["name"] == "Dwarka"
+    assert entries["consumer:dcdrc:delhi:tis-hazari"]["lineage"] == (
+        "District Commission > Delhi > Tis Hazari"
+    )
+    assert entries["drt:delhi:drt-2"]["name"] == "DRT-2"
+    assert entries["drt:delhi:drt-2"]["forum_level"] == "tribunal"
+    assert entries["recovery:delhi:po-court"]["name"] == "PO"
+    assert entries["company-law:nclat"]["name"] == "NCLAT"
+    assert entries["company-law:nclt"]["name"] == "NCLT"
+    assert entries["tdsat:delhi"]["name"] == "TDSAT"
+    assert entries["appellate-tribunal:fema"]["name"] == "FEMA"
     consumer_state_entries = [
         entry
         for entry in entries.values()
@@ -197,11 +208,8 @@ def test_lw_s4_forum_catalog_returns_public_hierarchy(
         "West Bengal",
     }
     assert len(consumer_state_entries) == 54
-    assert len(consumer_district_entries) == 676
-    assert all(
-        entry["source_name"] == "e-Jagriti master commission directory"
-        for entry in consumer_state_entries + consumer_district_entries
-    )
+    assert len(consumer_district_entries) == 682
+    assert all(entry["source_name"] for entry in consumer_state_entries + consumer_district_entries)
     assert all("company_id" not in entry for entry in entries.values())
     assert all(entry["source_name"] for entry in entries.values())
     assert all(entry["lineage"] for entry in entries.values())
@@ -315,6 +323,17 @@ def test_lw_s4_catalog_supports_required_forum_shapes(
     assert uncatalogued_consumer["forum_state"] == "Rajasthan"
     assert uncatalogued_consumer["forum_district"] == "Jaipur"
     assert uncatalogued_consumer["forum_consumer_level"] == "district"
+
+    drt = _create_matter(
+        client,
+        token,
+        code="LW-S4-DRT-2",
+        forum_level="tribunal",
+        forum_catalog_entry_id="drt:delhi:drt-2",
+    )
+    assert drt["forum_catalog_entry_id"] == "drt:delhi:drt-2"
+    assert drt["court_name"] == "DRT-2"
+    assert drt["forum_state"] == "Delhi"
 
 
 def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback(

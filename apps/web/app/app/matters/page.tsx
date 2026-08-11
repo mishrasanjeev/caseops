@@ -1,8 +1,20 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Briefcase, Filter, Loader2, RotateCcw, Tags, UploadCloud } from "lucide-react";
+import {
+  Briefcase,
+  Filter,
+  Loader2,
+  RotateCcw,
+  Tags,
+  UploadCloud,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -117,7 +129,8 @@ function formatClaimAmount(matter: Matter): string {
 
 function TagCell({ matter }: { matter: Matter }) {
   const tags = matter.tags ?? [];
-  if (tags.length === 0) return <span className="text-[var(--color-mute-2)]">—</span>;
+  if (tags.length === 0)
+    return <span className="text-[var(--color-mute-2)]">—</span>;
   return (
     <div className="flex max-w-52 flex-wrap gap-1">
       {tags.slice(0, 2).map((tag) => (
@@ -126,7 +139,9 @@ function TagCell({ matter }: { matter: Matter }) {
         </Badge>
       ))}
       {tags.length > 2 ? (
-        <span className="text-xs text-[var(--color-mute)]">+{tags.length - 2}</span>
+        <span className="text-xs text-[var(--color-mute)]">
+          +{tags.length - 2}
+        </span>
       ) : null}
     </div>
   );
@@ -136,7 +151,8 @@ export default function MattersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<FilterState>(EMPTY_FILTERS);
   const [bulkTagId, setBulkTagId] = useState<string>("none");
   const canCreateMatter = useCapability("matters:create");
   const canBulkImportMatters = useCapability("matters:bulk_import");
@@ -145,9 +161,12 @@ export default function MattersPage() {
   const listParams = useMemo(
     () => ({
       q: appliedFilters.q.trim() || undefined,
-      status: appliedFilters.status === "all" ? undefined : appliedFilters.status,
+      status:
+        appliedFilters.status === "all" ? undefined : appliedFilters.status,
       forum_level:
-        appliedFilters.forum_level === "all" ? undefined : appliedFilters.forum_level,
+        appliedFilters.forum_level === "all"
+          ? undefined
+          : appliedFilters.forum_level,
       tag: appliedFilters.tag === "all" ? undefined : appliedFilters.tag,
       min_claim_amount_minor: toMinor(appliedFilters.min_claim_amount),
       max_claim_amount_minor: toMinor(appliedFilters.max_claim_amount),
@@ -166,7 +185,11 @@ export default function MattersPage() {
   } = useInfiniteQuery({
     queryKey: ["matters", "list", listParams],
     queryFn: ({ pageParam }) =>
-      listMatters({ limit: PAGE_SIZE, cursor: pageParam ?? null, ...listParams }),
+      listMatters({
+        limit: PAGE_SIZE,
+        cursor: pageParam ?? null,
+        ...listParams,
+      }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
@@ -217,7 +240,8 @@ export default function MattersPage() {
             </span>
             {ctx.row.original.client_name ? (
               <span className="text-xs text-[var(--color-mute)]">
-                v. {ctx.row.original.opposing_party ?? "—"} · {ctx.row.original.client_name}
+                v. {ctx.row.original.opposing_party ?? "—"} ·{" "}
+                {ctx.row.original.client_name}
               </span>
             ) : null}
           </div>
@@ -226,7 +250,8 @@ export default function MattersPage() {
       {
         accessorKey: "forum_level",
         header: "Forum",
-        cell: (ctx) => FORUMS[ctx.getValue<string>() ?? ""] ?? ctx.getValue<string>() ?? "—",
+        cell: (ctx) =>
+          FORUMS[ctx.getValue<string>() ?? ""] ?? ctx.getValue<string>() ?? "—",
       },
       {
         accessorKey: "court_name",
@@ -314,7 +339,9 @@ export default function MattersPage() {
                   matter={matter}
                   compact
                   onChanged={async () => {
-                    await queryClient.invalidateQueries({ queryKey: ["matters"] });
+                    await queryClient.invalidateQueries({
+                      queryKey: ["matters"],
+                    });
                   }}
                 />
               ) : null}
@@ -361,9 +388,13 @@ export default function MattersPage() {
   }
 
   const filterPanel = (
-    <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-line)] bg-white p-3">
-      <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_150px_170px_180px_140px_140px_auto_auto]">
-        <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-[var(--color-line)] bg-white p-3">
+      <div
+        className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
+        aria-label="Matter filters"
+        data-testid="matter-filter-grid"
+      >
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label htmlFor="matter-filter-q">Search</Label>
           <Input
             id="matter-filter-q"
@@ -374,7 +405,7 @@ export default function MattersPage() {
             placeholder="Party, code, court"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label>Status</Label>
           <Select
             value={draftFilters.status}
@@ -394,7 +425,7 @@ export default function MattersPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label>Forum</Label>
           <Select
             value={draftFilters.forum_level}
@@ -415,7 +446,7 @@ export default function MattersPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label>Tag</Label>
           <Select
             value={draftFilters.tag}
@@ -436,7 +467,7 @@ export default function MattersPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label htmlFor="matter-filter-min-claim">Min claim</Label>
           <Input
             id="matter-filter-min-claim"
@@ -452,7 +483,7 @@ export default function MattersPage() {
             }
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label htmlFor="matter-filter-max-claim">Max claim</Label>
           <Input
             id="matter-filter-max-claim"
@@ -468,12 +499,22 @@ export default function MattersPage() {
             }
           />
         </div>
-        <div className="flex items-end gap-2">
-          <Button type="button" variant="outline" onClick={applyFilters}>
+        <div className="flex min-w-0 flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3 2xl:col-span-6">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={applyFilters}
+          >
             <Filter className="h-4 w-4" /> Apply
           </Button>
           {hasActiveFilters ? (
-            <Button type="button" variant="ghost" onClick={clearFilters}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full sm:w-auto"
+              onClick={clearFilters}
+            >
               <RotateCcw className="h-4 w-4" /> Reset
             </Button>
           ) : null}
@@ -500,7 +541,11 @@ export default function MattersPage() {
           <Button
             type="button"
             variant="outline"
-            disabled={bulkTagId === "none" || matters.length === 0 || bulkMutation.isPending}
+            disabled={
+              bulkTagId === "none" ||
+              matters.length === 0 ||
+              bulkMutation.isPending
+            }
             onClick={() => bulkMutation.mutate()}
           >
             <Tags className="h-4 w-4" /> Tag visible
@@ -550,7 +595,11 @@ export default function MattersPage() {
       ) : matters.length === 0 ? (
         <EmptyState
           icon={Briefcase}
-          title={hasActiveFilters ? "No matters match these filters" : "No matters yet"}
+          title={
+            hasActiveFilters
+              ? "No matters match these filters"
+              : "No matters yet"
+          }
           description={
             hasActiveFilters
               ? "Adjust or reset filters to return to the full matter portfolio."

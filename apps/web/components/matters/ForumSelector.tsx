@@ -22,6 +22,15 @@ export type ForumCategory =
   | "supreme_court"
   | "high_court"
   | "district_court"
+  | "ncdrc"
+  | "state_commission"
+  | "district_commission"
+  | "drt_drat"
+  | "recovery_forum"
+  | "company_law_tribunal"
+  | "tdsat"
+  | "appellate_tribunal"
+  // Compatibility for an unsaved selection created by an older client.
   | "consumer_forum"
   | "legacy";
 
@@ -29,8 +38,23 @@ const CATEGORY_OPTIONS: Array<{ value: ForumCategory; label: string }> = [
   { value: "supreme_court", label: "Supreme Court" },
   { value: "high_court", label: "High Court" },
   { value: "district_court", label: "District Court" },
-  { value: "consumer_forum", label: "Consumer Forum" },
+  { value: "ncdrc", label: "NCDRC" },
+  { value: "state_commission", label: "State Commission" },
+  { value: "district_commission", label: "District Commission" },
+  { value: "drt_drat", label: "DRAT / DRT" },
+  { value: "recovery_forum", label: "Recovery Forums" },
+  { value: "company_law_tribunal", label: "NCLAT / NCLT" },
+  { value: "tdsat", label: "TDSAT" },
+  { value: "appellate_tribunal", label: "Appellate Tribunal" },
   { value: "legacy", label: "Other / uncatalogued" },
+];
+
+const SPECIALIST_CATEGORIES: ForumCategory[] = [
+  "drt_drat",
+  "recovery_forum",
+  "company_law_tribunal",
+  "tdsat",
+  "appellate_tribunal",
 ];
 
 const LEGACY_FORUM_LEVELS = [
@@ -40,12 +64,6 @@ const LEGACY_FORUM_LEVELS = [
   { value: "tribunal", label: "Tribunal" },
   { value: "arbitration", label: "Arbitration" },
   { value: "advisory", label: "Advisory" },
-];
-
-const CONSUMER_LEVELS = [
-  { value: "national", label: "NCDRC" },
-  { value: "state", label: "SCDRC" },
-  { value: "district", label: "DCDRC" },
 ];
 
 const INDIA_DISTRICT_FORUM_STATES = [
@@ -113,7 +131,9 @@ export function isLegacyForumSelection(value: ForumSelection): boolean {
   );
 }
 
-export function isDistrictFallbackForumSelection(value: ForumSelection): boolean {
+export function isDistrictFallbackForumSelection(
+  value: ForumSelection,
+): boolean {
   return (
     value.forum_category === "district_court" &&
     value.forum_level === "lower_court" &&
@@ -126,7 +146,9 @@ export function isConsumerDistrictFallbackForumSelection(
   value: ForumSelection,
 ): boolean {
   return (
-    value.forum_category === "consumer_forum" &&
+    ["consumer_forum", "district_commission"].includes(
+      value.forum_category ?? "",
+    ) &&
     value.forum_level === "tribunal" &&
     value.forum_consumer_level === "district" &&
     !value.forum_catalog_entry_id &&
@@ -167,7 +189,7 @@ function consumerStateFallbackSelection(
     !current.court_id;
   return {
     ...EMPTY_FORUM_SELECTION,
-    forum_category: "consumer_forum",
+    forum_category: "state_commission",
     forum_level: "tribunal",
     court_id: null,
     court_name: preserveCurrentFallback
@@ -192,7 +214,7 @@ function consumerDistrictFallbackSelection(
     !current.court_id;
   return {
     ...EMPTY_FORUM_SELECTION,
-    forum_category: "consumer_forum",
+    forum_category: "district_commission",
     forum_level: "tribunal",
     court_id: null,
     court_name: preserveCurrentFallback ? current.court_name : null,
@@ -238,9 +260,11 @@ function forumPlaceLabel(entry: ForumCatalogEntry) {
   return place ? `${entry.name} (${place})` : entry.name;
 }
 
-export function forumSelectionFromEntry(entry: ForumCatalogEntry): ForumSelection {
+export function forumSelectionFromEntry(
+  entry: ForumCatalogEntry,
+): ForumSelection {
   return {
-    forum_category: entry.forum_type as ForumCategory,
+    forum_category: categoryFromEntry(entry),
     forum_level: entry.forum_level,
     court_id: entry.court_id ?? null,
     court_name: entry.name,
@@ -252,16 +276,47 @@ export function forumSelectionFromEntry(entry: ForumCatalogEntry): ForumSelectio
   };
 }
 
+function categoryFromEntry(entry: ForumCatalogEntry): ForumCategory {
+  if (entry.forum_type !== "consumer_forum") {
+    return entry.forum_type as ForumCategory;
+  }
+  if (entry.consumer_level === "national") return "ncdrc";
+  if (entry.consumer_level === "state") return "state_commission";
+  return "district_commission";
+}
+
 function categoryFromSelection(
   value: ForumSelection,
   selectedEntry: ForumCatalogEntry | undefined,
 ): ForumCategory {
+  if (selectedEntry?.forum_type) return categoryFromEntry(selectedEntry);
+  if (value.forum_category === "consumer_forum") {
+    if (value.forum_consumer_level === "national") return "ncdrc";
+    if (value.forum_consumer_level === "state") return "state_commission";
+    if (value.forum_consumer_level === "district") return "district_commission";
+  }
   if (value.forum_category) return value.forum_category;
-  if (selectedEntry?.forum_type) return selectedEntry.forum_type as ForumCategory;
   if (value.forum_level === "supreme_court") return "supreme_court";
   if (value.forum_level === "high_court") return "high_court";
   if (value.forum_level === "lower_court") return "district_court";
-  if (value.forum_level === "tribunal") return "consumer_forum";
+  if (
+    value.forum_level === "tribunal" &&
+    value.forum_consumer_level === "national"
+  ) {
+    return "ncdrc";
+  }
+  if (
+    value.forum_level === "tribunal" &&
+    value.forum_consumer_level === "state"
+  ) {
+    return "state_commission";
+  }
+  if (
+    value.forum_level === "tribunal" &&
+    value.forum_consumer_level === "district"
+  ) {
+    return "district_commission";
+  }
   return "legacy";
 }
 
@@ -294,7 +349,9 @@ export function ForumSelector({
     (entry) => entry.id === value.forum_catalog_entry_id,
   );
   const category = categoryFromSelection(value, selectedEntry);
-  const highCourts = sortedEntries.filter((entry) => entry.forum_type === "high_court");
+  const highCourts = sortedEntries.filter(
+    (entry) => entry.forum_type === "high_court",
+  );
   const districtCourts = sortedEntries.filter(
     (entry) => entry.forum_type === "district_court",
   );
@@ -327,29 +384,50 @@ export function ForumSelector({
         chooseEntry(entry);
         return;
       }
-      onChange(districtFallbackSelection(currentState || INDIA_DISTRICT_FORUM_STATES[0], value));
-      return;
-    }
-    if (next === "consumer_forum") {
-      const entry =
-        firstEntry(sortedEntries, (item) => item.forum_type === next) ??
-        firstEntry(
-          sortedEntries,
-          (item) => item.forum_type === next && item.consumer_level === "state",
-        );
-      if (entry) {
-        chooseEntry(entry);
-        return;
-      }
       onChange(
-        consumerStateFallbackSelection(
-          value.forum_state || CONSUMER_FORUM_STATES[0],
+        districtFallbackSelection(
+          currentState || INDIA_DISTRICT_FORUM_STATES[0],
           value,
         ),
       );
       return;
     }
-    chooseEntry(firstEntry(sortedEntries, (entry) => entry.forum_type === next));
+    if (["ncdrc", "state_commission", "district_commission"].includes(next)) {
+      const consumerLevel =
+        next === "ncdrc"
+          ? "national"
+          : next === "state_commission"
+            ? "state"
+            : "district";
+      const entry =
+        firstEntry(
+          sortedEntries,
+          (item) =>
+            item.forum_type === "consumer_forum" &&
+            item.consumer_level === consumerLevel &&
+            item.state === value.forum_state,
+        ) ??
+        firstEntry(
+          sortedEntries,
+          (item) =>
+            item.forum_type === "consumer_forum" &&
+            item.consumer_level === consumerLevel,
+        );
+      if (entry) {
+        chooseEntry(entry);
+        return;
+      }
+      const state = value.forum_state || CONSUMER_FORUM_STATES[0];
+      onChange(
+        consumerLevel === "district"
+          ? consumerDistrictFallbackSelection(state, value)
+          : consumerStateFallbackSelection(state, value),
+      );
+      return;
+    }
+    chooseEntry(
+      firstEntry(sortedEntries, (entry) => entry.forum_type === next),
+    );
   };
 
   const highCourtStates = unique(highCourts.map((entry) => entry.state));
@@ -365,7 +443,16 @@ export function ForumSelector({
   const districtFallbackSelected =
     category === "district_court" && isDistrictFallbackForumSelection(value);
   const districtSelectValue = selectedEntry?.id ?? DISTRICT_FALLBACK_OPTION;
-  const consumerLevel = selectedEntry?.consumer_level ?? value.forum_consumer_level ?? "national";
+  const consumerLevel =
+    category === "ncdrc"
+      ? "national"
+      : category === "state_commission"
+        ? "state"
+        : category === "district_commission"
+          ? "district"
+          : (selectedEntry?.consumer_level ??
+            value.forum_consumer_level ??
+            "national");
   const consumerLevelOptions = consumerForums.filter(
     (entry) => entry.consumer_level === consumerLevel,
   );
@@ -379,9 +466,22 @@ export function ForumSelector({
     (entry) => entry.state === selectedConsumerState,
   );
   const consumerDistrictFallbackSelected =
-    category === "consumer_forum" && isConsumerDistrictFallbackForumSelection(value);
+    category === "district_commission" &&
+    isConsumerDistrictFallbackForumSelection(value);
   const consumerDistrictSelectValue =
     selectedEntry?.id ?? CONSUMER_DISTRICT_FALLBACK_OPTION;
+  const specialistEntries = sortedEntries.filter(
+    (entry) => entry.forum_type === category,
+  );
+  const specialistStates = unique(
+    specialistEntries.map((entry) => entry.state),
+  );
+  const selectedSpecialistState =
+    selectedEntry?.state ?? value.forum_state ?? specialistStates[0] ?? "";
+  const specialistOptions = specialistEntries.filter(
+    (entry) =>
+      !specialistStates.length || entry.state === selectedSpecialistState,
+  );
 
   return (
     <div className="grid gap-3 md:grid-cols-2" data-testid={`${idPrefix}-root`}>
@@ -401,7 +501,9 @@ export function ForumSelector({
           className={`${selectClassName()} mt-1.5`}
           value={category}
           disabled={disabled}
-          onChange={(event) => chooseCategory(event.target.value as ForumCategory)}
+          onChange={(event) =>
+            chooseCategory(event.target.value as ForumCategory)
+          }
           data-testid={`${idPrefix}-category`}
         >
           {CATEGORY_OPTIONS.map((option) => (
@@ -421,7 +523,9 @@ export function ForumSelector({
             value={selectedEntry?.id ?? ""}
             disabled={disabled}
             onChange={(event) =>
-              chooseEntry(sortedEntries.find((entry) => entry.id === event.target.value))
+              chooseEntry(
+                sortedEntries.find((entry) => entry.id === event.target.value),
+              )
             }
             data-testid={`${idPrefix}-supreme`}
           >
@@ -437,30 +541,58 @@ export function ForumSelector({
       ) : null}
 
       {category === "high_court" ? (
-        <div>
-          <Label htmlFor={`${idPrefix}-state`}>State</Label>
-          <select
-            id={`${idPrefix}-state`}
-            className={`${selectClassName()} mt-1.5`}
-            value={selectedEntry?.state ?? value.forum_state ?? ""}
-            disabled={disabled}
-            onChange={(event) =>
-              chooseEntry(
-                firstEntry(
-                  highCourts,
-                  (entry) => entry.state === event.target.value,
-                ),
-              )
-            }
-            data-testid={`${idPrefix}-state`}
-          >
-            {highCourtStates.map((state) => (
-              <option key={state} value={state}>
-                {state}
-              </option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div>
+            <Label htmlFor={`${idPrefix}-state`}>State</Label>
+            <select
+              id={`${idPrefix}-state`}
+              className={`${selectClassName()} mt-1.5`}
+              value={selectedEntry?.state ?? value.forum_state ?? ""}
+              disabled={disabled}
+              onChange={(event) =>
+                chooseEntry(
+                  firstEntry(
+                    highCourts,
+                    (entry) => entry.state === event.target.value,
+                  ),
+                )
+              }
+              data-testid={`${idPrefix}-state`}
+            >
+              {highCourtStates.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor={`${idPrefix}-high-court`}>Exact court</Label>
+            <select
+              id={`${idPrefix}-high-court`}
+              className={`${selectClassName()} mt-1.5`}
+              value={selectedEntry?.id ?? ""}
+              disabled={disabled}
+              onChange={(event) =>
+                chooseEntry(
+                  highCourts.find((entry) => entry.id === event.target.value),
+                )
+              }
+              data-testid={`${idPrefix}-high-court`}
+            >
+              {highCourts
+                .filter(
+                  (entry) =>
+                    entry.state === (selectedEntry?.state ?? value.forum_state),
+                )
+                .map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </>
       ) : null}
 
       {category === "district_court" ? (
@@ -478,7 +610,10 @@ export function ForumSelector({
                   (item) => item.state === event.target.value,
                 );
                 if (entry) chooseEntry(entry);
-                else onChange(districtFallbackSelection(event.target.value, value));
+                else
+                  onChange(
+                    districtFallbackSelection(event.target.value, value),
+                  );
               }}
               data-testid={`${idPrefix}-district-state`}
             >
@@ -498,10 +633,16 @@ export function ForumSelector({
               disabled={disabled}
               onChange={(event) => {
                 if (event.target.value === DISTRICT_FALLBACK_OPTION) {
-                  onChange(districtFallbackSelection(selectedDistrictState, value));
+                  onChange(
+                    districtFallbackSelection(selectedDistrictState, value),
+                  );
                   return;
                 }
-                chooseEntry(districtCourts.find((entry) => entry.id === event.target.value));
+                chooseEntry(
+                  districtCourts.find(
+                    (entry) => entry.id === event.target.value,
+                  ),
+                );
               }}
               data-testid={`${idPrefix}-district`}
             >
@@ -539,7 +680,9 @@ export function ForumSelector({
                 />
               </div>
               <div>
-                <Label htmlFor={`${idPrefix}-district-court`}>Court / forum name</Label>
+                <Label htmlFor={`${idPrefix}-district-court`}>
+                  Court / forum name
+                </Label>
                 <Input
                   id={`${idPrefix}-district-court`}
                   className="mt-1.5"
@@ -564,73 +707,37 @@ export function ForumSelector({
         </>
       ) : null}
 
-      {category === "consumer_forum" ? (
+      {["ncdrc", "state_commission", "district_commission"].includes(
+        category,
+      ) ? (
         <>
-          <div>
-            <Label htmlFor={`${idPrefix}-consumer-level`}>Consumer level</Label>
-            <select
-              id={`${idPrefix}-consumer-level`}
-              className={`${selectClassName()} mt-1.5`}
-              value={consumerLevel}
-              disabled={disabled}
-              onChange={(event) => {
-                const nextLevel = event.target.value;
-                if (nextLevel === "national") {
+          {consumerLevel === "national" ? (
+            <div>
+              <Label htmlFor={`${idPrefix}-consumer-national`}>
+                Exact commission
+              </Label>
+              <select
+                id={`${idPrefix}-consumer-national`}
+                className={`${selectClassName()} mt-1.5`}
+                value={selectedEntry?.id ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
                   chooseEntry(
-                    firstEntry(
-                      consumerForums,
-                      (entry) => entry.consumer_level === "national",
+                    consumerForums.find(
+                      (entry) => entry.id === event.target.value,
                     ),
-                  );
-                  return;
+                  )
                 }
-                if (nextLevel === "state") {
-                  const entry =
-                    firstEntry(
-                      consumerForums,
-                      (item) =>
-                        item.consumer_level === "state" &&
-                        item.state === selectedConsumerState,
-                    ) ??
-                    firstEntry(
-                      consumerForums,
-                      (item) => item.consumer_level === "state",
-                    );
-                  if (entry) chooseEntry(entry);
-                  else {
-                    onChange(
-                      consumerStateFallbackSelection(selectedConsumerState, value),
-                    );
-                  }
-                  return;
-                }
-                const entry =
-                  firstEntry(
-                    consumerForums,
-                    (item) =>
-                      item.consumer_level === "district" &&
-                      item.state === selectedConsumerState,
-                  ) ??
-                  firstEntry(
-                    consumerForums,
-                    (item) => item.consumer_level === "district",
-                  );
-                if (entry) chooseEntry(entry);
-                else {
-                  onChange(
-                    consumerDistrictFallbackSelection(selectedConsumerState, value),
-                  );
-                }
-              }}
-              data-testid={`${idPrefix}-consumer-level`}
-            >
-              {CONSUMER_LEVELS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+                data-testid={`${idPrefix}-consumer-national`}
+              >
+                {consumerLevelOptions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {consumerLevel !== "national" ? (
             <div>
               <Label htmlFor={`${idPrefix}-consumer-state`}>State</Label>
@@ -652,7 +759,9 @@ export function ForumSelector({
                   if (consumerLevel === "state") {
                     onChange(consumerStateFallbackSelection(nextState, value));
                   } else {
-                    onChange(consumerDistrictFallbackSelection(nextState, value));
+                    onChange(
+                      consumerDistrictFallbackSelection(nextState, value),
+                    );
                   }
                 }}
                 data-testid={`${idPrefix}-consumer-state`}
@@ -665,23 +774,61 @@ export function ForumSelector({
               </select>
             </div>
           ) : null}
+          {consumerLevel === "state" ? (
+            <div>
+              <Label htmlFor={`${idPrefix}-consumer-commission`}>
+                Exact commission
+              </Label>
+              <select
+                id={`${idPrefix}-consumer-commission`}
+                className={`${selectClassName()} mt-1.5`}
+                value={selectedEntry?.id ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  chooseEntry(
+                    consumerLevelOptions.find(
+                      (entry) => entry.id === event.target.value,
+                    ),
+                  )
+                }
+                data-testid={`${idPrefix}-consumer-commission`}
+              >
+                {consumerLevelOptions
+                  .filter((entry) => entry.state === selectedConsumerState)
+                  .map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ) : null}
           {consumerLevel === "district" ? (
             <div>
-              <Label htmlFor={`${idPrefix}-consumer-district`}>District / city</Label>
+              <Label htmlFor={`${idPrefix}-consumer-district`}>
+                District / city
+              </Label>
               <select
                 id={`${idPrefix}-consumer-district`}
                 className={`${selectClassName()} mt-1.5`}
                 value={consumerDistrictSelectValue}
                 disabled={disabled}
                 onChange={(event) => {
-                  if (event.target.value === CONSUMER_DISTRICT_FALLBACK_OPTION) {
+                  if (
+                    event.target.value === CONSUMER_DISTRICT_FALLBACK_OPTION
+                  ) {
                     onChange(
-                      consumerDistrictFallbackSelection(selectedConsumerState, value),
+                      consumerDistrictFallbackSelection(
+                        selectedConsumerState,
+                        value,
+                      ),
                     );
                     return;
                   }
                   chooseEntry(
-                    consumerForums.find((entry) => entry.id === event.target.value),
+                    consumerForums.find(
+                      (entry) => entry.id === event.target.value,
+                    ),
                   );
                 }}
                 data-testid={`${idPrefix}-consumer-district`}
@@ -700,7 +847,9 @@ export function ForumSelector({
           {consumerDistrictFallbackSelected ? (
             <>
               <div>
-                <Label htmlFor={`${idPrefix}-consumer-district-name`}>District</Label>
+                <Label htmlFor={`${idPrefix}-consumer-district-name`}>
+                  District
+                </Label>
                 <Input
                   id={`${idPrefix}-consumer-district-name`}
                   className="mt-1.5"
@@ -709,7 +858,7 @@ export function ForumSelector({
                   onChange={(event) =>
                     onChange({
                       ...value,
-                      forum_category: "consumer_forum",
+                      forum_category: "district_commission",
                       forum_level: "tribunal",
                       forum_consumer_level: "district",
                       forum_district: event.target.value,
@@ -733,7 +882,7 @@ export function ForumSelector({
                   onChange={(event) =>
                     onChange({
                       ...value,
-                      forum_category: "consumer_forum",
+                      forum_category: "district_commission",
                       forum_level: "tribunal",
                       forum_consumer_level: "district",
                       court_name: event.target.value,
@@ -747,6 +896,62 @@ export function ForumSelector({
               </div>
             </>
           ) : null}
+        </>
+      ) : null}
+
+      {SPECIALIST_CATEGORIES.includes(category) ? (
+        <>
+          {specialistStates.length ? (
+            <div>
+              <Label htmlFor={`${idPrefix}-specialist-state`}>State</Label>
+              <select
+                id={`${idPrefix}-specialist-state`}
+                className={`${selectClassName()} mt-1.5`}
+                value={selectedSpecialistState}
+                disabled={disabled}
+                onChange={(event) =>
+                  chooseEntry(
+                    firstEntry(
+                      specialistEntries,
+                      (entry) => entry.state === event.target.value,
+                    ),
+                  )
+                }
+                data-testid={`${idPrefix}-specialist-state`}
+              >
+                {specialistStates.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor={`${idPrefix}-specialist-forum`}>
+              Exact court / tribunal
+            </Label>
+            <select
+              id={`${idPrefix}-specialist-forum`}
+              className={`${selectClassName()} mt-1.5`}
+              value={selectedEntry?.id ?? ""}
+              disabled={disabled}
+              onChange={(event) =>
+                chooseEntry(
+                  specialistEntries.find(
+                    (entry) => entry.id === event.target.value,
+                  ),
+                )
+              }
+              data-testid={`${idPrefix}-specialist-forum`}
+            >
+              {specialistOptions.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </>
       ) : null}
 
@@ -778,7 +983,9 @@ export function ForumSelector({
             </select>
           </div>
           <div>
-            <Label htmlFor={`${idPrefix}-legacy-court`}>Court / forum name</Label>
+            <Label htmlFor={`${idPrefix}-legacy-court`}>
+              Court / forum name
+            </Label>
             <Input
               id={`${idPrefix}-legacy-court`}
               className="mt-1.5"
@@ -803,7 +1010,9 @@ export function ForumSelector({
       {selectedEntry ? (
         <div className="md:col-span-2 text-xs text-[var(--color-mute)]">
           {selectedEntry.lineage}
-          {selectedEntry.court_id ? " - linked court profile" : " - catalog fallback"}
+          {selectedEntry.court_id
+            ? " - linked court profile"
+            : " - catalog selection"}
         </div>
       ) : null}
     </div>

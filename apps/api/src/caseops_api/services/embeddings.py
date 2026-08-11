@@ -239,6 +239,7 @@ class VoyageProvider:
         model: str = "voyage-4-large",
         api_key: str,
         dimensions: int = 1024,
+        query_timeout_seconds: float = 8.0,
     ) -> None:
         try:
             import voyageai  # type: ignore[import-not-found]
@@ -248,6 +249,11 @@ class VoyageProvider:
                 "`uv add voyageai` and set CASEOPS_EMBEDDING_PROVIDER=voyage.",
             ) from exc
         self._client = voyageai.Client(api_key=api_key)
+        self._query_client = voyageai.Client(
+            api_key=api_key,
+            max_retries=0,
+            timeout=query_timeout_seconds,
+        )
         self.model = model
         self.dimensions = dimensions
 
@@ -346,6 +352,7 @@ class VoyageProvider:
             groups.append(current)
 
         all_vectors: list[list[float]] = [None] * len(texts)  # type: ignore[list-item]
+        request_client = self._query_client if input_type == "query" else self._client
         for group in groups:
             batch_texts = [texts[i] for i in group]
             batch_tokens = (
@@ -355,7 +362,7 @@ class VoyageProvider:
             )
             t0 = time.perf_counter()
             try:
-                result = self._client.embed(
+                result = request_client.embed(
                     batch_texts,
                     model=self.model,
                     input_type=input_type,
@@ -470,6 +477,7 @@ def build_provider() -> EmbeddingProvider:
             model=settings.embedding_model or "voyage-4-large",
             api_key=settings.embedding_api_key,
             dimensions=settings.embedding_dimensions,
+            query_timeout_seconds=settings.embedding_query_timeout_seconds,
         )
     if provider_name == "gemini":
         return GeminiProvider(
