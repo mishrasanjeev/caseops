@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-026A",
+    "active_slice": "IPLF-026B",
     "checkpoint": {
-      "recorded_at": "2026-08-11T05:09:00+05:30",
-      "repository_revision": "88ef0b990114a2b0d30006513fdb955ca0bf13e4",
-      "environment": "IPLF-025B is deployment-verified at canonical main 88ef0b990114a2b0d30006513fdb955ca0bf13e4 after PRs #201, #202, and #203: all independent CI, Security, CodeQL, PostgreSQL, generated-contract, web, review, and full Playwright gates passed; exact immutable API/web images were built; migration caseops-migrate-job-ngc98 completed; all six schedulers converged; API caseops-api-00273-v99 and web caseops-web-00252-468 serve 100% traffic with exact public identity; synthetic entitled-tenant bootstrap caseops-ip-qa-bootstrap-s4hbk completed on the exact API digest; the focused 360px production journey passed; and exact-release workflows 31412319712 and 31413224798 each passed 61 RAM/IP tests with five conditional skips plus both Notice cases. The production-discovered PostgreSQL JSON DISTINCT defect is covered by a real-PostgreSQL regression and the unchanged deployed journey.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, and IPLF-025B have completed repository-controlled implementation and deployment verification. Genuine legal/UAT acceptance, IPLF-026A and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-11T06:26:00+05:30",
+      "repository_revision": "9449b00214bc8996a5b6c79921bc7af17c607b8c",
+      "environment": "IPLF-025B remains deployment-verified and its evidence-only canonical release 61f749c037118500f157582dbb2f972675b73d40 now serves exact API caseops-api-00274-phv and web caseops-web-00253-x7f identities; exact-release production workflow 31446233760 passed the complete RAM/IP and Notice suites. IPLF-026A is implemented and locally verified at immutable rebased revision 9449b00214bc8996a5b6c79921bc7af17c607b8c: the final-head access/migration/document/source/audit regression batch passed 29 tests, full API Ruff passed, and diff integrity passed. Independent CI, canonical merge, exact migration/deployment, reconciliation, and dated production acceptance remain open.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, and IPLF-025B have completed repository-controlled implementation and deployment verification. IPLF-026A has completed repository-controlled implementation and local verification but retains independent release gates. Genuine legal/UAT acceptance, IPLF-026B and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-026A",
-      "next_action": "Implement and independently release IPLF-026A over the existing internal-access and ethical-wall owners. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-025B/release-2026-08-11.md"
+      "next_slice": "IPLF-026B",
+      "next_action": "Run independent CI/Security/CodeQL/PostgreSQL review on IPLF-026A, merge the exact reviewed head to canonical main, deploy migrations 20260811_0001..0003 and exact images, prove healthy reconciliation and dated production access boundaries, then begin IPLF-026B. Separately obtain named lawyer approval for legal fixtures and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md"
     }
   },
   "milestones": [
@@ -977,7 +977,7 @@
         "IPLF-026A",
         "IPLF-026B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -6077,24 +6077,77 @@
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-025B"
+      ],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260811_0001_record_access_target_expand.py",
+        "apps/api/alembic/versions/20260811_0002_record_access_target_backfill.py",
+        "apps/api/alembic/versions/20260811_0003_record_access_target_switch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/matter_access.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_document_workflow.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/api/src/caseops_api/services/ip_audit.py",
+        "apps/api/src/caseops_api/services/audit_exports.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "docs/ip-implementation/IP_ACCESS_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260811_record_access_target_migration.py",
+        "apps/api/tests/test_ip_record_access_foundation.py",
+        "apps/api/tests/test_ethical_walls.py",
+        "apps/api/tests/test_ip_record_workflow.py",
+        "apps/api/tests/test_ip_document_workflow.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_audit_export_async.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/IP_ACCESS_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md",
+          "revision": "9449b00214bc8996a5b6c79921bc7af17c607b8c",
+          "environment": "Windows 11 isolated SQLite migration and API fixtures on the branch rebased over canonical main 61f749c037118500f157582dbb2f972675b73d40; final-head focused regressions, full API Ruff, and diff integrity; independent real-PostgreSQL CI and deployment remain required",
+          "fixtures": "Two synthetic same-tenant owners, one restricted unlinked IP docket, explicit membership/team grants, expiry/revocation, membership/team ethical walls, protected document/version/source, correlated audit events, and migration fixtures covering linked Matter snapshot and a mixed-version legacy write; no real client or legal/provider effect",
+          "assertions": "One canonical MatterAccessGrant/EthicalWall owner, exactly one Matter-or-IP target and membership-or-team subject, tenant correlation, expand/backfill/switch/downgrade/re-upgrade, independent linked-record policy snapshot, no IP owner bypass, SQL list/count filtering, direct/document/source/audit denial, worker-time audit export reauthorization, fail-closed uncorrelated record audit, and no portal/access-review/emergency persistence",
+          "result": "passed",
+          "recorded_at": "2026-08-11T06:26:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Run independent CI, Security, CodeQL, real-PostgreSQL migration, generated-contract, web, review, and full Playwright gates on the exact final head.",
+        "Merge the exact reviewed head to canonical main; deploy immutable images and migrations 20260811_0001..0003; prove zero reconciliation defects, exact public identity, and dated production access-boundary acceptance.",
+        "Retain all UJ-46 and IP-ACCESS/SEARCH-ACL/SEC-GOV completion claims for IPLF-026B and later allocated slices."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Migrations 20260811_0001..0003 extend the existing matter_access_grants and ethical_walls owners with tenant-correlated IP targets, team subjects, effective/revocation windows, record versions, checks, composite foreign keys, and active uniqueness.",
+        "The backfill snapshots effective linked-Matter visibility once into derived IP target rows and correlates direct IP docket audit events; later Matter policy changes do not silently broaden or narrow the IP record.",
+        "AuditEvent gains an optional IP docket correlation and IP document versions become protected source targets. No portal, access-review, emergency-access, or parallel IP grant/wall persistence is introduced."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_ACCESS_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "Internal record-access/ethical-wall owner",
+          "evidence": "Canonical ownership, migration, fail-closed decision, protected-surface, reconciliation, rollback, and deliberate-defer contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-026A/local-2026-08-11.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Exact implementation revision, focused final-head gates, bounded assertions, and remaining independent release gates"
+        }
+      ],
+      "allocation_review": "Reviewed against PRD Sections 11, 23, and 25 and the IPLF-026 administrative exception. IPLF-026A delivers only the canonical ownership, persistence, migration, policy predicate, protected backend surfaces, audit correlation, reconciliation, and rollback foundation. IPLF-026B retains every reciprocal IP-ACCESS, SEARCH-ACL, SEC-GOV and UJ-46 row plus user-facing grant/revoke/preview and exception workflows.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

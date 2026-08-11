@@ -76,7 +76,9 @@ consume the same effective membership/team row shape.
 - `/api/ip/dockets/{id}/audit` authorizes the docket before counting or
   returning correlated audit rows.
 - Audit exports filter correlated IP audit rows through the requester's
-  current docket predicate at worker execution time.
+  current docket predicate at worker execution time. Record-level IP events
+  without a safe docket correlation are omitted fail-closed rather than
+  treated as tenant-global events.
 
 Denied direct reads return the tenant-isolation 404 and append a correlated
 denial audit without revealing existence. Source opens are rechecked at open
