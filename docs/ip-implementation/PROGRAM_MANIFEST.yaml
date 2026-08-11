@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-026B",
+    "active_slice": "IPLF-027A",
     "checkpoint": {
-      "recorded_at": "2026-08-11T17:15:01+05:30",
-      "repository_revision": "f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1",
-      "environment": "IPLF-026A implementation is deployed through reviewed PRs #205 and #206. Current canonical production descendant f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1 serves exact API caseops-api-00278-4rq and web caseops-web-00257-75v identities at 100% traffic from immutable digests; caseops-migrate-job-lck9r, all six scheduler bindings, and IP QA bootstrap caseops-ip-qa-bootstrap-6sv8v passed on the exact API digest. Exact-release production workflows 31466368302 and 31467815420 passed the authorized IPLF-026A dated journey plus the complete RAM/IP and Notice suites, but deployment verification is reopened until the dated canary also proves authenticated ungranted denial across list/direct/document/source/audit. IPLF-026B remains the active implementation slice; named human acceptance is not inferred.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, and IPLF-025B have completed repository-controlled implementation and deployment verification. IPLF-026A implementation is deployed but its deployment-verification gate is reopened pending the authenticated-denial production canary. Genuine legal/security/pilot/UAT acceptance, IPLF-026B and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-11T19:35:22+05:30",
+      "repository_revision": "a7b6fc1398a683ac6c3e8723ff3e36297567f73c",
+      "environment": "IPLF-026A remains deployment-verified on canonical production and its evidence-publication PR #207 has passed every completed replacement-head gate while the full Playwright gate runs. IPLF-026B implementation is locally verified on reviewed IPLF-026A head 8e94e73fa332a4ae7fb3552194c464503de091bb: 41 affected API tests, 9 focused web tests, Ruff, TypeScript, current-source production build, generated OpenAPI, diff integrity, and the dated 360 px Playwright workflow passed. Independent IPLF-026B CI, canonical merge, exact deployment, and production acceptance remain required; named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-026B is locally implemented and ready for independent review but is not deployment-verified. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-026B",
-      "next_action": "Run the IPLF-026A dated authenticated-denial canary against the exact serving release and restore deployment_verified only on a pass. Continue IPLF-026B user-facing grant/revoke/preview, warnings, and UJ-46 exception workflows on the canonical owner, then run its independent release gates. Separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md"
+      "next_slice": "IPLF-027A",
+      "next_action": "Complete IPLF-026A evidence-publication merge/deployment, then run IPLF-026B independent final-head CI, expected-head merge, exact deployment, and dated production acceptance before implementing IPLF-027A. Separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
     }
   },
   "milestones": [
@@ -977,11 +977,14 @@
         "IPLF-026A",
         "IPLF-026B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ]
     },
     {
       "id": "IPLF-027",
@@ -6247,29 +6250,79 @@
       "dependencies": [
         "IPLF-026A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-46-EXC-01",
-        "planned:IPLF-UJ-46-EXC-02",
-        "planned:IPLF-UJ-46-EXC-03",
-        "planned:IPLF-UJ-46-EXC-04",
-        "planned:IPLF-UJ-46-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_access.py",
+        "apps/api/src/caseops_api/services/matter_access.py",
+        "apps/api/src/caseops_api/services/notification_delivery.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/components/ip/IpAccessWorkspace.tsx",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "docs/ip-implementation/IP_ACCESS_WORKFLOW.md"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_ip_record_access_foundation.py",
+        "apps/api/tests/test_notification_convergence_20260804.py",
+        "apps/api/tests/test_durable_workflows.py",
+        "apps/api/tests/test_portal_auth.py",
+        "apps/api/tests/test_portal_outside_counsel.py",
+        "apps/web/components/ip/IpAccessWorkspace.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/IP_ACCESS_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md",
+          "revision": "a7b6fc1398a683ac6c3e8723ff3e36297567f73c",
+          "environment": "Windows 11 CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a current-source production build with the local API URL embedded at build time, and Chromium at 360 px; independent real-PostgreSQL CI and deployment remain required",
+          "fixtures": "Synthetic entitled companies, separate owner/reviewer sessions, active memberships and teams, restricted/default IP dockets, an independently restricted linked Matter, membership/team grants and walls, queued in-app delivery, soft revocation history, and a cross-company subject; no real client, portal user, provider, recipient, filing, fee, payment, or legal effect",
+          "assertions": "Preview/token/version fencing, step-up route contract, atomic apply/audit, membership/team visibility gains and losses, effective windows, soft grant/wall revocation, self-lockout, cross-company rejection, linked-Matter non-broadening, direct/list/audit suppression, delivery-time reauthorization with zero external calls, explicit portal/access-review/emergency exclusion, preserved portal grant/session invalidation, OpenAPI parity, and every grouped action visible at 360 px",
+          "result": "passed",
+          "recorded_at": "2026-08-11T19:35:22+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Complete IPLF-026A evidence-publication merge and exact deployment, then restack IPLF-026B on canonical main.",
+        "Run independent final-head CI, expected-head merge, exact immutable deployment, dated production access acceptance, and complete RAM/IP and Notice suites.",
+        "Retain later reciprocal SEARCH-ACL/SEC-GOV depth and full IP portal-session acceptance for IPLF-066B/IPLF-073B; do not infer named human approval."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema migration. The workflow writes only the IPLF-026A target-aware MatterAccessGrant, EthicalWall, IpDocketRecord access_policy_version, and correlated AuditEvent owners.",
+        "Grant/wall revocation is soft and effective-dated; each apply increments the locked docket policy version and row version where applicable while retaining actor, reason, preview token, affected counts, and invalidation operation metadata.",
+        "Queued internal deliveries reauthorize against current IP policy immediately before dispatch. Linked Matter permissions are never copied, and no portal, access-review, emergency-access, or parallel IP access persistence is introduced."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_ACCESS_WORKFLOW.md",
+          "disposition": "created",
+          "owner": "Internal record-access/ethical-wall owner",
+          "evidence": "Authorization, preview/commit, optimistic concurrency, audit, notification reauthorization, linked-Matter independence, portal boundary, responsive UI, and rollback contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Immutable implementation revision, UJ-46 path accounting, final-source local gates, bounded non-effects, and remaining independent release work"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Concrete implementation/test/evidence traceability, no-schema data effects, bounded reciprocal claims, and ready-for-review state"
+        }
+      ],
+      "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-46, and 25 plus the IPLF-026 no-portal-persistence boundary. IPLF-026B implements the internal membership/team access workflow, UJ-46 normal path and exceptions 01..03, and fail-closed exclusion for exception 04 without generalizing portal persistence. Shared IP-ACCESS-01..08, SEARCH-ACL-01..12, SEC-GOV-01..16, and UJ-46 remain program-incomplete where IPLF-066B/IPLF-073B reciprocal depth, full portal-session behavior, or genuine human acceptance is allocated.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending"
     },
     {
@@ -23777,14 +23830,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -23824,14 +23877,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -23871,14 +23924,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -23918,14 +23971,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -23965,14 +24018,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -24012,14 +24065,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -24059,14 +24112,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -24106,14 +24159,14 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-066B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "IP-ACCESS allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066, IPLF-073."
     },
@@ -33730,13 +33783,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33765,13 +33818,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33800,13 +33853,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33835,13 +33888,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33870,13 +33923,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33905,13 +33958,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33940,13 +33993,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -33975,13 +34028,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34010,13 +34063,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34045,13 +34098,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34080,13 +34133,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34115,13 +34168,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34150,13 +34203,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34185,13 +34238,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34220,13 +34273,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -34255,13 +34308,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-073B"
+       "IPLF-026B",
+       "IPLF-073B"
       ],
       "allocation_rationale": "SEC-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-073."
     },
@@ -35541,13 +35594,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35581,13 +35634,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35621,13 +35674,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35661,13 +35714,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35701,13 +35754,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35741,13 +35794,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35781,13 +35834,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35821,13 +35874,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35861,13 +35914,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35901,13 +35954,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35941,13 +35994,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -35981,13 +36034,13 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-026B",
-        "IPLF-066B"
+       "IPLF-026B",
+       "IPLF-066B"
       ],
       "allocation_rationale": "SEARCH-ACL allocation reviewed against PRD requirement family and parent epic scope: IPLF-026, IPLF-066."
     },
@@ -39547,15 +39600,22 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_portal_auth.py",
+        "apps/api/tests/test_portal_outside_counsel.py",
+        "apps/web/components/ip/IpAccessWorkspace.test.tsx",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
         "planned:IPLF-UJ-46-EXC-01",
         "planned:IPLF-UJ-46-EXC-02",
         "planned:IPLF-UJ-46-EXC-03",
         "planned:IPLF-UJ-46-EXC-04",
         "planned:IPLF-UJ-46-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49633,11 +49693,16 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/web/components/ip/IpAccessWorkspace.test.tsx",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
         "planned:IPLF-UJ-46-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49691,11 +49756,15 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
         "planned:IPLF-UJ-46-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49749,11 +49818,15 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
         "planned:IPLF-UJ-46-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49807,11 +49880,15 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
         "planned:IPLF-UJ-46-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
@@ -49865,11 +49942,17 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_portal_auth.py",
+        "apps/api/tests/test_portal_outside_counsel.py",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
         "planned:IPLF-UJ-46-EXC-04"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
