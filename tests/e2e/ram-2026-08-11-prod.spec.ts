@@ -56,7 +56,10 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     supported_targets: ["matter", "ip_docket"],
     supported_subjects: ["membership", "team"],
     owner_bypass: { matter: true, ip_docket: false },
-    forbidden_parallel_owners: ["ip_access_grants", "ip_ethical_walls"],
+    forbidden_parallel_owners: [
+      "parallel_ip_grant_store",
+      "parallel_ip_wall_store",
+    ],
     excluded_persistence: [
       "portal_grants",
       "access_review_campaigns",

@@ -355,7 +355,10 @@ def record_access_foundation_contract() -> RecordAccessFoundationContract:
         supported_targets=["matter", "ip_docket"],
         supported_subjects=["membership", "team"],
         owner_bypass={"matter": True, "ip_docket": False},
-        forbidden_parallel_owners=["ip_access_grants", "ip_ethical_walls"],
+        forbidden_parallel_owners=[
+            "parallel_ip_grant_store",
+            "parallel_ip_wall_store",
+        ],
         excluded_persistence=[
             "portal_grants",
             "access_review_campaigns",

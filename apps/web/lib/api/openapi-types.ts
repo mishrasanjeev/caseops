@@ -3760,6 +3760,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/access/foundation-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Record Access Foundation Contract */
+        get: operations["get_record_access_foundation_contract_api_ip_access_foundation_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/access/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Record Access Reconciliation */
+        get: operations["get_record_access_reconciliation_api_ip_access_reconciliation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/applications/{application_id}/filing-phase": {
         parameters: {
             query?: never;
@@ -4010,6 +4044,23 @@ export interface paths {
         put?: never;
         /** Post Ip Asset */
         post: operations["post_ip_asset_api_ip_dockets__docket_id__assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Audit */
+        get: operations["get_ip_docket_audit_api_ip_dockets__docket_id__audit_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -17960,6 +18011,19 @@ export interface components {
             /** Rules */
             rules: components["schemas"]["IpRuleVersionRecord"][];
         };
+        /** IpDocketAuditListResponse */
+        IpDocketAuditListResponse: {
+            /** Events */
+            events: components["schemas"]["MatterAuditEventRecord"][];
+            /** Ip Docket Id */
+            ip_docket_id: string;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** IpDocketControlReport */
         IpDocketControlReport: {
             /** Docket Count */
@@ -18171,6 +18235,8 @@ export interface components {
         };
         /** IpDocketRecordResponse */
         IpDocketRecordResponse: {
+            /** Access Policy Version */
+            access_policy_version: number;
             /** Company Id */
             company_id: string;
             /** Cost Items */
@@ -22064,6 +22130,8 @@ export interface components {
             created_at: string;
             /** Id */
             id: string;
+            /** Ip Docket Id */
+            ip_docket_id?: string | null;
             /** Matter Id */
             matter_id: string | null;
             /** Metadata */
@@ -28163,6 +28231,57 @@ export interface components {
             /** Template Type */
             template_type: string;
         };
+        /** RecordAccessFoundationContract */
+        RecordAccessFoundationContract: {
+            /**
+             * Canonical Writer
+             * @default MatterAccessGrant/EthicalWall via services/matter_access.py
+             * @constant
+             */
+            canonical_writer: "MatterAccessGrant/EthicalWall via services/matter_access.py";
+            /**
+             * Contract Version
+             * @default record-access-v1
+             * @constant
+             */
+            contract_version: "record-access-v1";
+            /** Excluded Persistence */
+            excluded_persistence: string[];
+            /** Forbidden Parallel Owners */
+            forbidden_parallel_owners: string[];
+            /** Owner Bypass */
+            owner_bypass: {
+                [key: string]: boolean;
+            };
+            /** Supported Subjects */
+            supported_subjects: ("membership" | "team")[];
+            /** Supported Targets */
+            supported_targets: ("matter" | "ip_docket")[];
+        };
+        /** RecordAccessReconciliationReport */
+        RecordAccessReconciliationReport: {
+            /** Company Id */
+            company_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Healthy */
+            healthy: boolean;
+            /** Invalid Subject Count */
+            invalid_subject_count: number;
+            /** Invalid Target Count */
+            invalid_target_count: number;
+            /** Legacy Tail Count */
+            legacy_tail_count: number;
+            /** Subject Company Mismatch Count */
+            subject_company_mismatch_count: number;
+            /** Target Company Mismatch Count */
+            target_company_mismatch_count: number;
+            /** Uncorrelated Ip Audit Count */
+            uncorrelated_ip_audit_count: number;
+        };
         /** RedlineChangeRecord */
         RedlineChangeRecord: {
             /** Author */
@@ -28558,7 +28677,7 @@ export interface components {
             /** Target Id */
             target_id?: string | null;
             /** Target Type */
-            target_type?: ("authority_document" | "statute_section" | "judge_appointment" | "matter_attachment") | null;
+            target_type?: ("authority_document" | "statute_section" | "judge_appointment" | "matter_attachment" | "ip_document_version") | null;
         };
         /** SourceLinkReportCreateRequest */
         SourceLinkReportCreateRequest: {
@@ -28573,14 +28692,14 @@ export interface components {
              * Origin Surface
              * @enum {string}
              */
-            origin_surface: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "other";
+            origin_surface: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "ip_document" | "other";
             /** Target Id */
             target_id: string;
             /**
              * Target Type
              * @enum {string}
              */
-            target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment";
+            target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment" | "ip_document_version";
         };
         /** SourceLinkReportRecord */
         SourceLinkReportRecord: {
@@ -28602,7 +28721,7 @@ export interface components {
              * Origin Surface
              * @enum {string}
              */
-            origin_surface: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "other";
+            origin_surface: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "ip_document" | "other";
             /**
              * Source State
              * @enum {string}
@@ -28619,7 +28738,7 @@ export interface components {
              * Target Type
              * @enum {string}
              */
-            target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment";
+            target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment" | "ip_document_version";
         };
         /** StatuteAmendmentHistoryResponse */
         StatuteAmendmentHistoryResponse: {
@@ -37806,6 +37925,46 @@ export interface operations {
             };
         };
     };
+    get_record_access_foundation_contract_api_ip_access_foundation_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordAccessFoundationContract"];
+                };
+            };
+        };
+    };
+    get_record_access_reconciliation_api_ip_access_reconciliation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordAccessReconciliationReport"];
+                };
+            };
+        };
+    };
     patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch: {
         parameters: {
             query?: never;
@@ -38320,6 +38479,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpAssetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_audit_api_ip_dockets__docket_id__audit_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketAuditListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -48131,12 +48324,12 @@ export interface operations {
     open_source_target_api_source_actions_targets__target_type___target_id__open_get: {
         parameters: {
             query?: {
-                origin?: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "other";
+                origin?: "research" | "saved_research" | "judge_profile" | "uploaded_case_analysis" | "intelligent_review" | "statute" | "ip_document" | "other";
             };
             header?: never;
             path: {
                 target_id: string;
-                target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment";
+                target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment" | "ip_document_version";
             };
             cookie?: never;
         };

@@ -182,6 +182,10 @@ def test_restricted_ip_policy_is_shared_across_list_document_source_and_audit(
         "matter": True,
         "ip_docket": False,
     }
+    assert contract.json()["forbidden_parallel_owners"] == [
+        "parallel_ip_grant_store",
+        "parallel_ip_wall_store",
+    ]
     reconciliation = client.get(
         "/api/ip/access/reconciliation",
         headers=owner_headers,
