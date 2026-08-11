@@ -30,6 +30,8 @@ const API_BASE_URL = envOr(
 );
 const COMPANY_SLUG = envOr("CASEOPS_RAM_PROD_SLUG", "legal");
 const TESTER_EMAIL = envOr("CASEOPS_RAM_PROD_EMAIL", "hari.gupta@gmail.com");
+// Local bootstrap credentials are synthetic and never used for production.
+const LOCAL_TESTER_PASSWORD = "RamAug11Local!";
 const RUN_ID = `${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2, 8)}`.toUpperCase();
@@ -57,7 +59,7 @@ function requiredPassword(): string {
   const password =
     process.env.CASEOPS_RAM_PROD_PASSWORD?.trim() ||
     process.env.CASEOPS_RAM_LOCAL_PASSWORD?.trim() ||
-    "";
+    (IS_LOCAL ? LOCAL_TESTER_PASSWORD : "");
   if (!password) {
     throw new Error(
       "CASEOPS_RAM_PROD_PASSWORD or CASEOPS_RAM_LOCAL_PASSWORD is required for the August 11 regression.",

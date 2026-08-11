@@ -277,9 +277,9 @@ test.describe("Hari II bug regressions", () => {
 
   // --------------------------------------------------------------
   // BUG-018 — research page renders for an authenticated user
-  // (no blank page, stats or banner visible, search input present).
+  // (no blank page, grounded workspace and search input present).
   // --------------------------------------------------------------
-  test("BUG-018: research page renders stats or banner + search input", async ({
+  test("BUG-018: research page renders grounded workspace + search input", async ({
     page,
   }) => {
     const api = await request.newContext();
@@ -293,22 +293,19 @@ test.describe("Hari II bug regressions", () => {
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     await page.waitForURL(/\/app/);
     await page.goto("/app/research");
-    // Search input is present and enabled.
+    await expect(
+      page.getByRole("heading", { name: "Grounded legal research" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(
+        "Hybrid retrieval across statutes, judgments, and your own precedents — every answer cited and traceable.",
+      ),
+    ).toBeVisible();
+    // Search input is present and enabled without a competing initial
+    // corpus-stats request.
     const input = page.getByTestId("research-query-input");
     await expect(input).toBeVisible({ timeout: 15_000 });
-    // Either stats render successfully (the happy path) or the
-    // non-blocking warning banner from the stats-failure regression.
-    // Both count as "research page is working"; what must NOT happen
-    // is a blank screen or a hard crash.
-    const hasStatsCopy = await page
-      .getByText(/Searching .* judgments/i)
-      .isVisible()
-      .catch(() => false);
-    const hasBanner = await page
-      .getByText(/Could not load corpus stats/i)
-      .isVisible()
-      .catch(() => false);
-    expect(hasStatsCopy || hasBanner).toBe(true);
+    await expect(input).toBeEnabled();
   });
 
 

@@ -119,8 +119,9 @@ test.describe("Hari 2026-06-25 bugs", () => {
     await signIn(page, slug, ownerEmail);
 
     await openNewMatter(page);
-    await page.getByTestId("new-matter-forum-category").selectOption("consumer_forum");
-    await page.getByTestId("new-matter-forum-consumer-level").selectOption("state");
+    await page
+      .getByTestId("new-matter-forum-category")
+      .selectOption("state_commission");
 
     const stateSelect = page.getByTestId("new-matter-forum-consumer-state");
     await expect
@@ -132,7 +133,9 @@ test.describe("Hari 2026-06-25 bugs", () => {
       .toEqual(CONSUMER_STATE_JURISDICTIONS);
 
     await stateSelect.selectOption("Rajasthan");
-    await page.getByTestId("new-matter-forum-consumer-level").selectOption("district");
+    await page
+      .getByTestId("new-matter-forum-category")
+      .selectOption("district_commission");
     await expect(stateSelect).toHaveValue("Rajasthan");
 
     const districtSelect = page.getByTestId("new-matter-forum-consumer-district");
@@ -164,8 +167,9 @@ test.describe("Hari 2026-06-25 bugs", () => {
     await expect(page.getByText(catalogCode)).toBeVisible({ timeout: 15_000 });
 
     await openNewMatter(page);
-    await page.getByTestId("new-matter-forum-category").selectOption("consumer_forum");
-    await page.getByTestId("new-matter-forum-consumer-level").selectOption("district");
+    await page
+      .getByTestId("new-matter-forum-category")
+      .selectOption("district_commission");
     await page.getByTestId("new-matter-forum-consumer-state").selectOption("Rajasthan");
     await page
       .getByTestId("new-matter-forum-consumer-district")
