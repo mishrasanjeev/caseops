@@ -201,6 +201,13 @@ def test_ip_access_preview_apply_revocation_and_delivery_reauthorization(
     assert grant_preview["visibility_gain_count"] == 1
     assert grant_preview["linked_matter_mismatch"] is True
     assert grant_preview["requires_step_up"] is True
+    cross_actor_apply = client.post(
+        f"/api/ip/dockets/{docket_id}/access/apply",
+        headers=member_headers,
+        json={**grant_payload, "preview_token": grant_preview["preview_token"]},
+    )
+    assert cross_actor_apply.status_code == 409
+    assert "does not match" in cross_actor_apply.text
     granted = _apply(
         client,
         headers=owner_headers,

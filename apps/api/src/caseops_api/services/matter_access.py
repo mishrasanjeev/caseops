@@ -16,6 +16,7 @@ a 404, matching the tenant-isolation pattern.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -26,6 +27,7 @@ from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import Select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     Company,
@@ -651,18 +653,24 @@ def _preview_token(
     *,
     company_id: str,
     docket_id: str,
+    actor_membership_id: str,
     payload: IpAccessChangeRequest,
 ) -> str:
     canonical = json.dumps(
         {
             "company_id": company_id,
             "docket_id": docket_id,
+            "actor_membership_id": actor_membership_id,
             "change": payload.model_dump(mode="json", exclude={"preview_token"}),
         },
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return hmac.new(
+        get_settings().auth_secret.encode("utf-8"),
+        canonical.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _ip_access_preview_for_docket(
@@ -839,6 +847,7 @@ def _ip_access_preview_for_docket(
         preview_token=_preview_token(
             company_id=context.company.id,
             docket_id=docket.id,
+            actor_membership_id=context.membership.id,
             payload=payload,
         ),
         affected_memberships=affected,
@@ -1013,7 +1022,7 @@ def apply_ip_access_change(
         docket=docket,
         payload=payload,
     )
-    if preview.preview_token != payload.preview_token:
+    if not hmac.compare_digest(preview.preview_token, payload.preview_token):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Access preview does not match this command. Preview the change again.",

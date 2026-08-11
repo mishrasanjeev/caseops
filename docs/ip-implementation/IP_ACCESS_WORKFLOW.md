@@ -36,8 +36,9 @@ visible to operators.
 `POST /api/ip/dockets/{id}/access/preview` is read-only. It calculates
 membership visibility before and after the proposed command, documents and
 queued deliveries affected, linked-Matter mismatches, and a deterministic
-token covering company, docket, expected policy version, reason, subject,
-effective window, and action.
+server-secret HMAC covering company, docket, actor membership, expected policy
+version, reason, subject, effective window, and action. The token cannot be
+fabricated from request fields or transferred to another access manager.
 
 `POST /api/ip/dockets/{id}/access/apply` locks the docket row and recalculates
 the preview. The command is rejected unless both the optimistic policy version
