@@ -11033,7 +11033,9 @@ class MatterAccessGrant(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     revoked_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     record_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
@@ -11191,7 +11193,9 @@ class EthicalWall(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     revoked_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     record_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"

@@ -170,6 +170,11 @@ def test_record_access_expand_backfill_switch_downgrade_reupgrade(
             "revoked_at",
             "record_version",
         }.issubset(wall_columns)
+        for table_name in ("matter_access_grants", "ethical_walls"):
+            indexes = {
+                index["name"] for index in inspector.get_indexes(table_name)
+            }
+            assert f"ix_{table_name}_revoked_by_membership_id" in indexes
         assert "ip_docket_id" in {
             column["name"] for column in inspector.get_columns("audit_events")
         }

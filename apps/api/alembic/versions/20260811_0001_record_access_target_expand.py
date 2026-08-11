@@ -51,6 +51,7 @@ def _expand_grants() -> None:
         "effective_from",
         "expires_at",
         "revoked_at",
+        "revoked_by_membership_id",
     ):
         op.create_index(
             f"ix_matter_access_grants_{column_name}",
@@ -91,6 +92,7 @@ def _expand_walls() -> None:
         "effective_from",
         "expires_at",
         "revoked_at",
+        "revoked_by_membership_id",
     ):
         op.create_index(
             f"ix_ethical_walls_{column_name}",
@@ -160,6 +162,7 @@ def downgrade() -> None:
                 "matter_id", existing_type=sa.String(36), nullable=False
             )
         for column_name in (
+            "revoked_by_membership_id",
             "revoked_at",
             "expires_at",
             "effective_from",
