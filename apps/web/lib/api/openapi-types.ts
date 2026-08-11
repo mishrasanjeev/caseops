@@ -11415,8 +11415,18 @@ export interface components {
             filing_date?: string | null;
             /** Filing Number */
             filing_number?: string | null;
+            /** Forum Catalog Entry Id */
+            forum_catalog_entry_id?: string | null;
+            /** Forum City */
+            forum_city?: string | null;
+            /** Forum Consumer Level */
+            forum_consumer_level?: string | null;
+            /** Forum District */
+            forum_district?: string | null;
             /** Forum Level */
             forum_level?: string | null;
+            /** Forum State */
+            forum_state?: string | null;
             /** Matter Code */
             matter_code?: string | null;
             /** Matter Status */
