@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from caseops_api.db.models import (
@@ -15,6 +18,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.ip_access import IpAccessChangeRequest
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     process_notification_delivery_intent,
@@ -40,6 +44,47 @@ def _particulars(mark: str) -> dict[str, object]:
             }
         ],
     }
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            {"action": "grant"},
+            "subject_type and subject_id are required for this action",
+        ),
+        ({"action": "revoke_grant"}, "grant_id is required for revoke_grant"),
+        ({"action": "revoke_wall"}, "wall_id is required for revoke_wall"),
+        (
+            {"action": "set_restricted"},
+            "restricted is required for set_restricted",
+        ),
+    ],
+)
+def test_ip_access_change_schema_requires_action_specific_fields(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        IpAccessChangeRequest(
+            expected_access_policy_version=0,
+            reason="Coverage regression assertion",
+            **payload,
+        )
+
+
+def test_ip_access_change_schema_rejects_non_increasing_effective_window() -> None:
+    effective_from = datetime(2026, 8, 12, tzinfo=UTC)
+    with pytest.raises(ValidationError, match="expires_at must be later"):
+        IpAccessChangeRequest(
+            action="grant",
+            expected_access_policy_version=0,
+            reason="Coverage regression assertion",
+            subject_type="membership",
+            subject_id="membership-1",
+            effective_from=effective_from,
+            expires_at=effective_from - timedelta(seconds=1),
+        )
 
 
 def _invite_admin(
