@@ -18,6 +18,7 @@ From the repository root:
 python scripts/ip_program_manifest.py validate
 python scripts/ip_ownership_ledger.py validate
 python scripts/ip_arch_ops_contract.py validate
+python scripts/ip_data_class_registry.py validate
 python scripts/ip_program_manifest.py generate
 ```
 
@@ -25,7 +26,10 @@ python scripts/ip_program_manifest.py generate
 all M2/M3 proposals. `ARCH_OPS_CONTRACT.yaml` publishes the exact
 ARCH-OPS-01..26 control mapping, and `IP_EVENT_CATALOG.yaml` publishes stable
 versioned audit-action and domain-event schemas. Their validators are required
-CI gates. They authorize no early nullable schema and do not replace the
+CI gates. `IPLF_027A_DATA_CLASS_REGISTRY.yaml` is the narrower pre-schema
+admission for the five IPLF-027A foundation tables; its fail-closed dispositions
+do not claim the runtime retention/hold/export/purge/restore work allocated to
+IPLF-028. These controls authorize no early nullable schema and do not replace the
 behavior-level journeys, mixed-revision proof, deployment evidence, or human
 approval allocated to later slices.
 

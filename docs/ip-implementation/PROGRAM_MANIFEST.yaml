@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-027A",
     "checkpoint": {
-      "recorded_at": "2026-08-12T06:30:50+05:30",
-      "repository_revision": "9e9ff88dd36f8dfd3fa35f8f2ed9bff50dcb6f3f",
-      "environment": "IPLF-026A is deployment-verified on canonical production descendant 4458ea8cc81903efc19e308e55462c5d34cccbf3 after reviewed PRs #205 through #208. Exact API caseops-api-00280-qpf and web caseops-web-00259-5v4 serve 100% traffic; migration execution caseops-migrate-job-s76st and all six scheduler bindings passed on the immutable API image. Exact-release production workflow 31550651466 checked out the serving SHA and passed 67 RAM/IP tests with 4 documented conditional skips plus 2 Notice tests. IPLF-026B is locally verified on the canonical IPLF-026A lineage through stable implementation/test revision 9e9ff88dd36f8dfd3fa35f8f2ed9bff50dcb6f3f; independent final-head CI, canonical merge, exact deployment, and production acceptance remain required. Named human acceptance is not inferred.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-026B is locally implemented and ready for independent review but is not deployment-verified. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-12T11:08:36+05:30",
+      "repository_revision": "d97969d1ac8e6cf9da0418f534349257ba487393",
+      "environment": "IPLF-026B final head 977acde5d9a1e671fbe7e83b2939e1a5289b6c34 passed independent CI/Security/CodeQL/review, merged through PR #209, and is deployed on exact canonical SHA d97969d1ac8e6cf9da0418f534349257ba487393. API caseops-api-00281-9bt and web caseops-web-00260-mwh serve 100% traffic; migration caseops-migrate-job-m6rn4 and all six scheduler bindings passed on the immutable API image recorded in the cited release-attempt evidence. The focused 360px IPLF-026B production journey passed in workflow 31565070270, but the complete gate ended 65 passed, 4 documented conditional skips, and 3 unrelated recommendation HTTP 503 failures; one explicitly recorded the typed llm_quota_exhausted response, and the dependent Notice suite did not run. Named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-026B is implemented, independently reviewed, merged, exactly deployed, and focused-production verified, but its complete release gate remains blocked by production OpenAI quota availability and the resulting skipped Notice phase. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-027A",
-      "next_action": "Run IPLF-026B independent final-head CI and review, expected-head merge, exact deployment, and dated production acceptance before implementing IPLF-027A. Separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+      "next_action": "Restore available quota/credits for the configured CaseOps OpenAI project, verify its configuration, and rerun the unchanged complete production workflow against exact serving SHA d97969d1ac8e6cf9da0418f534349257ba487393; require both RAM/IP and Notice phases green before closing IPLF-026B. Continue independent IPLF-027A repository foundations behind disabled controls, and separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md"
     }
   },
   "milestones": [
@@ -983,7 +983,8 @@
       "acceptance_status": "pending",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md",
-        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md"
       ]
     },
     {
@@ -6269,7 +6270,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/IP_ACCESS_WORKFLOW.md",
-        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
+        "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md"
       ],
       "evidence_metadata": [
         {
@@ -6283,9 +6285,19 @@
         }
       ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-026B-PROD-GATE-31565070270",
+          "summary": "Exact-release workflow 31565070270 passed the focused IPLF-026B journey but failed three unrelated live-recommendation tests with HTTP 503; one explicitly recorded the typed llm_quota_exhausted response, and the dependent Notice phase did not run.",
+          "owner": "Production AI provider/account operator and Engineering/QA",
+          "evidence_needed": "Restore available quota/credits for the configured CaseOps OpenAI project, verify its configuration, then pass the unchanged complete RAM/IP and Notice workflow against exact serving SHA d97969d1ac8e6cf9da0418f534349257ba487393.",
+          "safe_fallback": "Retain the sanitized 503 and save no output; do not weaken release assertions, use synthetic output, or change provider/cost ownership merely to obtain a green workflow.",
+          "milestone_impact": "Blocks IPLF-026B, parent IPLF-026, and M2 release closure while leaving implementation and focused verification valid.",
+          "next_independent_slice": "IPLF-027A repository foundations behind disabled controls."
+        }
+      ],
       "next_actions": [
-        "Run independent final-head CI, expected-head merge, exact immutable deployment, dated production access acceptance, and complete RAM/IP and Notice suites.",
+        "Restore available quota/credits for the configured CaseOps OpenAI project, verify its configuration, and rerun the unchanged exact-release complete RAM/IP and Notice workflow green before claiming deployment verification.",
         "Retain later reciprocal SEARCH-ACL/SEC-GOV depth and full IP portal-session acceptance for IPLF-066B/IPLF-073B; do not infer named human approval."
       ],
       "data_impact": [
@@ -6307,16 +6319,22 @@
           "evidence": "Immutable implementation revision, UJ-46 path accounting, final-source local gates, bounded non-effects, and remaining independent release work"
         },
         {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Independent exact-head gates, canonical merge, immutable production identity, focused dated journey pass, complete-suite provider-quota failure, safe fallback, and resolving evidence needed"
+        },
+        {
           "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
           "disposition": "updated",
           "owner": "Program control plane",
-          "evidence": "Concrete implementation/test/evidence traceability, no-schema data effects, bounded reciprocal claims, and ready-for-review state"
+          "evidence": "Concrete implementation/test/evidence traceability, no-schema data effects, bounded reciprocal claims, and truthful provider-blocked release state"
         }
       ],
       "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-46, and 25 plus the IPLF-026 no-portal-persistence boundary. IPLF-026B implements the internal membership/team access workflow, UJ-46 normal path and exceptions 01..03, and fail-closed exclusion for exception 04 without generalizing portal persistence. Shared IP-ACCESS-01..08, SEARCH-ACL-01..12, SEC-GOV-01..16, and UJ-46 remain program-incomplete where IPLF-066B/IPLF-073B reciprocal depth, full portal-session behavior, or genuine human acceptance is allocated.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "blocked",
       "acceptance_status": "pending"
     },
     {

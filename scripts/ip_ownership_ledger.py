@@ -25,6 +25,25 @@ LEDGER_PATH = REPO_ROOT / "docs" / "ip-implementation" / "OWNERSHIP_LEDGER.yaml"
 CLASSIFICATIONS = {"NEW", "EXTEND", "LINK", "REPLACE"}
 COMPONENT_KINDS = {"table", "service", "route", "page", "job", "contract"}
 MILESTONES = {"M2", "M3"}
+IPLF_027_COMPONENTS_BY_KIND = {
+    "table": {
+        "api_idempotency_records",
+        "domain_consumer_effects",
+        "domain_outbox_events",
+        "ip_workflow_definitions",
+        "ip_workflow_versions",
+    },
+    "service": {
+        "ip-workflow-version-service",
+        "shared-api-idempotency-service",
+        "shared-outbox-consumer-service",
+        "shared-transactional-outbox-service",
+    },
+    "contract": {
+        "durable-workflow-adapter",
+        "ip-lifecycle-workflow-version-adapter",
+    },
+}
 
 # Exact names are checked after identifier normalization.  Patterns cover the
 # common "same subsystem, new spelling" variants for services/pages/jobs.
@@ -237,6 +256,26 @@ def validate(
     )
     if duplicate_components:
         errors.append(f"duplicate proposed component ownership: {duplicate_components}")
+
+    iplf_027 = next(
+        (row for row in decisions if row.get("epic_id") == "IPLF-027"),
+        None,
+    )
+    if iplf_027 is None:
+        errors.append("ownership ledger is missing the IPLF-027 shared-foundation decision")
+    else:
+        components = iplf_027.get("components", [])
+        for kind, expected_names in IPLF_027_COMPONENTS_BY_KIND.items():
+            actual_names = {
+                str(row.get("name", ""))
+                for row in components
+                if row.get("kind") == kind
+            }
+            if actual_names != expected_names:
+                errors.append(
+                    f"IPLF-027 {kind} components must exactly match "
+                    f"{sorted(expected_names)}; found {sorted(actual_names)}"
+                )
 
     for ref in ledger.get("adr_refs", []):
         if not (REPO_ROOT / ref).is_file():
