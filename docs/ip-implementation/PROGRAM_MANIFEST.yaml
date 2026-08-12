@@ -16,13 +16,13 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-026B",
     "checkpoint": {
-      "recorded_at": "2026-08-11T17:15:01+05:30",
-      "repository_revision": "f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1",
-      "environment": "IPLF-026A implementation is deployed through reviewed PRs #205 and #206. Current canonical production descendant f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1 serves exact API caseops-api-00278-4rq and web caseops-web-00257-75v identities at 100% traffic from immutable digests; caseops-migrate-job-lck9r, all six scheduler bindings, and IP QA bootstrap caseops-ip-qa-bootstrap-6sv8v passed on the exact API digest. Exact-release production workflows 31466368302 and 31467815420 passed the authorized IPLF-026A dated journey plus the complete RAM/IP and Notice suites, but deployment verification is reopened until the dated canary also proves authenticated ungranted denial across list/direct/document/source/audit. IPLF-026B remains the active implementation slice; named human acceptance is not inferred.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, and IPLF-025B have completed repository-controlled implementation and deployment verification. IPLF-026A implementation is deployed but its deployment-verification gate is reopened pending the authenticated-denial production canary. Genuine legal/security/pilot/UAT acceptance, IPLF-026B and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-11T21:52:14+05:30",
+      "repository_revision": "0dd342c656f66d07fdcc3a301c682fc93c0a407c",
+      "environment": "IPLF-026A is deployment-verified on canonical production descendant 0dd342c656f66d07fdcc3a301c682fc93c0a407c after reviewed PRs #205, #206, and #207. Exact API caseops-api-00279-6pg and web caseops-web-00258-gbg serve 100% traffic from immutable images; caseops-migrate-job-sb25b and all six scheduler bindings passed on the exact API digest. Exact-release production workflow 31509430739 checked out the serving SHA and passed 66 RAM/IP tests with 5 documented conditional skips plus 2 Notice tests, including authorized access and authenticated ungranted denial across list/direct/document/source/audit. IPLF-026B remains the active implementation slice; named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. Genuine legal/security/pilot/UAT acceptance, IPLF-026B and later slices, and M0 human program lock remain pending. No provider, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-026B",
-      "next_action": "Run the IPLF-026A dated authenticated-denial canary against the exact serving release and restore deployment_verified only on a pass. Continue IPLF-026B user-facing grant/revoke/preview, warnings, and UJ-46 exception workflows on the canonical owner, then run its independent release gates. Separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
+      "next_action": "Restack IPLF-026B on this canonical IPLF-026A release, then complete independent final-head CI, expected-head merge, exact deployment, and dated production acceptance for its user-facing grant/revoke/preview, warnings, and UJ-46 exception workflows. Separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
       "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md"
     }
   },
@@ -6121,22 +6121,16 @@
         },
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-026A/release-2026-08-11.md",
-          "revision": "f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1",
-          "environment": "Reviewed PRs #205 and #206 merged to canonical main; exact current Cloud Run API caseops-api-00278-4rq and web caseops-web-00257-75v at 100% traffic; immutable images, successful Alembic migration job, six-job scheduler inventory, exact-digest IP QA bootstrap, and two independent exact-release production Playwright workflows",
-          "fixtures": "Dedicated synthetic caseops-ip-qa tenant, timestamp-unique restricted docket and protected text document, seeded IP document taxonomy, correlated source-open and audit events, healthy reconciliation; no real client, provider, recipient, filing, fee, payment, or legal effect",
-          "assertions": "Independent CI/Security/CodeQL/PostgreSQL/web/Playwright review, expected-head merge fencing, migrations 20260811_0001..0003, exact release identity, canonical MatterAccessGrant/EthicalWall owner, no IP owner bypass, restricted list/count/direct/document/source/audit authorization, zero reconciliation defects, repeatable dated production canary, and no portal/access-review/emergency persistence",
+          "revision": "0dd342c656f66d07fdcc3a301c682fc93c0a407c",
+          "environment": "Reviewed PRs #205, #206, and #207 merged to canonical main; exact Cloud Run API caseops-api-00279-6pg and web caseops-web-00258-gbg at 100% traffic; immutable API and web image digests are recorded in the cited release evidence; successful migration caseops-migrate-job-sb25b, six-job scheduler inventory, and exact-release production workflow 31509430739",
+          "fixtures": "Dedicated synthetic caseops-ip-qa tenant, timestamp-unique restricted docket and protected text document, authorized creator and separate authenticated ungranted admin, seeded IP document taxonomy, correlated source-open and audit events, healthy reconciliation, and successful synthetic-member retirement; no real client, provider, recipient, filing, fee, payment, or legal effect",
+          "assertions": "Independent CI/Security/CodeQL/PostgreSQL/web/Playwright review, expected-head merge fencing, migrations 20260811_0001..0003, exact release identity, canonical MatterAccessGrant/EthicalWall owner, no IP owner bypass, authorized restricted list/count/direct/document/source/audit access, authenticated ungranted list/document suppression and direct/document/source/audit 404 denial, zero reconciliation defects, repeatable dated production canary, and no portal/access-review/emergency persistence",
           "result": "passed",
-          "recorded_at": "2026-08-11T17:15:01+05:30"
+          "recorded_at": "2026-08-11T21:52:14+05:30"
         }
       ],
       "approvals": [],
-      "blockers": [
-        {
-          "id": "IPLF-026A-PROD-DENIAL",
-          "summary": "Dated production acceptance has not yet exercised an authenticated ungranted identity across restricted docket list/direct, document list/detail, source open, and docket audit; deployment verification remains blocked until that exact-release canary passes.",
-          "state": "open"
-        }
-      ],
+      "blockers": [],
       "next_actions": [
         "Implement IPLF-026B grant/revoke/preview and exception workflows on this canonical access owner without adding portal, access-review, or emergency-access persistence.",
         "Retain all UJ-46 and IP-ACCESS/SEARCH-ACL/SEC-GOV completion claims for IPLF-026B and later allocated slices.",
@@ -6170,7 +6164,7 @@
       "allocation_review": "Reviewed against PRD Sections 11, 23, and 25 and the IPLF-026 administrative exception. IPLF-026A delivers only the canonical ownership, persistence, migration, policy predicate, protected backend surfaces, audit correlation, reconciliation, and rollback foundation. IPLF-026B retains every reciprocal IP-ACCESS, SEARCH-ACL, SEC-GOV and UJ-46 row plus user-facing grant/revoke/preview and exception workflows.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
