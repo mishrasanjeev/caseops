@@ -179,10 +179,32 @@ def test_ip_workflow_expand_is_inert_and_empty_rollback_is_rehearsable(
             "ip_docket_events",
             ("id", "company_id", "docket_id", "resulting_lifecycle_version"),
         )
+        assert (
+            "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            target_column,
+            "neutralized_by_ip_lifecycle_version",
+        ) in {
+            tuple(row["column_names"])
+            for row in inspector.get_indexes(table_name)
+        }
         checks = {
             row["name"] for row in inspector.get_check_constraints(table_name)
         }
         assert any(name.endswith("_ip_lifecycle_terminal_state") for name in checks)
+    workflow_indexes = {
+        tuple(row["column_names"])
+        for row in inspector.get_indexes("ip_workflow_versions")
+    }
+    for actor_columns in (
+        ("proposed_by_membership_id", "proposed_by_membership_company_id"),
+        ("reviewed_by_membership_id", "reviewed_by_membership_company_id"),
+        (
+            "legal_approved_by_membership_id",
+            "legal_approved_by_membership_company_id",
+        ),
+    ):
+        assert actor_columns in workflow_indexes
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM ip_workflow_definitions")) == 0
         assert connection.scalar(text("SELECT count(*) FROM ip_workflow_versions")) == 0

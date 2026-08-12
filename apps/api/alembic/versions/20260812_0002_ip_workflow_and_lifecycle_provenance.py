@@ -31,6 +31,23 @@ _PROVENANCE_TABLES = (
     "calendar_event_syncs",
 )
 
+# The FK-index validator works at individual-column granularity.  These
+# component columns are covered by the composite indexes created below, whose
+# leading columns are the lifecycle event or actor membership identifiers.
+FK_INDEXES: tuple[tuple[str, str], ...] = (
+    ("matter_tasks", "neutralized_by_ip_lifecycle_version"),
+    ("matter_hearings", "neutralized_by_ip_lifecycle_version"),
+    ("hearing_reminders", "neutralized_by_ip_lifecycle_version"),
+    ("matter_next_hearing_suggestions", "neutralized_by_ip_lifecycle_version"),
+    ("matter_deadlines", "neutralized_by_ip_lifecycle_version"),
+    ("notification_delivery_intents", "neutralized_by_ip_lifecycle_version"),
+    ("calendar_event_syncs", "neutralized_ip_docket_id"),
+    ("calendar_event_syncs", "neutralized_by_ip_lifecycle_version"),
+    ("ip_workflow_versions", "proposed_by_membership_company_id"),
+    ("ip_workflow_versions", "reviewed_by_membership_company_id"),
+    ("ip_workflow_versions", "legal_approved_by_membership_company_id"),
+)
+
 _DOWNGRADE_LOCK_TABLES = (
     "ip_workflow_definitions",
     "ip_workflow_versions",
@@ -191,7 +208,12 @@ def _add_lifecycle_provenance(table_name: str) -> None:
     op.create_index(
         _provenance_index_name(table_name),
         table_name,
-        ["neutralized_by_ip_lifecycle_event_id"],
+        [
+            "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            target_column,
+            "neutralized_by_ip_lifecycle_version",
+        ],
     )
     with op.batch_alter_table(table_name) as batch_op:
         batch_op.create_foreign_key(
@@ -842,15 +864,18 @@ def upgrade() -> None:
         "ip_workflow_versions",
         ["definition_id"],
     )
-    for actor_column in (
-        "proposed_by_membership_id",
-        "reviewed_by_membership_id",
-        "legal_approved_by_membership_id",
+    for actor_column, actor_company_column in (
+        ("proposed_by_membership_id", "proposed_by_membership_company_id"),
+        ("reviewed_by_membership_id", "reviewed_by_membership_company_id"),
+        (
+            "legal_approved_by_membership_id",
+            "legal_approved_by_membership_company_id",
+        ),
     ):
         op.create_index(
             f"ix_ip_workflow_versions_{actor_column}",
             "ip_workflow_versions",
-            [actor_column],
+            [actor_column, actor_company_column],
         )
     _create_workflow_version_immutability_guard(op.get_bind())
 

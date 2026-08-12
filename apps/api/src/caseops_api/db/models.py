@@ -1893,6 +1893,9 @@ class MatterTask(Base):
         Index(
             "ix_matter_tasks_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -2097,6 +2100,9 @@ class MatterHearing(Base):
         Index(
             "ix_matter_hearings_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -2469,6 +2475,9 @@ class HearingReminder(Base):
         Index(
             "ix_hearing_reminders_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -2894,6 +2903,9 @@ class CalendarEventSync(Base):
         Index(
             "ix_calendar_event_syncs_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "neutralized_ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -3945,6 +3957,9 @@ class NotificationDeliveryIntent(Base):
         Index(
             "ix_notification_intents_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -5433,6 +5448,9 @@ class MatterNextHearingSuggestion(Base):
         Index(
             "ix_next_hearing_suggestions_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -12410,6 +12428,9 @@ class MatterDeadline(Base):
         Index(
             "ix_matter_deadlines_ip_lifecycle_event",
             "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "ip_docket_id",
+            "neutralized_by_ip_lifecycle_version",
         ),
     )
 
@@ -13813,6 +13834,21 @@ class IpWorkflowVersion(Base):
             name="ck_ip_workflow_version_approved_evidence",
         ),
         Index("ix_ip_workflow_versions_company_status", "company_id", "status"),
+        Index(
+            "ix_ip_workflow_versions_proposed_by_membership_id",
+            "proposed_by_membership_id",
+            "proposed_by_membership_company_id",
+        ),
+        Index(
+            "ix_ip_workflow_versions_reviewed_by_membership_id",
+            "reviewed_by_membership_id",
+            "reviewed_by_membership_company_id",
+        ),
+        Index(
+            "ix_ip_workflow_versions_legal_approved_by_membership_id",
+            "legal_approved_by_membership_id",
+            "legal_approved_by_membership_company_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -13836,7 +13872,7 @@ class IpWorkflowVersion(Base):
         DateTime(timezone=True), nullable=True
     )
     proposed_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True
+        String(36), nullable=True
     )
     proposed_by_membership_company_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
@@ -13852,7 +13888,7 @@ class IpWorkflowVersion(Base):
         JSON, nullable=True
     )
     reviewed_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True
+        String(36), nullable=True
     )
     reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
@@ -13868,7 +13904,7 @@ class IpWorkflowVersion(Base):
         JSON, nullable=True
     )
     legal_approved_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True
+        String(36), nullable=True
     )
     legal_approved_by_membership_company_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
