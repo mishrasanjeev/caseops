@@ -20,11 +20,17 @@ CaseOps uses one layered durable-async model:
 1. The request transaction writes the domain state, audit evidence, and a
    neutral `domain_outbox_events` row atomically.
 2. `domain_consumer_effects` owns idempotent consumer checkpoints/effects.
-3. Configured multi-step or long-running workflows use the existing Temporal
+3. `api_idempotency_records` owns the neutral HTTP mutation fingerprint and
+   stable result identity; domain uniqueness and consumer-effect keys remain
+   necessary additional safeguards.
+4. `ip_workflow_definitions` and `ip_workflow_versions` own immutable legal
+   transition policy. They are not an async executor, queue, or replacement for
+   the existing dedicated IP lifecycle writer.
+5. Configured multi-step or long-running workflows use the existing Temporal
    adapter and worker conventions in `services/durable_workflows.py`.
-4. Bounded migrations, scheduled polling, report generation, and queue drains
+6. Bounded migrations, scheduled polling, report generation, and queue drains
    use exact-image Cloud Run Jobs under the existing scheduler/job inventory.
-5. `NotificationDeliveryIntent` remains the sole recipient/channel delivery
+7. `NotificationDeliveryIntent` remains the sole recipient/channel delivery
    effect owner; provider-operation rows remain external-operation evidence.
 
 Celery, RQ, Dramatiq, a second Temporal wrapper, IP-specific queue tables, and
@@ -51,6 +57,13 @@ worker build identity, and task queue are reported through the existing
 integration/readiness surfaces without exposing secret values. Production
 activation remains disabled until the slice-specific readiness and canary gate
 passes.
+
+Publishing an ownership entry, event catalogue row, workflow definition, or
+data-class registration never activates a producer, consumer, legal workflow,
+provider call, or external effect. IPLF-027A is an additive admission boundary:
+it seeds no active workflow and claims no runtime emission. Runtime activation,
+consumer draining, transition commands, replay/dead-letter operations, and
+mixed-revision proof remain separately gated behavior work.
 
 Rollout uses expand schema, deploy compatible producers/consumers, backfill or
 requeue only approved manifests, verify idempotency/fencing, switch the producer,

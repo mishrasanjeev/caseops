@@ -35,11 +35,12 @@ jobs:
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
-      - name: Validate IP program manifest, ownership and ARCH-OPS contracts
+      - name: Validate IP program, ownership, ARCH-OPS and data-class contracts
         run: |
           uv --directory apps/api run python ../../scripts/ip_program_manifest.py validate
           uv --directory apps/api run python ../../scripts/ip_ownership_ledger.py validate
           uv --directory apps/api run python ../../scripts/ip_arch_ops_contract.py validate
+          uv --directory apps/api run python ../../scripts/ip_data_class_registry.py validate
 
       - name: Validate IP research golden-query contract
         run: uv --directory apps/api run python ../../scripts/run_ip_golden_queries.py

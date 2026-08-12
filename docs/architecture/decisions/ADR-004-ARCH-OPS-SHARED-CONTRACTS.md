@@ -23,13 +23,15 @@ The following contracts are mandatory before a behavior can activate:
 2. JSON idempotency input uses one documented canonical serialization. A file
    or multipart request additionally hashes canonical metadata, content bytes,
    content length, media type, and declared file/version identity. Client and
-   backend golden fixtures must produce identical digests.
+   backend golden fixtures must produce identical digests. The neutral API
+   admission record is named exactly `api_idempotency_records`; aliases and
+   domain-private copies are rejected.
 3. Async operations expose `queued`, `running`, `succeeded`,
    `partially_succeeded`, `failed`, `cancel_requested`, `cancelled`, and
    `expired` where applicable, plus safe counts, checkpoint, result manifest,
    correlation, retry eligibility, and cancellation eligibility. Cancellation
    does not erase committed effects.
-4. A cursor is signed, expiring, versioned, and scoped to tenant, actor-access
+4. A cursor is signed, expiring, versioned, and scoped to company, actor-access
    fingerprint, sort, filter, and stable-snapshot boundary. A changed scope or
    invalid/expired signature fails closed; a response never silently resumes
    under different semantics.
@@ -53,7 +55,10 @@ The following contracts are mandatory before a behavior can activate:
 `ARCH_OPS_CONTRACT.yaml` maps every binding requirement to its owner and
 repository evidence. `ip_arch_ops_contract.py` validates exact PRD coverage,
 artifact existence, catalogue schemas, and these non-negotiable contract
-clauses in CI. Each feature still supplies behavior-level unit/integration,
+clauses in CI. The bounded IPLF-027A data-class registry must match the five
+admitted foundation table names before a migration can land; this admission
+check does not claim the IPLF-028 retention/hold/export implementation. Each
+feature still supplies behavior-level unit/integration,
 mixed-revision, performance, and deployed journey evidence when its own slice
 is implemented; this ADR does not fabricate that future acceptance.
 

@@ -58,3 +58,39 @@ def test_forbidden_source_scan_catches_exact_and_disguised_control_planes() -> N
 
     assert any("forbidden duplicate identifier ip_tasks" in error for error in errors)
     assert any("forbidden duplicate pattern ip_provider_control_plane" in error for error in errors)
+
+
+def test_iplf_027_admits_only_exact_shared_and_workflow_foundation_names() -> None:
+    ledger = _ledger()
+    decision = next(
+        row for row in ledger["epic_decisions"] if row["epic_id"] == "IPLF-027"
+    )
+
+    names_by_kind = {
+        kind: {row["name"] for row in decision["components"] if row["kind"] == kind}
+        for kind in ip_ownership_ledger.IPLF_027_COMPONENTS_BY_KIND
+    }
+
+    assert names_by_kind == ip_ownership_ledger.IPLF_027_COMPONENTS_BY_KIND
+
+
+def test_iplf_027_rejects_idempotency_alias_and_missing_workflow_table() -> None:
+    ledger = _ledger()
+    decision = next(
+        row for row in ledger["epic_decisions"] if row["epic_id"] == "IPLF-027"
+    )
+    idempotency = next(
+        row
+        for row in decision["components"]
+        if row["name"] == "api_idempotency_records"
+    )
+    idempotency["name"] = "idempotency_records"
+    decision["components"] = [
+        row
+        for row in decision["components"]
+        if row["name"] != "ip_workflow_versions"
+    ]
+
+    errors = ip_ownership_ledger.validate(ledger, scan_repository=False)
+
+    assert any("IPLF-027 table components must exactly match" in error for error in errors)
