@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Validate the bounded IPLF-027A data-class admission registry.
+"""Validate the bounded IPLF-027A data-class implementation registry.
 
-This is deliberately not the IPLF-028 runtime data map. It prevents an IPLF-027A
-migration from drifting away from the ownership ledger or shipping a new store
-without an explicit fail-closed retention/hold/export/purge/restore disposition.
+This is deliberately not the IPLF-028 runtime data map. It keeps the five
+IPLF-027A migration-managed tables aligned with the ownership ledger while
+requiring every data operation to remain explicitly fail-closed until IPLF-028
+provides the approved retention/hold/export/purge/restore handlers.
 """
 
 from __future__ import annotations
@@ -32,6 +33,9 @@ EXPECTED_TABLES = {
     "ip_workflow_versions",
 }
 CONFIDENTIALITY_VALUES = {"internal", "confidential", "privileged"}
+REGISTRY_STATUS = "repository_schema_implemented_runtime_unreleased"
+STORAGE_VALUE = "migration_managed_relational_table"
+RUNTIME_STATUS = "repository_implemented_runtime_unreleased"
 DISPOSITION_FIELDS = {
     "retention_disposition",
     "legal_hold_disposition",
@@ -86,8 +90,10 @@ def validate(registry: dict[str, Any] | None = None) -> list[str]:
         errors.append("IPLF-027A data-class registry schema_version must be 1")
     if registry.get("slice_id") != "IPLF-027A":
         errors.append("data-class registry must be bounded to IPLF-027A")
-    if registry.get("status") != "repository_admission_only_tables_not_created":
-        errors.append("data-class registry must not claim runtime tables or handlers")
+    if registry.get("status") != REGISTRY_STATUS:
+        errors.append(
+            "data-class registry must state repository implementation with runtime unreleased"
+        )
     expected_ref = str(LEDGER_PATH.relative_to(REPO_ROOT)).replace("\\", "/")
     if registry.get("ownership_ledger_ref") != expected_ref:
         errors.append("data-class registry must reference the binding ownership ledger")
@@ -145,13 +151,15 @@ def validate(registry: dict[str, Any] | None = None) -> list[str]:
             errors.append(f"data-class/{data_class_id}: owner differs from ledger")
         if row.get("company_scope") != "required" or row.get("company_key") != "company_id":
             errors.append(f"data-class/{data_class_id}: company_id scope must be required")
-        if row.get("storage") != "planned_postgresql_table":
-            errors.append(f"data-class/{data_class_id}: storage must remain planned")
+        if row.get("storage") != STORAGE_VALUE:
+            errors.append(
+                f"data-class/{data_class_id}: storage must be migration-managed relational"
+            )
         if row.get("confidentiality") not in CONFIDENTIALITY_VALUES:
             errors.append(f"data-class/{data_class_id}: invalid confidentiality")
         if row.get("disposition_handler") != "unimplemented_fail_closed":
             errors.append(f"data-class/{data_class_id}: disposition must fail closed")
-        if row.get("runtime_status") != "contract_only_not_created":
+        if row.get("runtime_status") != RUNTIME_STATUS:
             errors.append(f"data-class/{data_class_id}: runtime status overclaims delivery")
         if row.get("introduced_by") != "IPLF-027A":
             errors.append(f"data-class/{data_class_id}: introduced_by must be IPLF-027A")
@@ -171,7 +179,10 @@ def main(argv: list[str] | None = None) -> int:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    print("IPLF-027A data-class registry valid: five company-scoped admissions")
+    print(
+        "IPLF-027A data-class registry valid: five company-scoped "
+        "migration-managed classes"
+    )
     return 0
 
 

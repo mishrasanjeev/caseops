@@ -56,3 +56,14 @@ def test_registry_rejects_owner_scope_handler_and_iplf_028_overclaim() -> None:
     assert any("disposition must fail closed" in error for error in errors)
     assert any("runtime status overclaims delivery" in error for error in errors)
     assert any("purge_disposition must be explicit" in error for error in errors)
+
+
+def test_registry_rejects_a_regression_to_pre_schema_admission() -> None:
+    registry = _registry()
+    registry["status"] = "repository_admission_only_tables_not_created"
+    registry["data_classes"][0]["storage"] = "planned_postgresql_table"
+
+    errors = ip_data_class_registry.validate(registry)
+
+    assert any("must state repository implementation" in error for error in errors)
+    assert any("storage must be migration-managed relational" in error for error in errors)

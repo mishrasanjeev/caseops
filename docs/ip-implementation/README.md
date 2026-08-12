@@ -26,12 +26,12 @@ python scripts/ip_program_manifest.py generate
 all M2/M3 proposals. `ARCH_OPS_CONTRACT.yaml` publishes the exact
 ARCH-OPS-01..26 control mapping, and `IP_EVENT_CATALOG.yaml` publishes stable
 versioned audit-action and domain-event schemas. Their validators are required
-CI gates. `IPLF_027A_DATA_CLASS_REGISTRY.yaml` is the narrower pre-schema
-admission for the five IPLF-027A foundation tables; its fail-closed dispositions
-do not claim the runtime retention/hold/export/purge/restore work allocated to
-IPLF-028. These controls authorize no early nullable schema and do not replace the
-behavior-level journeys, mixed-revision proof, deployment evidence, or human
-approval allocated to later slices.
+CI gates. `IPLF_027A_DATA_CLASS_REGISTRY.yaml` records the repository-implemented,
+runtime-unreleased, migration-managed state of the five IPLF-027A foundation
+tables. Its fail-closed dispositions do not claim the runtime
+retention/hold/export/purge/restore work allocated to IPLF-028. These controls do
+not replace the behavior-level journeys, mixed-revision proof, deployment
+evidence, or human approval allocated to later slices.
 
 `IP_CAPABILITY_MODEL.md` documents the IPLF-020A extension of the existing
 backend/frontend capability catalogues. Server capability, billing entitlement,
