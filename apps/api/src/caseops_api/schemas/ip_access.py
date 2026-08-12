@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 IpAccessSubjectType = Literal["membership", "team"]
 IpAccessChangeAction = Literal[
@@ -101,6 +101,11 @@ class IpAccessChangeRequest(BaseModel):
     effective_from: datetime | None = None
     expires_at: datetime | None = None
 
+    @field_validator("reason", mode="before")
+    @classmethod
+    def strip_reason(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
     @model_validator(mode="after")
     def validate_action_fields(self) -> IpAccessChangeRequest:
         if self.action in {"grant", "add_wall"}:
@@ -113,8 +118,16 @@ class IpAccessChangeRequest(BaseModel):
         if self.action == "set_restricted" and self.restricted is None:
             raise ValueError("restricted is required for set_restricted")
         if self.expires_at is not None:
-            start = self.effective_from
-            if start is not None and self.expires_at <= start:
+            start = self.effective_from or datetime.now(UTC)
+            normalized_start = (
+                start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
+            )
+            normalized_expiry = (
+                self.expires_at.replace(tzinfo=UTC)
+                if self.expires_at.tzinfo is None
+                else self.expires_at.astimezone(UTC)
+            )
+            if normalized_expiry <= normalized_start:
                 raise ValueError("expires_at must be later than effective_from")
         return self
 

@@ -57,6 +57,7 @@ from caseops_api.schemas.ip_access import (
     RecordAccessReconciliationReport,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.session_context import SessionContext
 
 
@@ -384,6 +385,21 @@ def _load_ip_docket_for_access_management(
     docket_id: str,
     lock: bool = False,
 ) -> IpDocketRecord:
+    # Apply uses one lock order with Matter lifecycle disposal: parent Matter,
+    # then IP docket. Preview is read-only but applies the same fail-closed
+    # terminal checks without locks.
+    linked_statement = (
+        select(Matter)
+        .join(IpDocketRecord, IpDocketRecord.matter_id == Matter.id)
+        .where(
+            IpDocketRecord.id == docket_id,
+            IpDocketRecord.company_id == context.company.id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if lock:
+        linked_statement = linked_statement.with_for_update(of=Matter)
+    linked_matter = session.scalar(linked_statement)
     statement = select(IpDocketRecord).where(
         IpDocketRecord.id == docket_id,
         IpDocketRecord.company_id == context.company.id,
@@ -391,12 +407,80 @@ def _load_ip_docket_for_access_management(
     if lock:
         statement = statement.with_for_update(of=IpDocketRecord)
     docket = session.scalar(statement)
-    if docket is None:
+    if (
+        docket is None
+        or not docket.is_active
+        or docket.archived_by_matter_disposal
+        or (docket.matter_id is not None and linked_matter is None)
+        or (linked_matter is not None and not matter_is_operational(linked_matter))
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="IP docket record not found.",
         )
     return docket
+
+
+def _linked_matter_visibility_by_membership(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter | None,
+    memberships: list[CompanyMembership],
+    membership_teams: dict[str, set[str]],
+    now: datetime,
+) -> dict[str, bool]:
+    if matter is None:
+        return {}
+    grants = list(
+        session.scalars(
+            select(MatterAccessGrant).where(MatterAccessGrant.matter_id == matter.id)
+        ).all()
+    )
+    walls = list(
+        session.scalars(select(EthicalWall).where(EthicalWall.matter_id == matter.id)).all()
+    )
+    team_scoping_enabled = _team_scoping_enabled(session, context.company.id)
+    result: dict[str, bool] = {}
+    for membership in memberships:
+        if membership.role == MembershipRole.OWNER:
+            result[membership.id] = True
+            continue
+        team_ids = membership_teams.get(membership.id, set())
+        walled = any(
+            _active_at(wall, now)
+            and _subject_matches(
+                membership_id=membership.id,
+                team_ids=team_ids,
+                subject_membership_id=wall.excluded_membership_id,
+                subject_team_id=wall.excluded_team_id,
+            )
+            for wall in walls
+        )
+        granted = any(
+            _active_at(grant, now)
+            and _subject_matches(
+                membership_id=membership.id,
+                team_ids=team_ids,
+                subject_membership_id=grant.membership_id,
+                subject_team_id=grant.team_id,
+            )
+            for grant in grants
+        )
+        base_visible = not walled and (
+            not matter.restricted_access
+            or matter.assignee_membership_id == membership.id
+            or granted
+        )
+        team_visible = (
+            not team_scoping_enabled
+            or matter.team_id is None
+            or matter.team_id in team_ids
+            or granted
+            or matter.assignee_membership_id == membership.id
+        )
+        result[membership.id] = base_visible and team_visible
+    return result
 
 
 def _ip_access_rows(
@@ -699,6 +783,14 @@ def _ip_access_preview_for_docket(
     linked_matter = (
         session.get(Matter, docket.matter_id) if docket.matter_id is not None else None
     )
+    linked_visibility = _linked_matter_visibility_by_membership(
+        session,
+        context=context,
+        matter=linked_matter,
+        memberships=memberships,
+        membership_teams=membership_teams,
+        now=now,
+    )
     affected: list[IpAccessAffectedMembership] = []
     subject_membership_id = payload.subject_id if payload.subject_type == "membership" else None
     subject_team_id = payload.subject_id if payload.subject_type == "team" else None
@@ -756,18 +848,9 @@ def _ip_access_preview_for_docket(
                 else None
             ),
         )
-        linked_visible: bool | None = None
-        if linked_matter is not None:
-            linked_context = SessionContext(
-                company=context.company,
-                user=membership.user,
-                membership=membership,
-            )
-            linked_visible = can_access(
-                session,
-                context=linked_context,
-                matter=linked_matter,
-            )
+        linked_visible = (
+            linked_visibility[membership.id] if linked_matter is not None else None
+        )
         in_subject = payload.action == "set_restricted" or _subject_matches(
             membership_id=membership.id,
             team_ids=team_ids,
@@ -1037,6 +1120,11 @@ def apply_ip_access_change(
         walls=walls,
     )
     now = datetime.now(UTC)
+    if payload.expires_at is not None and _as_utc(payload.expires_at) <= now:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Access expiry passed after preview. Preview the change again.",
+        )
     if payload.action == "set_restricted":
         docket.restricted = bool(payload.restricted)
     elif payload.action == "grant":

@@ -317,7 +317,7 @@ def test_ip_delivery_holds_docket_lock_during_final_authorization(
 
     authorization_entered = Event()
     authorize_delivery = Event()
-    worker_failures: list[BaseException] = []
+    worker_failures: list[Exception] = []
 
     def paused_authorization(_session: Session, _intent: NotificationDeliveryIntent) -> bool:
         authorization_entered.set()
@@ -340,7 +340,7 @@ def test_ip_delivery_holds_docket_lock_during_final_authorization(
                     company_id=company_id,
                 )
                 session.commit()
-        except BaseException as exc:  # pragma: no cover - surfaced in parent thread
+        except Exception as exc:  # pragma: no cover - surfaced in parent thread
             worker_failures.append(exc)
 
     worker = Thread(target=process_delivery, name="ip-delivery-lock-proof")

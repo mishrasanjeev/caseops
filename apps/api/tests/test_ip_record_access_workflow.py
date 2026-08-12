@@ -13,6 +13,7 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     IpDocketRecord,
+    Matter,
     MatterAccessGrant,
     NotificationDeliveryChannel,
     User,
@@ -86,6 +87,25 @@ def test_ip_access_change_schema_rejects_non_increasing_effective_window() -> No
             expires_at=effective_from - timedelta(seconds=1),
         )
 
+    with pytest.raises(ValidationError, match="expires_at must be later"):
+        IpAccessChangeRequest(
+            action="grant",
+            expected_access_policy_version=0,
+            reason="Coverage regression assertion",
+            subject_type="membership",
+            subject_id="membership-1",
+            expires_at=effective_from - timedelta(seconds=1),
+        )
+
+
+def test_ip_access_change_schema_rejects_whitespace_only_reason() -> None:
+    with pytest.raises(ValidationError, match="at least 5 characters"):
+        IpAccessChangeRequest(
+            action="set_restricted",
+            expected_access_policy_version=0,
+            reason="     ",
+            restricted=True,
+        )
 
 def _invite_admin(
     client: TestClient,
@@ -441,6 +461,91 @@ def test_ip_access_rejects_cross_company_subject_and_self_lockout(
     )
     assert self_revoke.status_code == 409
     assert "different authorized owner" in self_revoke.text
+
+
+def test_ip_access_change_fails_closed_for_terminal_linked_matter(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_headers = auth_headers(str(bootstrap["access_token"]))
+    docket, matter_id = _create_linked_restricted_docket(
+        client,
+        owner_headers=owner_headers,
+    )
+    docket_id = str(docket["id"])
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        docket_row = session.get(IpDocketRecord, docket_id)
+        assert matter is not None and docket_row is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        # Simulate a stale operational child to prove the access loader also
+        # checks the authoritative parent lifecycle, not only child flags.
+        docket_row.is_active = True
+        docket_row.archived_by_matter_disposal = False
+        session.commit()
+
+    payload = {
+        "action": "set_restricted",
+        "expected_access_policy_version": 1,
+        "reason": "Terminal docket mutation must fail closed.",
+        "restricted": False,
+    }
+    preview = client.post(
+        f"/api/ip/dockets/{docket_id}/access/preview",
+        headers=owner_headers,
+        json=payload,
+    )
+    assert preview.status_code == 404
+    apply = client.post(
+        f"/api/ip/dockets/{docket_id}/access/apply",
+        headers=owner_headers,
+        json={**payload, "preview_token": "0" * 64},
+    )
+    assert apply.status_code == 404
+    with get_session_factory()() as session:
+        docket_row = session.get(IpDocketRecord, docket_id)
+        assert docket_row is not None
+        assert docket_row.access_policy_version == 1
+
+
+def test_ip_access_preview_batches_linked_matter_visibility(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services import matter_access
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    member_id, _ = _invite_admin(
+        client,
+        owner_token=owner_token,
+        name="Batch Visibility Reviewer",
+        email="batch-visibility@asterlegal.in",
+    )
+    docket, _ = _create_linked_restricted_docket(
+        client,
+        owner_headers=owner_headers,
+    )
+
+    def reject_per_membership_query(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("linked Matter preview performed a per-membership query")
+
+    monkeypatch.setattr(matter_access, "can_access", reject_per_membership_query)
+    preview = client.post(
+        f"/api/ip/dockets/{docket['id']}/access/preview",
+        headers=owner_headers,
+        json={
+            "action": "grant",
+            "expected_access_policy_version": 1,
+            "reason": "Bounded linked visibility calculation.",
+            "subject_type": "membership",
+            "subject_id": member_id,
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["linked_matter_mismatch"] is True
 
 
 def test_ip_access_wall_workflow_is_effective_dated_and_reversible(
