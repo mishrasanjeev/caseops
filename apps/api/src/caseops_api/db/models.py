@@ -1853,6 +1853,47 @@ class MatterTask(Base):
             "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_matter_task_exactly_one_target",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_matter_task_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_matter_task_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_matter_task_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'cancelled'",
+            name="ck_matter_task_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_matter_task_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_matter_tasks_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -1898,6 +1939,15 @@ class MatterTask(Base):
         nullable=False,
         default=False,
         server_default=false(),
+    )
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -2007,6 +2057,47 @@ class MatterHearing(Base):
             "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_matter_hearing_exactly_one_target",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_matter_hearing_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_matter_hearing_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_matter_hearing_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'cancelled'",
+            name="ck_matter_hearing_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_matter_hearing_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_matter_hearings_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -2057,6 +2148,15 @@ class MatterHearing(Base):
         nullable=False,
         default=False,
         server_default=false(),
+    )
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -2329,6 +2429,47 @@ class HearingReminder(Base):
             "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_hearing_reminder_exactly_one_target",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_hearing_reminder_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_hearing_reminder_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_hearing_reminder_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'cancelled'",
+            name="ck_hearing_reminder_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_hearing_reminder_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_hearing_reminders_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -2386,6 +2527,15 @@ class HearingReminder(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2700,6 +2850,51 @@ class CalendarEventSync(Base):
             "source_id",
             name="uq_calendar_event_sync_connection_source",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "neutralized_ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_calendar_event_sync_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_calendar_event_sync_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_calendar_event_sync_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR "
+            "sync_status IN ('delete_pending', 'deleted')",
+            name="ck_calendar_event_sync_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_ip_docket_id IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_ip_docket_id IS NOT NULL)",
+            name="ck_calendar_event_sync_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_calendar_event_syncs_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -2729,6 +2924,18 @@ class CalendarEventSync(Base):
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dead_letter_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_ip_docket_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -3698,6 +3905,47 @@ class NotificationDeliveryIntent(Base):
             "matter_id IS NULL OR ip_docket_id IS NULL",
             name="ck_notification_delivery_at_most_one_work_target",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_notification_delivery_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_notification_delivery_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_notification_delivery_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status IN ('blocked', 'cancelled')",
+            name="ck_notification_delivery_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_notification_delivery_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_notification_intents_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -3798,6 +4046,15 @@ class NotificationDeliveryIntent(Base):
         index=True,
     )
     provider_state_occurred_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -5136,6 +5393,47 @@ class MatterNextHearingSuggestion(Base):
             "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_next_hearing_suggestion_exactly_one_target",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_next_hearing_suggestion_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_next_hearing_suggestion_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_next_hearing_suggestion_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'rejected'",
+            name="ck_next_hearing_suggestion_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_next_hearing_suggestion_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_next_hearing_suggestions_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -5173,6 +5471,15 @@ class MatterNextHearingSuggestion(Base):
         index=True,
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -12063,6 +12370,47 @@ class MatterDeadline(Base):
             "CASE WHEN ip_docket_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_matter_deadline_exactly_one_target",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "ip_docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_matter_deadline_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL "
+            "AND company_id IS NOT NULL)",
+            name="ck_matter_deadline_ip_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_matter_deadline_ip_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'cancelled'",
+            name="ck_matter_deadline_ip_lifecycle_terminal_state",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_matter_deadline_ip_lifecycle_provenance_target",
+        ),
+        Index(
+            "ix_matter_deadlines_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -12113,6 +12461,15 @@ class MatterDeadline(Base):
         nullable=False,
         default=False,
         server_default=false(),
+    )
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 
@@ -13237,6 +13594,260 @@ class DomainConsumerEffect(Base):
     )
 
 
+class IpWorkflowDefinition(Base):
+    """Company-owned identity for an inert, versioned IP lifecycle workflow."""
+
+    __tablename__ = "ip_workflow_definitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "company_id", name="uq_ip_workflow_definition_id_company"
+        ),
+        UniqueConstraint(
+            "company_id", "key", name="uq_ip_workflow_definition_company_key"
+        ),
+        CheckConstraint(
+            "aggregate_type = 'ip_docket_record'",
+            name="ck_ip_workflow_definition_aggregate_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    aggregate_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="ip_docket_record"
+    )
+    initial_state: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class IpWorkflowVersion(Base):
+    """Immutable workflow contract shape; IPLF-027B owns activation and UX."""
+
+    __tablename__ = "ip_workflow_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["definition_id", "company_id"],
+            ["ip_workflow_definitions.id", "ip_workflow_definitions.company_id"],
+            name="fk_ip_workflow_version_definition_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proposed_by_membership_id", "proposed_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workflow_version_proposer_company",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by_membership_id", "reviewed_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workflow_version_reviewer_company",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            [
+                "legal_approved_by_membership_id",
+                "legal_approved_by_membership_company_id",
+            ],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_workflow_version_legal_approver_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_workflow_version_id_company"),
+        UniqueConstraint(
+            "definition_id",
+            "company_id",
+            "version",
+            name="uq_ip_workflow_version_definition_company_number",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "definition_id",
+            "version",
+            name="uq_ip_workflow_version_pin",
+        ),
+        CheckConstraint("version > 0", name="ck_ip_workflow_version_positive"),
+        CheckConstraint(
+            "schema_version > 0", name="ck_ip_workflow_schema_version_positive"
+        ),
+        CheckConstraint(
+            "status IN ('candidate', 'approved', 'active', 'retired', 'disabled')",
+            name="ck_ip_workflow_version_status",
+        ),
+        CheckConstraint(
+            "effective_until IS NULL OR effective_from IS NULL OR "
+            "effective_until >= effective_from",
+            name="ck_ip_workflow_version_effective_range",
+        ),
+        CheckConstraint(
+            "proposed_by_membership_id IS NULL OR reviewed_by_membership_id IS NULL "
+            "OR proposed_by_membership_id <> reviewed_by_membership_id",
+            name="ck_ip_workflow_version_reviewer_distinct",
+        ),
+        CheckConstraint(
+            "proposed_by_membership_id IS NULL OR legal_approved_by_membership_id IS NULL "
+            "OR proposed_by_membership_id <> legal_approved_by_membership_id",
+            name="ck_ip_workflow_version_legal_approver_distinct",
+        ),
+        CheckConstraint(
+            "(proposed_by_membership_id IS NULL AND "
+            "proposed_by_membership_company_id IS NULL) OR "
+            "(proposed_by_membership_id IS NOT NULL AND "
+            "proposed_by_membership_company_id = company_id)",
+            name="ck_ip_workflow_version_proposer_company_complete",
+        ),
+        CheckConstraint(
+            "(reviewed_by_membership_id IS NULL AND "
+            "reviewed_by_membership_company_id IS NULL) OR "
+            "(reviewed_by_membership_id IS NOT NULL AND "
+            "reviewed_by_membership_company_id = company_id)",
+            name="ck_ip_workflow_version_reviewer_company_complete",
+        ),
+        CheckConstraint(
+            "(legal_approved_by_membership_id IS NULL AND "
+            "legal_approved_by_membership_company_id IS NULL) OR "
+            "(legal_approved_by_membership_id IS NOT NULL AND "
+            "legal_approved_by_membership_company_id = company_id)",
+            name="ck_ip_workflow_version_legal_approver_company_complete",
+        ),
+        CheckConstraint(
+            "length(content_hash) = 64 AND length(source_hash) = 64",
+            name="ck_ip_workflow_version_hash_lengths",
+        ),
+        CheckConstraint(
+            "(status = 'candidate' AND approved_at IS NULL AND activated_at IS NULL "
+            "AND retired_at IS NULL) OR "
+            "(status = 'approved' AND approved_at IS NOT NULL AND activated_at IS NULL "
+            "AND retired_at IS NULL) OR "
+            "(status = 'active' AND approved_at IS NOT NULL AND activated_at IS NOT NULL "
+            "AND retired_at IS NULL) OR "
+            "(status = 'retired' AND approved_at IS NOT NULL AND retired_at IS NOT NULL) OR "
+            "(status = 'disabled' AND retired_at IS NOT NULL)",
+            name="ck_ip_workflow_version_status_timestamps",
+        ),
+        CheckConstraint(
+            "status NOT IN ('approved', 'active', 'retired') OR "
+            "(proposer_membership_id_snapshot IS NOT NULL AND "
+            "proposer_user_id_snapshot IS NOT NULL AND proposer_label_snapshot IS NOT NULL "
+            "AND proposer_authority_snapshot_json IS NOT NULL AND "
+            "reviewer_membership_id_snapshot IS NOT NULL AND "
+            "reviewer_user_id_snapshot IS NOT NULL AND reviewer_label_snapshot IS NOT NULL "
+            "AND reviewer_authority_snapshot_json IS NOT NULL AND "
+            "legal_approver_membership_id_snapshot IS NOT NULL AND "
+            "legal_approver_user_id_snapshot IS NOT NULL "
+            "AND legal_approver_label_snapshot IS NOT NULL "
+            "AND legal_approver_authority_snapshot_json IS NOT NULL "
+            "AND fixtures_passed_at IS NOT NULL)",
+            name="ck_ip_workflow_version_approved_evidence",
+        ),
+        Index("ix_ip_workflow_versions_company_status", "company_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    definition_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="candidate")
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    transition_table_json: Mapped[list | dict] = mapped_column(JSON, nullable=False)
+    fixture_set_json: Mapped[list | dict] = mapped_column(JSON, nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    engine_compatibility: Mapped[str] = mapped_column(String(80), nullable=False)
+    effective_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    effective_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    proposed_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    proposed_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    proposer_membership_id_snapshot: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    proposer_user_id_snapshot: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    proposer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    proposer_authority_snapshot_json: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    reviewer_membership_id_snapshot: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    reviewer_user_id_snapshot: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    reviewer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewer_authority_snapshot_json: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
+    legal_approved_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    legal_approved_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    legal_approver_membership_id_snapshot: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    legal_approver_user_id_snapshot: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    legal_approver_label_snapshot: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    legal_approver_authority_snapshot_json: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
+    fixtures_passed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class IpDocketRecord(Base):
     __tablename__ = "ip_docket_records"
     __table_args__ = (
@@ -13256,6 +13867,28 @@ class IpDocketRecord(Base):
             ["successor_docket_id", "company_id"],
             ["ip_docket_records.id", "ip_docket_records.company_id"],
             name="fk_ip_docket_successor_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workflow_definition_id", "company_id"],
+            ["ip_workflow_definitions.id", "ip_workflow_definitions.company_id"],
+            name="fk_ip_docket_workflow_definition_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "workflow_version_id",
+                "company_id",
+                "workflow_definition_id",
+                "workflow_version_number",
+            ],
+            [
+                "ip_workflow_versions.id",
+                "ip_workflow_versions.company_id",
+                "ip_workflow_versions.definition_id",
+                "ip_workflow_versions.version",
+            ],
+            name="fk_ip_docket_workflow_version_pin",
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_docket_id_company"),
@@ -13283,6 +13916,17 @@ class IpDocketRecord(Base):
         CheckConstraint(
             "successor_docket_id IS NULL OR successor_docket_id <> id",
             name="ck_ip_docket_successor_not_self",
+        ),
+        CheckConstraint(
+            "(workflow_definition_id IS NULL AND workflow_version_id IS NULL AND "
+            "workflow_version_number IS NULL) OR "
+            "(workflow_definition_id IS NOT NULL AND workflow_version_id IS NOT NULL "
+            "AND workflow_version_number IS NOT NULL)",
+            name="ck_ip_docket_workflow_pin_complete",
+        ),
+        CheckConstraint(
+            "workflow_version_number IS NULL OR workflow_version_number > 0",
+            name="ck_ip_docket_workflow_version_positive",
         ),
     )
 
@@ -13315,6 +13959,15 @@ class IpDocketRecord(Base):
     lifecycle_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
     lifecycle_evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     successor_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    workflow_definition_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    workflow_version_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    workflow_version_number: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
+    )
     archived_by_matter_disposal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -13383,6 +14036,13 @@ class IpDocketEvent(Base):
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_docket_event_id_company"),
         UniqueConstraint(
+            "id",
+            "company_id",
+            "docket_id",
+            "resulting_lifecycle_version",
+            name="uq_ip_docket_event_lifecycle_provenance",
+        ),
+        UniqueConstraint(
             "company_id",
             "docket_id",
             "sequence",
@@ -13424,6 +14084,12 @@ class IpDocketEvent(Base):
             "reconciles_event_id IS NULL OR reconciles_event_id <> id",
             name="ck_ip_docket_event_reconciles_not_self",
         ),
+        CheckConstraint(
+            "resulting_lifecycle_version IS NULL OR "
+            "(resulting_lifecycle_version > 0 AND "
+            "event_kind = 'lifecycle_transition' AND candidate_status = 'confirmed')",
+            name="ck_ip_docket_event_lifecycle_provenance_source",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -13450,6 +14116,9 @@ class IpDocketEvent(Base):
     )
     before_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
     after_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resulting_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     candidate_status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="confirmed", server_default="confirmed"
     )
