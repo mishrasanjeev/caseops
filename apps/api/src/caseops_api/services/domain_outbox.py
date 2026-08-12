@@ -56,18 +56,18 @@ class DomainEventContract:
 # Runtime admission is deliberately code-owned. The matching governance
 # catalog is validated separately; an arbitrary caller cannot invent an event
 # name, schema version, consumer set, or confidentiality classification.
+# ``required_payload_fields`` is exactly the catalogue payload schema. Company,
+# time, correlation, aggregate, producer, and source identity are immutable
+# envelope columns and must not be duplicated as payload contract fields.
 _EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
     ("ip.legal_state.lifecycle_changed", 1): DomainEventContract(
         required_payload_fields=frozenset(
             {
-                "tenant_id",
                 "target_type",
                 "target_id",
                 "from_state",
                 "to_state",
                 "lifecycle_version",
-                "occurred_at",
-                "correlation_id",
             }
         ),
         consumers=(
@@ -81,14 +81,11 @@ _EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
     ("ip.docket_event.recorded", 1): DomainEventContract(
         required_payload_fields=frozenset(
             {
-                "tenant_id",
                 "ip_docket_event_id",
                 "target_id",
                 "event_type",
                 "event_version",
                 "source_evidence_id",
-                "occurred_at",
-                "correlation_id",
             }
         ),
         consumers=("access-filtered-timeline", "deadline-calculation-adapter"),
@@ -98,15 +95,12 @@ _EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
     ("ip.deadline.calculation_committed", 1): DomainEventContract(
         required_payload_fields=frozenset(
             {
-                "tenant_id",
                 "ip_deadline_id",
                 "target_id",
                 "due_at",
                 "rule_version_id",
                 "engine_version",
                 "calculation_version",
-                "occurred_at",
-                "correlation_id",
             }
         ),
         consumers=(
@@ -119,14 +113,11 @@ _EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
     ("bulk_import.operation_state_changed", 1): DomainEventContract(
         required_payload_fields=frozenset(
             {
-                "tenant_id",
                 "bulk_import_job_id",
                 "from_state",
                 "to_state",
                 "operation_version",
                 "safe_counts",
-                "occurred_at",
-                "correlation_id",
             }
         ),
         consumers=("audit-evidence", "bulk-operation-status"),
@@ -296,10 +287,7 @@ def _validate_contract_payload(
     payload: dict[str, object],
     *,
     contract: DomainEventContract,
-    company_id: str,
     aggregate_id: str,
-    correlation_id: str,
-    occurred_at: datetime,
 ) -> None:
     payload_fields = set(payload)
     missing_fields = sorted(contract.required_payload_fields.difference(payload_fields))
@@ -333,20 +321,8 @@ def _validate_contract_payload(
         ):
             raise TypeError(f"Domain event payload field {field} must be a string.")
 
-    if payload["tenant_id"] != company_id:
-        raise ValueError("Domain event tenant_id must match the persisted company.")
-    if payload["correlation_id"] != correlation_id:
-        raise ValueError("Domain event correlation_id must match the persisted envelope.")
     if payload[contract.aggregate_payload_field] != aggregate_id:
         raise ValueError("Domain event aggregate identity does not match its payload.")
-    try:
-        payload_occurred_at = _aware(
-            datetime.fromisoformat(str(payload["occurred_at"]).replace("Z", "+00:00"))
-        )
-    except ValueError as exc:
-        raise ValueError("Domain event occurred_at must be an ISO-8601 timestamp.") from exc
-    if payload_occurred_at != occurred_at:
-        raise ValueError("Domain event occurred_at does not match the persisted envelope.")
 
 
 def _event_envelope(event: DomainOutboxEvent) -> DomainEventEnvelope:
@@ -482,10 +458,7 @@ def enqueue_domain_event(
     _validate_contract_payload(
         payload,
         contract=contract,
-        company_id=company_id,
         aggregate_id=aggregate_id,
-        correlation_id=correlation_id,
-        occurred_at=occurred_at,
     )
     payload_bytes = canonical_json_bytes(payload)
     if len(payload_bytes) > _MAX_PAYLOAD_BYTES:

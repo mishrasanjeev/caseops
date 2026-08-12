@@ -148,14 +148,11 @@ def _enqueue_shared_lifecycle_event(
         confidentiality="privileged",
         correlation_id=correlation_id,
         payload={
-            "tenant_id": company_id,
             "target_type": "ip_docket_record",
             "target_id": aggregate_id,
             "from_state": "draft",
             "to_state": "active",
             "lifecycle_version": 1,
-            "occurred_at": now.isoformat(),
-            "correlation_id": correlation_id,
         },
         now=now,
     )

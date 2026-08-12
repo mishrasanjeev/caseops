@@ -134,14 +134,11 @@ def _enqueue(
     confidentiality: str = "privileged",
 ):
     event_payload: dict[str, object] = {
-        "tenant_id": company_id,
         "target_type": "ip_docket_record",
         "target_id": "docket-fixture-1",
         "from_state": "draft",
         "to_state": "active",
         "lifecycle_version": 2,
-        "occurred_at": NOW.isoformat(),
-        "correlation_id": "request-fixture-1",
     }
     if payload is not None:
         event_payload.update(payload)
