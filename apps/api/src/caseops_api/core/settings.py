@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="CASEOPS_",
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -148,6 +149,16 @@ class Settings(BaseSettings):
     ip_costs_rollout_expires_at: datetime | None = Field(default=None)
     ip_rule_governance_enabled: bool = Field(default=False)
     ip_rule_governance_rollout_expires_at: datetime | None = Field(default=None)
+
+    # IPLF-027A reliability/workflow foundations are deliberately independent
+    # dark-launch surfaces.  A deploy must not start draining the shared outbox
+    # or accept versioned IP workflow commands merely because Temporal or a
+    # broader IP workspace flag is enabled.  IPLF-027B owns the separately
+    # approved switch and expiry policy for each surface.
+    domain_outbox_consumers_enabled: bool = Field(default=False)
+    domain_outbox_consumers_rollout_expires_at: datetime | None = Field(default=None)
+    ip_workflow_commands_enabled: bool = Field(default=False)
+    ip_workflow_commands_rollout_expires_at: datetime | None = Field(default=None)
 
     # Hearing reminders (MOD-TS-007 Sprint T first slice — dark-
     # launched on 2026-04-22). Rows accumulate in ``hearing_reminders``

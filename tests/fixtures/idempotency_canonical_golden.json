@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "nested-and-safe-integer",
+      "value": {
+        "z": "π",
+        "a": [true, null, 9007199254740991],
+        "nested": {"b": "line\nbreak", "a": -7}
+      },
+      "canonical": "{\"a\":[true,null,9007199254740991],\"nested\":{\"a\":-7,\"b\":\"line\\nbreak\"},\"z\":\"π\"}",
+      "sha256": "d3ee29711006bc7cf74450a18051bf68ba50f25f023ff8d7d3667e312eff609d"
+    },
+    {
+      "name": "utf16-object-key-order",
+      "value": {"\ue000": "bmp", "\ud800\udc00": "astral"},
+      "canonical": "{\"𐀀\":\"astral\",\"\":\"bmp\"}",
+      "sha256": "5e72745dd500f8b8d997ef851679707b89099da29d2aca4b93dfd85810ebaa20"
+    },
+    {
+      "name": "numeric-looking-object-keys",
+      "value": {"2": "two", "10": "ten", "a": "letter"},
+      "canonical": "{\"10\":\"ten\",\"2\":\"two\",\"a\":\"letter\"}",
+      "sha256": "264a04ae1cca03183321518eb8984b19c814df554347f259085f568361e504da"
+    }
+  ]
+}

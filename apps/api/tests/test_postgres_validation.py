@@ -51,13 +51,16 @@ from __future__ import annotations
 
 import importlib.util
 import os
-from datetime import UTC, date, datetime
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from threading import Event
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.postgres
@@ -115,6 +118,44 @@ def _seed_company(session: Session) -> str:
         },
     )
     return company_id
+
+
+def _enqueue_shared_lifecycle_event(
+    session: Session,
+    *,
+    company_id: str,
+    event_key: str,
+    aggregate_id: str,
+    now: datetime,
+):
+    from caseops_api.services.domain_outbox import enqueue_domain_event
+
+    correlation_id = f"correlation-{uuid4()}"
+    return enqueue_domain_event(
+        session,
+        company_id=company_id,
+        event_key=event_key,
+        event_type="ip.legal_state.lifecycle_changed",
+        schema_version=1,
+        aggregate_type="ip_docket_record",
+        aggregate_id=aggregate_id,
+        aggregate_version=1,
+        occurred_at=now,
+        effective_at=now,
+        source_command_id=f"command-{uuid4()}",
+        source_event_id=None,
+        producer="postgres-validation",
+        confidentiality="privileged",
+        correlation_id=correlation_id,
+        payload={
+            "target_type": "ip_docket_record",
+            "target_id": aggregate_id,
+            "from_state": "draft",
+            "to_state": "active",
+            "lifecycle_version": 1,
+        },
+        now=now,
+    )
 
 
 def _seed_matter(session: Session, company_id: str) -> str:
@@ -247,20 +288,22 @@ def _fk_index_pairs() -> tuple[tuple[str, str], ...]:
 
 def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
     """If `_ensure_migrations` got us here without raising, head is
-    applied. Belt-and-suspenders: assert alembic_version is non-empty
-    and equals the latest revision file on disk.
+    applied. Belt-and-suspenders: resolve Alembic's graph instead of
+    guessing the head from lexicographic filenames.
     """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
     project_root = Path(__file__).resolve().parents[1]
-    versions_dir = project_root / "alembic" / "versions"
-    revs = sorted(p.name for p in versions_dir.glob("*.py") if p.name[0].isdigit())
-    latest_filename = revs[-1]  # 20260424_0002_outside_counsel_portal.py
-    latest_rev = latest_filename.split("_")[0] + "_" + latest_filename.split("_")[1]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "alembic"))
+    heads = ScriptDirectory.from_config(config).get_heads()
 
     with pg_engine.connect() as conn:
         rows = conn.execute(text("SELECT version_num FROM alembic_version")).fetchall()
     assert len(rows) == 1, f"alembic_version should have one row, got {len(rows)}"
-    assert rows[0][0] == latest_rev, (
-        f"DB at {rows[0][0]} but latest revision file is {latest_rev}; "
+    assert heads == [rows[0][0]], (
+        f"DB at {rows[0][0]} but Alembic graph heads are {heads}; "
         "alembic upgrade head did not advance the DB"
     )
 
@@ -1161,6 +1204,430 @@ def test_oc_cross_visibility_server_default_inserts_false(pg_engine):
         f"Expected server_default=false to land False, got {v!r}. "
         "Migration 20260424_0002 server_default may not have applied."
     )
+
+
+def test_shared_outbox_skip_locked_claims_are_disjoint_on_postgres(pg_engine):
+    """Concurrent drainers skip a locked event instead of double-claiming it."""
+    from datetime import timedelta
+
+    from caseops_api.services.domain_outbox import claim_outbox_events
+    now = datetime(2026, 8, 12, 6, 30, tzinfo=UTC)
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        for index in range(2):
+            _enqueue_shared_lifecycle_event(
+                seed,
+                company_id=company_id,
+                event_key=f"postgres-skip-locked-{uuid4()}",
+                aggregate_id=f"fixture-{index}",
+                now=now,
+            )
+        seed.commit()
+
+    first_session = Session(pg_engine)
+    second_session = Session(pg_engine)
+    try:
+        first = claim_outbox_events(
+            first_session,
+            company_id=company_id,
+            lease_owner="postgres-worker-a",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now,
+        )
+        # Keep the first transaction open so its row lock remains live.
+        second = claim_outbox_events(
+            second_session,
+            company_id=company_id,
+            lease_owner="postgres-worker-b",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now,
+        )
+        assert len(first) == len(second) == 1
+        assert first[0].event_id != second[0].event_id
+        first_session.commit()
+        second_session.commit()
+    finally:
+        first_session.close()
+        second_session.close()
+
+
+def test_workflow_definition_identity_is_immutable_on_postgres(pg_engine):
+    """Published-version semantics cannot be rewritten through the definition row."""
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        session.commit()
+
+    definition_id = str(uuid4())
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ip_workflow_definitions "
+                "(id, company_id, key, name, initial_state) VALUES "
+                "(:id, :company_id, 'postgres-retained', 'Postgres retained', 'draft')"
+            ),
+            {"id": definition_id, "company_id": company_id},
+        )
+        connection.execute(
+            text(
+                "UPDATE ip_workflow_definitions SET name = 'Renamed retained' "
+                "WHERE id = :id"
+            ),
+            {"id": definition_id},
+        )
+
+    with pytest.raises(DBAPIError, match="definition identity is immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE ip_workflow_definitions SET initial_state = 'rewritten' "
+                    "WHERE id = :id"
+                ),
+                {"id": definition_id},
+            )
+
+
+def test_shared_reliability_downgrade_lock_excludes_postgres_writer(pg_engine):
+    """The fail-closed empty check owns exclusive locks before inspecting rows."""
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260812_0001_shared_reliability_foundation.py"
+    )
+    spec = importlib.util.spec_from_file_location(migration_path.stem, migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    now = datetime(2026, 8, 12, 6, 45, tzinfo=UTC)
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        seed.commit()
+
+    writer_started = Event()
+    record_id = str(uuid4())
+
+    def insert_evidence() -> None:
+        writer_started.set()
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO api_idempotency_records "
+                    "(id, company_id, actor_scope, http_method, operation, "
+                    "idempotency_key, request_hash, state, claim_token, "
+                    "claim_generation, claim_expires_at, expires_at, created_at, "
+                    "updated_at) VALUES "
+                    "(:id, :company_id, 'system:downgrade-lock', 'POST', "
+                    "'fixture.downgrade-lock', :key, :request_hash, 'processing', "
+                    "'fixture-claim', 1, :claim_expires_at, :expires_at, "
+                    ":created_at, :created_at)"
+                ),
+                {
+                    "id": record_id,
+                    "company_id": company_id,
+                    "key": f"downgrade-lock-{record_id}",
+                    "request_hash": "d" * 64,
+                    "claim_expires_at": now.replace(minute=50),
+                    "expires_at": now.replace(day=19),
+                    "created_at": now,
+                },
+            )
+
+    with pg_engine.connect() as lock_connection:
+        transaction = lock_connection.begin()
+        migration._lock_tables_for_populated_downgrade_check(lock_connection)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            writer = executor.submit(insert_evidence)
+            assert writer_started.wait(timeout=5)
+            with pytest.raises(FutureTimeoutError):
+                writer.result(timeout=0.25)
+            transaction.rollback()
+            writer.result(timeout=5)
+
+    with Session(pg_engine) as session:
+        assert session.scalar(
+            text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+            {"id": record_id},
+        ) == 1
+
+
+def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine):
+    """Alembic itself must leave revision 0001 installed once evidence exists."""
+
+    from alembic.config import Config
+
+    from alembic import command
+
+    url = os.environ["CASEOPS_TEST_POSTGRES_URL"]
+    project_root = Path(__file__).resolve().parents[1]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "alembic"))
+    config.set_main_option("sqlalchemy.url", url)
+    with pg_engine.connect() as connection:
+        installed_revision = connection.scalar(
+            text("SELECT version_num FROM alembic_version")
+        )
+    now = datetime(2026, 8, 12, 6, 55, tzinfo=UTC)
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        record_id = str(uuid4())
+        seed.execute(
+            text(
+                "INSERT INTO api_idempotency_records "
+                "(id, company_id, actor_scope, http_method, operation, "
+                "idempotency_key, request_hash, state, claim_token, "
+                "claim_generation, claim_expires_at, expires_at, created_at, "
+                "updated_at) VALUES "
+                "(:id, :company_id, 'system:actual-downgrade', 'POST', "
+                "'fixture.actual-downgrade', :key, :request_hash, 'processing', "
+                "'fixture-claim', 1, :claim_expires_at, :expires_at, "
+                ":created_at, :created_at)"
+            ),
+            {
+                "id": record_id,
+                "company_id": company_id,
+                "key": f"actual-downgrade-{record_id}",
+                "request_hash": "e" * 64,
+                "claim_expires_at": now + timedelta(minutes=5),
+                "expires_at": now + timedelta(days=7),
+                "created_at": now,
+            },
+        )
+        seed.commit()
+
+    with pytest.raises(RuntimeError, match="roll application code forward"):
+        command.downgrade(config, "20260811_0005")
+
+    with pg_engine.connect() as connection:
+        revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+        assert revision == installed_revision
+        assert connection.scalar(
+            text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+            {"id": record_id},
+        ) == 1
+
+
+def test_shared_outbox_fence_rejects_stale_worker_on_postgres(pg_engine):
+    from datetime import timedelta
+
+    from caseops_api.db.models import DomainOutboxEvent, DomainOutboxState
+    from caseops_api.services.domain_outbox import (
+        StaleOutboxLeaseError,
+        claim_consumer_effect,
+        claim_outbox_events,
+        complete_consumer_effect,
+        complete_outbox_event,
+    )
+
+    now = datetime(2026, 8, 12, 7, 0, tzinfo=UTC)
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        event = _enqueue_shared_lifecycle_event(
+            session,
+            company_id=company_id,
+            event_key=f"postgres-fence-{uuid4()}",
+            aggregate_id="fenced-fixture",
+            now=now,
+        ).event
+        session.commit()
+        event_id = event.id
+
+    with Session(pg_engine) as session:
+        old_claim = claim_outbox_events(
+            session,
+            company_id=company_id,
+            lease_owner="postgres-old-worker",
+            limit=1,
+            lease_for=timedelta(seconds=1),
+            now=now,
+        )[0]
+        session.commit()
+
+    with Session(pg_engine) as session:
+        new_claim = claim_outbox_events(
+            session,
+            company_id=company_id,
+            lease_owner="postgres-new-worker",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now + timedelta(seconds=2),
+        )[0]
+        assert new_claim.event_id == event_id
+        assert new_claim.fence_version == old_claim.fence_version + 1
+        session.commit()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(StaleOutboxLeaseError):
+            complete_outbox_event(
+                session,
+                claim=old_claim,
+                now=now + timedelta(seconds=3),
+            )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        for consumer_name in (
+            "ip-portfolio-projection",
+            "notification-intent-adapter",
+            "operational-deadline-projection",
+        ):
+            effect_claim = claim_consumer_effect(
+                session,
+                outbox_claim=new_claim,
+                consumer_name=consumer_name,
+                consumer_version="v1",
+                effect_key=f"postgres-fence:{consumer_name}",
+                lease_owner="postgres-new-worker",
+                now=now + timedelta(seconds=3),
+            )
+            complete_consumer_effect(
+                session,
+                outbox_claim=new_claim,
+                effect_id=effect_claim.effect.id,
+                effect_lease_token=str(effect_claim.lease_token),
+                effect_fence_version=int(effect_claim.fence_version or 0),
+                now=now + timedelta(seconds=3),
+            )
+        completed = complete_outbox_event(
+            session,
+            claim=new_claim,
+            now=now + timedelta(seconds=3),
+        )
+        assert completed.state == DomainOutboxState.SUCCEEDED
+        session.commit()
+        stored = session.get(DomainOutboxEvent, event_id)
+        assert stored is not None
+        assert stored.fence_version == new_claim.fence_version
+
+    with pytest.raises(DBAPIError, match="envelope is immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE domain_outbox_events SET aggregate_version = "
+                    "aggregate_version + 1 WHERE id = :event_id"
+                ),
+                {"event_id": event_id},
+            )
+
+
+def test_shared_reliability_company_fk_and_transaction_rollback_on_postgres(
+    pg_engine,
+):
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from caseops_api.db.models import DomainConsumerEffect, DomainOutboxEvent
+    from caseops_api.services.domain_outbox import claim_outbox_events
+    from caseops_api.services.idempotency import canonical_request_hash, claim_idempotency
+
+    now = datetime(2026, 8, 12, 7, 30, tzinfo=UTC)
+    rolled_back_key = f"postgres-rollback-{uuid4()}"
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        _enqueue_shared_lifecycle_event(
+            session,
+            company_id=company_id,
+            event_key=rolled_back_key,
+            aggregate_id="rollback-fixture",
+            now=now,
+        )
+        claim_idempotency(
+            session,
+            company_id=company_id,
+            actor_scope="system:postgres-rollback",
+            http_method="POST",
+            operation="fixture.rollback",
+            idempotency_key=rolled_back_key,
+            request_hash=canonical_request_hash({"rolled_back": True}),
+            now=now,
+        )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.scalar(
+            select(func.count()).select_from(DomainOutboxEvent).where(
+                DomainOutboxEvent.event_key == rolled_back_key
+            )
+        ) == 0
+        from caseops_api.db.models import ApiIdempotencyRecord
+
+        assert session.scalar(
+            select(func.count()).select_from(ApiIdempotencyRecord).where(
+                ApiIdempotencyRecord.idempotency_key == rolled_back_key
+            )
+        ) == 0
+        company_a = _seed_company(session)
+        company_b = _seed_company(session)
+        membership_a = _seed_membership(session, company_a)
+        event = _enqueue_shared_lifecycle_event(
+            session,
+            company_id=company_a,
+            event_key=f"postgres-company-fk-{uuid4()}",
+            aggregate_id="company-fk-fixture",
+            now=now,
+        ).event
+        session.commit()
+        event_id = event.id
+
+    with Session(pg_engine) as session:
+        claim = claim_outbox_events(
+            session,
+            company_id=company_a,
+            lease_owner="postgres-company-worker",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now,
+        )[0]
+        assert claim.event_id == event_id
+        session.commit()
+
+    with pytest.raises(IntegrityError):
+        with Session(pg_engine) as session:
+            session.add(
+                DomainConsumerEffect(
+                    company_id=company_b,
+                    outbox_event_id=event_id,
+                    consumer_name="cross-company-fixture",
+                    consumer_version="v1",
+                    effect_key=f"cross-company-{uuid4()}",
+                    state="processing",
+                    attempts=1,
+                    outbox_fence_version=1,
+                    lease_owner="postgres-company-worker",
+                    lease_token=uuid4().hex,
+                    lease_expires_at=now + timedelta(minutes=5),
+                    fence_version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+
+    with pytest.raises(IntegrityError):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM companies WHERE id = :company_id"),
+                {"company_id": company_a},
+            )
+
+    with pytest.raises(IntegrityError):
+        with Session(pg_engine) as session:
+            claim_idempotency(
+                session,
+                company_id=company_b,
+                actor_scope=f"membership:{membership_a}",
+                actor_membership_id=membership_a,
+                http_method="POST",
+                operation="fixture.cross-company",
+                idempotency_key=f"cross-company-{uuid4()}",
+                request_hash=canonical_request_hash({"company": "b"}),
+                now=now,
+            )
+            session.commit()
 
 
 def test_notice_tenant_constraints_and_delete_policy_on_postgres(pg_engine):

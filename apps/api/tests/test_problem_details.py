@@ -6,9 +6,21 @@ type, wrong title, etc.) surfaces fast.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import UUID
+
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from caseops_api.core.problem_details import PROBLEM_CONTENT_TYPE, _problem_payload
+from caseops_api.core.observability import get_request_id
+from caseops_api.core.problem_details import (
+    PROBLEM_CONTENT_TYPE,
+    ProblemHTTPException,
+    ProblemType,
+    _problem_payload,
+    register_problem_handlers,
+)
+from caseops_api.core.request_context import RequestContextMiddleware
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -42,6 +54,7 @@ def test_404_has_rfc_7807_envelope(client: TestClient) -> None:
     assert body["type"] == "matter_not_found"
     assert body["detail"] == "Matter not found."
     assert body["instance"].startswith("/api/matters/")
+    assert body["request_id"] == resp.headers["X-Request-ID"]
 
 
 def test_401_has_machine_readable_type(client: TestClient) -> None:
@@ -94,6 +107,80 @@ def test_structured_detail_keeps_extensions_without_overriding_rfc_members() -> 
     assert body["status"] == 409
     assert body["title"] == "Conflict"
     assert body["instance"] == "/api/matters/m-1"
+
+
+def test_explicit_problem_type_is_stable_and_reserved_extras_cannot_override() -> None:
+    application = FastAPI()
+    register_problem_handlers(application)
+
+    @application.get("/typed")
+    async def _typed() -> None:
+        raise ProblemHTTPException(
+            409,
+            problem_type=ProblemType.IDEMPOTENCY_KEY_REUSED,
+            detail="The supplied key belongs to a different request.",
+            extras={
+                "operation": "ip.transition",
+                "status": 200,
+                "request_id": "spoof",
+                "observed_at": datetime(2026, 8, 12, tzinfo=UTC),
+                "workflow_version_id": UUID("00000000-0000-0000-0000-000000000027"),
+            },
+            headers={
+                "Retry-After": "1",
+                "content-type": "text/html",
+                "Content-Length": "999",
+                "X-Request-ID": "spoofed-header",
+            },
+        )
+
+    with TestClient(application) as isolated_client:
+        response = isolated_client.get(
+            "/typed", headers={"X-Request-ID": "typed-request-123"}
+        )
+
+    assert response.status_code == 409
+    assert response.json()["type"] == "idempotency_key_reused"
+    assert response.json()["operation"] == "ip.transition"
+    assert response.json()["status"] == 409
+    assert response.json()["request_id"] == "typed-request-123"
+    assert response.json()["observed_at"] == "2026-08-12T00:00:00+00:00"
+    assert response.json()["workflow_version_id"] == (
+        "00000000-0000-0000-0000-000000000027"
+    )
+    assert response.headers["X-Request-ID"] == "typed-request-123"
+    assert response.headers["content-type"] == PROBLEM_CONTENT_TYPE
+    assert response.headers["Retry-After"] == "1"
+    assert response.headers["content-length"] != "999"
+
+
+def test_operation_in_progress_uses_the_prd_wire_value() -> None:
+    assert ProblemType.OPERATION_IN_PROGRESS.value == "operation_in_progress"
+    assert ProblemType.IDEMPOTENCY_IN_PROGRESS is ProblemType.OPERATION_IN_PROGRESS
+
+
+def test_unhandled_exception_is_safe_correlated_problem_details() -> None:
+    application = FastAPI()
+    application.add_middleware(RequestContextMiddleware)
+    register_problem_handlers(application)
+    observed_request_ids: list[str | None] = []
+
+    @application.get("/boom")
+    async def _boom() -> None:
+        observed_request_ids.append(get_request_id())
+        raise RuntimeError("secret database and tenant details")
+
+    with TestClient(application, raise_server_exceptions=False) as isolated_client:
+        response = isolated_client.get("/boom", headers={"X-Request-ID": "invalid"})
+
+    body = response.json()
+    assert response.status_code == 500
+    assert response.headers["content-type"] == PROBLEM_CONTENT_TYPE
+    assert body["type"] == "https://httpstatuses.com/500"
+    assert body["detail"] == "An unexpected error occurred."
+    assert "secret" not in response.text
+    assert body["request_id"] == response.headers["X-Request-ID"]
+    assert body["request_id"] == observed_request_ids[0]
 
 
 def test_verified_citations_required_has_specific_slug(client: TestClient) -> None:

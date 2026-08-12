@@ -22,6 +22,7 @@ The response ``Content-Type`` is ``application/problem+json`` per spec.
 """
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -29,7 +30,45 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from caseops_api.core.observability import ensure_request_id, get_request_id
+
 PROBLEM_CONTENT_TYPE = "application/problem+json"
+
+
+class ProblemType(StrEnum):
+    """Stable types for cross-revision recovery paths.
+
+    New command/reliability code should raise :class:`ProblemHTTPException`
+    with one of these values instead of depending on a detail substring.
+    """
+
+    STALE_WRITE = "stale_write"
+    # PRD section 16.7 names this wire value exactly. Keep the older member
+    # name as an alias so an in-flight caller cannot reintroduce the incorrect
+    # ``idempotency_in_progress`` response while branches are integrated.
+    OPERATION_IN_PROGRESS = "operation_in_progress"
+    IDEMPOTENCY_IN_PROGRESS = "operation_in_progress"
+    IDEMPOTENCY_KEY_REUSED = "idempotency_key_reused"
+    WORKFLOW_DISABLED = "workflow_disabled"
+    WORKFLOW_NOT_CONFIGURED = "workflow_not_configured"
+    INVALID_WORKFLOW_TRANSITION = "invalid_workflow_transition"
+
+
+class ProblemHTTPException(HTTPException):
+    """HTTP exception whose machine type is independent of human copy."""
+
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        problem_type: ProblemType | str,
+        detail: str,
+        headers: dict[str, str] | None = None,
+        extras: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
+        self.problem_type = str(problem_type)
+        self.problem_extras = dict(extras or {})
 
 
 # Mapping of (status_code, detail-substring) → short machine-readable
@@ -110,6 +149,8 @@ def _problem_payload(
     detail: Any,
     instance: str,
     extras: dict[str, Any] | None = None,
+    problem_type: str | None = None,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
     # Pydantic validation errors are lists; normalise to a single string
     # for the human-readable `detail` field but keep the structured
@@ -140,6 +181,7 @@ def _problem_payload(
             "detail",
             "instance",
             "errors",
+            "request_id",
         }
         detail_extensions = {
             key: value
@@ -149,7 +191,7 @@ def _problem_payload(
     else:
         detail_text = str(detail)
 
-    slug = _resolve_type_slug(status_code, detail_text)
+    slug = problem_type or _resolve_type_slug(status_code, detail_text)
     body: dict[str, Any] = {
         "type": slug,
         "title": STATUS_TITLES.get(status_code, "Error"),
@@ -157,12 +199,30 @@ def _problem_payload(
         "detail": detail_text,
         "instance": instance,
     }
+    if request_id:
+        body["request_id"] = request_id
     if errors:
         body["errors"] = errors
     if detail_extensions:
         body.update(detail_extensions)
     if extras:
-        body.update(extras)
+        reserved_problem_members = {
+            "type",
+            "title",
+            "status",
+            "detail",
+            "instance",
+            "errors",
+            "request_id",
+        }
+        encoded_extras = jsonable_encoder(extras)
+        body.update(
+            {
+                key: value
+                for key, value in encoded_extras.items()
+                if key.lower() not in reserved_problem_members
+            }
+        )
     return body
 
 
@@ -173,16 +233,32 @@ def problem_json(
     request: Request,
     headers: dict[str, str] | None = None,
     extras: dict[str, Any] | None = None,
+    problem_type: str | None = None,
 ) -> JSONResponse:
+    request_id = (
+        get_request_id()
+        or getattr(request.state, "request_id", None)
+        or ensure_request_id(request.headers.get("X-Request-ID"))
+    )
     body = _problem_payload(
         status_code=status_code,
         detail=detail,
         instance=str(request.url.path),
         extras=extras,
+        problem_type=problem_type,
+        request_id=request_id,
     )
     merged_headers = {"Content-Type": PROBLEM_CONTENT_TYPE}
     if headers:
-        merged_headers.update(headers)
+        merged_headers.update(
+            {
+                key: value
+                for key, value in headers.items()
+                if key.lower()
+                not in {"content-length", "content-type", "x-request-id"}
+            }
+        )
+    merged_headers["X-Request-ID"] = request_id
     return JSONResponse(
         status_code=status_code,
         content=body,
@@ -202,6 +278,8 @@ def register_problem_handlers(application: FastAPI) -> None:
             detail=exc.detail,
             request=request,
             headers=getattr(exc, "headers", None) or None,
+            extras=getattr(exc, "problem_extras", None),
+            problem_type=getattr(exc, "problem_type", None),
         )
 
     @application.exception_handler(RequestValidationError)
@@ -214,10 +292,25 @@ def register_problem_handlers(application: FastAPI) -> None:
             request=request,
         )
 
+    @application.exception_handler(Exception)
+    async def _unexpected_exception(
+        request: Request, _exc: Exception
+    ) -> JSONResponse:  # pragma: no cover -- exercised through ServerErrorMiddleware
+        # Never reflect the exception text: it may contain SQL, provider data,
+        # credentials, or tenant-private content. ServerErrorMiddleware still
+        # re-raises after sending this response so the server records the
+        # original exception and traceback.
+        return problem_json(
+            500,
+            detail="An unexpected error occurred.",
+            request=request,
+        )
 
 __all__ = [
     "PROBLEM_CONTENT_TYPE",
     "PROBLEM_TYPE_MAP",
+    "ProblemHTTPException",
+    "ProblemType",
     "problem_json",
     "register_problem_handlers",
 ]

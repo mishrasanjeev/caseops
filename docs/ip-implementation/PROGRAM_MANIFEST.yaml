@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-027A",
+    "active_slice": "IPLF-027B",
     "checkpoint": {
-      "recorded_at": "2026-08-12T11:08:36+05:30",
-      "repository_revision": "d97969d1ac8e6cf9da0418f534349257ba487393",
-      "environment": "IPLF-026B final head 977acde5d9a1e671fbe7e83b2939e1a5289b6c34 passed independent CI/Security/CodeQL/review, merged through PR #209, and is deployed on exact canonical SHA d97969d1ac8e6cf9da0418f534349257ba487393. API caseops-api-00281-9bt and web caseops-web-00260-mwh serve 100% traffic; migration caseops-migrate-job-m6rn4 and all six scheduler bindings passed on the immutable API image recorded in the cited release-attempt evidence. The focused 360px IPLF-026B production journey passed in workflow 31565070270, but the complete gate ended 65 passed, 4 documented conditional skips, and 3 unrelated recommendation HTTP 503 failures; one explicitly recorded the typed llm_quota_exhausted response, and the dependent Notice suite did not run. Named human acceptance is not inferred.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-026B is implemented, independently reviewed, merged, exactly deployed, and focused-production verified, but its complete release gate remains blocked by production OpenAI quota availability and the resulting skipped Notice phase. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-12T20:35:45+05:30",
+      "repository_revision": "2b4d4004bded125a6e58eecb16ce7c15b20abb01",
+      "environment": "IPLF-027A repository implementation 2b4d4004bded125a6e58eecb16ce7c15b20abb01 passed its focused 19-test SQLite reliability/workflow regression and affected-source lint. The earlier evidence also records the full 591-test web suite and current-source production build; no web source changed after that evidence. The new real-PostgreSQL workflow-definition identity regression remains intentionally pending independent CI. The two reliability/workflow runtime controls remain false by default; no outbox consumer or IP workflow command is activated. Independent CI, real PostgreSQL, canonical merge, deployment, and dated production evidence remain required. IPLF-026B retains its separate exact-release production quota blocker: workflow 31565070270 ended 65 passed, 4 documented conditional skips, and 3 unrelated recommendation HTTP 503 failures including llm_quota_exhausted; its dependent Notice phase did not run. Named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-027A has completed repository implementation and focused local verification as a runtime-unreleased foundation and is ready for independent review; it does not yet have CI, canonical-merge, deployment, or production acceptance. IPLF-026B remains separately blocked by production OpenAI quota availability and the resulting skipped Notice phase. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-027A",
-      "next_action": "Restore available quota/credits for the configured CaseOps OpenAI project, verify its configuration, and rerun the unchanged complete production workflow against exact serving SHA d97969d1ac8e6cf9da0418f534349257ba487393; require both RAM/IP and Notice phases green before closing IPLF-026B. Continue independent IPLF-027A repository foundations behind disabled controls, and separately obtain named legal/security/pilot/UAT approval and M0 human program lock without fabricating acceptance.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md"
+      "next_slice": "IPLF-027B",
+      "next_action": "Run independent exact-head CI, security/review, real PostgreSQL, canonical merge, and deployment evidence for IPLF-027A before treating its foundation as release verified. Keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false; do not start IPLF-027B user activation without its approved rollout/operator policy. Separately restore available quota/credits for the configured CaseOps OpenAI project and rerun the unchanged IPLF-026B complete production workflow against exact serving SHA d97969d1ac8e6cf9da0418f534349257ba487393; require both RAM/IP and Notice phases green before closing that prior gate. Do not fabricate named legal/security/pilot/UAT approval or M0 human program lock.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-027A/local-2026-08-12.md"
     }
   },
   "milestones": [
@@ -1035,7 +1035,7 @@
         "IPLF-027A",
         "IPLF-027B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -6359,23 +6359,80 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260812_0001_shared_reliability_foundation.py",
+        "apps/api/alembic/versions/20260812_0002_ip_workflow_and_lifecycle_provenance.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/idempotency.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/core/settings.py",
+        "apps/web/lib/api/canonical-json.ts",
+        "docs/ip-implementation/SHARED_RELIABILITY_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/api/tests/test_20260812_shared_reliability_migration.py",
+        "apps/api/tests/test_20260812_ip_workflow_lifecycle_migration.py",
+        "apps/api/tests/test_postgres_validation.py",
+        "apps/api/tests/test_iplf027a_rollout_settings.py",
+        "apps/api/tests/test_ip_data_class_registry.py",
+        "apps/web/lib/api/canonical-json.test.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/SHARED_RELIABILITY_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027A/local-2026-08-12.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-027A/local-2026-08-12.md",
+          "revision": "2b4d4004bded125a6e58eecb16ce7c15b20abb01",
+          "environment": "Windows 11 with CPython 3.13, locked API and web dependencies, isolated SQLite/API fixtures, and local Node/Next type-check and Vitest; independent real-PostgreSQL CI and deployment remain required",
+          "fixtures": "Synthetic companies, memberships, deterministic API request/event identifiers, isolated SQLite migrations, fake worker leases/effects, inert unseeded workflow tables, and a shared canonical JSON fixture; no real client, recipient, provider, filing, fee, payment, or legal effect",
+          "assertions": "Canonical JSON/file identity across Python and web, server-owned retention, immutable idempotency/event envelopes, exact catalogue payload-field admission, company scope, expected consumer effects, bounded retry/fencing/dead-letter decisions, SQLite absent-row serialization, migration downgrade refusal, immutable workflow-definition identity with mutable display/retirement metadata, inert workflow/provenance state, catalogue alignment, dark-launch settings, request/audit/auth contracts, and fail-closed IPLF-028 data-operation boundary",
+          "result": "passed",
+          "recorded_at": "2026-08-12T20:35:45+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Obtain independent exact-head CI/security/review and real PostgreSQL evidence, then merge/deploy the foundation without enabling its two dark-launch controls.",
+        "Retain user activation, operator policy, exception workflows, release proof, and named human approvals for IPLF-027B and later allocated slices."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive migrations 20260812_0001 and 20260812_0002 add the five company-scoped reliability/workflow tables and nullable lifecycle provenance on shared operational children; no existing legal workflow, child operation, or consumer is activated or backfilled into a new authoritative owner.",
+        "Idempotency and outbox identity/envelope fields are immutable; downgrade fails closed when retained workflow/lifecycle/effect evidence exists. IPLF-028 data-operation handlers remain unimplemented and fail closed."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/SHARED_RELIABILITY_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "Platform shared foundations and IP legal-state owners",
+          "evidence": "Canonical ownership, immutable envelope, cross-language identity, outbox/effect fencing, inert workflow, dark-launch, migration, rollback, and IPLF-028 boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/IPLF_027A_DATA_CLASS_REGISTRY.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Truthful repository-implemented/runtime-unreleased migration state with an unchanged fail-closed data-operation boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-027A/local-2026-08-12.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Focused local gates, non-effects, and independent release gates still required"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Implementation/test/evidence traceability, checkpoint, release-review boundary, and next-slice allocation"
+        }
+      ],
+      "allocation_review": "Implemented against PRD Sections 11, 23 UJ-47/UJ-67, and 25. IPLF-027A owns only neutral reliability plus inert legal-workflow foundations; it neither activates legal transition commands nor claims user journeys, retention handlers, deployment proof, or human approval allocated to IPLF-027B/IPLF-028 and later reciprocal slices.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "acceptance_status": "pending",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

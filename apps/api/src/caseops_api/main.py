@@ -44,16 +44,14 @@ def create_application() -> FastAPI:
     configure_tracing(application)
     limiter = configure_limiter()
     application.state.limiter = limiter
-    # Request context runs FIRST so every downstream middleware + handler
-    # sees the request_id on every log line.
-    application.add_middleware(RequestContextMiddleware)
     application.add_middleware(SlowAPIMiddleware)
     # EG-001 (2026-04-23): CSRF middleware. The bearer-auth path is
     # exempt — see core/csrf.py for the policy. Order matters:
     # Starlette wraps later-added middleware OUTSIDE earlier ones,
-    # so we add CSRF BEFORE CORS. Effective request flow:
-    # CORS → CSRF → SlowAPI → RequestContext → app. That keeps CORS
-    # outermost so a 403 from CSRF still picks up
+    # so we add CSRF before CORS and request context last. Effective flow:
+    # RequestContext → CORS → CSRF → SlowAPI → app. Request context therefore
+    # covers preflight, CSRF, and rate-limit responses while CORS still wraps
+    # CSRF so a 403 picks up
     # ``Access-Control-Allow-Origin`` on the way out and the browser
     # surfaces it as a real HTTP error rather than a generic CORS
     # block.
@@ -64,8 +62,9 @@ def create_application() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["Content-Disposition", "X-CaseOps-Checksum"],
+        expose_headers=["Content-Disposition", "X-CaseOps-Checksum", "X-Request-ID"],
     )
+    application.add_middleware(RequestContextMiddleware)
 
     @application.exception_handler(RateLimitExceeded)
     async def _rate_limit_handler(

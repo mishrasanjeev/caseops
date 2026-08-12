@@ -39,6 +39,7 @@ from caseops_api.core.cookies import (
     PORTAL_CSRF_COOKIE,
     PORTAL_CSRF_HEADER,
 )
+from caseops_api.core.problem_details import problem_json
 
 # State-changing methods. GET / HEAD / OPTIONS / TRACE are exempt by
 # RFC and by browser convention.
@@ -133,23 +134,20 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         cookie_value = request.cookies.get(cookie_name, "")
         header_value = request.headers.get(header_name, "")
         if not cookie_value or not header_value:
-            return _csrf_failure("Missing CSRF token.")
+            return _csrf_failure(request, "Missing CSRF token.")
         # Constant-time compare so an attacker cannot infer the cookie
         # value via timing on a probe.
         if not hmac.compare_digest(cookie_value, header_value):
-            return _csrf_failure("CSRF token mismatch.")
+            return _csrf_failure(request, "CSRF token mismatch.")
         return await call_next(request)
 
 
-def _csrf_failure(detail: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=403,
-        content={
-            "type": "https://caseops.ai/errors/csrf",
-            "title": "Forbidden",
-            "status": 403,
-            "detail": detail,
-        },
+def _csrf_failure(request: Request, detail: str) -> JSONResponse:
+    return problem_json(
+        403,
+        detail=detail,
+        request=request,
+        problem_type="https://caseops.ai/errors/csrf",
     )
 
 

@@ -166,6 +166,30 @@ class TestRequestContextMiddleware:
         assert rid != "x" * 500
         assert 8 <= len(rid) <= 80
 
+    def test_browser_can_read_request_id_cors_header(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/health",
+            headers={"Origin": "http://localhost:3000"},
+        )
+        exposed = response.headers.get("Access-Control-Expose-Headers", "").lower()
+        assert "x-request-id" in exposed
+
+    def test_cors_preflight_also_receives_request_id(self, client: TestClient) -> None:
+        response = client.options(
+            "/api/health",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "X-Request-ID",
+            },
+        )
+        assert response.status_code == 200
+        request_id = response.headers.get(REQUEST_ID_HEADER)
+        assert request_id and 8 <= len(request_id) <= 80
+        assert response.headers["Access-Control-Allow-Origin"] == (
+            "http://localhost:3000"
+        )
+
 
 class TestTenantContextAfterAuth:
     def test_authenticated_request_populates_tenant_context(

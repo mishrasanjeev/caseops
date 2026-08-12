@@ -21,6 +21,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from caseops_api.core.observability import get_request_id
 from caseops_api.db.models import AuditActorType, AuditEvent, AuditResult
 from caseops_api.services.session_context import SessionContext
 
@@ -60,7 +61,7 @@ def record_audit(
         ip_docket_id=ip_docket_id,
         result=result,
         metadata_json=json.dumps(metadata, default=str) if metadata else None,
-        request_id=request_id,
+        request_id=request_id if request_id is not None else get_request_id(),
         ip=ip,
         user_agent=user_agent,
         created_at=datetime.now(UTC),
