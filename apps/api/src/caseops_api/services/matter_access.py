@@ -441,6 +441,18 @@ def _linked_matter_visibility_by_membership(
         session.scalars(select(EthicalWall).where(EthicalWall.matter_id == matter.id)).all()
     )
     team_scoping_enabled = _team_scoping_enabled(session, context.company.id)
+    scoped_membership_ids = (
+        {
+            str(membership_id)
+            for membership_id in session.scalars(
+                select(TeamMembership.membership_id).where(
+                    TeamMembership.team_id == matter.team_id
+                )
+            ).all()
+        }
+        if team_scoping_enabled and matter.team_id is not None
+        else set()
+    )
     result: dict[str, bool] = {}
     for membership in memberships:
         if membership.role == MembershipRole.OWNER:
@@ -475,7 +487,7 @@ def _linked_matter_visibility_by_membership(
         team_visible = (
             not team_scoping_enabled
             or matter.team_id is None
-            or matter.team_id in team_ids
+            or membership.id in scoped_membership_ids
             or granted
             or matter.assignee_membership_id == membership.id
         )
@@ -1207,8 +1219,7 @@ def apply_ip_access_change(
             "linked_matter_permissions_copied": False,
         },
     )
-    session.commit()
-    return IpAccessChangeResponse(
+    response = IpAccessChangeResponse(
         action=payload.action,
         invalidation_operation_id=operation_id,
         visibility_gain_count=preview.visibility_gain_count,
@@ -1220,6 +1231,8 @@ def apply_ip_access_change(
             docket_id=docket.id,
         ),
     )
+    session.commit()
+    return response
 
 
 def attach_visible_ip_dockets_filter(

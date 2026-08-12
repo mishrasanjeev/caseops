@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -12,10 +13,12 @@ from caseops_api.db.models import (
     AuditEvent,
     Company,
     CompanyMembership,
+    EthicalWall,
     IpDocketRecord,
     Matter,
     MatterAccessGrant,
     NotificationDeliveryChannel,
+    Team,
     User,
 )
 from caseops_api.db.session import get_session_factory
@@ -546,6 +549,131 @@ def test_ip_access_preview_batches_linked_matter_visibility(
     )
     assert preview.status_code == 200, preview.text
     assert preview.json()["linked_matter_mismatch"] is True
+
+
+def test_ip_access_preview_matches_matter_scoping_for_inactive_team(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    member_id, member_headers = _invite_admin(
+        client,
+        owner_token=owner_token,
+        name="Inactive Team Reviewer",
+        email="inactive-team-reviewer@asterlegal.in",
+    )
+    team_response = client.post(
+        "/api/teams/",
+        headers=owner_headers,
+        json={"name": "Former IP Team", "slug": "former-ip-team"},
+    )
+    assert team_response.status_code == 201, team_response.text
+    team_id = str(team_response.json()["id"])
+    membership_response = client.post(
+        f"/api/teams/{team_id}/members",
+        headers=owner_headers,
+        json={"membership_id": member_id, "is_lead": False},
+    )
+    assert membership_response.status_code == 200, membership_response.text
+    docket, matter_id = _create_linked_restricted_docket(
+        client,
+        owner_headers=owner_headers,
+    )
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        team = session.get(Team, team_id)
+        assert matter is not None and team is not None
+        company = session.get(Company, matter.company_id)
+        assert company is not None
+        matter.team_id = team_id
+        matter.restricted_access = False
+        team.is_active = False
+        company.team_scoping_enabled = True
+        session.add(
+            EthicalWall(
+                company_id=company.id,
+                matter_id=matter.id,
+                excluded_team_id=team_id,
+                reason="Inactive-team walls do not apply to canonical Matter access.",
+                created_by_membership_id=str(bootstrap["membership"]["id"]),
+            )
+        )
+        session.commit()
+
+    # Canonical Matter access intentionally retains any existing team
+    # membership for the direct team-scoping gate, even after deactivation.
+    assert client.get(
+        f"/api/matters/{matter_id}", headers=member_headers
+    ).status_code == 200
+    preview = _preview(
+        client,
+        headers=owner_headers,
+        docket_id=str(docket["id"]),
+        payload={
+            "action": "set_restricted",
+            "expected_access_policy_version": 1,
+            "reason": "Align the IP record with canonical Matter visibility.",
+            "restricted": False,
+        },
+    )
+    member_effect = next(
+        row
+        for row in preview["affected_memberships"]
+        if row["membership_id"] == member_id
+    )
+    assert member_effect["after_visible"] is True
+    assert member_effect["linked_matter_visible"] is True
+    assert preview["linked_matter_mismatch"] is False
+
+
+def test_ip_access_apply_rolls_back_when_response_panel_cannot_be_built(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services import matter_access
+
+    bootstrap = bootstrap_company(client)
+    owner_headers = auth_headers(str(bootstrap["access_token"]))
+    docket, _ = _create_linked_restricted_docket(
+        client,
+        owner_headers=owner_headers,
+    )
+    docket_id = str(docket["id"])
+    payload: dict[str, object] = {
+        "action": "set_restricted",
+        "expected_access_policy_version": 1,
+        "reason": "Materialize the committed response under lifecycle locks.",
+        "restricted": False,
+    }
+    preview = _preview(
+        client,
+        headers=owner_headers,
+        docket_id=docket_id,
+        payload=payload,
+    )
+    def reject_panel_after_mutation(*args, **kwargs):  # noqa: ARG001
+        raise HTTPException(status_code=404, detail="Lifecycle transition won.")
+
+    monkeypatch.setattr(matter_access, "get_ip_access_panel", reject_panel_after_mutation)
+    applied = client.post(
+        f"/api/ip/dockets/{docket_id}/access/apply",
+        headers=owner_headers,
+        json={**payload, "preview_token": preview["preview_token"]},
+    )
+    assert applied.status_code == 404, applied.text
+    with get_session_factory()() as session:
+        docket_row = session.get(IpDocketRecord, docket_id)
+        assert docket_row is not None
+        assert docket_row.restricted is True
+        assert docket_row.access_policy_version == 1
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "ip.access.set_restricted",
+                AuditEvent.ip_docket_id == docket_id,
+            )
+        )
+        assert audit is None
 
 
 def test_ip_access_wall_workflow_is_effective_dated_and_reversible(
