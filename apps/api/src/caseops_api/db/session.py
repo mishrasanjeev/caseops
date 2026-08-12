@@ -38,6 +38,18 @@ class CaseOpsSession(Session):
         _SQLITE_WRITE_LOCK.acquire()
         self.info[_SQLITE_WRITE_LOCK_HELD_KEY] = True
 
+    def serialize_sqlite_writer(self) -> None:
+        """Serialize an absent-row lookup with its later SQLite write.
+
+        Reliability claims must acquire this lock *before* checking whether a
+        unique key exists.  Acquiring it only from ``flush()`` leaves a race in
+        which two sessions both observe absence and the loser poisons its outer
+        transaction with a uniqueness violation.  Commit, rollback, and close
+        retain responsibility for releasing the transaction-scoped lock.
+        """
+
+        self._acquire_sqlite_write_lock()
+
     def _release_sqlite_write_lock(self) -> None:
         if not self.info.pop(_SQLITE_WRITE_LOCK_HELD_KEY, False):
             return
@@ -174,6 +186,21 @@ def get_session_factory(database_url: str | None = None) -> sessionmaker[Session
         autoflush=False,
         expire_on_commit=False,
     )
+
+
+def serialize_sqlite_writer(session: Session) -> None:
+    """Acquire CaseOps' transaction-scoped SQLite writer serialization.
+
+    Production PostgreSQL sessions are a no-op.  A plain SQLAlchemy ``Session``
+    over SQLite cannot provide the process-wide ordering guarantee and is
+    rejected rather than silently reintroducing the absent-row race.
+    """
+
+    if session.get_bind().dialect.name != "sqlite":
+        return
+    if not isinstance(session, CaseOpsSession):
+        raise RuntimeError("SQLite reliability writes require CaseOpsSession.")
+    session.serialize_sqlite_writer()
 
 
 def get_db_session() -> Generator[Session]:

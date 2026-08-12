@@ -51,8 +51,11 @@ from __future__ import annotations
 
 import importlib.util
 import os
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, date, datetime
 from pathlib import Path
+from threading import Event
 from uuid import uuid4
 
 import pytest
@@ -1161,6 +1164,358 @@ def test_oc_cross_visibility_server_default_inserts_false(pg_engine):
         f"Expected server_default=false to land False, got {v!r}. "
         "Migration 20260424_0002 server_default may not have applied."
     )
+
+
+def test_shared_outbox_skip_locked_claims_are_disjoint_on_postgres(pg_engine):
+    """Concurrent drainers skip a locked event instead of double-claiming it."""
+    from datetime import timedelta
+
+    from caseops_api.services.domain_outbox import (
+        claim_outbox_events,
+        enqueue_domain_event,
+    )
+    now = datetime(2026, 8, 12, 6, 30, tzinfo=UTC)
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        for index in range(2):
+            enqueue_domain_event(
+                seed,
+                company_id=company_id,
+                event_key=f"postgres-skip-locked-{uuid4()}",
+                event_type="fixture.event",
+                schema_version=1,
+                aggregate_type="fixture",
+                aggregate_id=f"fixture-{index}",
+                aggregate_version=1,
+                occurred_at=now,
+                effective_at=now,
+                source_command_id=f"command-{index}",
+                source_event_id=None,
+                producer="postgres-validation",
+                confidentiality="internal",
+                correlation_id=f"correlation-{uuid4()}",
+                payload={"index": index},
+                now=now,
+            )
+        seed.commit()
+
+    first_session = Session(pg_engine)
+    second_session = Session(pg_engine)
+    try:
+        first = claim_outbox_events(
+            first_session,
+            company_id=company_id,
+            lease_owner="postgres-worker-a",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now,
+        )
+        # Keep the first transaction open so its row lock remains live.
+        second = claim_outbox_events(
+            second_session,
+            company_id=company_id,
+            lease_owner="postgres-worker-b",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now,
+        )
+        assert len(first) == len(second) == 1
+        assert first[0].event_id != second[0].event_id
+        first_session.commit()
+        second_session.commit()
+    finally:
+        first_session.close()
+        second_session.close()
+
+
+def test_shared_reliability_downgrade_lock_excludes_postgres_writer(pg_engine):
+    """The fail-closed empty check owns exclusive locks before inspecting rows."""
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260812_0001_shared_reliability_foundation.py"
+    )
+    spec = importlib.util.spec_from_file_location(migration_path.stem, migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    now = datetime(2026, 8, 12, 6, 45, tzinfo=UTC)
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        seed.commit()
+
+    writer_started = Event()
+    record_id = str(uuid4())
+
+    def insert_evidence() -> None:
+        writer_started.set()
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO api_idempotency_records "
+                    "(id, company_id, actor_scope, http_method, operation, "
+                    "idempotency_key, request_hash, state, claim_token, "
+                    "claim_generation, claim_expires_at, expires_at, created_at, "
+                    "updated_at) VALUES "
+                    "(:id, :company_id, 'system:downgrade-lock', 'POST', "
+                    "'fixture.downgrade-lock', :key, :request_hash, 'processing', "
+                    "'fixture-claim', 1, :claim_expires_at, :expires_at, "
+                    ":created_at, :created_at)"
+                ),
+                {
+                    "id": record_id,
+                    "company_id": company_id,
+                    "key": f"downgrade-lock-{record_id}",
+                    "request_hash": "d" * 64,
+                    "claim_expires_at": now.replace(minute=50),
+                    "expires_at": now.replace(day=19),
+                    "created_at": now,
+                },
+            )
+
+    with pg_engine.connect() as lock_connection:
+        transaction = lock_connection.begin()
+        migration._lock_tables_for_populated_downgrade_check(lock_connection)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            writer = executor.submit(insert_evidence)
+            assert writer_started.wait(timeout=5)
+            with pytest.raises(FutureTimeoutError):
+                writer.result(timeout=0.25)
+            transaction.rollback()
+            writer.result(timeout=5)
+
+    with Session(pg_engine) as session:
+        assert session.scalar(
+            text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+            {"id": record_id},
+        ) == 1
+
+
+def test_shared_outbox_fence_rejects_stale_worker_on_postgres(pg_engine):
+    from datetime import timedelta
+
+    from caseops_api.db.models import DomainOutboxEvent, DomainOutboxState
+    from caseops_api.services.domain_outbox import (
+        StaleOutboxLeaseError,
+        claim_outbox_events,
+        complete_outbox_event,
+        enqueue_domain_event,
+    )
+
+    now = datetime(2026, 8, 12, 7, 0, tzinfo=UTC)
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        event = enqueue_domain_event(
+            session,
+            company_id=company_id,
+            event_key=f"postgres-fence-{uuid4()}",
+            event_type="fixture.event",
+            schema_version=1,
+            aggregate_type="fixture",
+            aggregate_id="fenced-fixture",
+            aggregate_version=1,
+            occurred_at=now,
+            effective_at=now,
+            source_command_id="fenced-command",
+            source_event_id=None,
+            producer="postgres-validation",
+            confidentiality="internal",
+            correlation_id=f"correlation-{uuid4()}",
+            payload={"fenced": True},
+            now=now,
+        ).event
+        session.commit()
+        event_id = event.id
+
+    with Session(pg_engine) as session:
+        old_claim = claim_outbox_events(
+            session,
+            company_id=company_id,
+            lease_owner="postgres-old-worker",
+            limit=1,
+            lease_for=timedelta(seconds=1),
+            now=now,
+        )[0]
+        session.commit()
+
+    with Session(pg_engine) as session:
+        new_claim = claim_outbox_events(
+            session,
+            company_id=company_id,
+            lease_owner="postgres-new-worker",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now + timedelta(seconds=2),
+        )[0]
+        assert new_claim.event_id == event_id
+        assert new_claim.fence_version == old_claim.fence_version + 1
+        session.commit()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(StaleOutboxLeaseError):
+            complete_outbox_event(
+                session,
+                claim=old_claim,
+                now=now + timedelta(seconds=3),
+            )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        completed = complete_outbox_event(
+            session,
+            claim=new_claim,
+            now=now + timedelta(seconds=3),
+        )
+        assert completed.state == DomainOutboxState.SUCCEEDED
+        session.commit()
+        stored = session.get(DomainOutboxEvent, event_id)
+        assert stored is not None
+        assert stored.fence_version == new_claim.fence_version
+
+
+def test_shared_reliability_company_fk_and_transaction_rollback_on_postgres(
+    pg_engine,
+):
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from caseops_api.db.models import DomainConsumerEffect, DomainOutboxEvent
+    from caseops_api.services.domain_outbox import (
+        claim_outbox_events,
+        enqueue_domain_event,
+    )
+    from caseops_api.services.idempotency import (
+        canonical_request_hash,
+        claim_idempotency,
+    )
+
+    now = datetime(2026, 8, 12, 7, 30, tzinfo=UTC)
+    rolled_back_key = f"postgres-rollback-{uuid4()}"
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        enqueue_domain_event(
+            session,
+            company_id=company_id,
+            event_key=rolled_back_key,
+            event_type="fixture.event",
+            schema_version=1,
+            aggregate_type="fixture",
+            aggregate_id="rollback-fixture",
+            aggregate_version=1,
+            occurred_at=now,
+            effective_at=now,
+            source_command_id="rollback-command",
+            source_event_id=None,
+            producer="postgres-validation",
+            confidentiality="internal",
+            correlation_id=f"correlation-{uuid4()}",
+            payload={"rolled_back": True},
+            now=now,
+        )
+        claim_idempotency(
+            session,
+            company_id=company_id,
+            actor_scope="system:postgres-rollback",
+            http_method="POST",
+            operation="fixture.rollback",
+            idempotency_key=rolled_back_key,
+            request_hash=canonical_request_hash({"rolled_back": True}),
+            expires_at=now + timedelta(days=7),
+            now=now,
+        )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.scalar(
+            select(func.count()).select_from(DomainOutboxEvent).where(
+                DomainOutboxEvent.event_key == rolled_back_key
+            )
+        ) == 0
+        from caseops_api.db.models import ApiIdempotencyRecord
+
+        assert session.scalar(
+            select(func.count()).select_from(ApiIdempotencyRecord).where(
+                ApiIdempotencyRecord.idempotency_key == rolled_back_key
+            )
+        ) == 0
+        company_a = _seed_company(session)
+        company_b = _seed_company(session)
+        membership_a = _seed_membership(session, company_a)
+        event = enqueue_domain_event(
+            session,
+            company_id=company_a,
+            event_key=f"postgres-company-fk-{uuid4()}",
+            event_type="fixture.event",
+            schema_version=1,
+            aggregate_type="fixture",
+            aggregate_id="company-fk-fixture",
+            aggregate_version=1,
+            occurred_at=now,
+            effective_at=now,
+            source_command_id="company-fk-command",
+            source_event_id=None,
+            producer="postgres-validation",
+            confidentiality="internal",
+            correlation_id=f"correlation-{uuid4()}",
+            payload={"company": "a"},
+            now=now,
+        ).event
+        session.commit()
+        event_id = event.id
+
+    with Session(pg_engine) as session:
+        claim = claim_outbox_events(
+            session,
+            company_id=company_a,
+            lease_owner="postgres-company-worker",
+            limit=1,
+            lease_for=timedelta(minutes=5),
+            now=now,
+        )[0]
+        assert claim.event_id == event_id
+        session.commit()
+
+    with pytest.raises(IntegrityError):
+        with Session(pg_engine) as session:
+            session.add(
+                DomainConsumerEffect(
+                    company_id=company_b,
+                    outbox_event_id=event_id,
+                    consumer_name="cross-company-fixture",
+                    consumer_version="v1",
+                    effect_key=f"cross-company-{uuid4()}",
+                    state="processing",
+                    attempts=1,
+                    outbox_fence_version=1,
+                    lease_owner="postgres-company-worker",
+                    lease_token=uuid4().hex,
+                    lease_expires_at=now + timedelta(minutes=5),
+                    fence_version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+
+    with pytest.raises(IntegrityError):
+        with Session(pg_engine) as session:
+            claim_idempotency(
+                session,
+                company_id=company_b,
+                actor_scope=f"membership:{membership_a}",
+                actor_membership_id=membership_a,
+                http_method="POST",
+                operation="fixture.cross-company",
+                idempotency_key=f"cross-company-{uuid4()}",
+                request_hash=canonical_request_hash({"company": "b"}),
+                expires_at=now + timedelta(days=7),
+                now=now,
+            )
+            session.commit()
 
 
 def test_notice_tenant_constraints_and_delete_policy_on_postgres(pg_engine):

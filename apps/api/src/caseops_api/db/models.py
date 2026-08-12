@@ -12865,6 +12865,378 @@ class TenantContractPlaybookRule(Base):
     playbook: Mapped[TenantContractPlaybook] = relationship(back_populates="rules")
 
 
+class ApiIdempotencyState(StrEnum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ApiIdempotencyRecord(Base):
+    """Shared HTTP mutation replay record.
+
+    The record retains only a canonical request digest and a stable result
+    reference.  Response bodies, uploaded bytes, and other confidential request
+    content do not belong in this table.
+    """
+
+    __tablename__ = "api_idempotency_records"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["actor_membership_id", "actor_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_api_idempotency_actor_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_api_idempotency_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "actor_scope",
+            "http_method",
+            "operation",
+            "idempotency_key",
+            name="uq_api_idempotency_scope_key",
+        ),
+        Index(
+            "ix_api_idempotency_scope_lookup",
+            "company_id",
+            "actor_scope",
+            "operation",
+            "idempotency_key",
+        ),
+        Index("ix_api_idempotency_expiry", "expires_at", "state"),
+        CheckConstraint(
+            "state IN ('processing', 'completed', 'failed')",
+            name="ck_api_idempotency_state",
+        ),
+        CheckConstraint(
+            "length(request_hash) = 64",
+            name="ck_api_idempotency_request_hash_length",
+        ),
+        CheckConstraint(
+            "claim_generation > 0",
+            name="ck_api_idempotency_claim_generation_positive",
+        ),
+        CheckConstraint(
+            "expires_at > created_at",
+            name="ck_api_idempotency_expiry_after_create",
+        ),
+        CheckConstraint(
+            "(actor_membership_id IS NULL AND actor_company_id IS NULL) OR "
+            "(actor_membership_id IS NOT NULL AND actor_company_id = company_id)",
+            name="ck_api_idempotency_actor_company",
+        ),
+        CheckConstraint(
+            "(state = 'processing' AND claim_token IS NOT NULL AND "
+            "claim_expires_at IS NOT NULL AND finished_at IS NULL) OR "
+            "(state IN ('completed', 'failed') AND claim_token IS NULL AND "
+            "claim_expires_at IS NULL AND finished_at IS NOT NULL)",
+            name="ck_api_idempotency_claim_state",
+        ),
+        CheckConstraint(
+            "response_status IS NULL OR response_status BETWEEN 100 AND 599",
+            name="ck_api_idempotency_response_status",
+        ),
+        CheckConstraint(
+            "(result_type IS NULL AND result_id IS NULL) OR "
+            "(result_type IS NOT NULL AND result_id IS NOT NULL)",
+            name="ck_api_idempotency_result_reference",
+        ),
+        CheckConstraint(
+            "state <> 'completed' OR response_status IS NOT NULL",
+            name="ck_api_idempotency_completed_response",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_scope: Mapped[str] = mapped_column(String(160), nullable=False)
+    actor_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    actor_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    http_method: Mapped[str] = mapped_column(String(12), nullable=False)
+    operation: Mapped[str] = mapped_column(String(160), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ApiIdempotencyState.PROCESSING
+    )
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claim_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    result_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    result_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class DomainOutboxState(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    RETRY_SCHEDULED = "retry_scheduled"
+    SUCCEEDED = "succeeded"
+    DEAD_LETTER = "dead_letter"
+
+
+class DomainOutboxEvent(Base):
+    """Neutral transactional event plus bounded delivery-control state."""
+
+    __tablename__ = "domain_outbox_events"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_domain_outbox_id_company"),
+        UniqueConstraint(
+            "company_id", "event_key", name="uq_domain_outbox_company_event_key"
+        ),
+        Index(
+            "ix_domain_outbox_claim",
+            "state",
+            "next_attempt_at",
+            "lease_expires_at",
+            "created_at",
+        ),
+        Index(
+            "ix_domain_outbox_company_state",
+            "company_id",
+            "state",
+            "created_at",
+        ),
+        Index(
+            "ix_domain_outbox_aggregate",
+            "company_id",
+            "aggregate_type",
+            "aggregate_id",
+            "aggregate_version",
+        ),
+        Index(
+            "ix_domain_outbox_correlation",
+            "company_id",
+            "correlation_id",
+        ),
+        CheckConstraint(
+            "state IN ('queued', 'processing', 'retry_scheduled', "
+            "'succeeded', 'dead_letter')",
+            name="ck_domain_outbox_state",
+        ),
+        CheckConstraint(
+            "confidentiality IN ('internal', 'confidential', 'privileged')",
+            name="ck_domain_outbox_confidentiality",
+        ),
+        CheckConstraint(
+            "schema_version > 0",
+            name="ck_domain_outbox_schema_version_positive",
+        ),
+        CheckConstraint(
+            "aggregate_version >= 0",
+            name="ck_domain_outbox_aggregate_version_nonnegative",
+        ),
+        CheckConstraint(
+            "length(payload_hash) = 64",
+            name="ck_domain_outbox_payload_hash_length",
+        ),
+        CheckConstraint(
+            "source_command_id IS NOT NULL OR source_event_id IS NOT NULL",
+            name="ck_domain_outbox_source_reference",
+        ),
+        CheckConstraint(
+            "attempts >= 0 AND max_attempts > 0 AND attempts <= max_attempts",
+            name="ck_domain_outbox_attempts",
+        ),
+        CheckConstraint(
+            "fence_version >= 0",
+            name="ck_domain_outbox_fence_nonnegative",
+        ),
+        CheckConstraint(
+            "(state = 'processing' AND lease_owner IS NOT NULL AND "
+            "lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR "
+            "(state <> 'processing' AND lease_owner IS NULL AND "
+            "lease_token IS NULL AND lease_expires_at IS NULL)",
+            name="ck_domain_outbox_lease_state",
+        ),
+        CheckConstraint(
+            "state <> 'retry_scheduled' OR next_attempt_at IS NOT NULL",
+            name="ck_domain_outbox_retry_time",
+        ),
+        CheckConstraint(
+            "(state = 'succeeded' AND completed_at IS NOT NULL) OR "
+            "(state <> 'succeeded' AND completed_at IS NULL)",
+            name="ck_domain_outbox_completed_state",
+        ),
+        CheckConstraint(
+            "(state = 'dead_letter' AND dead_lettered_at IS NOT NULL AND "
+            "dead_letter_reason IS NOT NULL) OR "
+            "(state <> 'dead_letter' AND dead_lettered_at IS NULL)",
+            name="ck_domain_outbox_dead_letter_state",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    event_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    aggregate_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    aggregate_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    aggregate_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_command_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_event_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    producer: Mapped[str] = mapped_column(String(120), nullable=False)
+    producer_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidentiality: Mapped[str] = mapped_column(String(24), nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    causation_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=DomainOutboxState.QUEUED
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    dead_letter_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class DomainConsumerEffectState(StrEnum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class DomainConsumerEffect(Base):
+    """Per-consumer idempotency/checkpoint state for one outbox event."""
+
+    __tablename__ = "domain_consumer_effects"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["outbox_event_id", "company_id"],
+            ["domain_outbox_events.id", "domain_outbox_events.company_id"],
+            name="fk_domain_consumer_effect_outbox_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_domain_consumer_effect_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "outbox_event_id",
+            "consumer_name",
+            name="uq_domain_consumer_effect_event_consumer",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "consumer_name",
+            "effect_key",
+            name="uq_domain_consumer_effect_key",
+        ),
+        Index(
+            "ix_domain_consumer_effect_claim",
+            "state",
+            "lease_expires_at",
+            "updated_at",
+        ),
+        Index(
+            "ix_domain_consumer_effect_company_consumer",
+            "company_id",
+            "consumer_name",
+            "state",
+        ),
+        CheckConstraint(
+            "state IN ('processing', 'completed', 'failed')",
+            name="ck_domain_consumer_effect_state",
+        ),
+        CheckConstraint(
+            "attempts > 0",
+            name="ck_domain_consumer_effect_attempts_positive",
+        ),
+        CheckConstraint(
+            "fence_version > 0 AND outbox_fence_version > 0",
+            name="ck_domain_consumer_effect_fences_positive",
+        ),
+        CheckConstraint(
+            "(state = 'processing' AND lease_owner IS NOT NULL AND "
+            "lease_token IS NOT NULL AND lease_expires_at IS NOT NULL AND "
+            "completed_at IS NULL AND failed_at IS NULL) OR "
+            "(state = 'completed' AND lease_owner IS NULL AND lease_token IS NULL "
+            "AND lease_expires_at IS NULL AND completed_at IS NOT NULL AND "
+            "failed_at IS NULL) OR "
+            "(state = 'failed' AND lease_owner IS NULL AND lease_token IS NULL "
+            "AND lease_expires_at IS NULL AND completed_at IS NULL AND "
+            "failed_at IS NOT NULL)",
+            name="ck_domain_consumer_effect_lease_state",
+        ),
+        CheckConstraint(
+            "(result_type IS NULL AND result_id IS NULL) OR "
+            "(result_type IS NOT NULL AND result_id IS NOT NULL)",
+            name="ck_domain_consumer_effect_result_reference",
+        ),
+        CheckConstraint(
+            "result_hash IS NULL OR length(result_hash) = 64",
+            name="ck_domain_consumer_effect_result_hash_length",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    outbox_event_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    consumer_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    consumer_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    effect_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=DomainConsumerEffectState.PROCESSING
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    outbox_fence_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    result_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    result_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    result_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
 class IpDocketRecord(Base):
     __tablename__ = "ip_docket_records"
     __table_args__ = (
