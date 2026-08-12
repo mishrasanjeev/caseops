@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
+import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -86,6 +87,7 @@ export default function IpDocketPage() {
   const canActivateRules = useCapability("ip:rules_activate");
   const canFinance = useCapability("ip:fees_manage");
   const canConfigure = useCapability("ip:taxonomy_admin");
+  const canManageAccess = useCapability("matter_access:manage");
   const session = useSession();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -239,6 +241,7 @@ export default function IpDocketPage() {
               canFinance={canFinance}
               canProposeRules={canProposeRules}
               canActivateRules={canActivateRules}
+              canManageAccess={canManageAccess}
               currentMembershipId={session.context?.membership.id ?? null}
               onChanged={refresh}
             />
@@ -676,6 +679,7 @@ function DocketWorkspace({
   canFinance,
   canProposeRules,
   canActivateRules,
+  canManageAccess,
   currentMembershipId,
   onChanged,
 }: {
@@ -685,6 +689,7 @@ function DocketWorkspace({
   canFinance: boolean;
   canProposeRules: boolean;
   canActivateRules: boolean;
+  canManageAccess: boolean;
   currentMembershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
@@ -712,6 +717,9 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        {canManageAccess ? (
+          <IpAccessWorkspace docket={docket} onChanged={onChanged} />
+        ) : null}
         <HearingWorkflowCard
           docket={docket}
           enabled={canWrite}

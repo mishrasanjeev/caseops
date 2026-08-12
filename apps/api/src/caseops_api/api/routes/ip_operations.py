@@ -20,6 +20,11 @@ from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.core.settings import get_settings
 from caseops_api.schemas.audit import IpDocketAuditListResponse
 from caseops_api.schemas.ip_access import (
+    IpAccessApplyRequest,
+    IpAccessChangeRequest,
+    IpAccessChangeResponse,
+    IpAccessPanelResponse,
+    IpAccessPreviewResponse,
     RecordAccessFoundationContract,
     RecordAccessReconciliationReport,
 )
@@ -216,9 +221,13 @@ from caseops_api.services.ip_workspace import (
     upsert_ip_workspace_configuration,
 )
 from caseops_api.services.matter_access import (
+    apply_ip_access_change,
+    get_ip_access_panel,
+    preview_ip_access_change,
     reconcile_record_access,
     record_access_foundation_contract,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import (
     create_ip_operational_deadline,
@@ -288,6 +297,66 @@ async def get_record_access_reconciliation(
     session: DbSession,
 ) -> RecordAccessReconciliationReport:
     return reconcile_record_access(session, context=context)
+
+
+@router.get(
+    "/dockets/{docket_id}/access",
+    response_model=IpAccessPanelResponse,
+    summary="Inspect internal IP access grants, ethical walls, and policy history",
+)
+async def get_ip_docket_access_panel(
+    docket_id: str,
+    context: IpAccessManager,
+    session: DbSession,
+) -> IpAccessPanelResponse:
+    return get_ip_access_panel(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/access/preview",
+    response_model=IpAccessPreviewResponse,
+    summary="Preview an internal IP access-policy change without mutation",
+)
+async def post_ip_docket_access_preview(
+    docket_id: str,
+    payload: IpAccessChangeRequest,
+    context: IpAccessManager,
+    session: DbSession,
+) -> IpAccessPreviewResponse:
+    return preview_ip_access_change(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/access/apply",
+    response_model=IpAccessChangeResponse,
+    summary="Apply a previewed internal IP access-policy change",
+)
+async def post_ip_docket_access_change(
+    docket_id: str,
+    payload: IpAccessApplyRequest,
+    context: IpAccessManager,
+    session: DbSession,
+) -> IpAccessChangeResponse:
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="record_access_change",
+    )
+    return apply_ip_access_change(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
 
 
 @router.get(

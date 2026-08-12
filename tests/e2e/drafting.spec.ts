@@ -97,7 +97,7 @@ test.describe("Drafting studio (§4.3)", () => {
     const csrf = cookies.find((c) => c.name === "caseops_csrf")?.value;
     if (!csrf) throw new Error("caseops_csrf cookie missing after sign-in");
     const draftRes = await page.context().request.post(
-      `http://127.0.0.1:8000/api/matters/${matterId}/drafts`,
+      `${apiBaseUrl}/api/matters/${matterId}/drafts`,
       {
         data: { title: "E2E reply brief", draft_type: "brief" },
         headers: { "X-CSRF-Token": csrf },

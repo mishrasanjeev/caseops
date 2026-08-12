@@ -49,7 +49,7 @@ Generated; do not edit.
 | UJ-43 | Manage assignment, licence, and obligations | 5 | IPLF-090B | 5 | 0 | not_started | not_run | false |
 | UJ-44 | Manage GI, plant variety, layout design, or trade secret | 5 | IPLF-091B | 5 | 0 | not_started | not_run | false |
 | UJ-45 | Manage customs or anti-counterfeiting action | 5 | IPLF-091B | 5 | 0 | not_started | not_run | false |
-| UJ-46 | Apply or revoke IP ethical-wall access | 5 | IPLF-026B | 5 | 0 | not_started | not_run | false |
+| UJ-46 | Apply or revoke IP ethical-wall access | 5 | IPLF-026B | 10 | 1 | implemented | passed | false |
 | UJ-47 | Propose, test, activate, and retire legal rule version | 6 | IPLF-023B, IPLF-027B | 6 | 0 | in_progress | not_run | false |
 | UJ-48 | Verify, quarantine, or supersede legal source | 6 | IPLF-006A, IPLF-006B, IPLF-006C | 6 | 1 | implemented | passed | false |
 | UJ-49 | Onboard IP client/work and clear firm conflict | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |

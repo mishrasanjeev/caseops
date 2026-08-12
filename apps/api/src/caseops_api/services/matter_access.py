@@ -15,32 +15,49 @@ a 404, matching the tenant-isolation pattern.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, exists, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import Select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     Company,
     CompanyMembership,
     EthicalWall,
     IpDocketRecord,
+    IpDocumentLink,
     Matter,
     MatterAccessGrant,
     MatterAccessLevel,
     MembershipRole,
+    NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
     Team,
     TeamMembership,
 )
 from caseops_api.schemas.ip_access import (
+    IpAccessAffectedMembership,
+    IpAccessApplyRequest,
+    IpAccessChangeRequest,
+    IpAccessChangeResponse,
+    IpAccessGrantRecord,
+    IpAccessPanelResponse,
+    IpAccessPreviewResponse,
+    IpEthicalWallRecord,
     RecordAccessFoundationContract,
     RecordAccessReconciliationReport,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.session_context import SessionContext
 
 
@@ -340,6 +357,882 @@ def seed_restricted_ip_creator_access(
     session.add(docket)
     session.flush()
     return grant
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _active_at(row: MatterAccessGrant | EthicalWall, now: datetime) -> bool:
+    effective_from = _as_utc(row.effective_from)
+    expires_at = _as_utc(row.expires_at)
+    revoked_at = _as_utc(row.revoked_at)
+    return bool(
+        revoked_at is None
+        and (effective_from is None or effective_from <= now)
+        and (expires_at is None or expires_at > now)
+    )
+
+
+def _load_ip_docket_for_access_management(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    lock: bool = False,
+) -> IpDocketRecord:
+    # Apply uses one lock order with Matter lifecycle disposal: parent Matter,
+    # then IP docket. Preview is read-only but applies the same fail-closed
+    # terminal checks without locks.
+    linked_statement = (
+        select(Matter)
+        .join(IpDocketRecord, IpDocketRecord.matter_id == Matter.id)
+        .where(
+            IpDocketRecord.id == docket_id,
+            IpDocketRecord.company_id == context.company.id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if lock:
+        linked_statement = linked_statement.with_for_update(of=Matter)
+    linked_matter = session.scalar(linked_statement)
+    statement = select(IpDocketRecord).where(
+        IpDocketRecord.id == docket_id,
+        IpDocketRecord.company_id == context.company.id,
+    )
+    if lock:
+        statement = statement.with_for_update(of=IpDocketRecord)
+    docket = session.scalar(statement)
+    if (
+        docket is None
+        or not docket.is_active
+        or docket.archived_by_matter_disposal
+        or (docket.matter_id is not None and linked_matter is None)
+        or (linked_matter is not None and not matter_is_operational(linked_matter))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="IP docket record not found.",
+        )
+    return docket
+
+
+def _linked_matter_visibility_by_membership(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter | None,
+    memberships: list[CompanyMembership],
+    membership_teams: dict[str, set[str]],
+    now: datetime,
+) -> dict[str, bool]:
+    if matter is None:
+        return {}
+    grants = list(
+        session.scalars(
+            select(MatterAccessGrant).where(MatterAccessGrant.matter_id == matter.id)
+        ).all()
+    )
+    walls = list(
+        session.scalars(select(EthicalWall).where(EthicalWall.matter_id == matter.id)).all()
+    )
+    team_scoping_enabled = _team_scoping_enabled(session, context.company.id)
+    scoped_membership_ids = (
+        {
+            str(membership_id)
+            for membership_id in session.scalars(
+                select(TeamMembership.membership_id).where(
+                    TeamMembership.team_id == matter.team_id
+                )
+            ).all()
+        }
+        if team_scoping_enabled and matter.team_id is not None
+        else set()
+    )
+    result: dict[str, bool] = {}
+    for membership in memberships:
+        if membership.role == MembershipRole.OWNER:
+            result[membership.id] = True
+            continue
+        team_ids = membership_teams.get(membership.id, set())
+        walled = any(
+            _active_at(wall, now)
+            and _subject_matches(
+                membership_id=membership.id,
+                team_ids=team_ids,
+                subject_membership_id=wall.excluded_membership_id,
+                subject_team_id=wall.excluded_team_id,
+            )
+            for wall in walls
+        )
+        granted = any(
+            _active_at(grant, now)
+            and _subject_matches(
+                membership_id=membership.id,
+                team_ids=team_ids,
+                subject_membership_id=grant.membership_id,
+                subject_team_id=grant.team_id,
+            )
+            for grant in grants
+        )
+        base_visible = not walled and (
+            not matter.restricted_access
+            or matter.assignee_membership_id == membership.id
+            or granted
+        )
+        team_visible = (
+            not team_scoping_enabled
+            or matter.team_id is None
+            or membership.id in scoped_membership_ids
+            or granted
+            or matter.assignee_membership_id == membership.id
+        )
+        result[membership.id] = base_visible and team_visible
+    return result
+
+
+def _ip_access_rows(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+) -> tuple[list[MatterAccessGrant], list[EthicalWall]]:
+    grants = list(
+        session.scalars(
+            select(MatterAccessGrant)
+            .where(MatterAccessGrant.ip_docket_id == docket.id)
+            .order_by(MatterAccessGrant.created_at, MatterAccessGrant.id)
+        ).all()
+    )
+    walls = list(
+        session.scalars(
+            select(EthicalWall)
+            .where(EthicalWall.ip_docket_id == docket.id)
+            .order_by(EthicalWall.created_at, EthicalWall.id)
+        ).all()
+    )
+    return grants, walls
+
+
+def _active_company_memberships(
+    session: Session,
+    *,
+    company_id: str,
+) -> list[CompanyMembership]:
+    return list(
+        session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.is_active.is_(True),
+            )
+            .order_by(CompanyMembership.created_at, CompanyMembership.id)
+        ).all()
+    )
+
+
+def _active_team_membership_map(
+    session: Session,
+    *,
+    company_id: str,
+) -> tuple[dict[str, set[str]], dict[str, str]]:
+    rows = session.execute(
+        select(TeamMembership.team_id, TeamMembership.membership_id, Team.name)
+        .join(Team, Team.id == TeamMembership.team_id)
+        .where(Team.company_id == company_id, Team.is_active.is_(True))
+    ).all()
+    membership_teams: dict[str, set[str]] = {}
+    team_labels: dict[str, str] = {}
+    for team_id, membership_id, team_name in rows:
+        membership_teams.setdefault(str(membership_id), set()).add(str(team_id))
+        team_labels[str(team_id)] = str(team_name)
+    return membership_teams, team_labels
+
+
+def _membership_label(membership: CompanyMembership) -> str:
+    user = membership.user
+    return str(user.full_name or user.email or membership.id)
+
+
+def _subject_matches(
+    *,
+    membership_id: str,
+    team_ids: set[str],
+    subject_membership_id: str | None,
+    subject_team_id: str | None,
+) -> bool:
+    return bool(
+        (subject_membership_id is not None and subject_membership_id == membership_id)
+        or (subject_team_id is not None and subject_team_id in team_ids)
+    )
+
+
+def _policy_visible_from_rows(
+    *,
+    membership_id: str,
+    team_ids: set[str],
+    restricted: bool,
+    grants: list[MatterAccessGrant],
+    walls: list[EthicalWall],
+    now: datetime,
+    ignored_grant_id: str | None = None,
+    ignored_wall_id: str | None = None,
+    added_grant_subject: tuple[str, str, datetime | None, datetime | None] | None = None,
+    added_wall_subject: tuple[str, str, datetime | None, datetime | None] | None = None,
+) -> bool:
+    for wall in walls:
+        if wall.id == ignored_wall_id or not _active_at(wall, now):
+            continue
+        if _subject_matches(
+            membership_id=membership_id,
+            team_ids=team_ids,
+            subject_membership_id=wall.excluded_membership_id,
+            subject_team_id=wall.excluded_team_id,
+        ):
+            return False
+    if added_wall_subject is not None:
+        subject_type, subject_id, effective_from, expires_at = added_wall_subject
+        effective = _as_utc(effective_from)
+        expires = _as_utc(expires_at)
+        active = (effective is None or effective <= now) and (
+            expires is None or expires > now
+        )
+        matches = (
+            subject_type == "membership" and subject_id == membership_id
+        ) or (subject_type == "team" and subject_id in team_ids)
+        if active and matches:
+            return False
+    if not restricted:
+        return True
+    for grant in grants:
+        if grant.id == ignored_grant_id or not _active_at(grant, now):
+            continue
+        if _subject_matches(
+            membership_id=membership_id,
+            team_ids=team_ids,
+            subject_membership_id=grant.membership_id,
+            subject_team_id=grant.team_id,
+        ):
+            return True
+    if added_grant_subject is not None:
+        subject_type, subject_id, effective_from, expires_at = added_grant_subject
+        effective = _as_utc(effective_from)
+        expires = _as_utc(expires_at)
+        active = (effective is None or effective <= now) and (
+            expires is None or expires > now
+        )
+        matches = (
+            subject_type == "membership" and subject_id == membership_id
+        ) or (subject_type == "team" and subject_id in team_ids)
+        if active and matches:
+            return True
+    return False
+
+
+def _validate_ip_access_change(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    payload: IpAccessChangeRequest,
+    grants: list[MatterAccessGrant],
+    walls: list[EthicalWall],
+) -> tuple[MatterAccessGrant | None, EthicalWall | None]:
+    if docket.access_policy_version != payload.expected_access_policy_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "IP access policy changed after this view was loaded. "
+                "Refresh the access preview and try again."
+            ),
+        )
+    grant: MatterAccessGrant | None = None
+    wall: EthicalWall | None = None
+    if payload.action in {"grant", "add_wall"}:
+        if payload.subject_type == "membership":
+            subject = session.scalar(
+                select(CompanyMembership).where(
+                    CompanyMembership.id == payload.subject_id,
+                    CompanyMembership.company_id == context.company.id,
+                    CompanyMembership.is_active.is_(True),
+                )
+            )
+        else:
+            subject = session.scalar(
+                select(Team).where(
+                    Team.id == payload.subject_id,
+                    Team.company_id == context.company.id,
+                    Team.is_active.is_(True),
+                )
+            )
+        if subject is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Access subject does not belong to this company or is inactive.",
+            )
+    if payload.action == "grant":
+        duplicate = next(
+            (
+                row
+                for row in grants
+                if row.revoked_at is None
+                and (
+                    payload.subject_type == "membership"
+                    and row.membership_id == payload.subject_id
+                    or payload.subject_type == "team"
+                    and row.team_id == payload.subject_id
+                )
+            ),
+            None,
+        )
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An active grant already exists for this subject.",
+            )
+    elif payload.action == "add_wall":
+        duplicate = next(
+            (
+                row
+                for row in walls
+                if row.revoked_at is None
+                and (
+                    payload.subject_type == "membership"
+                    and row.excluded_membership_id == payload.subject_id
+                    or payload.subject_type == "team"
+                    and row.excluded_team_id == payload.subject_id
+                )
+            ),
+            None,
+        )
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An active ethical wall already exists for this subject.",
+            )
+    elif payload.action == "revoke_grant":
+        grant = next(
+            (
+                row
+                for row in grants
+                if row.id == payload.grant_id and row.revoked_at is None
+            ),
+            None,
+        )
+        if grant is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Active IP access grant not found.",
+            )
+    elif payload.action == "revoke_wall":
+        wall = next(
+            (
+                row
+                for row in walls
+                if row.id == payload.wall_id and row.revoked_at is None
+            ),
+            None,
+        )
+        if wall is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Active IP ethical wall not found.",
+            )
+    return grant, wall
+
+
+def _preview_token(
+    *,
+    company_id: str,
+    docket_id: str,
+    actor_membership_id: str,
+    payload: IpAccessChangeRequest,
+) -> str:
+    canonical = json.dumps(
+        {
+            "company_id": company_id,
+            "docket_id": docket_id,
+            "actor_membership_id": actor_membership_id,
+            "change": payload.model_dump(mode="json", exclude={"preview_token"}),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hmac.new(
+        get_settings().auth_secret.encode("utf-8"),
+        canonical.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _ip_access_preview_for_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    payload: IpAccessChangeRequest,
+) -> IpAccessPreviewResponse:
+    grants, walls = _ip_access_rows(session, docket=docket)
+    revoked_grant, revoked_wall = _validate_ip_access_change(
+        session,
+        context=context,
+        docket=docket,
+        payload=payload,
+        grants=grants,
+        walls=walls,
+    )
+    memberships = _active_company_memberships(
+        session, company_id=context.company.id
+    )
+    membership_teams, _ = _active_team_membership_map(
+        session, company_id=context.company.id
+    )
+    now = datetime.now(UTC)
+    linked_matter = (
+        session.get(Matter, docket.matter_id) if docket.matter_id is not None else None
+    )
+    linked_visibility = _linked_matter_visibility_by_membership(
+        session,
+        context=context,
+        matter=linked_matter,
+        memberships=memberships,
+        membership_teams=membership_teams,
+        now=now,
+    )
+    affected: list[IpAccessAffectedMembership] = []
+    subject_membership_id = payload.subject_id if payload.subject_type == "membership" else None
+    subject_team_id = payload.subject_id if payload.subject_type == "team" else None
+    if revoked_grant is not None:
+        subject_membership_id = revoked_grant.membership_id
+        subject_team_id = revoked_grant.team_id
+    if revoked_wall is not None:
+        subject_membership_id = revoked_wall.excluded_membership_id
+        subject_team_id = revoked_wall.excluded_team_id
+    for membership in memberships:
+        team_ids = membership_teams.get(membership.id, set())
+        before_visible = _policy_visible_from_rows(
+            membership_id=membership.id,
+            team_ids=team_ids,
+            restricted=docket.restricted,
+            grants=grants,
+            walls=walls,
+            now=now,
+        )
+        after_visible = _policy_visible_from_rows(
+            membership_id=membership.id,
+            team_ids=team_ids,
+            restricted=(
+                bool(payload.restricted)
+                if payload.action == "set_restricted"
+                else docket.restricted
+            ),
+            grants=grants,
+            walls=walls,
+            now=now,
+            ignored_grant_id=(
+                revoked_grant.id if payload.action == "revoke_grant" and revoked_grant else None
+            ),
+            ignored_wall_id=(
+                revoked_wall.id if payload.action == "revoke_wall" and revoked_wall else None
+            ),
+            added_grant_subject=(
+                (
+                    str(payload.subject_type),
+                    str(payload.subject_id),
+                    payload.effective_from,
+                    payload.expires_at,
+                )
+                if payload.action == "grant"
+                else None
+            ),
+            added_wall_subject=(
+                (
+                    str(payload.subject_type),
+                    str(payload.subject_id),
+                    payload.effective_from,
+                    payload.expires_at,
+                )
+                if payload.action == "add_wall"
+                else None
+            ),
+        )
+        linked_visible = (
+            linked_visibility[membership.id] if linked_matter is not None else None
+        )
+        in_subject = payload.action == "set_restricted" or _subject_matches(
+            membership_id=membership.id,
+            team_ids=team_ids,
+            subject_membership_id=subject_membership_id,
+            subject_team_id=subject_team_id,
+        )
+        if in_subject or before_visible != after_visible:
+            affected.append(
+                IpAccessAffectedMembership(
+                    membership_id=membership.id,
+                    label=_membership_label(membership),
+                    before_visible=before_visible,
+                    after_visible=after_visible,
+                    linked_matter_visible=linked_visible,
+                )
+            )
+    actor_effect = next(
+        (row for row in affected if row.membership_id == context.membership.id),
+        None,
+    )
+    if actor_effect is not None and actor_effect.before_visible and not actor_effect.after_visible:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "You cannot remove your own last effective access. "
+                "A different authorized owner or access administrator must perform this change."
+            ),
+        )
+    gains = sum(not row.before_visible and row.after_visible for row in affected)
+    losses = sum(row.before_visible and not row.after_visible for row in affected)
+    linked_mismatch = any(
+        row.linked_matter_visible is not None
+        and row.linked_matter_visible != row.after_visible
+        for row in affected
+    )
+    queued_delivery_count = int(
+        session.scalar(
+            select(func.count(NotificationDeliveryIntent.id)).where(
+                NotificationDeliveryIntent.company_id == context.company.id,
+                NotificationDeliveryIntent.ip_docket_id == docket.id,
+                NotificationDeliveryIntent.status.in_(
+                    [
+                        NotificationDeliveryStatus.QUEUED,
+                        NotificationDeliveryStatus.RETRY_SCHEDULED,
+                    ]
+                ),
+            )
+        )
+        or 0
+    )
+    document_count = int(
+        session.scalar(
+            select(func.count(func.distinct(IpDocumentLink.document_id))).where(
+                IpDocumentLink.company_id == context.company.id,
+                IpDocumentLink.docket_id == docket.id,
+            )
+        )
+        or 0
+    )
+    warnings = [
+        "Linked Matter and IP access remain independent; this change never copies permissions."
+    ] if linked_mismatch else []
+    if losses:
+        warnings.append(
+            "Revoked users lose direct, list, document, source, audit, export, "
+            "and queued-delivery visibility."
+        )
+    if payload.action == "set_restricted" and payload.restricted is False:
+        warnings.append(
+            "Default visibility will include every active internal membership "
+            "not blocked by an ethical wall."
+        )
+    return IpAccessPreviewResponse(
+        docket_id=docket.id,
+        access_policy_version=docket.access_policy_version,
+        action=payload.action,
+        preview_token=_preview_token(
+            company_id=context.company.id,
+            docket_id=docket.id,
+            actor_membership_id=context.membership.id,
+            payload=payload,
+        ),
+        affected_memberships=affected,
+        visibility_gain_count=gains,
+        visibility_loss_count=losses,
+        queued_delivery_recheck_count=queued_delivery_count,
+        document_count=document_count,
+        linked_matter_id=docket.matter_id,
+        linked_matter_mismatch=linked_mismatch,
+        warnings=warnings,
+    )
+
+
+def preview_ip_access_change(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpAccessChangeRequest,
+) -> IpAccessPreviewResponse:
+    docket = _load_ip_docket_for_access_management(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
+    return _ip_access_preview_for_docket(
+        session,
+        context=context,
+        docket=docket,
+        payload=payload,
+    )
+
+
+def _subject_labels(
+    session: Session,
+    *,
+    company_id: str,
+) -> tuple[dict[str, str], dict[str, str]]:
+    memberships = _active_company_memberships(session, company_id=company_id)
+    membership_labels = {
+        membership.id: _membership_label(membership) for membership in memberships
+    }
+    team_labels = {
+        str(team_id): str(name)
+        for team_id, name in session.execute(
+            select(Team.id, Team.name).where(Team.company_id == company_id)
+        ).all()
+    }
+    return membership_labels, team_labels
+
+
+def get_ip_access_panel(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+) -> IpAccessPanelResponse:
+    docket = _load_ip_docket_for_access_management(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
+    grants, walls = _ip_access_rows(session, docket=docket)
+    membership_labels, team_labels = _subject_labels(
+        session, company_id=context.company.id
+    )
+    memberships = _active_company_memberships(
+        session, company_id=context.company.id
+    )
+    membership_teams, _ = _active_team_membership_map(
+        session, company_id=context.company.id
+    )
+    now = datetime.now(UTC)
+    active_count = sum(
+        _policy_visible_from_rows(
+            membership_id=membership.id,
+            team_ids=membership_teams.get(membership.id, set()),
+            restricted=docket.restricted,
+            grants=grants,
+            walls=walls,
+            now=now,
+        )
+        for membership in memberships
+    )
+    queued_count = int(
+        session.scalar(
+            select(func.count(NotificationDeliveryIntent.id)).where(
+                NotificationDeliveryIntent.company_id == context.company.id,
+                NotificationDeliveryIntent.ip_docket_id == docket.id,
+                NotificationDeliveryIntent.status.in_(
+                    [
+                        NotificationDeliveryStatus.QUEUED,
+                        NotificationDeliveryStatus.RETRY_SCHEDULED,
+                    ]
+                ),
+            )
+        )
+        or 0
+    )
+    grant_records = [
+        IpAccessGrantRecord(
+            id=row.id,
+            subject_type="membership" if row.membership_id else "team",
+            subject_id=str(row.membership_id or row.team_id),
+            subject_label=(
+                membership_labels.get(str(row.membership_id), "Former membership")
+                if row.membership_id
+                else team_labels.get(str(row.team_id), "Former team")
+            ),
+            access_level="member",
+            reason=row.reason,
+            effective_from=row.effective_from,
+            expires_at=row.expires_at,
+            revoked_at=row.revoked_at,
+            granted_by_membership_id=row.granted_by_membership_id,
+            revoked_by_membership_id=row.revoked_by_membership_id,
+            record_version=row.record_version,
+            created_at=row.created_at,
+        )
+        for row in grants
+    ]
+    wall_records = [
+        IpEthicalWallRecord(
+            id=row.id,
+            subject_type="membership" if row.excluded_membership_id else "team",
+            subject_id=str(row.excluded_membership_id or row.excluded_team_id),
+            subject_label=(
+                membership_labels.get(str(row.excluded_membership_id), "Former membership")
+                if row.excluded_membership_id
+                else team_labels.get(str(row.excluded_team_id), "Former team")
+            ),
+            reason=row.reason,
+            effective_from=row.effective_from,
+            expires_at=row.expires_at,
+            revoked_at=row.revoked_at,
+            created_by_membership_id=row.created_by_membership_id,
+            revoked_by_membership_id=row.revoked_by_membership_id,
+            record_version=row.record_version,
+            created_at=row.created_at,
+        )
+        for row in walls
+    ]
+    return IpAccessPanelResponse(
+        docket_id=docket.id,
+        docket_title=docket.title,
+        restricted=docket.restricted,
+        access_policy_version=docket.access_policy_version,
+        linked_matter_id=docket.matter_id,
+        grants=grant_records,
+        walls=wall_records,
+        active_internal_membership_count=active_count,
+        queued_delivery_count=queued_count,
+    )
+
+
+def apply_ip_access_change(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpAccessApplyRequest,
+) -> IpAccessChangeResponse:
+    docket = _load_ip_docket_for_access_management(
+        session,
+        context=context,
+        docket_id=docket_id,
+        lock=True,
+    )
+    preview = _ip_access_preview_for_docket(
+        session,
+        context=context,
+        docket=docket,
+        payload=payload,
+    )
+    if not hmac.compare_digest(preview.preview_token, payload.preview_token):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Access preview does not match this command. Preview the change again.",
+        )
+    grants, walls = _ip_access_rows(session, docket=docket)
+    revoked_grant, revoked_wall = _validate_ip_access_change(
+        session,
+        context=context,
+        docket=docket,
+        payload=payload,
+        grants=grants,
+        walls=walls,
+    )
+    now = datetime.now(UTC)
+    if payload.expires_at is not None and _as_utc(payload.expires_at) <= now:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Access expiry passed after preview. Preview the change again.",
+        )
+    if payload.action == "set_restricted":
+        docket.restricted = bool(payload.restricted)
+    elif payload.action == "grant":
+        session.add(
+            MatterAccessGrant(
+                company_id=context.company.id,
+                ip_docket_id=docket.id,
+                membership_id=(
+                    payload.subject_id if payload.subject_type == "membership" else None
+                ),
+                team_id=payload.subject_id if payload.subject_type == "team" else None,
+                access_level=MatterAccessLevel.MEMBER,
+                reason=payload.reason.strip(),
+                granted_by_membership_id=context.membership.id,
+                effective_from=payload.effective_from or now,
+                expires_at=payload.expires_at,
+            )
+        )
+    elif payload.action == "revoke_grant":
+        assert revoked_grant is not None
+        revoked_grant.revoked_at = now
+        revoked_grant.revoked_by_membership_id = context.membership.id
+        revoked_grant.record_version += 1
+        session.add(revoked_grant)
+    elif payload.action == "add_wall":
+        session.add(
+            EthicalWall(
+                company_id=context.company.id,
+                ip_docket_id=docket.id,
+                excluded_membership_id=(
+                    payload.subject_id if payload.subject_type == "membership" else None
+                ),
+                excluded_team_id=(
+                    payload.subject_id if payload.subject_type == "team" else None
+                ),
+                reason=payload.reason.strip(),
+                created_by_membership_id=context.membership.id,
+                effective_from=payload.effective_from or now,
+                expires_at=payload.expires_at,
+            )
+        )
+    elif payload.action == "revoke_wall":
+        assert revoked_wall is not None
+        revoked_wall.revoked_at = now
+        revoked_wall.revoked_by_membership_id = context.membership.id
+        revoked_wall.record_version += 1
+        session.add(revoked_wall)
+    previous_version = docket.access_policy_version
+    docket.access_policy_version += 1
+    session.add(docket)
+    session.flush()
+    operation_id = str(uuid4())
+    record_from_context(
+        session,
+        context,
+        action=f"ip.access.{payload.action}",
+        target_type="ip_docket_record",
+        target_id=docket.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={
+            "reason": payload.reason.strip(),
+            "subject_type": payload.subject_type,
+            "subject_id": payload.subject_id,
+            "grant_id": payload.grant_id,
+            "wall_id": payload.wall_id,
+            "restricted": payload.restricted,
+            "access_policy_version_before": previous_version,
+            "access_policy_version_after": docket.access_policy_version,
+            "preview_token": payload.preview_token,
+            "invalidation_operation_id": operation_id,
+            "visibility_gain_count": preview.visibility_gain_count,
+            "visibility_loss_count": preview.visibility_loss_count,
+            "queued_delivery_recheck_count": preview.queued_delivery_recheck_count,
+            "invalidation_contract": [
+                "access_policy_generation",
+                "result_hydration",
+                "queued_delivery_reauthorization",
+            ],
+            "linked_matter_permissions_copied": False,
+        },
+    )
+    response = IpAccessChangeResponse(
+        action=payload.action,
+        invalidation_operation_id=operation_id,
+        visibility_gain_count=preview.visibility_gain_count,
+        visibility_loss_count=preview.visibility_loss_count,
+        queued_delivery_recheck_count=preview.queued_delivery_recheck_count,
+        panel=get_ip_access_panel(
+            session,
+            context=context,
+            docket_id=docket.id,
+        ),
+    )
+    session.commit()
+    return response
 
 
 def attach_visible_ip_dockets_filter(
@@ -795,6 +1688,7 @@ def remove_ethical_wall(
 __all__ = [
     "add_access_grant",
     "add_ethical_wall",
+    "apply_ip_access_change",
     "assert_access",
     "assert_ip_docket_access",
     "attach_visible_ip_dockets_filter",
@@ -802,6 +1696,8 @@ __all__ = [
     "can_access",
     "can_access_ip_docket",
     "list_access_panel",
+    "get_ip_access_panel",
+    "preview_ip_access_change",
     "remove_access_grant",
     "remove_ethical_wall",
     "reconcile_record_access",

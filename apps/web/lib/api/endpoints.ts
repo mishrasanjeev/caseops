@@ -7914,6 +7914,7 @@ export type IpDocket = {
   lifecycle_evidence_ref: string | null;
   successor_docket_id: string | null;
   restricted: boolean;
+  access_policy_version: number;
   current_version: number;
   current_particulars: IpTrademarkParticularVersion;
   notice_links: Array<Record<string, unknown>>;
@@ -9292,6 +9293,142 @@ export async function createIpDocket(input: {
         ],
       },
     },
+  });
+}
+
+export type IpAccessSubjectType = "membership" | "team";
+export type IpAccessChangeAction =
+  | "set_restricted"
+  | "grant"
+  | "revoke_grant"
+  | "add_wall"
+  | "revoke_wall";
+
+export type IpAccessGrant = {
+  id: string;
+  subject_type: IpAccessSubjectType;
+  subject_id: string;
+  subject_label: string;
+  access_level: "member";
+  reason: string | null;
+  effective_from: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  granted_by_membership_id: string | null;
+  revoked_by_membership_id: string | null;
+  record_version: number;
+  created_at: string;
+};
+
+export type IpEthicalWall = {
+  id: string;
+  subject_type: IpAccessSubjectType;
+  subject_id: string;
+  subject_label: string;
+  reason: string | null;
+  effective_from: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by_membership_id: string | null;
+  revoked_by_membership_id: string | null;
+  record_version: number;
+  created_at: string;
+};
+
+export type IpAccessPanel = {
+  docket_id: string;
+  docket_title: string;
+  restricted: boolean;
+  access_policy_version: number;
+  linked_matter_id: string | null;
+  grants: IpAccessGrant[];
+  walls: IpEthicalWall[];
+  active_internal_membership_count: number;
+  queued_delivery_count: number;
+  excluded_persistence: string[];
+};
+
+export type IpAccessChangeInput = {
+  action: IpAccessChangeAction;
+  expectedAccessPolicyVersion: number;
+  reason: string;
+  subjectType?: IpAccessSubjectType | null;
+  subjectId?: string | null;
+  grantId?: string | null;
+  wallId?: string | null;
+  restricted?: boolean | null;
+  effectiveFrom?: string | null;
+  expiresAt?: string | null;
+};
+
+export type IpAccessPreview = {
+  docket_id: string;
+  access_policy_version: number;
+  action: IpAccessChangeAction;
+  preview_token: string;
+  affected_memberships: Array<{
+    membership_id: string;
+    label: string;
+    before_visible: boolean;
+    after_visible: boolean;
+    linked_matter_visible: boolean | null;
+  }>;
+  visibility_gain_count: number;
+  visibility_loss_count: number;
+  queued_delivery_recheck_count: number;
+  document_count: number;
+  linked_matter_id: string | null;
+  linked_matter_mismatch: boolean;
+  warnings: string[];
+  requires_step_up: true;
+};
+
+export type IpAccessChangeResult = {
+  action: IpAccessChangeAction;
+  invalidation_operation_id: string;
+  visibility_gain_count: number;
+  visibility_loss_count: number;
+  queued_delivery_recheck_count: number;
+  panel: IpAccessPanel;
+};
+
+function ipAccessChangeBody(input: IpAccessChangeInput) {
+  return {
+    action: input.action,
+    expected_access_policy_version: input.expectedAccessPolicyVersion,
+    reason: input.reason,
+    subject_type: input.subjectType ?? null,
+    subject_id: input.subjectId ?? null,
+    grant_id: input.grantId ?? null,
+    wall_id: input.wallId ?? null,
+    restricted: input.restricted ?? null,
+    effective_from: input.effectiveFrom ?? null,
+    expires_at: input.expiresAt ?? null,
+  };
+}
+
+export async function fetchIpAccessPanel(docketId: string): Promise<IpAccessPanel> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/access`);
+}
+
+export async function previewIpAccessChange(
+  docketId: string,
+  input: IpAccessChangeInput,
+): Promise<IpAccessPreview> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/access/preview`, {
+    method: "POST",
+    body: ipAccessChangeBody(input),
+  });
+}
+
+export async function applyIpAccessChange(
+  docketId: string,
+  input: IpAccessChangeInput,
+  previewToken: string,
+): Promise<IpAccessChangeResult> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/access/apply`, {
+    method: "POST",
+    body: { ...ipAccessChangeBody(input), preview_token: previewToken },
   });
 }
 
