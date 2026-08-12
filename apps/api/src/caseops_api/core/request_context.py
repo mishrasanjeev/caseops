@@ -28,6 +28,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         candidate = request.headers.get(REQUEST_ID_HEADER)
         rid = ensure_request_id(candidate)
+        # Keep the correlation id on the request as well as in the context
+        # variable. Starlette's outer ServerErrorMiddleware invokes a generic
+        # exception handler after this middleware has cleared contextvars, so
+        # the RFC 7807 response still needs a stable link to the request/logs.
+        request.state.request_id = rid
         set_request_id(rid)
         try:
             response = await call_next(request)

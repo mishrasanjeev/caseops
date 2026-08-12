@@ -184,6 +184,8 @@ def test_post_without_csrf_header_is_rejected_403(client: TestClient) -> None:
     assert resp.status_code == 403, resp.text
     body = resp.json()
     assert "CSRF" in body["detail"], body
+    assert resp.headers["content-type"].startswith("application/problem+json")
+    assert body["request_id"] == resp.headers["X-Request-ID"]
 
 
 def test_post_with_matching_csrf_header_is_accepted(client: TestClient) -> None:

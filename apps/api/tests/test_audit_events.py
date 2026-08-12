@@ -61,6 +61,33 @@ def test_matter_create_emits_audit_row(client: TestClient) -> None:
     assert meta["status"] == "intake"
 
 
+def test_request_id_is_propagated_to_audit_row(client: TestClient) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    request_id = "audit-correlation-027a"
+    response = client.post(
+        "/api/matters/",
+        headers={**auth_headers(token), "X-Request-ID": request_id},
+        json={
+            "title": "Audit correlation matter",
+            "matter_code": "AUD-RID-027A",
+            "practice_area": "Commercial",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["X-Request-ID"] == request_id
+
+    event = next(
+        row
+        for row in _all_events(company_id)
+        if row.action == "matter.created" and row.target_id == response.json()["id"]
+    )
+    assert event.request_id == request_id
+
+
 def test_draft_state_machine_emits_one_row_per_transition(client: TestClient) -> None:
     boot = bootstrap_company(client)
     token = str(boot["access_token"])
