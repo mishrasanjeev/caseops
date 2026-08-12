@@ -385,6 +385,13 @@ def test_outbox_catalog_payload_and_database_envelope_guards(
                 event_key="sensitive-payload",
                 payload={"access_token": "must-not-land"},
             )
+        with pytest.raises(ValueError, match="catalog-unadmitted fields: client_name"):
+            _enqueue(
+                session,
+                company_id=company_id,
+                event_key="extra-payload-field",
+                payload={"client_name": "must-not-land"},
+            )
         enqueued = _enqueue(
             session,
             company_id=company_id,

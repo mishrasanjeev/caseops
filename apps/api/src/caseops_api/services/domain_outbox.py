@@ -296,6 +296,12 @@ def _validate_contract_payload(
             "Domain event payload is missing catalog-required fields: " + ", ".join(missing_fields)
         )
     _reject_sensitive_payload_keys(payload)
+    unexpected_fields = sorted(payload_fields.difference(contract.required_payload_fields))
+    if unexpected_fields:
+        raise ValueError(
+            "Domain event payload contains catalog-unadmitted fields: "
+            + ", ".join(unexpected_fields)
+        )
 
     version_fields = {
         "lifecycle_version",

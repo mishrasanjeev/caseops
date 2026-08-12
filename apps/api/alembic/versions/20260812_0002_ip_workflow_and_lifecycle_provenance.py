@@ -269,6 +269,14 @@ def _create_workflow_version_immutability_guard(bind: sa.Connection) -> None:
         "fixtures_passed_at",
         "approved_at",
     )
+    definition_identity_columns = (
+        "id",
+        "company_id",
+        "key",
+        "aggregate_type",
+        "initial_state",
+        "created_at",
+    )
     if bind.dialect.name == "postgresql":
         changed = " OR ".join(
             f"NEW.{column_name} IS DISTINCT FROM OLD.{column_name}"
@@ -356,14 +364,25 @@ def _create_workflow_version_immutability_guard(bind: sa.Connection) -> None:
                 """
             )
         )
+        definition_identity_changed = " OR ".join(
+            f"NEW.{column_name} IS DISTINCT FROM OLD.{column_name}"
+            for column_name in definition_identity_columns
+        )
         op.execute(
             sa.text(
-                """
-                CREATE FUNCTION caseops_reject_ip_workflow_definition_delete()
+                f"""
+                CREATE FUNCTION caseops_reject_ip_workflow_definition_mutation()
                 RETURNS trigger AS $$
                 BEGIN
-                    RAISE EXCEPTION
-                        'IP workflow definitions are retained; retire instead of delete';
+                    IF TG_OP = 'DELETE' THEN
+                        RAISE EXCEPTION
+                            'IP workflow definitions are retained; retire instead of delete';
+                    END IF;
+                    IF {definition_identity_changed} THEN
+                        RAISE EXCEPTION
+                            'IP workflow definition identity is immutable';
+                    END IF;
+                    RETURN NEW;
                 END;
                 $$ LANGUAGE plpgsql;
                 """
@@ -372,10 +391,10 @@ def _create_workflow_version_immutability_guard(bind: sa.Connection) -> None:
         op.execute(
             sa.text(
                 """
-                CREATE TRIGGER trg_ip_workflow_definitions_retained
-                BEFORE DELETE ON ip_workflow_definitions
+                CREATE TRIGGER trg_ip_workflow_definitions_immutable
+                BEFORE UPDATE OR DELETE ON ip_workflow_definitions
                 FOR EACH ROW
-                EXECUTE FUNCTION caseops_reject_ip_workflow_definition_delete()
+                EXECUTE FUNCTION caseops_reject_ip_workflow_definition_mutation()
                 """
             )
         )
@@ -497,6 +516,28 @@ def _create_workflow_version_immutability_guard(bind: sa.Connection) -> None:
                 """
             )
         )
+        definition_identity_changed = " OR ".join(
+            f"OLD.{column_name} IS NOT NEW.{column_name}"
+            for column_name in definition_identity_columns
+        )
+        definition_identity_update_columns = ", ".join(definition_identity_columns)
+        op.execute(
+            sa.text(
+                f"""
+                CREATE TRIGGER trg_ip_workflow_definitions_immutable_update
+                BEFORE UPDATE OF {definition_identity_update_columns}
+                ON ip_workflow_definitions
+                FOR EACH ROW
+                WHEN {definition_identity_changed}
+                BEGIN
+                    SELECT RAISE(
+                        ABORT,
+                        'IP workflow definition identity is immutable'
+                    );
+                END;
+                """
+            )
+        )
         op.execute(
             sa.text(
                 """
@@ -518,14 +559,14 @@ def _drop_workflow_version_immutability_guard(bind: sa.Connection) -> None:
     if bind.dialect.name == "postgresql":
         op.execute(
             sa.text(
-                "DROP TRIGGER IF EXISTS trg_ip_workflow_definitions_retained "
+                "DROP TRIGGER IF EXISTS trg_ip_workflow_definitions_immutable "
                 "ON ip_workflow_definitions"
             )
         )
         op.execute(
             sa.text(
                 "DROP FUNCTION IF EXISTS "
-                "caseops_reject_ip_workflow_definition_delete()"
+                "caseops_reject_ip_workflow_definition_mutation()"
             )
         )
         op.execute(
@@ -544,6 +585,12 @@ def _drop_workflow_version_immutability_guard(bind: sa.Connection) -> None:
         op.execute(
             sa.text(
                 "DROP TRIGGER IF EXISTS trg_ip_workflow_definitions_retained"
+            )
+        )
+        op.execute(
+            sa.text(
+                "DROP TRIGGER IF EXISTS "
+                "trg_ip_workflow_definitions_immutable_update"
             )
         )
         op.execute(

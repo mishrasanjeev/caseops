@@ -1253,6 +1253,41 @@ def test_shared_outbox_skip_locked_claims_are_disjoint_on_postgres(pg_engine):
         second_session.close()
 
 
+def test_workflow_definition_identity_is_immutable_on_postgres(pg_engine):
+    """Published-version semantics cannot be rewritten through the definition row."""
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        session.commit()
+
+    definition_id = str(uuid4())
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ip_workflow_definitions "
+                "(id, company_id, key, name, initial_state) VALUES "
+                "(:id, :company_id, 'postgres-retained', 'Postgres retained', 'draft')"
+            ),
+            {"id": definition_id, "company_id": company_id},
+        )
+        connection.execute(
+            text(
+                "UPDATE ip_workflow_definitions SET name = 'Renamed retained' "
+                "WHERE id = :id"
+            ),
+            {"id": definition_id},
+        )
+
+    with pytest.raises(DBAPIError, match="definition identity is immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE ip_workflow_definitions SET initial_state = 'rewritten' "
+                    "WHERE id = :id"
+                ),
+                {"id": definition_id},
+            )
+
+
 def test_shared_reliability_downgrade_lock_excludes_postgres_writer(pg_engine):
     """The fail-closed empty check owns exclusive locks before inspecting rows."""
 

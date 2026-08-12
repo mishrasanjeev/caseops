@@ -362,6 +362,26 @@ def test_published_workflow_contract_cannot_be_rewritten_or_deleted(
             ),
             {"id": empty_definition_id, "retired_at": datetime.now(UTC)},
         )
+        connection.execute(
+            text(
+                "UPDATE ip_workflow_definitions SET name = 'Renamed retained', "
+                "description = 'Display metadata remains mutable' WHERE id = :id"
+            ),
+            {"id": empty_definition_id},
+        )
+    for column_name, replacement in (
+        ("key", "rewritten-retained"),
+        ("initial_state", "rewritten"),
+    ):
+        with pytest.raises(IntegrityError, match="definition identity is immutable"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        f"UPDATE ip_workflow_definitions SET {column_name} = :replacement "
+                        "WHERE id = :id"
+                    ),
+                    {"id": empty_definition_id, "replacement": replacement},
+                )
     with pytest.raises(IntegrityError):
         with engine.begin() as connection:
             connection.execute(
