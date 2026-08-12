@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -17,9 +19,137 @@ from caseops_api.db.models import (
     DomainOutboxState,
 )
 from caseops_api.db.session import serialize_sqlite_writer
-from caseops_api.services.idempotency import canonical_json_sha256
+from caseops_api.services.audit import record_from_context
+from caseops_api.services.idempotency import canonical_json_bytes, canonical_json_sha256
+from caseops_api.services.session_context import SessionContext
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_SENSITIVE_KEY = re.compile(
+    r"(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|"
+    r"private[_-]?key|session[_-]?id|raw[_-]?(?:body|content|document|prompt))",
+    re.IGNORECASE,
+)
+_SENSITIVE_ERROR_VALUE = re.compile(
+    r"(?i)(?:bearer\s+[^\s,;]+|(?:authorization|cookie|password|passwd|"
+    r"secret|token|api[_-]?key|private[_-]?key)\s*[:=]\s*"
+    r"(?:bearer\s+)?[^\s,;]+)"
+)
+_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]+")
+_MAX_PAYLOAD_BYTES = 65_536
+_DEAD_LETTER_REASONS = {
+    "consumer_permanent_failure",
+    "operator_dead_letter",
+    "poison_event",
+    "retry_limit_exhausted",
+    "schema_rejected",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class DomainEventContract:
+    required_payload_fields: frozenset[str]
+    consumers: tuple[str, ...]
+    confidentiality: str
+    aggregate_payload_field: str
+
+
+# Runtime admission is deliberately code-owned. The matching governance
+# catalog is validated separately; an arbitrary caller cannot invent an event
+# name, schema version, consumer set, or confidentiality classification.
+_EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
+    ("ip.legal_state.lifecycle_changed", 1): DomainEventContract(
+        required_payload_fields=frozenset(
+            {
+                "tenant_id",
+                "target_type",
+                "target_id",
+                "from_state",
+                "to_state",
+                "lifecycle_version",
+                "occurred_at",
+                "correlation_id",
+            }
+        ),
+        consumers=(
+            "ip-portfolio-projection",
+            "notification-intent-adapter",
+            "operational-deadline-projection",
+        ),
+        confidentiality="privileged",
+        aggregate_payload_field="target_id",
+    ),
+    ("ip.docket_event.recorded", 1): DomainEventContract(
+        required_payload_fields=frozenset(
+            {
+                "tenant_id",
+                "ip_docket_event_id",
+                "target_id",
+                "event_type",
+                "event_version",
+                "source_evidence_id",
+                "occurred_at",
+                "correlation_id",
+            }
+        ),
+        consumers=("access-filtered-timeline", "deadline-calculation-adapter"),
+        confidentiality="privileged",
+        aggregate_payload_field="ip_docket_event_id",
+    ),
+    ("ip.deadline.calculation_committed", 1): DomainEventContract(
+        required_payload_fields=frozenset(
+            {
+                "tenant_id",
+                "ip_deadline_id",
+                "target_id",
+                "due_at",
+                "rule_version_id",
+                "engine_version",
+                "calculation_version",
+                "occurred_at",
+                "correlation_id",
+            }
+        ),
+        consumers=(
+            "notification-intent-adapter",
+            "operational-deadline-projection",
+        ),
+        confidentiality="privileged",
+        aggregate_payload_field="ip_deadline_id",
+    ),
+    ("bulk_import.operation_state_changed", 1): DomainEventContract(
+        required_payload_fields=frozenset(
+            {
+                "tenant_id",
+                "bulk_import_job_id",
+                "from_state",
+                "to_state",
+                "operation_version",
+                "safe_counts",
+                "occurred_at",
+                "correlation_id",
+            }
+        ),
+        consumers=("audit-evidence", "bulk-operation-status"),
+        confidentiality="confidential",
+        aggregate_payload_field="bulk_import_job_id",
+    ),
+}
+
+
+def domain_event_contract_snapshot() -> tuple[dict[str, object], ...]:
+    """Expose a stable, detached view for governance admission checks."""
+
+    return tuple(
+        {
+            "name": event_type,
+            "version": version,
+            "required_payload_fields": tuple(sorted(contract.required_payload_fields)),
+            "consumers": contract.consumers,
+            "confidentiality": contract.confidentiality,
+            "aggregate_payload_field": contract.aggregate_payload_field,
+        }
+        for (event_type, version), contract in sorted(_EVENT_CONTRACTS.items())
+    )
 
 
 class OutboxEventKeyReusedError(RuntimeError):
@@ -42,6 +172,10 @@ class StaleConsumerEffectLeaseError(RuntimeError):
     """The caller's consumer-effect lease/fence no longer owns the row."""
 
 
+class StaleDeadLetterDispositionError(RuntimeError):
+    """The dead-letter row changed before an operator disposition was stored."""
+
+
 class ConsumerEffectClaimOutcome(StrEnum):
     CLAIMED = "claimed"
     IN_PROGRESS = "in_progress"
@@ -49,8 +183,23 @@ class ConsumerEffectClaimOutcome(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class DomainEventEnvelope:
+    id: str
+    company_id: str
+    event_key: str
+    event_type: str
+    schema_version: int
+    aggregate_type: str
+    aggregate_id: str
+    aggregate_version: int
+    payload_hash: str
+    expected_consumers: tuple[str, ...]
+    max_attempts: int
+
+
+@dataclass(frozen=True, slots=True)
 class EnqueuedDomainEvent:
-    event: DomainOutboxEvent
+    event: DomainEventEnvelope
     created: bool
 
 
@@ -124,7 +273,96 @@ def _optional(value: str | None, *, field: str, maximum: int) -> str | None:
 
 
 def _safe_error(value: str | None) -> str | None:
-    return _optional(value, field="last_error_redacted", maximum=500)
+    if value is None:
+        return None
+    sanitized = _SENSITIVE_ERROR_VALUE.sub("[REDACTED]", value)
+    sanitized = _CONTROL_CHARACTER.sub(" ", sanitized)
+    sanitized = sanitized.strip()
+    return sanitized[:500] or None
+
+
+def _reject_sensitive_payload_keys(value: object, *, path: str = "$") -> None:
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if isinstance(key, str) and _SENSITIVE_KEY.search(key):
+                raise ValueError(f"Domain event payload field {path}.{key} is not allowlisted.")
+            _reject_sensitive_payload_keys(nested, path=f"{path}.{key}")
+    elif isinstance(value, (list, tuple)):
+        for index, nested in enumerate(value):
+            _reject_sensitive_payload_keys(nested, path=f"{path}[{index}]")
+
+
+def _validate_contract_payload(
+    payload: dict[str, object],
+    *,
+    contract: DomainEventContract,
+    company_id: str,
+    aggregate_id: str,
+    correlation_id: str,
+    occurred_at: datetime,
+) -> None:
+    payload_fields = set(payload)
+    missing_fields = sorted(contract.required_payload_fields.difference(payload_fields))
+    if missing_fields:
+        raise ValueError(
+            "Domain event payload is missing catalog-required fields: " + ", ".join(missing_fields)
+        )
+    _reject_sensitive_payload_keys(payload)
+
+    version_fields = {
+        "lifecycle_version",
+        "event_version",
+        "calculation_version",
+        "operation_version",
+    }
+    for field, value in payload.items():
+        if field in version_fields:
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise TypeError(f"Domain event payload field {field} must be a version.")
+        elif field == "safe_counts":
+            if not isinstance(value, Mapping) or any(
+                not isinstance(key, str)
+                or isinstance(count, bool)
+                or not isinstance(count, int)
+                or count < 0
+                for key, count in value.items()
+            ):
+                raise TypeError("Domain event safe_counts must contain nonnegative integers.")
+        elif field in contract.required_payload_fields and (
+            not isinstance(value, str) or not value.strip()
+        ):
+            raise TypeError(f"Domain event payload field {field} must be a string.")
+
+    if payload["tenant_id"] != company_id:
+        raise ValueError("Domain event tenant_id must match the persisted company.")
+    if payload["correlation_id"] != correlation_id:
+        raise ValueError("Domain event correlation_id must match the persisted envelope.")
+    if payload[contract.aggregate_payload_field] != aggregate_id:
+        raise ValueError("Domain event aggregate identity does not match its payload.")
+    try:
+        payload_occurred_at = _aware(
+            datetime.fromisoformat(str(payload["occurred_at"]).replace("Z", "+00:00"))
+        )
+    except ValueError as exc:
+        raise ValueError("Domain event occurred_at must be an ISO-8601 timestamp.") from exc
+    if payload_occurred_at != occurred_at:
+        raise ValueError("Domain event occurred_at does not match the persisted envelope.")
+
+
+def _event_envelope(event: DomainOutboxEvent) -> DomainEventEnvelope:
+    return DomainEventEnvelope(
+        id=event.id,
+        company_id=event.company_id,
+        event_key=event.event_key,
+        event_type=event.event_type,
+        schema_version=event.schema_version,
+        aggregate_type=event.aggregate_type,
+        aggregate_id=event.aggregate_id,
+        aggregate_version=event.aggregate_version,
+        payload_hash=event.payload_hash,
+        expected_consumers=tuple(event.expected_consumers_json),
+        max_attempts=event.max_attempts,
+    )
 
 
 def _immutable_event_identity(event: DomainOutboxEvent) -> tuple[object, ...]:
@@ -144,7 +382,41 @@ def _immutable_event_identity(event: DomainOutboxEvent) -> tuple[object, ...]:
         event.correlation_id,
         event.causation_id,
         event.payload_hash,
+        tuple(event.expected_consumers_json),
+        event.max_attempts,
     )
+
+
+def _fence_processing_effects(
+    session: Session,
+    *,
+    event: DomainOutboxEvent,
+    now: datetime,
+    error: str,
+) -> None:
+    """Terminalize children before their parent abandons an attempt."""
+
+    statement = select(DomainConsumerEffect).where(
+        DomainConsumerEffect.company_id == event.company_id,
+        DomainConsumerEffect.outbox_event_id == event.id,
+        DomainConsumerEffect.state == DomainConsumerEffectState.PROCESSING,
+    )
+    effects = list(session.scalars(_effect_lock_statement(session, statement)).all())
+    safe_error = _safe_error(error) or "Parent outbox attempt was fenced."
+    for effect in effects:
+        effect.state = DomainConsumerEffectState.FAILED
+        effect.lease_owner = None
+        effect.lease_token = None
+        effect.lease_expires_at = None
+        effect.fence_version += 1
+        effect.outbox_fence_version = event.fence_version
+        effect.result_type = None
+        effect.result_id = None
+        effect.result_hash = None
+        effect.last_error_redacted = safe_error
+        effect.completed_at = None
+        effect.failed_at = now
+        effect.updated_at = now
 
 
 def enqueue_domain_event(
@@ -183,13 +455,9 @@ def enqueue_domain_event(
     aggregate_id = _required(aggregate_id, field="aggregate_id", maximum=160)
     producer = _required(producer, field="producer", maximum=120)
     correlation_id = _required(correlation_id, field="correlation_id", maximum=160)
-    source_command_id = _optional(
-        source_command_id, field="source_command_id", maximum=160
-    )
+    source_command_id = _optional(source_command_id, field="source_command_id", maximum=160)
     source_event_id = _optional(source_event_id, field="source_event_id", maximum=160)
-    producer_revision = _optional(
-        producer_revision, field="producer_revision", maximum=64
-    )
+    producer_revision = _optional(producer_revision, field="producer_revision", maximum=64)
     causation_id = _optional(causation_id, field="causation_id", maximum=160)
     if source_command_id is None and source_event_id is None:
         raise ValueError("A source command or source event ID is required.")
@@ -204,9 +472,27 @@ def enqueue_domain_event(
     if not isinstance(payload, dict):
         raise TypeError("Domain event payload must be a JSON object.")
 
+    contract = _EVENT_CONTRACTS.get((event_type, schema_version))
+    if contract is None:
+        raise ValueError("Event type and schema version are not admitted by the catalog.")
+    if confidentiality != contract.confidentiality:
+        raise ValueError("Event confidentiality does not match the catalog contract.")
     occurred_at = _aware(occurred_at)
     effective_at = _aware(effective_at)
+    _validate_contract_payload(
+        payload,
+        contract=contract,
+        company_id=company_id,
+        aggregate_id=aggregate_id,
+        correlation_id=correlation_id,
+        occurred_at=occurred_at,
+    )
+    payload_bytes = canonical_json_bytes(payload)
+    if len(payload_bytes) > _MAX_PAYLOAD_BYTES:
+        raise ValueError(f"Domain event payload exceeds {_MAX_PAYLOAD_BYTES} canonical bytes.")
     payload_hash = canonical_json_sha256(payload)
+    persisted_payload = json.loads(payload_bytes.decode("utf-8"))
+    expected_consumers = sorted(set(contract.consumers))
     candidate = DomainOutboxEvent(
         company_id=company_id,
         event_key=event_key,
@@ -225,7 +511,8 @@ def enqueue_domain_event(
         correlation_id=correlation_id,
         causation_id=causation_id,
         payload_hash=payload_hash,
-        payload_json=payload,
+        payload_json=persisted_payload,
+        expected_consumers_json=expected_consumers,
         state=DomainOutboxState.QUEUED,
         attempts=0,
         max_attempts=max_attempts,
@@ -246,7 +533,7 @@ def enqueue_domain_event(
             # BEGIN can make RELEASE SAVEPOINT escape the caller's rollback.
             session.add(candidate)
             session.flush()
-            return EnqueuedDomainEvent(event=candidate, created=True)
+            return EnqueuedDomainEvent(event=_event_envelope(candidate), created=True)
         try:
             with session.begin_nested():
                 session.add(candidate)
@@ -258,13 +545,13 @@ def enqueue_domain_event(
                 # unrelated FK/check failures instead of disguising them.
                 raise
         else:
-            return EnqueuedDomainEvent(event=candidate, created=True)
+            return EnqueuedDomainEvent(event=_event_envelope(candidate), created=True)
 
     if _immutable_event_identity(existing) != _immutable_event_identity(candidate):
         raise OutboxEventKeyReusedError(
             "Domain event key is already bound to different immutable data."
         )
-    return EnqueuedDomainEvent(event=existing, created=False)
+    return EnqueuedDomainEvent(event=_event_envelope(existing), created=False)
 
 
 def claim_outbox_events(
@@ -317,11 +604,7 @@ def claim_outbox_events(
     )
     if company_id is not None:
         statement = statement.where(DomainOutboxEvent.company_id == company_id)
-    rows = list(
-        session.scalars(
-            _event_lock_statement(session, statement, skip_locked=True)
-        ).all()
-    )
+    rows = list(session.scalars(_event_lock_statement(session, statement, skip_locked=True)).all())
     claims: list[OutboxClaim] = []
     for event in rows:
         if event.attempts >= event.max_attempts:
@@ -336,9 +619,18 @@ def claim_outbox_events(
             event.completed_at = None
             event.dead_lettered_at = current_time
             event.dead_letter_reason = "retry_limit_exhausted"
+            event.dead_letter_resolution = "pending"
+            event.dead_letter_resolved_at = None
+            event.fence_version += 1
             if event.last_error_redacted is None:
                 event.last_error_redacted = "Worker lease expired at retry limit."
             event.updated_at = current_time
+            _fence_processing_effects(
+                session,
+                event=event,
+                now=current_time,
+                error="Parent outbox event reached its retry limit.",
+            )
             continue
         token = uuid4().hex
         event.state = DomainOutboxState.PROCESSING
@@ -349,6 +641,8 @@ def claim_outbox_events(
         event.lease_expires_at = current_time + lease_for
         event.next_attempt_at = None
         event.dead_letter_reason = None
+        event.dead_letter_resolution = None
+        event.dead_letter_resolved_at = None
         event.updated_at = current_time
         claims.append(
             OutboxClaim(
@@ -430,21 +724,34 @@ def complete_outbox_event(
         fence_version=claim.fence_version,
         now=current_time,
     )
-    processing_effect = session.scalar(
-        _effect_lock_statement(
-            session,
-            select(DomainConsumerEffect)
-            .where(
-                DomainConsumerEffect.company_id == event.company_id,
-                DomainConsumerEffect.outbox_event_id == event.id,
-                DomainConsumerEffect.state == DomainConsumerEffectState.PROCESSING,
+    effects = list(
+        session.scalars(
+            _effect_lock_statement(
+                session,
+                select(DomainConsumerEffect).where(
+                    DomainConsumerEffect.company_id == event.company_id,
+                    DomainConsumerEffect.outbox_event_id == event.id,
+                ),
             )
-            .limit(1),
-        )
+        ).all()
     )
-    if processing_effect is not None:
+    expected_consumers = set(event.expected_consumers_json)
+    effect_by_consumer = {effect.consumer_name: effect for effect in effects}
+    actual_consumers = set(effect_by_consumer)
+    if actual_consumers != expected_consumers or any(
+        effect_by_consumer[consumer].state != DomainConsumerEffectState.COMPLETED
+        for consumer in expected_consumers.intersection(actual_consumers)
+    ):
+        missing = len(expected_consumers.difference(actual_consumers))
+        nonterminal = sum(
+            effect.state != DomainConsumerEffectState.COMPLETED
+            for effect in effects
+            if effect.consumer_name in expected_consumers
+        )
+        unexpected = len(actual_consumers.difference(expected_consumers))
         raise NonterminalConsumerEffectError(
-            "Outbox event has a processing consumer effect."
+            "Outbox event consumer set is incomplete "
+            f"(missing={missing}, nonterminal={nonterminal}, unexpected={unexpected})."
         )
     event.state = DomainOutboxState.SUCCEEDED
     event.lease_owner = None
@@ -454,6 +761,8 @@ def complete_outbox_event(
     event.completed_at = current_time
     event.dead_lettered_at = None
     event.dead_letter_reason = None
+    event.dead_letter_resolution = None
+    event.dead_letter_resolved_at = None
     event.last_error_redacted = None
     event.updated_at = current_time
     session.flush()
@@ -473,9 +782,9 @@ def record_outbox_failure(
     error = _safe_error(last_error_redacted)
     if error is None:
         raise ValueError("A redacted failure description is required.")
-    reason = _required(
-        dead_letter_reason, field="dead_letter_reason", maximum=160
-    )
+    reason = _required(dead_letter_reason, field="dead_letter_reason", maximum=160)
+    if reason not in _DEAD_LETTER_REASONS:
+        raise ValueError("dead_letter_reason is not an admitted safe reason code.")
     event = _owned_outbox_event(
         session,
         company_id=claim.company_id,
@@ -497,12 +806,166 @@ def record_outbox_failure(
         event.next_attempt_at = retry_at
         event.dead_lettered_at = None
         event.dead_letter_reason = None
+        event.dead_letter_resolution = None
+        event.dead_letter_resolved_at = None
     else:
         event.state = DomainOutboxState.DEAD_LETTER
         event.next_attempt_at = None
         event.dead_lettered_at = current_time
         event.dead_letter_reason = reason
+        event.dead_letter_resolution = "pending"
+        event.dead_letter_resolved_at = None
+        event.fence_version += 1
+    _fence_processing_effects(
+        session,
+        event=event,
+        now=current_time,
+        error="Parent outbox attempt failed and fenced its consumer effects.",
+    )
     event.updated_at = current_time
+    session.flush()
+    return event
+
+
+def _dead_letter_for_operator(
+    session: Session,
+    *,
+    context: SessionContext,
+    event_id: str,
+    expected_fence_version: int,
+) -> DomainOutboxEvent:
+    membership = context.membership
+    if (
+        membership.company_id != context.company.id
+        or membership.user_id != context.user.id
+        or not membership.is_active
+        or membership.role not in {"owner", "admin"}
+    ):
+        raise PermissionError("An active tenant owner or admin must disposition dead letters.")
+    serialize_sqlite_writer(session)
+    statement = select(DomainOutboxEvent).where(
+        DomainOutboxEvent.id == event_id,
+        DomainOutboxEvent.company_id == context.company.id,
+    )
+    event = session.scalar(_event_lock_statement(session, statement))
+    if (
+        event is None
+        or event.state != DomainOutboxState.DEAD_LETTER
+        or event.fence_version != expected_fence_version
+    ):
+        raise StaleDeadLetterDispositionError(
+            "Dead-letter event is missing, no longer terminal, or has a stale version."
+        )
+    return event
+
+
+def replay_dead_letter_event(
+    session: Session,
+    *,
+    context: SessionContext,
+    event_id: str,
+    expected_fence_version: int,
+    reason: str,
+    now: datetime | None = None,
+) -> DomainOutboxEvent:
+    """Requeue one tenant-owned dead letter and append operator evidence."""
+
+    current_time = _aware(now or _now())
+    safe_reason = _safe_error(reason)
+    if safe_reason is None:
+        raise ValueError("A bounded replay reason is required.")
+    event = _dead_letter_for_operator(
+        session,
+        context=context,
+        event_id=event_id,
+        expected_fence_version=expected_fence_version,
+    )
+    previous_reason = event.dead_letter_reason
+    previous_attempts = event.attempts
+    previous_fence = event.fence_version
+    event.fence_version += 1
+    _fence_processing_effects(
+        session,
+        event=event,
+        now=current_time,
+        error="Operator replay fenced a stale consumer effect.",
+    )
+    event.state = DomainOutboxState.QUEUED
+    event.attempts = 0
+    event.next_attempt_at = None
+    event.lease_owner = None
+    event.lease_token = None
+    event.lease_expires_at = None
+    event.last_error_redacted = None
+    event.dead_letter_reason = None
+    event.dead_lettered_at = None
+    event.dead_letter_resolution = None
+    event.dead_letter_resolved_at = None
+    event.completed_at = None
+    event.updated_at = current_time
+    record_from_context(
+        session,
+        context,
+        action="domain_outbox.dead_letter.replayed",
+        target_type="domain_outbox_event",
+        target_id=event.id,
+        metadata={
+            "reason": safe_reason,
+            "previous_dead_letter_reason": previous_reason,
+            "previous_attempts": previous_attempts,
+            "previous_fence_version": previous_fence,
+            "new_fence_version": event.fence_version,
+            "event_type": event.event_type,
+        },
+    )
+    session.flush()
+    return event
+
+
+def resolve_dead_letter_event(
+    session: Session,
+    *,
+    context: SessionContext,
+    event_id: str,
+    expected_fence_version: int,
+    resolution: str,
+    reason: str,
+    now: datetime | None = None,
+) -> DomainOutboxEvent:
+    """Persist an audited ``ignored`` or ``resolved`` operator decision."""
+
+    if resolution not in {"ignored", "resolved"}:
+        raise ValueError("resolution must be ignored or resolved.")
+    current_time = _aware(now or _now())
+    safe_reason = _safe_error(reason)
+    if safe_reason is None:
+        raise ValueError("A bounded dead-letter resolution reason is required.")
+    event = _dead_letter_for_operator(
+        session,
+        context=context,
+        event_id=event_id,
+        expected_fence_version=expected_fence_version,
+    )
+    previous_resolution = event.dead_letter_resolution
+    previous_fence = event.fence_version
+    event.dead_letter_resolution = resolution
+    event.dead_letter_resolved_at = current_time
+    event.fence_version += 1
+    event.updated_at = current_time
+    record_from_context(
+        session,
+        context,
+        action=f"domain_outbox.dead_letter.{resolution}",
+        target_type="domain_outbox_event",
+        target_id=event.id,
+        metadata={
+            "reason": safe_reason,
+            "previous_resolution": previous_resolution,
+            "previous_fence_version": previous_fence,
+            "new_fence_version": event.fence_version,
+            "event_type": event.event_type,
+        },
+    )
     session.flush()
     return event
 
@@ -555,9 +1018,7 @@ def claim_consumer_effect(
 
     current_time = _aware(now or _now())
     consumer_name = _required(consumer_name, field="consumer_name", maximum=120)
-    consumer_version = _required(
-        consumer_version, field="consumer_version", maximum=64
-    )
+    consumer_version = _required(consumer_version, field="consumer_version", maximum=64)
     effect_key = _required(effect_key, field="effect_key", maximum=200)
     lease_owner = _required(lease_owner, field="lease_owner", maximum=120)
     if lease_for <= timedelta(0):
@@ -570,6 +1031,8 @@ def claim_consumer_effect(
         fence_version=outbox_claim.fence_version,
         now=current_time,
     )
+    if consumer_name not in set(event.expected_consumers_json):
+        raise ValueError("Consumer is not admitted by this event's catalog snapshot.")
 
     statement = select(DomainConsumerEffect).where(
         DomainConsumerEffect.company_id == event.company_id,
@@ -620,9 +1083,7 @@ def claim_consumer_effect(
                 session.add(effect)
                 session.flush()
         except IntegrityError:
-            matches = list(
-                session.scalars(_effect_lock_statement(session, statement)).all()
-            )
+            matches = list(session.scalars(_effect_lock_statement(session, statement)).all())
             if len(matches) != 1:
                 # A genuine uniqueness race leaves exactly one matching effect.
                 # Propagate tenant/FK/check violations unchanged.
@@ -647,6 +1108,7 @@ def claim_consumer_effect(
         )
     if (
         effect.state == DomainConsumerEffectState.PROCESSING
+        and effect.outbox_fence_version == event.fence_version
         and effect.lease_expires_at is not None
         and _aware(effect.lease_expires_at) > current_time
     ):
@@ -698,9 +1160,7 @@ def _owned_consumer_effect(
         or effect.lease_expires_at is None
         or _aware(effect.lease_expires_at) <= now
     ):
-        raise StaleConsumerEffectLeaseError(
-            "Consumer effect lease or fencing token is stale."
-        )
+        raise StaleConsumerEffectLeaseError("Consumer effect lease or fencing token is stale.")
     return event, effect
 
 
@@ -822,19 +1282,24 @@ __all__ = (
     "ConsumerEffectClaim",
     "ConsumerEffectClaimOutcome",
     "ConsumerEffectKeyReusedError",
+    "DomainEventEnvelope",
     "EnqueuedDomainEvent",
     "NonterminalConsumerEffectError",
     "OutboxClaim",
     "OutboxEventKeyReusedError",
     "StaleConsumerEffectLeaseError",
+    "StaleDeadLetterDispositionError",
     "StaleOutboxLeaseError",
     "claim_consumer_effect",
     "claim_outbox_events",
     "complete_consumer_effect",
     "complete_outbox_event",
+    "domain_event_contract_snapshot",
     "enqueue_domain_event",
     "fail_consumer_effect",
     "record_outbox_failure",
+    "replay_dead_letter_event",
+    "resolve_dead_letter_event",
     "renew_consumer_effect_lease",
     "renew_outbox_lease",
 )

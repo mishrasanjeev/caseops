@@ -13261,6 +13261,17 @@ class ApiIdempotencyRecord(Base):
             "idempotency_key",
         ),
         Index("ix_api_idempotency_expiry", "expires_at", "state"),
+        Index(
+            "ix_api_idempotency_actor_membership",
+            "actor_membership_id",
+            "actor_company_id",
+            "created_at",
+        ),
+        Index(
+            "ix_api_idempotency_actor_company",
+            "actor_company_id",
+            "actor_membership_id",
+        ),
         CheckConstraint(
             "state IN ('processing', 'completed', 'failed')",
             name="ck_api_idempotency_state",
@@ -13302,11 +13313,21 @@ class ApiIdempotencyRecord(Base):
             "state <> 'completed' OR response_status IS NOT NULL",
             name="ck_api_idempotency_completed_response",
         ),
+        CheckConstraint(
+            "(actor_scope LIKE 'membership:%' OR actor_scope LIKE 'system:%') "
+            "AND actor_scope NOT IN ('membership:', 'system:')",
+            name="ck_api_idempotency_actor_scope_kind",
+        ),
+        CheckConstraint(
+            "actor_membership_id IS NULL OR "
+            "actor_scope = 'membership:' || actor_membership_id",
+            name="ck_api_idempotency_actor_scope_membership",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
     )
     actor_scope: Mapped[str] = mapped_column(String(160), nullable=False)
     actor_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -13365,6 +13386,13 @@ class DomainOutboxEvent(Base):
             "company_id",
             "state",
             "created_at",
+        ),
+        Index(
+            "ix_domain_outbox_dead_letter_resolution",
+            "company_id",
+            "state",
+            "dead_letter_resolution",
+            "dead_lettered_at",
         ),
         Index(
             "ix_domain_outbox_aggregate",
@@ -13433,11 +13461,29 @@ class DomainOutboxEvent(Base):
             "(state <> 'dead_letter' AND dead_lettered_at IS NULL)",
             name="ck_domain_outbox_dead_letter_state",
         ),
+        CheckConstraint(
+            "json_array_length(expected_consumers_json) > 0",
+            name="ck_domain_outbox_expected_consumers_nonempty",
+        ),
+        CheckConstraint(
+            "(state = 'dead_letter' AND dead_letter_resolution IN "
+            "('pending', 'ignored', 'resolved')) OR "
+            "(state <> 'dead_letter' AND dead_letter_resolution IS NULL)",
+            name="ck_domain_outbox_dead_letter_resolution_state",
+        ),
+        CheckConstraint(
+            "(dead_letter_resolution = 'pending' AND "
+            "dead_letter_resolved_at IS NULL) OR "
+            "(dead_letter_resolution IN ('ignored', 'resolved') AND "
+            "dead_letter_resolved_at IS NOT NULL) OR "
+            "dead_letter_resolution IS NULL",
+            name="ck_domain_outbox_dead_letter_resolution_time",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
     )
     event_key: Mapped[str] = mapped_column(String(200), nullable=False)
     event_type: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -13456,6 +13502,7 @@ class DomainOutboxEvent(Base):
     causation_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    expected_consumers_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     state: Mapped[str] = mapped_column(
         String(24), nullable=False, default=DomainOutboxState.QUEUED
     )
@@ -13472,6 +13519,10 @@ class DomainOutboxEvent(Base):
     fence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     dead_letter_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    dead_letter_resolution: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    dead_letter_resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dead_lettered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -13499,7 +13550,7 @@ class DomainConsumerEffect(Base):
             ["outbox_event_id", "company_id"],
             ["domain_outbox_events.id", "domain_outbox_events.company_id"],
             name="fk_domain_consumer_effect_outbox_company",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "company_id", name="uq_domain_consumer_effect_id_company"),
         UniqueConstraint(
@@ -13524,6 +13575,12 @@ class DomainConsumerEffect(Base):
             "ix_domain_consumer_effect_company_consumer",
             "company_id",
             "consumer_name",
+            "state",
+        ),
+        Index(
+            "ix_domain_consumer_effect_event",
+            "outbox_event_id",
+            "company_id",
             "state",
         ),
         CheckConstraint(
@@ -13563,7 +13620,7 @@ class DomainConsumerEffect(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
     )
     outbox_event_id: Mapped[str] = mapped_column(String(36), nullable=False)
     consumer_name: Mapped[str] = mapped_column(String(120), nullable=False)

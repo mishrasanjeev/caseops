@@ -29,6 +29,42 @@ _TABLES = (
     "domain_consumer_effects",
 )
 
+_IMMUTABLE_OUTBOX_COLUMNS = (
+    "id",
+    "company_id",
+    "event_key",
+    "event_type",
+    "schema_version",
+    "aggregate_type",
+    "aggregate_id",
+    "aggregate_version",
+    "occurred_at",
+    "effective_at",
+    "source_command_id",
+    "source_event_id",
+    "producer",
+    "producer_revision",
+    "confidentiality",
+    "correlation_id",
+    "causation_id",
+    "payload_hash",
+    "payload_json",
+    "expected_consumers_json",
+    "max_attempts",
+    "created_at",
+)
+
+_IMMUTABLE_IDEMPOTENCY_COLUMNS = (
+    "id",
+    "company_id",
+    "actor_scope",
+    "http_method",
+    "operation",
+    "idempotency_key",
+    "request_hash",
+    "created_at",
+)
+
 
 def _lock_tables_for_populated_downgrade_check(bind: sa.Connection) -> None:
     """Exclude mixed-revision writers before deciding that evidence is empty."""
@@ -38,8 +74,156 @@ def _lock_tables_for_populated_downgrade_check(bind: sa.Connection) -> None:
     # PostgreSQL ACCESS SHARE (taken by SELECT count(*)) is compatible with
     # INSERT.  Lock every evidence owner in one fixed order first so a writer
     # cannot commit a new durable row between the emptiness check and DROP.
+    bind.execute(sa.text("SET LOCAL lock_timeout = '30s'"))
     for table in _TABLES:
         bind.execute(sa.text(f'LOCK TABLE "{table}" IN ACCESS EXCLUSIVE MODE'))
+
+
+def _create_immutable_outbox_trigger(bind: sa.Connection) -> None:
+    """Make the event envelope immutable below the ORM boundary."""
+
+    if bind.dialect.name == "postgresql":
+        comparisons = []
+        for column in _IMMUTABLE_OUTBOX_COLUMNS:
+            if column in {"payload_json", "expected_consumers_json"}:
+                comparisons.append(
+                    f'OLD."{column}"::text IS DISTINCT FROM NEW."{column}"::text'
+                )
+            else:
+                comparisons.append(
+                    f'OLD."{column}" IS DISTINCT FROM NEW."{column}"'
+                )
+        predicate = " OR ".join(comparisons)
+        op.execute(
+            sa.text(
+                f"""
+                CREATE FUNCTION reject_domain_outbox_envelope_update()
+                RETURNS trigger AS $$
+                BEGIN
+                    IF {predicate} THEN
+                        RAISE EXCEPTION 'domain outbox event envelope is immutable';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """
+            )
+        )
+        op.execute(
+            sa.text(
+                """
+                CREATE TRIGGER trg_domain_outbox_envelope_immutable
+                BEFORE UPDATE ON domain_outbox_events
+                FOR EACH ROW EXECUTE FUNCTION reject_domain_outbox_envelope_update()
+                """
+            )
+        )
+        return
+
+    if bind.dialect.name == "sqlite":
+        predicate = " OR ".join(
+            f'OLD."{column}" IS NOT NEW."{column}"'
+            for column in _IMMUTABLE_OUTBOX_COLUMNS
+        )
+        op.execute(
+            sa.text(
+                f"""
+                CREATE TRIGGER trg_domain_outbox_envelope_immutable
+                BEFORE UPDATE ON domain_outbox_events
+                FOR EACH ROW WHEN {predicate}
+                BEGIN
+                    SELECT RAISE(ABORT, 'domain outbox event envelope is immutable');
+                END
+                """
+            )
+        )
+
+
+def _create_immutable_idempotency_trigger(bind: sa.Connection) -> None:
+    """Prevent a processing retry from rewriting its durable identity."""
+
+    if bind.dialect.name == "postgresql":
+        predicate = " OR ".join(
+            f'OLD."{column}" IS DISTINCT FROM NEW."{column}"'
+            for column in _IMMUTABLE_IDEMPOTENCY_COLUMNS
+        )
+        predicate += ' OR NEW."expires_at" < OLD."expires_at"'
+        op.execute(
+            sa.text(
+                f"""
+                CREATE FUNCTION reject_api_idempotency_identity_update()
+                RETURNS trigger AS $$
+                BEGIN
+                    IF {predicate} THEN
+                        RAISE EXCEPTION 'api idempotency identity is immutable';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """
+            )
+        )
+        op.execute(
+            sa.text(
+                """
+                CREATE TRIGGER trg_api_idempotency_identity_immutable
+                BEFORE UPDATE ON api_idempotency_records
+                FOR EACH ROW EXECUTE FUNCTION reject_api_idempotency_identity_update()
+                """
+            )
+        )
+        return
+
+    if bind.dialect.name == "sqlite":
+        predicate = " OR ".join(
+            f'OLD."{column}" IS NOT NEW."{column}"'
+            for column in _IMMUTABLE_IDEMPOTENCY_COLUMNS
+        )
+        predicate += ' OR NEW."expires_at" < OLD."expires_at"'
+        op.execute(
+            sa.text(
+                f"""
+                CREATE TRIGGER trg_api_idempotency_identity_immutable
+                BEFORE UPDATE ON api_idempotency_records
+                FOR EACH ROW WHEN {predicate}
+                BEGIN
+                    SELECT RAISE(ABORT, 'api idempotency identity is immutable');
+                END
+                """
+            )
+        )
+
+
+def _drop_immutable_outbox_trigger(bind: sa.Connection) -> None:
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                "DROP TRIGGER IF EXISTS trg_domain_outbox_envelope_immutable "
+                "ON domain_outbox_events"
+            )
+        )
+        op.execute(
+            sa.text("DROP FUNCTION IF EXISTS reject_domain_outbox_envelope_update()")
+        )
+    elif bind.dialect.name == "sqlite":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS trg_domain_outbox_envelope_immutable"))
+
+
+def _drop_immutable_idempotency_trigger(bind: sa.Connection) -> None:
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                "DROP TRIGGER IF EXISTS trg_api_idempotency_identity_immutable "
+                "ON api_idempotency_records"
+            )
+        )
+        op.execute(
+            sa.text("DROP FUNCTION IF EXISTS reject_api_idempotency_identity_update()")
+        )
+    elif bind.dialect.name == "sqlite":
+        op.execute(
+            sa.text("DROP TRIGGER IF EXISTS trg_api_idempotency_identity_immutable")
+        )
 
 
 def upgrade() -> None:
@@ -123,8 +307,18 @@ def upgrade() -> None:
             "state <> 'completed' OR response_status IS NOT NULL",
             name="ck_api_idempotency_completed_response",
         ),
+        sa.CheckConstraint(
+            "(actor_scope LIKE 'membership:%' OR actor_scope LIKE 'system:%') "
+            "AND actor_scope NOT IN ('membership:', 'system:')",
+            name="ck_api_idempotency_actor_scope_kind",
+        ),
+        sa.CheckConstraint(
+            "actor_membership_id IS NULL OR "
+            "actor_scope = 'membership:' || actor_membership_id",
+            name="ck_api_idempotency_actor_scope_membership",
+        ),
         sa.ForeignKeyConstraint(
-            ["company_id"], ["companies.id"], ondelete="CASCADE"
+            ["company_id"], ["companies.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
             ["actor_membership_id", "actor_company_id"],
@@ -153,6 +347,16 @@ def upgrade() -> None:
         "api_idempotency_records",
         ["expires_at", "state"],
     )
+    op.create_index(
+        "ix_api_idempotency_actor_membership",
+        "api_idempotency_records",
+        ["actor_membership_id", "actor_company_id", "created_at"],
+    )
+    op.create_index(
+        "ix_api_idempotency_actor_company",
+        "api_idempotency_records",
+        ["actor_company_id", "actor_membership_id"],
+    )
 
     op.create_table(
         "domain_outbox_events",
@@ -175,6 +379,7 @@ def upgrade() -> None:
         sa.Column("causation_id", sa.String(length=160), nullable=True),
         sa.Column("payload_hash", sa.String(length=64), nullable=False),
         sa.Column("payload_json", sa.JSON(), nullable=False),
+        sa.Column("expected_consumers_json", sa.JSON(), nullable=False),
         sa.Column(
             "state",
             sa.String(length=24),
@@ -194,6 +399,8 @@ def upgrade() -> None:
         ),
         sa.Column("last_error_redacted", sa.String(length=500), nullable=True),
         sa.Column("dead_letter_reason", sa.String(length=160), nullable=True),
+        sa.Column("dead_letter_resolution", sa.String(length=16), nullable=True),
+        sa.Column("dead_letter_resolved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("dead_lettered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -261,8 +468,26 @@ def upgrade() -> None:
             "(state <> 'dead_letter' AND dead_lettered_at IS NULL)",
             name="ck_domain_outbox_dead_letter_state",
         ),
+        sa.CheckConstraint(
+            "json_array_length(expected_consumers_json) > 0",
+            name="ck_domain_outbox_expected_consumers_nonempty",
+        ),
+        sa.CheckConstraint(
+            "(state = 'dead_letter' AND dead_letter_resolution IN "
+            "('pending', 'ignored', 'resolved')) OR "
+            "(state <> 'dead_letter' AND dead_letter_resolution IS NULL)",
+            name="ck_domain_outbox_dead_letter_resolution_state",
+        ),
+        sa.CheckConstraint(
+            "(dead_letter_resolution = 'pending' AND "
+            "dead_letter_resolved_at IS NULL) OR "
+            "(dead_letter_resolution IN ('ignored', 'resolved') AND "
+            "dead_letter_resolved_at IS NOT NULL) OR "
+            "dead_letter_resolution IS NULL",
+            name="ck_domain_outbox_dead_letter_resolution_time",
+        ),
         sa.ForeignKeyConstraint(
-            ["company_id"], ["companies.id"], ondelete="CASCADE"
+            ["company_id"], ["companies.id"], ondelete="RESTRICT"
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("id", "company_id", name="uq_domain_outbox_id_company"),
@@ -279,6 +504,11 @@ def upgrade() -> None:
         "ix_domain_outbox_company_state",
         "domain_outbox_events",
         ["company_id", "state", "created_at"],
+    )
+    op.create_index(
+        "ix_domain_outbox_dead_letter_resolution",
+        "domain_outbox_events",
+        ["company_id", "state", "dead_letter_resolution", "dead_lettered_at"],
     )
     op.create_index(
         "ix_domain_outbox_aggregate",
@@ -362,13 +592,13 @@ def upgrade() -> None:
             name="ck_domain_consumer_effect_result_hash_length",
         ),
         sa.ForeignKeyConstraint(
-            ["company_id"], ["companies.id"], ondelete="CASCADE"
+            ["company_id"], ["companies.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
             ["outbox_event_id", "company_id"],
             ["domain_outbox_events.id", "domain_outbox_events.company_id"],
             name="fk_domain_consumer_effect_outbox_company",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -397,6 +627,14 @@ def upgrade() -> None:
         "domain_consumer_effects",
         ["company_id", "consumer_name", "state"],
     )
+    op.create_index(
+        "ix_domain_consumer_effect_event",
+        "domain_consumer_effects",
+        ["outbox_event_id", "company_id", "state"],
+    )
+    bind = op.get_bind()
+    _create_immutable_idempotency_trigger(bind)
+    _create_immutable_outbox_trigger(bind)
 
 
 def downgrade() -> None:
@@ -413,6 +651,8 @@ def downgrade() -> None:
             f"roll application code forward instead of deleting rows: {populated}"
         )
 
+    _drop_immutable_outbox_trigger(bind)
+    _drop_immutable_idempotency_trigger(bind)
     op.drop_table("domain_consumer_effects")
     op.drop_table("domain_outbox_events")
     op.drop_table("api_idempotency_records")

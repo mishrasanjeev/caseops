@@ -17,7 +17,21 @@ from caseops_api.db.models import ApiIdempotencyRecord, ApiIdempotencyState
 from caseops_api.db.session import serialize_sqlite_writer
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_HTTP_METHOD = re.compile(r"^[A-Z]{1,12}$")
+_OPERATION = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,159}$")
 _JSON_SAFE_INTEGER_MAX = 9_007_199_254_740_991
+_DEFAULT_MINIMUM_RETENTION = timedelta(days=7)
+_LEGAL_MINIMUM_RETENTION = timedelta(days=365)
+_LEGAL_OPERATION_PREFIXES = (
+    "ip.",
+    "ip_document.",
+    "bulk_import.",
+    "billing.",
+    "notification.",
+    "payment.",
+    "payments.",
+    "provider.",
+)
 
 
 class IdempotencyClaimOutcome(StrEnum):
@@ -51,9 +65,9 @@ class CanonicalFilePart:
             raise ValueError("File size_bytes cannot be negative.")
         _validate_sha256(self.content_sha256, field="content_sha256")
         return {
-            "field_name": self.field_name,
+            "field_name": self.field_name.strip(),
             "file_name": self.file_name,
-            "media_type": self.media_type.lower(),
+            "media_type": self.media_type.strip().lower(),
             "size_bytes": self.size_bytes,
             "content_sha256": self.content_sha256,
             "representation_version": self.representation_version,
@@ -61,9 +75,50 @@ class CanonicalFilePart:
 
 
 @dataclass(frozen=True, slots=True)
+class IdempotencyRecordSnapshot:
+    id: str
+    company_id: str
+    actor_scope: str
+    actor_membership_id: str | None
+    http_method: str
+    operation: str
+    idempotency_key: str
+    request_hash: str
+    state: str
+    claim_generation: int
+    response_status: int | None
+    result_type: str | None
+    result_id: str | None
+    finished_at: datetime | None
+    expires_at: datetime
+    created_at: datetime
+
+
+def _record_snapshot(record: ApiIdempotencyRecord) -> IdempotencyRecordSnapshot:
+    return IdempotencyRecordSnapshot(
+        id=record.id,
+        company_id=record.company_id,
+        actor_scope=record.actor_scope,
+        actor_membership_id=record.actor_membership_id,
+        http_method=record.http_method,
+        operation=record.operation,
+        idempotency_key=record.idempotency_key,
+        request_hash=record.request_hash,
+        state=record.state,
+        claim_generation=record.claim_generation,
+        response_status=record.response_status,
+        result_type=record.result_type,
+        result_id=record.result_id,
+        finished_at=record.finished_at,
+        expires_at=record.expires_at,
+        created_at=record.created_at,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class IdempotencyClaim:
     outcome: IdempotencyClaimOutcome
-    record: ApiIdempotencyRecord
+    record: IdempotencyRecordSnapshot
     claim_token: str | None = None
     claim_generation: int | None = None
 
@@ -82,7 +137,11 @@ def _validate_sha256(value: str, *, field: str) -> None:
 
 
 def _validate_json_value(value: object, *, path: str = "$") -> None:
-    if value is None or isinstance(value, (str, bool)):
+    if value is None or isinstance(value, bool):
+        return
+    if isinstance(value, str):
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+            raise ValueError(f"JSON string at {path} contains an unpaired surrogate.")
         return
     if isinstance(value, int):
         if abs(value) > _JSON_SAFE_INTEGER_MAX:
@@ -99,6 +158,10 @@ def _validate_json_value(value: object, *, path: str = "$") -> None:
         for key, nested in value.items():
             if not isinstance(key, str):
                 raise TypeError(f"Canonical JSON object key at {path} must be a string.")
+            if any(0xD800 <= ord(character) <= 0xDFFF for character in key):
+                raise ValueError(
+                    f"Canonical JSON object key at {path} contains an unpaired surrogate."
+                )
             _validate_json_value(nested, path=f"{path}.{key}")
         return
     if isinstance(value, (list, tuple)):
@@ -109,6 +172,23 @@ def _validate_json_value(value: object, *, path: str = "$") -> None:
         f"Unsupported canonical JSON value at {path}: {type(value).__name__}. "
         "Serialize dates, decimals, UUIDs, and models explicitly first."
     )
+
+
+def _utf16_sort_key(value: str) -> bytes:
+    """Match ECMAScript/JCS object-key ordering by UTF-16 code units."""
+
+    return value.encode("utf-16-be")
+
+
+def _ordered_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {
+            key: _ordered_json_value(value[key])
+            for key in sorted(value, key=_utf16_sort_key)
+        }
+    if isinstance(value, (list, tuple)):
+        return [_ordered_json_value(item) for item in value]
+    return value
 
 
 def canonical_json_bytes(value: object) -> bytes:
@@ -123,11 +203,10 @@ def canonical_json_bytes(value: object) -> bytes:
 
     _validate_json_value(value)
     return json.dumps(
-        value,
+        _ordered_json_value(value),
         ensure_ascii=False,
         allow_nan=False,
         separators=(",", ":"),
-        sort_keys=True,
     ).encode("utf-8")
 
 
@@ -179,31 +258,37 @@ def _new_claim_token() -> str:
     return uuid4().hex
 
 
+def idempotency_retention_for_operation(operation: str) -> timedelta:
+    """Return the server-owned retry-evidence window for an operation."""
+
+    normalized = operation.strip().lower()
+    if not normalized:
+        raise ValueError("operation is required for idempotency retention.")
+    if normalized.startswith(_LEGAL_OPERATION_PREFIXES):
+        return _LEGAL_MINIMUM_RETENTION
+    return _DEFAULT_MINIMUM_RETENTION
+
+
 def _claim_existing(
     record: ApiIdempotencyRecord,
     *,
-    request_hash: str,
     now: datetime,
     claim_ttl: timedelta,
     expires_at: datetime,
-    reset_expired_record: bool,
 ) -> IdempotencyClaim:
     record.state = ApiIdempotencyState.PROCESSING
-    record.request_hash = request_hash
     record.claim_token = _new_claim_token()
     record.claim_generation += 1
-    record.claim_expires_at = min(now + claim_ttl, expires_at)
+    record.expires_at = max(_aware(record.expires_at), expires_at)
+    record.claim_expires_at = min(now + claim_ttl, record.expires_at)
     record.response_status = None
     record.result_type = None
     record.result_id = None
     record.finished_at = None
     record.updated_at = now
-    if reset_expired_record:
-        record.expires_at = expires_at
-        record.created_at = now
     return IdempotencyClaim(
         outcome=IdempotencyClaimOutcome.CLAIMED,
-        record=record,
+        record=_record_snapshot(record),
         claim_token=record.claim_token,
         claim_generation=record.claim_generation,
     )
@@ -218,7 +303,6 @@ def claim_idempotency(
     operation: str,
     idempotency_key: str,
     request_hash: str,
-    expires_at: datetime,
     actor_membership_id: str | None = None,
     claim_ttl: timedelta = timedelta(minutes=15),
     now: datetime | None = None,
@@ -226,22 +310,37 @@ def claim_idempotency(
     """Claim or classify one scoped idempotency key without committing."""
 
     current_time = _aware(now or _now())
-    expires_at = _aware(expires_at)
+    company_id = company_id.strip()
     actor_scope = actor_scope.strip()
     http_method = http_method.strip().upper()
-    operation = operation.strip()
+    operation = operation.strip().lower()
     idempotency_key = idempotency_key.strip()
-    if not company_id.strip() or not actor_scope or not operation or not idempotency_key:
+    if not company_id or not actor_scope or not operation or not idempotency_key:
         raise ValueError("Company, actor scope, operation, and idempotency key are required.")
-    if not http_method or len(http_method) > 12:
+    if len(company_id) > 36:
+        raise ValueError("company_id exceeds the persisted contract.")
+    if not _HTTP_METHOD.fullmatch(http_method):
         raise ValueError("A bounded HTTP method is required.")
+    if not _OPERATION.fullmatch(operation):
+        raise ValueError("Operation must use the normalized operation-name contract.")
     if len(actor_scope) > 160 or len(operation) > 160 or len(idempotency_key) > 200:
         raise ValueError("Idempotency scope exceeds the persisted contract.")
+    if actor_membership_id is not None:
+        actor_membership_id = actor_membership_id.strip()
+        if not actor_membership_id or len(actor_membership_id) > 36:
+            raise ValueError("actor_membership_id exceeds the persisted contract.")
+        if actor_scope != f"membership:{actor_membership_id}":
+            raise ValueError(
+                "Membership idempotency scope must identify the supplied membership."
+            )
+    elif not actor_scope.startswith("system:") or not actor_scope.removeprefix(
+        "system:"
+    ).strip():
+        raise ValueError("A typed membership or named system actor scope is required.")
     _validate_sha256(request_hash, field="request_hash")
     if claim_ttl <= timedelta(0):
         raise ValueError("claim_ttl must be positive.")
-    if expires_at <= current_time:
-        raise ValueError("expires_at must be in the future.")
+    expires_at = current_time + idempotency_retention_for_operation(operation)
 
     scope = _scope_statement(
         company_id=company_id,
@@ -280,7 +379,7 @@ def claim_idempotency(
             session.flush()
             return IdempotencyClaim(
                 outcome=IdempotencyClaimOutcome.CLAIMED,
-                record=record,
+                record=_record_snapshot(record),
                 claim_token=token,
                 claim_generation=1,
             )
@@ -299,35 +398,20 @@ def claim_idempotency(
         else:
             return IdempotencyClaim(
                 outcome=IdempotencyClaimOutcome.CLAIMED,
-                record=record,
+                record=_record_snapshot(record),
                 claim_token=token,
                 claim_generation=1,
             )
 
-    record_expired = _aware(record.expires_at) <= current_time
-    if record_expired:
-        record.actor_membership_id = actor_membership_id
-        record.actor_company_id = company_id if actor_membership_id else None
-        claimed = _claim_existing(
-            record,
-            request_hash=request_hash,
-            now=current_time,
-            claim_ttl=claim_ttl,
-            expires_at=expires_at,
-            reset_expired_record=True,
-        )
-        session.flush()
-        return claimed
-
     if record.request_hash != request_hash:
         return IdempotencyClaim(
             outcome=IdempotencyClaimOutcome.KEY_REUSED,
-            record=record,
+            record=_record_snapshot(record),
         )
     if record.state == ApiIdempotencyState.COMPLETED:
         return IdempotencyClaim(
             outcome=IdempotencyClaimOutcome.REPLAY,
-            record=record,
+            record=_record_snapshot(record),
         )
     if (
         record.state == ApiIdempotencyState.PROCESSING
@@ -336,16 +420,14 @@ def claim_idempotency(
     ):
         return IdempotencyClaim(
             outcome=IdempotencyClaimOutcome.IN_PROGRESS,
-            record=record,
+            record=_record_snapshot(record),
         )
 
     claimed = _claim_existing(
         record,
-        request_hash=request_hash,
         now=current_time,
         claim_ttl=claim_ttl,
         expires_at=expires_at,
-        reset_expired_record=False,
     )
     session.flush()
     return claimed
@@ -452,6 +534,7 @@ __all__ = (
     "CanonicalFilePart",
     "IdempotencyClaim",
     "IdempotencyClaimOutcome",
+    "IdempotencyRecordSnapshot",
     "StaleIdempotencyClaimError",
     "canonical_json_bytes",
     "canonical_json_sha256",
@@ -459,4 +542,5 @@ __all__ = (
     "claim_idempotency",
     "complete_idempotency",
     "fail_idempotency",
+    "idempotency_retention_for_operation",
 )

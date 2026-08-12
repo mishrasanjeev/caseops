@@ -58,15 +58,59 @@ def test_shared_reliability_migration_empty_rollback_and_populated_fail_closed(
     command.upgrade(config, "20260811_0005")
     assert TABLES.isdisjoint(_table_names(database_url))
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260812_0001")
     assert _head(database_url) == "20260812_0001"
     assert TABLES <= _table_names(database_url)
+    engine = create_engine(database_url, future=True)
+    try:
+        schema = inspect(engine)
+        outbox_columns = {
+            column["name"] for column in schema.get_columns("domain_outbox_events")
+        }
+        assert {
+            "expected_consumers_json",
+            "dead_letter_resolution",
+            "dead_letter_resolved_at",
+        } <= outbox_columns
+        idempotency_indexes = {
+            index["name"] for index in schema.get_indexes("api_idempotency_records")
+        }
+        assert {
+            "ix_api_idempotency_actor_membership",
+            "ix_api_idempotency_actor_company",
+        } <= idempotency_indexes
+        for table in TABLES:
+            company_foreign_keys = [
+                foreign_key
+                for foreign_key in schema.get_foreign_keys(table)
+                if foreign_key["referred_table"] == "companies"
+            ]
+            assert company_foreign_keys
+            assert all(
+                foreign_key["options"].get("ondelete") == "RESTRICT"
+                for foreign_key in company_foreign_keys
+            )
+        with engine.connect() as connection:
+            triggers = set(
+                connection.scalars(
+                    text(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type = 'trigger' AND name LIKE 'trg_%_immutable'"
+                    )
+                ).all()
+            )
+        assert triggers == {
+            "trg_api_idempotency_identity_immutable",
+            "trg_domain_outbox_envelope_immutable",
+        }
+    finally:
+        engine.dispose()
 
     # An empty rehearsal database can exercise the structural downgrade and
     # re-upgrade path without losing durable evidence.
     command.downgrade(config, "20260811_0005")
     assert TABLES.isdisjoint(_table_names(database_url))
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260812_0001")
 
     now = datetime.now(UTC)
     company_id = str(uuid4())
