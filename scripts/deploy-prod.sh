@@ -47,6 +47,12 @@ MIGRATION_TASK_TIMEOUT=30m
 # surface down.
 API_CONCURRENCY=1
 API_TIMEOUT=300s
+# Keep a headroom ceiling above the historical ten single-request containers.
+# A production browser page can issue several ordinary API reads in parallel;
+# when all ten single-concurrency instances were busy, Cloud Run returned 429
+# before application code ran. This does not increase the warm baseline.
+# Override only for a deliberate incident/cost response.
+API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"
 # P1-2 (2026-05-15 perf review): keep one API instance always warm.
 # caseops-api previously had no minScale (scaled to 0), so the first
 # login after any idle window paid a 3-8s Python + SQLAlchemy + Cloud
@@ -178,6 +184,7 @@ gcloud run deploy caseops-api \
   --project "${PROJECT}" \
   --quiet \
   --concurrency "${API_CONCURRENCY}" \
+  --max "${API_MAX_INSTANCES}" \
   --timeout "${API_TIMEOUT}" \
   --min "${API_MIN_INSTANCES}" \
   --min-instances default \
@@ -190,7 +197,7 @@ gcloud run deploy caseops-api \
   --container clamav \
   --image "${CLAMAV_IMAGE}" \
   --startup-probe "tcpSocket.port=3310,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120"
-echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, service-min ${API_MIN_INSTANCES})."
+echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, service-min ${API_MIN_INSTANCES}, service-max ${API_MAX_INSTANCES})."
 
 # Step 4 — deploy web.
 echo "--- 5/6 deploy caseops-web ---"
