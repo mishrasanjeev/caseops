@@ -137,6 +137,11 @@ jobs:
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
 
       - name: Run prod-Playwright suite (notice module)
+        # The RAM batch is intentionally broad and can expose an independent
+        # provider or quota incident.  The Notice suite is still a required
+        # production signal, so run it after a RAM failure and retain both
+        # outcomes in the same fail-closed workflow result.
+        if: always()
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
