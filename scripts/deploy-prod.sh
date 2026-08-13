@@ -51,6 +51,9 @@ API_TIMEOUT=300s
 # A production browser page can issue several ordinary API reads in parallel;
 # when all ten single-concurrency instances were busy, Cloud Run returned 429
 # before application code ran. This does not increase the warm baseline.
+# Cloud Run has both a mutable service-wide ceiling (--max) and an immutable
+# per-revision ceiling (--max-instances). Set both: the service ceiling alone
+# cannot raise a historical revision cap.
 # Override only for a deliberate incident/cost response.
 API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"
 # P1-2 (2026-05-15 perf review): keep one API instance always warm.
@@ -185,6 +188,7 @@ gcloud run deploy caseops-api \
   --quiet \
   --concurrency "${API_CONCURRENCY}" \
   --max "${API_MAX_INSTANCES}" \
+  --max-instances "${API_MAX_INSTANCES}" \
   --timeout "${API_TIMEOUT}" \
   --min "${API_MIN_INSTANCES}" \
   --min-instances default \

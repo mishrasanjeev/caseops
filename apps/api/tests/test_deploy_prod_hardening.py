@@ -94,6 +94,7 @@ def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() ->
     assert "API_CONCURRENCY=1" in script
     assert 'API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"' in script
     assert '--max "${API_MAX_INSTANCES}"' in script
+    assert '--max-instances "${API_MAX_INSTANCES}"' in script
     assert 'autoscaling.knative.dev/maxScale: "20"' in manifest
 
 
