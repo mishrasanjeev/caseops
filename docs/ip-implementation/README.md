@@ -19,6 +19,9 @@ python scripts/ip_program_manifest.py validate
 python scripts/ip_ownership_ledger.py validate
 python scripts/ip_arch_ops_contract.py validate
 python scripts/ip_data_class_registry.py validate
+python scripts/ip_data_governance_registry.py validate
+python scripts/ip_data_governance_map.py validate
+python scripts/ip_data_governance_map.py check-change --base origin/main
 python scripts/ip_program_manifest.py generate
 ```
 
@@ -32,6 +35,15 @@ tables. Its fail-closed dispositions do not claim the runtime
 retention/hold/export/purge/restore work allocated to IPLF-028. These controls do
 not replace the behavior-level journeys, mixed-revision proof, deployment
 evidence, or human approval allocated to later slices.
+
+`DATA_GOVERNANCE_MAP.yaml` is the IPLF-028C repository inventory and
+Definition-of-Ready gate. It snapshots every current SQLAlchemy table and
+column, relational-index fingerprints, and the known object, cache, vector,
+queue/outbox/dead-letter, telemetry, export, provider-held, and backup classes.
+Its `registry_fail_closed` handler only blocks unregistered changes in CI: it
+does not activate retention, holds, export, purge, offboarding, restore,
+provider deletion, or backup recovery. The Records/Privacy/Legal/Security
+policy approval remains an explicit blocker.
 
 `IP_CAPABILITY_MODEL.md` documents the IPLF-020A extension of the existing
 backend/frontend capability catalogues. Server capability, billing entitlement,

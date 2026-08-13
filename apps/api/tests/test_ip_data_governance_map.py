@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import copy
+import importlib.util
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPT_PATH = REPO_ROOT / "scripts" / "ip_data_governance_map.py"
+SPEC = importlib.util.spec_from_file_location("ip_data_governance_map", SCRIPT_PATH)
+assert SPEC is not None and SPEC.loader is not None
+ip_data_governance_map = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ip_data_governance_map)
+
+
+def _map() -> dict:
+    return copy.deepcopy(ip_data_governance_map._load(ip_data_governance_map.MAP_PATH))
+
+
+def test_committed_data_governance_map_covers_current_repository_inventory() -> None:
+    assert ip_data_governance_map.validate(_map()) == []
+
+
+def test_map_rejects_missing_or_unregistered_sql_table_and_column() -> None:
+    data = _map()
+    removed = data["sql_tables"].pop()
+    schema = ip_data_governance_map.current_sql_schema()
+    schema["unregistered_data_store"] = {
+        "new_payload": {"sql_type": "TEXT", "nullable": True}
+    }
+
+    errors = ip_data_governance_map.validate(data, sql_schema=schema)
+
+    assert removed["table_name"] in " ".join(errors)
+    assert any("sql-table inventory must exactly match" in error for error in errors)
+    assert any("unregistered_data_store" in error for error in errors)
+
+
+def test_map_rejects_missing_policy_and_runtime_overclaim() -> None:
+    data = _map()
+    data["completion_boundary"] = "This is complete."
+    data["policy_profiles"]["tenant_operational_record"]["default_retention"] = ""
+    data["disposition_handlers"][0]["status"] = "live_execute_handler"
+    data["non_sql_data_classes"][0]["status"] = "policy_approved"
+
+    errors = ip_data_governance_map.validate(data)
+
+    assert any("explicit incomplete boundary" in error for error in errors)
+    assert any("default_retention must be explicit" in error for error in errors)
+    assert any("must not overclaim runtime execution" in error for error in errors)
+    assert any("must not overclaim runtime policy approval" in error for error in errors)
+
+
+def test_change_gate_requires_map_update_and_migration_marker() -> None:
+    migration = "apps/api/alembic/versions/20260814_0001_new_data.py"
+    errors = ip_data_governance_map.change_gate_errors(
+        [migration], source_by_path={migration: "def upgrade(): pass"}
+    )
+
+    assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
+    assert any("missing required marker" in error for error in errors)
+
+    passed = ip_data_governance_map.change_gate_errors(
+        [migration, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"],
+        source_by_path={
+            migration: f"# {ip_data_governance_map.MIGRATION_MARKER}\ndef upgrade(): pass"
+        },
+    )
+    assert passed == []
+
+
+def test_change_gate_requires_map_update_for_new_provider_or_storage_boundary() -> None:
+    path = "apps/api/src/caseops_api/services/new_provider.py"
+    source = "from google.cloud import storage\nclient = storage.Client()\n"
+
+    errors = ip_data_governance_map.change_gate_errors(
+        [path], source_by_path={path: source}
+    )
+    assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
+
+    assert (
+        ip_data_governance_map.change_gate_errors(
+            [path, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"],
+            source_by_path={path: source},
+        )
+        == []
+    )
