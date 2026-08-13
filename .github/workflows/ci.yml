@@ -48,6 +48,7 @@ jobs:
           uv --directory apps/api run python ../../scripts/ip_data_governance_registry.py validate
           uv --directory apps/api run python ../../scripts/ip_data_governance_map.py validate
           uv --directory apps/api run python ../../scripts/ip_data_governance_map.py check-change --base origin/main
+          uv --directory apps/api run python ../../scripts/ip_m2_ownership_audit.py validate
 
       - name: Validate IP research golden-query contract
         run: uv --directory apps/api run python ../../scripts/run_ip_golden_queries.py
