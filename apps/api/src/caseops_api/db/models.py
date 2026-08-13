@@ -15672,3 +15672,535 @@ class IpResponsibilityAssignment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+# IPLF-028A — shared records-governance foundations.  These tables are
+# intentionally additive and dry-run-only.  They record policy, preservation,
+# and scoped-operation evidence without exposing a real export, purge,
+# offboarding, restore, or provider action.
+
+
+class DataRetentionPolicyStatus(StrEnum):
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class DataRetentionPolicyVersionStatus(StrEnum):
+    CANDIDATE = "candidate"
+    APPROVED = "approved"
+    ACTIVE = "active"
+    RETIRED = "retired"
+    DISABLED = "disabled"
+
+
+class LegalHoldStatus(StrEnum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    RELEASED = "released"
+    CANCELLED = "cancelled"
+
+
+class TenantDataOperationStatus(StrEnum):
+    PLANNED = "planned"
+    DRY_RUN_COMPLETE = "dry_run_complete"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+
+
+class DataRetentionPolicy(Base):
+    """Tenant-scoped identity for a versioned shared retention policy."""
+
+    __tablename__ = "data_retention_policies"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_data_retention_policy_id_company"),
+        UniqueConstraint("company_id", "key", name="uq_data_retention_policy_company_key"),
+        CheckConstraint(
+            "status IN ('active', 'retired')",
+            name="ck_data_retention_policy_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=DataRetentionPolicyStatus.ACTIVE
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DataRetentionPolicyVersion(Base):
+    """Immutable policy terms once they leave the candidate state."""
+
+    __tablename__ = "data_retention_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["policy_id", "company_id"],
+            ["data_retention_policies.id", "data_retention_policies.company_id"],
+            name="fk_data_retention_version_policy_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proposed_by_membership_id", "proposed_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_data_retention_version_proposer_company",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by_membership_id", "reviewed_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_data_retention_version_reviewer_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_data_retention_version_id_company"),
+        UniqueConstraint(
+            "policy_id",
+            "company_id",
+            "version",
+            name="uq_data_retention_version_policy_company_number",
+        ),
+        CheckConstraint("version > 0", name="ck_data_retention_version_positive"),
+        CheckConstraint(
+            "status IN ('candidate', 'approved', 'active', 'retired', 'disabled')",
+            name="ck_data_retention_version_status",
+        ),
+        CheckConstraint(
+            "sensitivity IN ('internal', 'confidential', 'privileged')",
+            name="ck_data_retention_version_sensitivity",
+        ),
+        CheckConstraint(
+            "retention_days IS NULL OR retention_days > 0",
+            name="ck_data_retention_version_retention_days_positive",
+        ),
+        CheckConstraint(
+            "(retention_days IS NOT NULL AND "
+            "indefinite_retention_approval_ref IS NULL) OR "
+            "(retention_days IS NULL AND "
+            "indefinite_retention_approval_ref IS NOT NULL)",
+            name="ck_data_retention_version_explicit_indefinite_approval",
+        ),
+        CheckConstraint(
+            "length(policy_hash) = 64",
+            name="ck_data_retention_version_policy_hash_length",
+        ),
+        CheckConstraint(
+            "proposed_by_membership_id IS NULL OR reviewed_by_membership_id IS NULL "
+            "OR proposed_by_membership_id <> reviewed_by_membership_id",
+            name="ck_data_retention_version_reviewer_distinct",
+        ),
+        CheckConstraint(
+            "(proposed_by_membership_id IS NULL AND "
+            "proposed_by_membership_company_id IS NULL) OR "
+            "(proposed_by_membership_id IS NOT NULL AND "
+            "proposed_by_membership_company_id = company_id)",
+            name="ck_data_retention_version_proposer_company_complete",
+        ),
+        CheckConstraint(
+            "(reviewed_by_membership_id IS NULL AND "
+            "reviewed_by_membership_company_id IS NULL) OR "
+            "(reviewed_by_membership_id IS NOT NULL AND "
+            "reviewed_by_membership_company_id = company_id)",
+            name="ck_data_retention_version_reviewer_company_complete",
+        ),
+        Index(
+            "ix_data_retention_versions_company_status",
+            "company_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_data_retention_versions_proposer_company",
+            "proposed_by_membership_id",
+            "proposed_by_membership_company_id",
+        ),
+        Index(
+            "ix_data_retention_versions_reviewer_company",
+            "reviewed_by_membership_id",
+            "reviewed_by_membership_company_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    policy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=DataRetentionPolicyVersionStatus.CANDIDATE
+    )
+    data_class_selector_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(255), nullable=False)
+    legal_policy_basis: Mapped[str] = mapped_column(String(512), nullable=False)
+    sensitivity: Mapped[str] = mapped_column(String(24), nullable=False)
+    retention_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    indefinite_retention_approval_ref: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    disposition: Mapped[str] = mapped_column(String(80), nullable=False)
+    hold_behavior: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_license_limits: Mapped[str | None] = mapped_column(Text, nullable=True)
+    region: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    subprocessor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    proposed_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    proposer_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    reviewer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class LegalHold(Base):
+    """Preservation state; release never deletes the original hold record."""
+
+    __tablename__ = "legal_holds"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "created_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_legal_hold_creator_company",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["approved_by_membership_id", "approved_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_legal_hold_approver_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_legal_hold_id_company"),
+        UniqueConstraint("company_id", "key", name="uq_legal_hold_company_key"),
+        CheckConstraint(
+            "status IN ('draft', 'active', 'released', 'cancelled')",
+            name="ck_legal_hold_status",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND activated_at IS NOT NULL AND "
+            "created_by_membership_id IS NOT NULL AND "
+            "created_by_membership_company_id = company_id AND "
+            "approved_by_membership_id IS NOT NULL AND "
+            "approved_by_membership_company_id = company_id) OR "
+            "status <> 'active'",
+            name="ck_legal_hold_activation_approval",
+        ),
+        CheckConstraint(
+            "(status = 'released' AND released_at IS NOT NULL) OR "
+            "status <> 'released'",
+            name="ck_legal_hold_release_state",
+        ),
+        CheckConstraint(
+            "created_by_membership_id IS NULL OR approved_by_membership_id IS NULL "
+            "OR created_by_membership_id <> approved_by_membership_id",
+            name="ck_legal_hold_approver_distinct",
+        ),
+        CheckConstraint(
+            "(created_by_membership_id IS NULL AND "
+            "created_by_membership_company_id IS NULL) OR "
+            "(created_by_membership_id IS NOT NULL AND "
+            "created_by_membership_company_id = company_id)",
+            name="ck_legal_hold_creator_company_complete",
+        ),
+        CheckConstraint(
+            "(approved_by_membership_id IS NULL AND "
+            "approved_by_membership_company_id IS NULL) OR "
+            "(approved_by_membership_id IS NOT NULL AND "
+            "approved_by_membership_company_id = company_id)",
+            name="ck_legal_hold_approver_company_complete",
+        ),
+        Index("ix_legal_holds_company_status", "company_id", "status", "created_at"),
+        Index(
+            "ix_legal_holds_creator_company",
+            "created_by_membership_id",
+            "created_by_membership_company_id",
+        ),
+        Index(
+            "ix_legal_holds_approver_company",
+            "approved_by_membership_id",
+            "approved_by_membership_company_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    authority_reference: Mapped[str] = mapped_column(String(512), nullable=False)
+    reason_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=LegalHoldStatus.DRAFT
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    release_reason_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class LegalHoldItem(Base):
+    """An opaque target selector belonging to a legal hold."""
+
+    __tablename__ = "legal_hold_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["legal_hold_id", "company_id"],
+            ["legal_holds.id", "legal_holds.company_id"],
+            name="fk_legal_hold_item_hold_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_legal_hold_item_id_company"),
+        UniqueConstraint(
+            "legal_hold_id",
+            "company_id",
+            "data_class_id",
+            "target_type",
+            "target_reference_hash",
+            name="uq_legal_hold_item_target",
+        ),
+        CheckConstraint(
+            "length(target_reference_hash) = 64",
+            name="ck_legal_hold_item_target_hash_length",
+        ),
+        Index(
+            "ix_legal_hold_items_company_target",
+            "company_id",
+            "data_class_id",
+            "target_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    legal_hold_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    data_class_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_reference_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_label_redacted: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class TenantDataOperation(Base):
+    """Immutable manifest identity for an explicitly dry-run-only operation."""
+
+    __tablename__ = "tenant_data_operations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["requested_by_membership_id", "requested_by_membership_company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_tenant_data_operation_requester_company",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["retention_policy_version_id", "company_id"],
+            ["data_retention_versions.id", "data_retention_versions.company_id"],
+            name="fk_tenant_data_operation_policy_version_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_tenant_data_operation_id_company"),
+        CheckConstraint(
+            "operation_type IN ('tenant_export', 'retention_purge', "
+            "'tenant_offboarding', 'restore_validation')",
+            name="ck_tenant_data_operation_type",
+        ),
+        CheckConstraint(
+            "execution_mode = 'dry_run'",
+            name="ck_tenant_data_operation_dry_run_only",
+        ),
+        CheckConstraint(
+            "status IN ('planned', 'dry_run_complete', 'blocked', 'cancelled')",
+            name="ck_tenant_data_operation_status",
+        ),
+        CheckConstraint(
+            "approval_status = 'not_requested'",
+            name="ck_tenant_data_operation_execute_approval_closed",
+        ),
+        CheckConstraint(
+            "length(request_scope_hash) = 64",
+            name="ck_tenant_data_operation_scope_hash_length",
+        ),
+        CheckConstraint(
+            "manifest_hash IS NULL OR length(manifest_hash) = 64",
+            name="ck_tenant_data_operation_manifest_hash_length",
+        ),
+        CheckConstraint(
+            "(status = 'dry_run_complete' AND dry_run_completed_at IS NOT NULL "
+            "AND manifest_hash IS NOT NULL) OR status <> 'dry_run_complete'",
+            name="ck_tenant_data_operation_completion_manifest",
+        ),
+        CheckConstraint(
+            "(requested_by_membership_id IS NULL AND "
+            "requested_by_membership_company_id IS NULL) OR "
+            "(requested_by_membership_id IS NOT NULL AND "
+            "requested_by_membership_company_id = company_id)",
+            name="ck_tenant_data_operation_requester_company_complete",
+        ),
+        Index(
+            "ix_tenant_data_operations_company_status",
+            "company_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_tenant_data_operations_requester_company",
+            "requested_by_membership_id",
+            "requested_by_membership_company_id",
+        ),
+        Index(
+            "ix_tenant_data_operations_retention_policy_version_id",
+            "retention_policy_version_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    operation_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="dry_run")
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=TenantDataOperationStatus.PLANNED
+    )
+    approval_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_requested"
+    )
+    request_scope_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    request_scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_evidence_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    retention_policy_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    manifest_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    requested_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    requested_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    requester_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    dry_run_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    blocked_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TenantDataOperationItem(Base):
+    """Opaque dry-run item/checkpoint; it can never authorize execution."""
+
+    __tablename__ = "tenant_data_operation_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["operation_id", "company_id"],
+            ["tenant_data_operations.id", "tenant_data_operations.company_id"],
+            name="fk_tenant_data_operation_item_operation_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["legal_hold_id", "company_id"],
+            ["legal_holds.id", "legal_holds.company_id"],
+            name="fk_tenant_data_operation_item_hold_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_tenant_data_operation_item_id_company"),
+        UniqueConstraint(
+            "operation_id",
+            "company_id",
+            "data_class_id",
+            "target_type",
+            "target_reference_hash",
+            name="uq_tenant_data_operation_item_target",
+        ),
+        CheckConstraint(
+            "item_status IN ('pending', 'eligible', 'held', 'blocked')",
+            name="ck_tenant_data_operation_item_status",
+        ),
+        CheckConstraint(
+            "length(target_reference_hash) = 64",
+            name="ck_tenant_data_operation_item_target_hash_length",
+        ),
+        CheckConstraint(
+            "candidate_record_count >= 0 AND estimated_bytes >= 0",
+            name="ck_tenant_data_operation_item_counts_nonnegative",
+        ),
+        CheckConstraint(
+            "safe_to_execute = false",
+            name="ck_tenant_data_operation_item_never_execute",
+        ),
+        CheckConstraint(
+            "(item_status = 'held' AND legal_hold_id IS NOT NULL) OR "
+            "item_status <> 'held'",
+            name="ck_tenant_data_operation_item_hold_evidence",
+        ),
+        Index(
+            "ix_tenant_data_operation_items_company_operation",
+            "company_id",
+            "operation_id",
+            "item_status",
+        ),
+        Index("ix_tenant_data_operation_items_legal_hold_id", "legal_hold_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    operation_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    data_class_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_reference_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    item_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    candidate_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    legal_hold_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    safe_to_execute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    detail_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )

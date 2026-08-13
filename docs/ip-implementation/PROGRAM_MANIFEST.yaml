@@ -14,16 +14,16 @@
     "verification_status": "blocked",
     "release_status": "blocked",
     "acceptance_status": "pending",
-    "active_slice": "IPLF-027B",
+    "active_slice": "IPLF-028A",
     "checkpoint": {
-      "recorded_at": "2026-08-13T08:51:00+05:30",
-      "repository_revision": "0ad7a43de3d136e9991191d29cc8feeb75602443",
-      "environment": "IPLF-027A was merged through PRs #212-#215 and deployed from exact main 0ad7a43de3d136e9991191d29cc8feeb75602443: API caseops-api-00285-skg and web caseops-web-00263-sx6 each receive 100% traffic and expose the matching source identity. The API preserves concurrency 1 and has both service max scale and revision max instances at 20. The successful migration job caseops-migrate-job-wcwlg, exact-digest scheduler inventory, health/build identity, and dark default reliability/workflow controls were verified. Exact-main CI 31661191219, Security 31661191220, and CodeQL 31661191204 all passed. Exact production workflow 31661191199 passed 65 RAM/IP tests, retained 3 documented conditional skips, and passed the independently continued 2-test Notice phase, but remained red on three OpenAI-quota 503 recommendation tests and a case-tracking-provider health HTTP 409. No capacity 429, outbox consumer, IP workflow command, provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled. Named human acceptance is not inferred.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-027A has completed repository implementation, independent review, canonical merge, exact deployment, and focused production evidence as a deployed dark foundation; its release gate remains blocked by the exact complete-production failures recorded below and does not claim activation or human acceptance. IPLF-026B remains separately blocked by production OpenAI quota availability, although its dependent Notice phase now runs and passed on workflow 31661191199. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-13T11:02:07+05:30",
+      "repository_revision": "8b3f60a708a9b64a33f94676c61926d9be1c3d9a",
+      "environment": "IPLF-028A repository foundation is on open PR #217 at exact branch head 8b3f60a708a9b64a33f94676c61926d9be1c3d9a and is neither merged nor deployed. The required fresh PR CI has not completed at this checkpoint; no new production image, schema migration, serving revision, or acceptance evidence is claimed. The current production release remains IPLF-027A from exact main 0ad7a43de3d136e9991191d29cc8feeb75602443: API caseops-api-00285-skg and web caseops-web-00263-sx6 each receive 100% traffic and expose the matching source identity. The API preserves concurrency 1 and has both service max scale and revision max instances at 20. The successful migration job caseops-migrate-job-wcwlg, exact-digest scheduler inventory, health/build identity, and dark default reliability/workflow controls were verified. Exact-main CI 31661191219, Security 31661191220, and CodeQL 31661191204 all passed. Exact production workflow 31661191199 passed 65 RAM/IP tests, retained 3 documented conditional skips, and passed the independently continued 2-test Notice phase, but remained red on three OpenAI-quota 503 recommendation tests and a case-tracking-provider health HTTP 409. No capacity 429, outbox consumer, IP workflow command, provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled. Named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-027A has completed repository implementation, independent review, canonical merge, exact deployment, and focused production evidence as a deployed dark foundation; its release gate remains blocked by the exact complete-production failures recorded below and does not claim activation or human acceptance. IPLF-028A is current repository work on PR #217 only; it is unmerged, its fresh full CI is unfinished, and it is not counted as deployed or complete. IPLF-026B remains separately blocked by production OpenAI quota availability, although its dependent Notice phase now runs and passed on workflow 31661191199. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-027B",
-      "next_action": "Retain the IPLF-027A release gate as blocked until the production AI provider/account operator restores usable quota for the configured CaseOps OpenAI project and the authorized case-tracking provider operator reviews the HTTP 409 health/replay condition. Engineering/QA must rerun the unchanged complete RAM/IP and Notice workflow against its exact serving release after those external actions. Keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false; do not start IPLF-027B user activation without its approved rollout/operator policy. Do not fabricate named legal/security/pilot/UAT approval or M0 human program lock.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-027A/release-attempt-2026-08-13.md"
+      "next_slice": "IPLF-028A",
+      "next_action": "Finish independent CI for exact PR #217 head 8b3f60a708a9b64a33f94676c61926d9be1c3d9a. Only then merge, deploy the additive empty data-governance schema through the migration job, verify exact images/revisions/schema, and record focused evidence. Keep all IPLF-028A data-operation surfaces nonexistent or dry-run only; keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false. Retain the separate IPLF-027A release gate as blocked until the production AI provider/account operator restores usable quota for the configured CaseOps OpenAI project and the authorized case-tracking provider operator reviews the HTTP 409 health/replay condition; then rerun the unchanged complete RAM/IP and Notice workflow against its exact serving release. Do not fabricate named legal/security/pilot/UAT approval or M0 human program lock.",
+      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md"
     }
   },
   "milestones": [
@@ -1087,7 +1087,7 @@
         "IPLF-028A",
         "IPLF-028B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -6611,21 +6611,81 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260813_0001_data_governance_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/data_governance.py",
+        "apps/api/src/caseops_api/services/data_governance.py",
+        "docs/ip-implementation/IPLF_028A_DATA_GOVERNANCE_REGISTRY.yaml",
+        "scripts/ip_data_governance_registry.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260813_data_governance_migration.py",
+        "apps/api/tests/test_data_governance_service.py",
+        "apps/api/tests/test_ip_data_governance_registry.py",
+        "apps/api/tests/test_schema_fk_indexes.py",
+        "apps/api/tests/test_postgres_validation.py::test_records_governance_guards_reject_real_postgres_mutations"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md"
+      ],
       "evidence_metadata": [],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-028A-FULL-DATA-MAP",
+          "summary": "The repository registry covers only the six new IPLF-028A governance tables; it is not the complete SQL/object/index/cache/queue/log/export/provider/backup data map required by DATA-GOV-01 through DATA-GOV-03.",
+          "owner": "Platform records-governance owner and Engineering",
+          "evidence_needed": "Inventory every in-scope class and column category, attach approved purpose/retention/hold/region/subprocessor fields, and prove the migration/handler registry gate rejects an unregistered class.",
+          "safe_fallback": "Keep every unregistered class outside a data-operation surface and retain the documented dry-run-only boundary.",
+          "milestone_impact": "Blocks IPLF-028A completion and all DATA-GOV release claims while leaving the additive foundation valid.",
+          "next_independent_slice": "Continue repository-controlled inventory and validator work only; do not expose an export, purge, offboarding, or restore endpoint."
+        },
+        {
+          "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
+          "summary": "No approved retention schedule, legal-hold activation/release workflow, step-up/four-eyes decision, or tenant-facing review contract has been supplied for a real data operation.",
+          "owner": "Authorized legal/privacy owner, security owner, and product owner",
+          "evidence_needed": "Approved policy/version authority, named dual-approval and step-up controls, jurisdiction/tenant exceptions, and reviewed user workflow tests.",
+          "safe_fallback": "Keep execution impossible in the schema and service; preserve only opaque dry-run evidence and typed 503 execute rejection.",
+          "milestone_impact": "Blocks legal-hold lifecycle and all real export/purge/offboarding/restore behavior.",
+          "next_independent_slice": "Do not infer legal authorization from schema presence or synthetic tests."
+        },
+        {
+          "id": "IPLF-028A-RES-13-REHEARSAL",
+          "summary": "No current database-plus-object application-cutover restore rehearsal or tenant-export dry run has been performed against an approved environment.",
+          "owner": "Authorized SRE/incident operator and Engineering/QA",
+          "evidence_needed": "Dated, sanitized database/object/image/schema/operator/reviewer evidence with measured application readiness and a tested tenant-export dry run.",
+          "safe_fallback": "Do not treat an isolated SQLite migration test as backup, object-store, restore, or resilience evidence.",
+          "milestone_impact": "Blocks RES-13 and deployment/acceptance closure for IPLF-028.",
+          "next_independent_slice": "Prepare non-live rehearsal design only until the authorized operator run is scheduled."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Keep the new records-governance tables unseeded and the service dry-run-only; no route, worker, scheduler, storage adapter, provider adapter, or execute mode is authorized in IPLF-028A.",
+        "Expand the registry to every in-scope data class and enforce the data-map update gate before marking foundation implementation complete.",
+        "Obtain explicit legal/privacy/security approval for policy, holds, step-up, four-eyes, and user workflow before designing any real data-operation command.",
+        "After independent CI and approved non-live resilience preparation, run the required database-plus-object cutover restore and tenant-export dry run with named operators and reviewers."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive migration 20260813_0001 creates six unseeded company-scoped records-governance tables. It creates no retention policy, legal hold, tenant operation, export, purge, offboarding, restore, object, provider, or backup mutation.",
+        "Database constraints and triggers keep manifests/items immutable, prohibit execute mode and safe_to_execute=true, require explicit indefinite-retention references, retain hold/version evidence, and refuse a destructive downgrade once governance evidence exists."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IPLF_028A_DATA_GOVERNANCE_REGISTRY.yaml",
+          "disposition": "created",
+          "owner": "Platform shared foundations",
+          "evidence": "Six admitted governance classes, explicit incomplete boundary, ownership ledger alignment, and code/migration references"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Local migration/service/registry evidence and explicit remaining legal, inventory, resilience, CI, deployment, and acceptance gates"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",

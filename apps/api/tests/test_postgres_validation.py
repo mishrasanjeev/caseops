@@ -1630,6 +1630,198 @@ def test_shared_reliability_company_fk_and_transaction_rollback_on_postgres(
             session.commit()
 
 
+def test_records_governance_guards_reject_real_postgres_mutations(pg_engine):
+    """IPLF-028A's fail-closed constraints must hold on the production dialect."""
+    from caseops_api.db.models import (
+        DataRetentionPolicy,
+        DataRetentionPolicyVersion,
+        LegalHold,
+        LegalHoldItem,
+        TenantDataOperation,
+        TenantDataOperationItem,
+    )
+
+    now = datetime(2026, 8, 13, 5, 0, tzinfo=UTC)
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        requester_membership_id = _seed_membership(session, company_id)
+        approver_membership_id = _seed_membership(session, company_id)
+        policy = DataRetentionPolicy(
+            company_id=company_id,
+            key=f"pg-foundation-{uuid4()}",
+            name="Postgres foundation policy",
+        )
+        session.add(policy)
+        session.flush()
+        policy_version = DataRetentionPolicyVersion(
+            company_id=company_id,
+            policy_id=policy.id,
+            version=1,
+            status="candidate",
+            data_class_selector_json=["legal_holds"],
+            purpose="Postgres regression fixture",
+            legal_policy_basis="fixture-only",
+            sensitivity="confidential",
+            retention_days=365,
+            disposition="hold_aware",
+            hold_behavior="preserve",
+            policy_hash="a" * 64,
+            proposed_by_membership_id=requester_membership_id,
+            proposed_by_membership_company_id=company_id,
+            proposer_label_snapshot="Postgres requester",
+            created_at=now,
+        )
+        hold = LegalHold(
+            company_id=company_id,
+            key=f"pg-hold-{uuid4()}",
+            title="Postgres hold fixture",
+            authority_reference="fixture://postgres-hold",
+            status="draft",
+            created_by_membership_id=requester_membership_id,
+            created_by_membership_company_id=company_id,
+            creator_label_snapshot="Postgres requester",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add_all([policy_version, hold])
+        session.flush()
+        hold_item = LegalHoldItem(
+            company_id=company_id,
+            legal_hold_id=hold.id,
+            data_class_id="legal_holds",
+            target_type="tenant",
+            target_reference_hash="b" * 64,
+            created_at=now,
+        )
+        operation = TenantDataOperation(
+            company_id=company_id,
+            operation_type="tenant_export",
+            execution_mode="dry_run",
+            status="dry_run_complete",
+            approval_status="not_requested",
+            request_scope_json={"schema_version": 1, "fixture": "postgres"},
+            request_scope_hash="c" * 64,
+            request_evidence_ref="fixture://postgres-dry-run",
+            retention_policy_version_id=policy_version.id,
+            manifest_json={"schema_version": 1, "safe_to_execute": False},
+            manifest_hash="d" * 64,
+            requested_by_membership_id=requester_membership_id,
+            requested_by_membership_company_id=company_id,
+            requester_label_snapshot="Postgres requester",
+            dry_run_completed_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(operation)
+        session.flush()
+        operation_item = TenantDataOperationItem(
+            company_id=company_id,
+            operation_id=operation.id,
+            data_class_id="legal_holds",
+            target_type="tenant",
+            target_reference_hash="e" * 64,
+            item_status="eligible",
+            candidate_record_count=0,
+            estimated_bytes=0,
+            safe_to_execute=False,
+            created_at=now,
+        )
+        session.add_all([hold_item, operation_item])
+        session.flush()
+        policy_version_id = policy_version.id
+        hold_id = hold.id
+        hold_item_id = hold_item.id
+        operation_id = operation.id
+        operation_item_id = operation_item.id
+        session.commit()
+
+    with pytest.raises(DBAPIError, match="manifest is immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE tenant_data_operations SET execution_mode = 'execute' "
+                    "WHERE id = :operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+    with pytest.raises(DBAPIError, match="manifest is immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE tenant_data_operations SET manifest_hash = :manifest_hash "
+                    "WHERE id = :operation_id"
+                ),
+                {"operation_id": operation_id, "manifest_hash": "f" * 64},
+            )
+    with pytest.raises(IntegrityError):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE legal_holds SET status = 'active' "
+                    "WHERE id = :hold_id"
+                ),
+                {"hold_id": hold_id},
+            )
+
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE legal_holds SET status = 'active', "
+                "approved_by_membership_id = :approver_membership_id, "
+                "approved_by_membership_company_id = :company_id, "
+                "approver_label_snapshot = 'Postgres approver', activated_at = :activated_at "
+                "WHERE id = :hold_id"
+            ),
+            {
+                "approver_membership_id": approver_membership_id,
+                "company_id": company_id,
+                "activated_at": now,
+                "hold_id": hold_id,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE data_retention_versions SET status = 'approved' "
+                "WHERE id = :policy_version_id"
+            ),
+            {"policy_version_id": policy_version_id},
+        )
+
+    with pytest.raises(DBAPIError, match="Legal hold state cannot reopen"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("UPDATE legal_holds SET status = 'draft' WHERE id = :hold_id"),
+                {"hold_id": hold_id},
+            )
+    with pytest.raises(DBAPIError, match="Legal hold scope is immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE legal_hold_items SET target_type = 'matter' "
+                    "WHERE id = :hold_item_id"
+                ),
+                {"hold_item_id": hold_item_id},
+            )
+    with pytest.raises(DBAPIError, match="Published retention policy terms are immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE data_retention_versions SET purpose = 'rewritten' "
+                    "WHERE id = :policy_version_id"
+                ),
+                {"policy_version_id": policy_version_id},
+            )
+    with pytest.raises(DBAPIError, match="Tenant data-operation items are immutable"):
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE tenant_data_operation_items SET item_status = 'blocked' "
+                    "WHERE id = :operation_item_id"
+                ),
+                {"operation_item_id": operation_item_id},
+            )
+
+
 def test_notice_tenant_constraints_and_delete_policy_on_postgres(pg_engine):
     """Production DB must reject tenant drift and notice globalization."""
     with Session(pg_engine) as session:
