@@ -1087,7 +1087,7 @@
         "IPLF-028A",
         "IPLF-028B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -6611,21 +6611,80 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260813_0001_data_governance_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/data_governance.py",
+        "apps/api/src/caseops_api/services/data_governance.py",
+        "docs/ip-implementation/IPLF_028A_DATA_GOVERNANCE_REGISTRY.yaml",
+        "scripts/ip_data_governance_registry.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260813_data_governance_migration.py",
+        "apps/api/tests/test_data_governance_service.py",
+        "apps/api/tests/test_ip_data_governance_registry.py",
+        "apps/api/tests/test_postgres_validation.py::test_records_governance_guards_reject_real_postgres_mutations"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md"
+      ],
       "evidence_metadata": [],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-028A-FULL-DATA-MAP",
+          "summary": "The repository registry covers only the six new IPLF-028A governance tables; it is not the complete SQL/object/index/cache/queue/log/export/provider/backup data map required by DATA-GOV-01 through DATA-GOV-03.",
+          "owner": "Platform records-governance owner and Engineering",
+          "evidence_needed": "Inventory every in-scope class and column category, attach approved purpose/retention/hold/region/subprocessor fields, and prove the migration/handler registry gate rejects an unregistered class.",
+          "safe_fallback": "Keep every unregistered class outside a data-operation surface and retain the documented dry-run-only boundary.",
+          "milestone_impact": "Blocks IPLF-028A completion and all DATA-GOV release claims while leaving the additive foundation valid.",
+          "next_independent_slice": "Continue repository-controlled inventory and validator work only; do not expose an export, purge, offboarding, or restore endpoint."
+        },
+        {
+          "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
+          "summary": "No approved retention schedule, legal-hold activation/release workflow, step-up/four-eyes decision, or tenant-facing review contract has been supplied for a real data operation.",
+          "owner": "Authorized legal/privacy owner, security owner, and product owner",
+          "evidence_needed": "Approved policy/version authority, named dual-approval and step-up controls, jurisdiction/tenant exceptions, and reviewed user workflow tests.",
+          "safe_fallback": "Keep execution impossible in the schema and service; preserve only opaque dry-run evidence and typed 503 execute rejection.",
+          "milestone_impact": "Blocks legal-hold lifecycle and all real export/purge/offboarding/restore behavior.",
+          "next_independent_slice": "Do not infer legal authorization from schema presence or synthetic tests."
+        },
+        {
+          "id": "IPLF-028A-RES-13-REHEARSAL",
+          "summary": "No current database-plus-object application-cutover restore rehearsal or tenant-export dry run has been performed against an approved environment.",
+          "owner": "Authorized SRE/incident operator and Engineering/QA",
+          "evidence_needed": "Dated, sanitized database/object/image/schema/operator/reviewer evidence with measured application readiness and a tested tenant-export dry run.",
+          "safe_fallback": "Do not treat an isolated SQLite migration test as backup, object-store, restore, or resilience evidence.",
+          "milestone_impact": "Blocks RES-13 and deployment/acceptance closure for IPLF-028.",
+          "next_independent_slice": "Prepare non-live rehearsal design only until the authorized operator run is scheduled."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Keep the new records-governance tables unseeded and the service dry-run-only; no route, worker, scheduler, storage adapter, provider adapter, or execute mode is authorized in IPLF-028A.",
+        "Expand the registry to every in-scope data class and enforce the data-map update gate before marking foundation implementation complete.",
+        "Obtain explicit legal/privacy/security approval for policy, holds, step-up, four-eyes, and user workflow before designing any real data-operation command.",
+        "After independent CI and approved non-live resilience preparation, run the required database-plus-object cutover restore and tenant-export dry run with named operators and reviewers."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive migration 20260813_0001 creates six unseeded company-scoped records-governance tables. It creates no retention policy, legal hold, tenant operation, export, purge, offboarding, restore, object, provider, or backup mutation.",
+        "Database constraints and triggers keep manifests/items immutable, prohibit execute mode and safe_to_execute=true, require explicit indefinite-retention references, retain hold/version evidence, and refuse a destructive downgrade once governance evidence exists."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IPLF_028A_DATA_GOVERNANCE_REGISTRY.yaml",
+          "disposition": "created",
+          "owner": "Platform shared foundations",
+          "evidence": "Six admitted governance classes, explicit incomplete boundary, ownership ledger alignment, and code/migration references"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Local migration/service/registry evidence and explicit remaining legal, inventory, resilience, CI, deployment, and acceptance gates"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
