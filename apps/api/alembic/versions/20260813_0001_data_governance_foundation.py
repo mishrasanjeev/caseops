@@ -76,6 +76,18 @@ _OPERATION_IMMUTABLE_COLUMNS = (
     "created_at",
 )
 
+# Composite tenant-safe foreign keys are backed by the paired indexes created
+# below.  The schema validator evaluates foreign-key columns separately, so
+# declare the non-leading tenant-correlator components explicitly rather than
+# adding redundant one-column indexes that cannot improve the paired lookup.
+FK_INDEXES: tuple[tuple[str, str], ...] = (
+    ("data_retention_versions", "proposed_by_membership_company_id"),
+    ("data_retention_versions", "reviewed_by_membership_company_id"),
+    ("legal_holds", "created_by_membership_company_id"),
+    ("legal_holds", "approved_by_membership_company_id"),
+    ("tenant_data_operations", "requested_by_membership_company_id"),
+)
+
 
 def _postgres_immutable_predicate(
     columns: tuple[str, ...], *, json_columns: frozenset[str] = frozenset()
@@ -783,6 +795,16 @@ def upgrade() -> None:
         "legal_holds",
         ["company_id", "status", "created_at"],
     )
+    op.create_index(
+        "ix_legal_holds_creator_company",
+        "legal_holds",
+        ["created_by_membership_id", "created_by_membership_company_id"],
+    )
+    op.create_index(
+        "ix_legal_holds_approver_company",
+        "legal_holds",
+        ["approved_by_membership_id", "approved_by_membership_company_id"],
+    )
 
     op.create_table(
         "legal_hold_items",
@@ -1022,6 +1044,11 @@ def upgrade() -> None:
         "tenant_data_operation_items",
         ["operation_id"],
     )
+    op.create_index(
+        "ix_tenant_data_operation_items_legal_hold_id",
+        "tenant_data_operation_items",
+        ["legal_hold_id"],
+    )
 
     bind = op.get_bind()
     _create_retention_version_immutability_guard(bind)
@@ -1033,6 +1060,10 @@ def downgrade() -> None:
     bind = op.get_bind()
     _assert_downgrade_is_evidence_free(bind)
     _drop_guards(bind)
+    op.drop_index(
+        "ix_tenant_data_operation_items_legal_hold_id",
+        table_name="tenant_data_operation_items",
+    )
     op.drop_index(
         "ix_tenant_data_operation_items_operation_id",
         table_name="tenant_data_operation_items",
@@ -1058,6 +1089,8 @@ def downgrade() -> None:
     op.drop_index("ix_legal_hold_items_legal_hold_id", table_name="legal_hold_items")
     op.drop_index("ix_legal_hold_items_company_target", table_name="legal_hold_items")
     op.drop_table("legal_hold_items")
+    op.drop_index("ix_legal_holds_approver_company", table_name="legal_holds")
+    op.drop_index("ix_legal_holds_creator_company", table_name="legal_holds")
     op.drop_index("ix_legal_holds_company_status", table_name="legal_holds")
     op.drop_table("legal_holds")
     op.drop_index(

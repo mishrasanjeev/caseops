@@ -23,6 +23,9 @@ workflow and release evidence.
   `safe_to_execute = false`, stores only opaque target hashes/redacted details
   in dry-run items, and refuses destructive downgrade after durable governance
   evidence exists.
+- Tenant-safe membership, policy-version, and hold references are backed by
+  leading relation indexes; the repository's schema FK-index contract validates
+  both the physical indexes and the documented composite-key coverage.
 - Retention versions and legal holds have monotonic/immutable database guards;
   manifests and operation items cannot be rewritten or deleted.
 - `services/data_governance.py` records only a synthetic dry-run manifest. It
@@ -52,15 +55,18 @@ uv --directory apps/api run ruff check \
 uv --directory apps/api run pytest -q \
   tests/test_20260813_data_governance_migration.py \
   tests/test_data_governance_service.py \
-  tests/test_ip_data_governance_registry.py
+  tests/test_ip_data_governance_registry.py \
+  tests/test_schema_fk_indexes.py
 ```
 
-Result: `8 passed` with the repository's known Starlette TestClient and
-SQLite datetime-adapter deprecation warnings. The migration test proves empty
-expand/downgrade/re-upgrade, populated-schema downgrade refusal, immutable
-manifest rejection, no execute mode, and retained hold/version evidence. The
-service test proves hold-aware dry-run suppression, no unregistered data class,
-no `safe_to_execute=true`, and a typed execute rejection.
+Result: the focused migration/service/registry suite returned `8 passed`, and
+the schema FK-index contract returned `1 passed`, with the repository's known
+Starlette TestClient and SQLite datetime-adapter deprecation warnings. The
+migration test proves empty expand/downgrade/re-upgrade, populated-schema
+downgrade refusal, immutable manifest rejection, no execute mode, and retained
+hold/version evidence. The service test proves hold-aware dry-run suppression,
+no unregistered data class, no `safe_to_execute=true`, and a typed execute
+rejection.
 
 The production-dialect guard was also run from a fresh disposable
 `pgvector/pgvector:pg17` PostgreSQL database after `CREATE EXTENSION vector`

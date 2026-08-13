@@ -6623,6 +6623,7 @@
         "apps/api/tests/test_20260813_data_governance_migration.py",
         "apps/api/tests/test_data_governance_service.py",
         "apps/api/tests/test_ip_data_governance_registry.py",
+        "apps/api/tests/test_schema_fk_indexes.py",
         "apps/api/tests/test_postgres_validation.py::test_records_governance_guards_reject_real_postgres_mutations"
       ],
       "evidence_refs": [

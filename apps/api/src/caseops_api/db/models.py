@@ -15930,6 +15930,16 @@ class LegalHold(Base):
             name="ck_legal_hold_approver_company_complete",
         ),
         Index("ix_legal_holds_company_status", "company_id", "status", "created_at"),
+        Index(
+            "ix_legal_holds_creator_company",
+            "created_by_membership_id",
+            "created_by_membership_company_id",
+        ),
+        Index(
+            "ix_legal_holds_approver_company",
+            "approved_by_membership_id",
+            "approved_by_membership_company_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -16078,6 +16088,10 @@ class TenantDataOperation(Base):
             "requested_by_membership_id",
             "requested_by_membership_company_id",
         ),
+        Index(
+            "ix_tenant_data_operations_retention_policy_version_id",
+            "retention_policy_version_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -16170,6 +16184,7 @@ class TenantDataOperationItem(Base):
             "operation_id",
             "item_status",
         ),
+        Index("ix_tenant_data_operation_items_legal_hold_id", "legal_hold_id"),
     )
 
     id: Mapped[str] = mapped_column(
