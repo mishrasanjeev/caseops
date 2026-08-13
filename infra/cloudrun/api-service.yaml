@@ -7,7 +7,11 @@ spec:
     metadata:
       annotations:
         autoscaling.knative.dev/minScale: "0"
-        autoscaling.knative.dev/maxScale: "10"
+        # Each API container deliberately accepts one request at a time: sync
+        # database/LLM handlers must not share the Uvicorn event loop. Allow
+        # enough instances to absorb normal browser fan-out while one request
+        # is slow, rather than returning Cloud Run's capacity 429.
+        autoscaling.knative.dev/maxScale: "20"
         run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
         run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/execution-environment: gen2

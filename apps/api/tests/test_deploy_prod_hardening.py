@@ -85,6 +85,18 @@ def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> N
     assert '--task-timeout "${MIGRATION_TASK_TIMEOUT}"' in script
 
 
+def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() -> None:
+    """Cloud Run must not reject ordinary UI fan-out while handlers stay sync."""
+
+    script = _read_repo_text("scripts/deploy-prod.sh")
+    manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
+
+    assert "API_CONCURRENCY=1" in script
+    assert 'API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"' in script
+    assert '--max "${API_MAX_INSTANCES}"' in script
+    assert 'autoscaling.knative.dev/maxScale: "20"' in manifest
+
+
 def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
     """Evaluate the root-level canary subset used by these ignore files."""
     ignored = False
