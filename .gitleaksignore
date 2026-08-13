@@ -30,3 +30,9 @@ a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST
 # calendar fixture label. The fixture now uses the established low-entropy
 # test value; only the historical fingerprint is suppressed.
 246ad73b5f1540ac9b9850f52b8d7616815b1c52:tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts:generic-api-key:83
+
+# 2026-08-13 IPLF-028A release evidence: exact false positive on the public
+# immutable Cloud Run image digest recorded in the program checkpoint. This
+# suppression is fingerprint-specific; newly introduced generic-key findings
+# remain blocking.
+184925e7ac36929b2d47d4367c038b263b633251:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21
