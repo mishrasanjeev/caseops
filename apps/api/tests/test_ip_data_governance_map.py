@@ -84,3 +84,15 @@ def test_change_gate_requires_map_update_for_new_provider_or_storage_boundary() 
         )
         == []
     )
+
+
+def test_change_gate_ignores_provider_words_in_program_documentation() -> None:
+    path = "docs/ip-implementation/PROGRAM_MANIFEST.yaml"
+
+    assert (
+        ip_data_governance_map.change_gate_errors(
+            [path],
+            source_by_path={path: "Provider quota: OpenAI remains externally blocked."},
+        )
+        == []
+    )
