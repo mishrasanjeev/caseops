@@ -22,6 +22,10 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The data-governance Definition-of-Ready gate compares a PR with
+          # its merge base, so the base ref must be available locally.
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
@@ -35,12 +39,15 @@ jobs:
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
-      - name: Validate IP program, ownership, ARCH-OPS and data-class contracts
+      - name: Validate IP program, ownership, ARCH-OPS and data-governance contracts
         run: |
           uv --directory apps/api run python ../../scripts/ip_program_manifest.py validate
           uv --directory apps/api run python ../../scripts/ip_ownership_ledger.py validate
           uv --directory apps/api run python ../../scripts/ip_arch_ops_contract.py validate
           uv --directory apps/api run python ../../scripts/ip_data_class_registry.py validate
+          uv --directory apps/api run python ../../scripts/ip_data_governance_registry.py validate
+          uv --directory apps/api run python ../../scripts/ip_data_governance_map.py validate
+          uv --directory apps/api run python ../../scripts/ip_data_governance_map.py check-change --base origin/main
 
       - name: Validate IP research golden-query contract
         run: uv --directory apps/api run python ../../scripts/run_ip_golden_queries.py

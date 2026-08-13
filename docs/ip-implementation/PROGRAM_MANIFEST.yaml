@@ -1085,7 +1085,8 @@
       ],
       "slice_ids": [
         "IPLF-028A",
-        "IPLF-028B"
+        "IPLF-028B",
+        "IPLF-028C"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -6794,6 +6795,108 @@
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending"
+    },
+    {
+      "id": "IPLF-028C",
+      "title": "Repository-wide data inventory and Definition-of-Ready enforcement for the data-map foundation: snapshot every current SQL table/column/index and known object/cache/queue/telemetry/export/provider/backup class without enabling a data operation.",
+      "milestone_id": "M2",
+      "epic_id": "IPLF-028",
+      "source_kind": "derived",
+      "scope_source": "IPLF-028",
+      "primary_behavior": "Repository data-map inventory and fail-closed Definition-of-Ready enforcement",
+      "migration_boundary": "No schema migration or runtime data mutation. Future migrations must update the map and include the required data-governance marker.",
+      "release_boundary": "Repository/CI control only; no deployment or data-operation activation is claimed by this slice.",
+      "requirement_ids": [],
+      "journey_path_ids": [],
+      "ownership": [
+        {
+          "classification": "EXTEND",
+          "component": "Neutral records-governance foundation and the existing SQL/object/index/cache/queue/log/export/provider/backup owners named by PRD Sections 11.3 and 11.5.",
+          "canonical_writer": "The existing table/store/adapter owner remains canonical; DATA_GOVERNANCE_MAP.yaml is a repository control-plane registry, not a new runtime data-operation owner.",
+          "compatibility_path": "All current storage, provider, queue, telemetry, and database behavior remains unchanged. The map only makes unregistered future data-bearing changes fail CI Definition of Ready.",
+          "retirement_gate": "Do not replace registry_fail_closed with a runtime handler until named records/privacy/legal/security approval, operational design, tests, and deployment evidence exist."
+        }
+      ],
+      "dependencies": [
+        "IPLF-028A"
+      ],
+      "implementation_refs": [
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+        "scripts/ip_data_governance_map.py",
+        ".github/workflows/ci.yml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_data_governance_map.py",
+        "scripts/ip_data_governance_map.py validate",
+        "scripts/ip_data_governance_map.py check-change --base origin/main"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md"
+      ],
+      "evidence_metadata": [],
+      "approvals": [],
+      "blockers": [
+        {
+          "id": "IPLF-028C-POLICY-APPROVAL",
+          "summary": "The repository inventory is explicit and fail-closed, but the approved retention, hold, export, purge, residency, subprocessor, provider-deletion, and backup policy values are still absent.",
+          "owner": "Authorized Records/Privacy/Legal/Security owners",
+          "evidence_needed": "Versioned approved policy with named authority, retention bounds, hold/disposition rules, tenant exceptions, residency/subprocessor boundary, and execute approval model.",
+          "safe_fallback": "Keep registry_fail_closed and every real data operation nonexistent or dry-run-only.",
+          "milestone_impact": "Blocks DATA-GOV-02 and all data-operation/recovery completion claims.",
+          "next_independent_slice": "Continue repository-controlled map coverage and control tests; do not create an execution route."
+        },
+        {
+          "id": "IPLF-028C-LIVE-TOPOLOGY-AND-RECOVERY",
+          "summary": "Repository inspection cannot prove the current production backup/PITR/object-version topology, provider-held deletion contract, or database-plus-object restore behavior.",
+          "owner": "Authorized SRE/incident operator with Records/Privacy/Security reviewers",
+          "evidence_needed": "Dated approved non-live topology, backup/object/version evidence, tombstone/hold reapplication, worker fencing, restore, and tenant-export dry-run proof.",
+          "safe_fallback": "Do not represent the inventory as recovery, export, purge, residency, or provider-deletion evidence.",
+          "milestone_impact": "Blocks RES-13 and the M2 data/recovery exit gate.",
+          "next_independent_slice": "Prepare only non-live rehearsal design until the authorized operator run is scheduled."
+        }
+      ],
+      "next_actions": [
+        "Run focused validator/control tests and the required CI checks, then merge this repository-only gate through main.",
+        "Keep the current handler fail-closed and do not add a retention, hold, export, purge, offboarding, restore, provider-deletion, or backup execution path.",
+        "Obtain the named policy and operational approvals before designing or releasing a runtime data-operation handler."
+      ],
+      "data_impact": [
+        "No data, schema, object, provider, cache, queue, export, backup, or telemetry mutation is introduced.",
+        "The map records a reviewed current repository snapshot and makes future data-bearing migration/provider/storage/telemetry changes fail Definition of Ready unless the map is updated."
+      ],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Versioned SQL/non-SQL inventory, policy-pending boundaries, explicit fail-closed disposition handler, and index fingerprints"
+        },
+        {
+          "artifact": "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Generated readable projection of the machine-readable inventory"
+        },
+        {
+          "artifact": "docs/ip-implementation/README.md",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Local/CI validation and explicit no-data-operation boundary"
+        }
+      ],
+      "allocation_review": "Derived IPLF-028 decomposition under PRD Sections 11.5(21), 13.24 DATA-GOV-01..03, 23.1 M2-F, and 25.2 Definition of Ready.",
+      "implementation_status": "in_progress",
+      "verification_status": "not_run",
+      "release_status": "blocked",
+      "acceptance_status": "pending",
+      "administrative_exception": {
+        "prd_citation": "PRD Sections 11.5(21), 13.24 DATA-GOV-01..03, 23.1 M2-F, and 25.2",
+        "reviewer": "CaseOps program-control reconciliation",
+        "reason": "This bounded repository-control slice supplies Definition-of-Ready enforcement for the parent workflow slice. IPLF-028B retains the reciprocal DATA-GOV and journey allocation; this slice does not claim a user data-operation path.",
+        "date": "2026-08-13",
+        "milestone": "M2"
+      }
     },
     {
       "id": "IPLF-029A",
