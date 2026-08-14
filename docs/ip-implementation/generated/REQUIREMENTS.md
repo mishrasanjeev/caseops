@@ -303,7 +303,7 @@ Generated; do not edit.
 | CAL-OPS-03 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039H | 103 | 0 | in_progress | not_run | blocked | false |
 | CAL-OPS-04 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039H | 103 | 0 | in_progress | not_run | blocked | false |
 | CAL-OPS-05 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039H | 103 | 0 | in_progress | not_run | blocked | false |
-| CAL-OPS-06 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039H | 103 | 0 | in_progress | not_run | blocked | false |
+| CAL-OPS-06 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-035B, IPLF-039H, IPLF-034A | 1 | 1 | in_progress | not_run | blocked | false |
 | CAL-OPS-07 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039C, IPLF-039H | 107 | 1 | in_progress | not_run | blocked | false |
 | CAL-OPS-08 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039C, IPLF-039H | 107 | 1 | in_progress | not_run | blocked | false |
 | CAL-OPS-09 | CAL-OPS | IPLF-023B, IPLF-025B, IPLF-034B, IPLF-035B, IPLF-039C, IPLF-039H | 107 | 1 | in_progress | not_run | blocked | false |

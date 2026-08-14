@@ -38,6 +38,8 @@ from caseops_api.schemas.ip_deadlines import (
     IpDeadlineCalculationRequest,
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
+    IpDeadlineDependencyNode,
+    IpDeadlineDependencyResponse,
     IpDeadlineExceptionRecord,
     IpDeadlineImpactResponse,
     IpDeadlineOverrideRequest,
@@ -1815,12 +1817,165 @@ def deadline_workspace(
     )
 
 
+def deadline_dependencies(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+) -> IpDeadlineDependencyResponse:
+    """CAL-OPS-06 - explain which inputs produced this deadline's current date.
+
+    Pure read over stored evidence. It never recomputes the date, so a rule or
+    calendar that has since changed cannot silently rewrite the explanation. An
+    input that can no longer be resolved is reported as unavailable rather than
+    omitted, so an incomplete chain is visible instead of looking complete.
+    """
+
+    row = session.scalar(
+        select(IpDeadline).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline not found.")
+    _docket_or_404(session, context=context, docket_id=row.docket_id)
+
+    nodes: list[IpDeadlineDependencyNode] = []
+    unavailable: list[str] = []
+
+    def add(kind: str, reference_id, label: str, detail: str | None, available: bool) -> None:
+        nodes.append(
+            IpDeadlineDependencyNode(
+                kind=kind,
+                reference_id=reference_id,
+                label=label,
+                detail=detail,
+                available=available,
+            )
+        )
+        if not available:
+            unavailable.append(kind)
+
+    # Trigger event
+    if row.trigger_event_id:
+        event = session.get(IpDocketEvent, row.trigger_event_id)
+        if event is None:
+            add("trigger_event", row.trigger_event_id, "Trigger event", None, False)
+        else:
+            add(
+                "trigger_event",
+                event.id,
+                f"{event.event_kind} ({event.source})",
+                f"effective {event.effective_at.date().isoformat()}",
+                True,
+            )
+    else:
+        add(
+            "trigger_event",
+            None,
+            f"Manual base date ({row.trigger_kind})",
+            row.base_date.isoformat() if row.base_date else "no base date recorded",
+            row.base_date is not None,
+        )
+
+    # Rule version
+    rule = session.get(IpRuleVersion, row.rule_version_id)
+    if rule is None:
+        add("rule_version", row.rule_version_id, "Rule version", None, False)
+    else:
+        rule_set = session.get(IpRuleSet, rule.rule_set_id)
+        add(
+            "rule_version",
+            rule.id,
+            f"{rule_set.key} v{rule.version}" if rule_set else f"rule v{rule.version}",
+            f"status {rule.status}; {row.rule_citation}",
+            True,
+        )
+
+    # Calendar version
+    calendar = session.get(LegalWorkingCalendarVersion, row.calendar_version_id)
+    if calendar is None:
+        add("calendar_version", row.calendar_version_id, "Working calendar", None, False)
+    else:
+        add(
+            "calendar_version",
+            calendar.id,
+            f"calendar v{calendar.version} ({calendar.timezone})",
+            f"status {calendar.status}; {len(calendar.holidays_json or [])} holidays",
+            True,
+        )
+
+    # Extension, when the stored inputs recorded one
+    inputs = row.calculation_inputs_json or {}
+    extension_days = inputs.get("extension_days") or 0
+    if extension_days:
+        add(
+            "extension",
+            None,
+            f"Extension of {extension_days} day(s)",
+            "recorded in the stored calculation inputs",
+            True,
+        )
+
+    # Predecessor deadline chain
+    chain: list[str] = []
+    seen: set[str] = {row.id}
+    cursor = row.supersedes_deadline_id
+    while cursor and cursor not in seen:
+        seen.add(cursor)
+        predecessor = session.get(IpDeadline, cursor)
+        if predecessor is None or predecessor.company_id != context.company.id:
+            add("predecessor_deadline", cursor, "Superseded deadline", None, False)
+            break
+        chain.append(predecessor.id)
+        add(
+            "predecessor_deadline",
+            predecessor.id,
+            f"Superseded: {predecessor.title}",
+            (
+                f"was {predecessor.result_on.isoformat()}"
+                if predecessor.result_on
+                else "no date"
+            ),
+            True,
+        )
+        cursor = predecessor.supersedes_deadline_id
+
+    if row.override_reason:
+        add(
+            "override",
+            None,
+            "Manual override",
+            row.override_reason,
+            True,
+        )
+
+    return IpDeadlineDependencyResponse(
+        deadline_id=row.id,
+        docket_id=row.docket_id,
+        state=row.state,
+        result_on=row.result_on,
+        certainty=row.certainty,
+        is_critical=row.is_critical,
+        engine_version=row.engine_version,
+        source_version=row.source_version,
+        rule_citation=row.rule_citation,
+        explanation=row.explanation,
+        nodes=nodes,
+        calculation_trace=list(row.calculation_trace_json or []),
+        unavailable_inputs=sorted(set(unavailable)),
+        superseded_chain=chain,
+    )
+
+
 __all__ = [
     "activate_calendar_version",
     "activate_rule_version",
     "complete_deadline",
     "confirm_deadline",
     "deadline_impact",
+    "deadline_dependencies",
     "deadline_workspace",
     "list_company_rule_policies",
     "override_deadline",

@@ -3930,6 +3930,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadlines/{deadline_id}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Dependencies */
+        get: operations["get_ip_deadline_dependencies_api_ip_deadlines__deadline_id__dependencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadlines/{deadline_id}/impact": {
         parameters: {
             query?: never;
@@ -18208,6 +18225,68 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * IpDeadlineDependencyNode
+         * @description One input that contributed to a deadline's current date.
+         */
+        IpDeadlineDependencyNode: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "trigger_event" | "rule_version" | "calendar_version" | "predecessor_deadline" | "extension" | "override";
+            /** Label */
+            label: string;
+            /** Reference Id */
+            reference_id?: string | null;
+        };
+        /**
+         * IpDeadlineDependencyResponse
+         * @description CAL-OPS-06 dependency graph for one legal deadline.
+         *
+         *     Read-only provenance derived from the stored calculation evidence. It never
+         *     recomputes the date; a missing input is reported as unavailable rather than
+         *     silently dropped, so the chain cannot look complete when it is not.
+         */
+        IpDeadlineDependencyResponse: {
+            /** Calculation Trace */
+            calculation_trace?: {
+                [key: string]: unknown;
+            }[];
+            /** Certainty */
+            certainty: string;
+            /** Deadline Id */
+            deadline_id: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Engine Version */
+            engine_version: string;
+            /** Explanation */
+            explanation: string;
+            /** Is Critical */
+            is_critical: boolean;
+            /** Nodes */
+            nodes?: components["schemas"]["IpDeadlineDependencyNode"][];
+            /** Result On */
+            result_on: string | null;
+            /** Rule Citation */
+            rule_citation: string;
+            /** Source Version */
+            source_version: string;
+            /** State */
+            state: string;
+            /** Superseded Chain */
+            superseded_chain?: string[];
+            /** Unavailable Inputs */
+            unavailable_inputs?: string[];
         };
         /** IpDeadlineExceptionRecord */
         IpDeadlineExceptionRecord: {
@@ -39107,6 +39186,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_deadline_dependencies_api_ip_deadlines__deadline_id__dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineDependencyResponse"];
                 };
             };
             /** @description Validation Error */

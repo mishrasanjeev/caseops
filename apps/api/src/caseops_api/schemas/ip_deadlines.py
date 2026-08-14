@@ -452,3 +452,44 @@ class IpDeadlineWorkspaceResponse(BaseModel):
     deadlines: list[IpDeadlineRecord]
     exceptions: list[IpDeadlineExceptionRecord]
     automation_state: Literal["explicit_confirmation_only"] = "explicit_confirmation_only"
+
+
+class IpDeadlineDependencyNode(BaseModel):
+    """One input that contributed to a deadline's current date."""
+
+    kind: Literal[
+        "trigger_event",
+        "rule_version",
+        "calendar_version",
+        "predecessor_deadline",
+        "extension",
+        "override",
+    ]
+    reference_id: str | None = None
+    label: str
+    detail: str | None = None
+    available: bool = True
+
+
+class IpDeadlineDependencyResponse(BaseModel):
+    """CAL-OPS-06 dependency graph for one legal deadline.
+
+    Read-only provenance derived from the stored calculation evidence. It never
+    recomputes the date; a missing input is reported as unavailable rather than
+    silently dropped, so the chain cannot look complete when it is not.
+    """
+
+    deadline_id: str
+    docket_id: str
+    state: str
+    result_on: date | None
+    certainty: str
+    is_critical: bool
+    engine_version: str
+    source_version: str
+    rule_citation: str
+    explanation: str
+    nodes: list[IpDeadlineDependencyNode] = Field(default_factory=list)
+    calculation_trace: list[dict[str, Any]] = Field(default_factory=list)
+    unavailable_inputs: list[str] = Field(default_factory=list)
+    superseded_chain: list[str] = Field(default_factory=list)

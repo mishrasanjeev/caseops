@@ -33,6 +33,7 @@ from caseops_api.schemas.ip_deadlines import (
     IpCompanyRuleSelectionRequest,
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
+    IpDeadlineDependencyResponse,
     IpDeadlineImpactResponse,
     IpDeadlineOverrideRequest,
     IpDeadlineProposalRequest,
@@ -161,6 +162,7 @@ from caseops_api.services.ip_deadline_workflow import (
     activate_rule_version,
     complete_deadline,
     confirm_deadline,
+    deadline_dependencies,
     deadline_impact,
     deadline_workspace,
     list_company_rule_policies,
@@ -917,6 +919,18 @@ async def get_ip_deadline_impact(
     session: DbSession,
 ) -> IpDeadlineImpactResponse:
     return deadline_impact(session, context=context, deadline_id=deadline_id)
+
+
+@router.get(
+    "/deadlines/{deadline_id}/dependencies",
+    response_model=IpDeadlineDependencyResponse,
+)
+async def get_ip_deadline_dependencies(
+    deadline_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDeadlineDependencyResponse:
+    return deadline_dependencies(session, context=context, deadline_id=deadline_id)
 
 
 @router.post("/deadlines/{deadline_id}/confirm", response_model=IpDeadlineRecord)

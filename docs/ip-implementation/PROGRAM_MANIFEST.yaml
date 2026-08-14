@@ -1536,7 +1536,7 @@
         "IPLF-034A",
         "IPLF-034B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -8819,36 +8819,76 @@
       "source_kind": "derived",
       "scope_source": "IPLF-034",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "No schema change, no migration, no backfill; read-only derivation.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "CAL-OPS-06"
+      ],
+      "journey_path_ids": [
+        "UJ-09-NORMAL"
+      ],
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-034 canonical scope: On the M2 target-aware owners, ship legal deadline calculation/confirmation/override/completion UX plus task, Today and calendar behavior; do not add another schema owner.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "component": "IPLF-023A/023B deadline evidence: ip_deadlines, ip_docket_events, ip_rule_versions, legal_working_calendar_versions.",
+          "canonical_writer": "None; pure read. The deadline engine remains the single calculation owner and no provenance table or second calculation path is introduced. Access reuses _docket_or_404.",
+          "compatibility_path": "One additive read-only route.",
+          "retirement_gate": "Nothing deprecated."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-023B"
+      ],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_deadline_dependencies.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md",
+          "revision": "3bb2b6da347fec56c9f58baf2d7b09354176cee2",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no query-plan evidence, no frontend, no E2E, no deployment. Per owner direction the full -k ip_ sweep is batched across slices.",
+          "fixtures": "Synthetic single- and cross-company tenants; an activated working calendar and deadline rule version with independent proposer, reviewer and legal approver; one confirmed critical deadline; an emergency-disabled rule; an authorised override producing a superseding record. No real client, matter, registry or lawyer-approved legal rule.",
+          "assertions": "The graph names the rule and calendar that produced the date by id, reports a manual base date as the trigger when no registry event drove it, and carries the stored trace, engine version, source version, citation and explanation; disabling the governing rule afterwards leaves date, trace and citation unchanged while the rule node reports its current disabled status; an override supersedes rather than mutating in place, the successor links back through superseded_chain with the predecessor's original date, and the superseded calculation stays independently readable; a deadline on an inaccessible docket and a cross-tenant read both return 404. The available/unavailable_inputs branch is defensive and explicitly not claimed as tested because database foreign keys make the dangling states unreachable. Counts: 4 passed, ruff clean, OpenAPI regeneration additive only.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-034A-RELEASE-VERIFICATION",
+          "summary": "The dependency graph is verified only on isolated SQLite fixtures. There is no real-PostgreSQL CI, no query-plan evidence, no frontend, no E2E and no deployment. IP-DL-03 requires a plain-language UI explanation linked to the governing verified source, which this backend-only slice does not supply. Extensions are read from stored calculation inputs rather than a first-class extension/order record, and hearings, internal targets and reminders have no graph.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, a deadline-explanation UI with desktop and narrow-mobile evidence linking to the governing source, a first-class extension/order model if the PRD requires it, and dated deployed acceptance.",
+          "safe_fallback": "The route is read-only and access-scoped; it recomputes nothing and no client consumes it.",
+          "milestone_impact": "Blocks IPLF-034A release closure; all other CAL-OPS and IP-DL requirements remain open on IPLF-034B.",
+          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-035A."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Build the plain-language deadline explanation UI for IP-DL-03 with source links.",
+        "Decide whether a first-class extension/order record is required and scope it on IPLF-034B.",
+        "Extend the graph to hearings, internal targets and reminders if the PRD requires it.",
+        "Add query-plan evidence for the provenance read per ARCH-OPS-11."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, no migration, no backfill, no data mutation."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md"
+      ],
+      "allocation_review": "Audit found the deadline engine, calendars, confirmation, override, recalculation, completion and exception workspace already delivered by IPLF-023A/023B. CAL-OPS-06 had no implementation. IPLF-034A claims only CAL-OPS-06 plus the UJ-09 normal override/supersede path it exercises end to end. All other CAL-OPS and IP-DL requirements stay on IPLF-034B. PRD scope unchanged.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -8882,7 +8922,6 @@
         "CAL-OPS-03",
         "CAL-OPS-04",
         "CAL-OPS-05",
-        "CAL-OPS-06",
         "CAL-OPS-07",
         "CAL-OPS-08",
         "CAL-OPS-09",
@@ -8906,7 +8945,6 @@
         "UJ-08-NORMAL",
         "UJ-09-EXC-01",
         "UJ-09-EXC-02",
-        "UJ-09-NORMAL",
         "UJ-56-EXC-01",
         "UJ-56-EXC-02",
         "UJ-56-EXC-03",
@@ -32619,113 +32657,18 @@
         "UJ-61",
         "UJ-62"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-CAL-OPS-06",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-31-EXC-01",
-        "planned:IPLF-UJ-31-EXC-02",
-        "planned:IPLF-UJ-31-EXC-03",
-        "planned:IPLF-UJ-31-EXC-04",
-        "planned:IPLF-UJ-31-NORMAL",
-        "planned:IPLF-UJ-32-EXC-01",
-        "planned:IPLF-UJ-32-EXC-02",
-        "planned:IPLF-UJ-32-EXC-03",
-        "planned:IPLF-UJ-32-EXC-04",
-        "planned:IPLF-UJ-32-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-49-EXC-01",
-        "planned:IPLF-UJ-49-EXC-02",
-        "planned:IPLF-UJ-49-EXC-03",
-        "planned:IPLF-UJ-49-EXC-04",
-        "planned:IPLF-UJ-49-NORMAL",
-        "planned:IPLF-UJ-50-EXC-01",
-        "planned:IPLF-UJ-50-EXC-02",
-        "planned:IPLF-UJ-50-EXC-03",
-        "planned:IPLF-UJ-50-EXC-04",
-        "planned:IPLF-UJ-50-NORMAL",
-        "planned:IPLF-UJ-51-EXC-01",
-        "planned:IPLF-UJ-51-EXC-02",
-        "planned:IPLF-UJ-51-EXC-03",
-        "planned:IPLF-UJ-51-EXC-04",
-        "planned:IPLF-UJ-51-EXC-05",
-        "planned:IPLF-UJ-51-EXC-06",
-        "planned:IPLF-UJ-51-EXC-07",
-        "planned:IPLF-UJ-51-EXC-08",
-        "planned:IPLF-UJ-51-NORMAL",
-        "planned:IPLF-UJ-52-EXC-01",
-        "planned:IPLF-UJ-52-EXC-02",
-        "planned:IPLF-UJ-52-EXC-03",
-        "planned:IPLF-UJ-52-EXC-04",
-        "planned:IPLF-UJ-52-EXC-05",
-        "planned:IPLF-UJ-52-EXC-06",
-        "planned:IPLF-UJ-52-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL",
-        "planned:IPLF-UJ-54-EXC-01",
-        "planned:IPLF-UJ-54-EXC-02",
-        "planned:IPLF-UJ-54-EXC-03",
-        "planned:IPLF-UJ-54-EXC-04",
-        "planned:IPLF-UJ-54-NORMAL",
-        "planned:IPLF-UJ-55-EXC-01",
-        "planned:IPLF-UJ-55-EXC-02",
-        "planned:IPLF-UJ-55-EXC-03",
-        "planned:IPLF-UJ-55-EXC-04",
-        "planned:IPLF-UJ-55-EXC-05",
-        "planned:IPLF-UJ-55-EXC-06",
-        "planned:IPLF-UJ-55-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL",
-        "planned:IPLF-UJ-57-EXC-01",
-        "planned:IPLF-UJ-57-EXC-02",
-        "planned:IPLF-UJ-57-EXC-03",
-        "planned:IPLF-UJ-57-EXC-04",
-        "planned:IPLF-UJ-57-EXC-05",
-        "planned:IPLF-UJ-57-EXC-06",
-        "planned:IPLF-UJ-57-NORMAL",
-        "planned:IPLF-UJ-58-EXC-01",
-        "planned:IPLF-UJ-58-EXC-02",
-        "planned:IPLF-UJ-58-EXC-03",
-        "planned:IPLF-UJ-58-EXC-04",
-        "planned:IPLF-UJ-58-EXC-05",
-        "planned:IPLF-UJ-58-NORMAL",
-        "planned:IPLF-UJ-59-EXC-01",
-        "planned:IPLF-UJ-59-EXC-02",
-        "planned:IPLF-UJ-59-EXC-03",
-        "planned:IPLF-UJ-59-NORMAL",
-        "planned:IPLF-UJ-61-EXC-01",
-        "planned:IPLF-UJ-61-EXC-02",
-        "planned:IPLF-UJ-61-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_graph_names_every_input_that_produced_the_date"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md"
+      ],
       "blockers": [],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -32734,9 +32677,9 @@
       "slice_ids": [
         "IPLF-023B",
         "IPLF-025B",
-        "IPLF-034B",
         "IPLF-035B",
-        "IPLF-039H"
+        "IPLF-039H",
+        "IPLF-034A"
       ],
       "allocation_rationale": "CAL-OPS allocation reviewed against PRD requirement family and parent epic scope: IPLF-023, IPLF-025, IPLF-034, IPLF-035, IPLF-039.",
       "not_required_approval": {
@@ -48753,16 +48696,18 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-09-NORMAL"
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-09-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-034B"
+        "IPLF-034A"
       ],
       "allocation_rationale": "UJ-09 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-034.",
       "not_required_approval": {
