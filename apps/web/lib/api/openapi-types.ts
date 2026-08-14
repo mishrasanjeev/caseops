@@ -4903,6 +4903,23 @@ export interface paths {
         patch: operations["patch_ip_operational_deadline_api_ip_operational_deadlines__deadline_id__patch"];
         trace?: never;
     };
+    "/api/ip/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio */
+        get: operations["get_ip_portfolio_api_ip_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/readiness": {
         parameters: {
             query?: never;
@@ -19651,6 +19668,129 @@ export interface components {
             status?: ("open" | "done" | "cancelled" | "missed") | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * IpPortfolioCounts
+         * @description Data-quality split for the current filter scope.
+         *
+         *     ``registry_sync_state`` is deliberately ``unavailable`` rather than zero:
+         *     IP-office synchronisation is an M5 capability, so a sync-failure count
+         *     cannot be reported truthfully yet.
+         */
+        IpPortfolioCounts: {
+            /** Complete Records */
+            complete_records: number;
+            /** Incomplete Records */
+            incomplete_records: number;
+            /** Overdue Records */
+            overdue_records: number;
+            /**
+             * Registry Sync State
+             * @default unavailable
+             */
+            registry_sync_state: string;
+            /** Total */
+            total: number;
+            /** Unconfirmed Deadline Records */
+            unconfirmed_deadline_records: number;
+        };
+        /**
+         * IpPortfolioFilters
+         * @description Server-owned filter scope for one portfolio query (IP-PORT-02).
+         */
+        IpPortfolioFilters: {
+            /** Asset Kind */
+            asset_kind?: string[];
+            /** Docket Status */
+            docket_status?: string[];
+            /** Filing Phase */
+            filing_phase?: string[];
+            /**
+             * Include Inactive
+             * @default false
+             */
+            include_inactive: boolean;
+            /** Jurisdiction */
+            jurisdiction?: string[];
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Office */
+            office?: string[];
+            /** Query */
+            query?: string | null;
+        };
+        /** IpPortfolioListResponse */
+        IpPortfolioListResponse: {
+            counts: components["schemas"]["IpPortfolioCounts"];
+            filters: components["schemas"]["IpPortfolioFilters"];
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Rows */
+            rows: components["schemas"]["IpPortfolioRow"][];
+        };
+        /**
+         * IpPortfolioRow
+         * @description One jurisdiction/application record with its owning mark.
+         */
+        IpPortfolioRow: {
+            /** Application Id */
+            application_id: string;
+            /** Asset Id */
+            asset_id: string | null;
+            /** Asset Jurisdiction */
+            asset_jurisdiction: string | null;
+            /** Asset Kind */
+            asset_kind: string | null;
+            /** Asset Title */
+            asset_title: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Status */
+            docket_status: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Incomplete Reasons */
+            incomplete_reasons?: string[];
+            /** Is Active */
+            is_active: boolean;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Office */
+            office: string | null;
+            /**
+             * Open Deadline Count
+             * @default 0
+             */
+            open_deadline_count: number;
+            /**
+             * Overdue Deadline Count
+             * @default 0
+             */
+            overdue_deadline_count: number;
+            /** Pending Identifier Allocation */
+            pending_identifier_allocation: boolean;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Record Complete */
+            record_complete: boolean;
+            /**
+             * Unconfirmed Deadline Count
+             * @default 0
+             */
+            unconfirmed_deadline_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** IpProceedingCreateRequest */
         IpProceedingCreateRequest: {
@@ -40584,6 +40724,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpOperationalDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portfolio_api_ip_portfolio_get: {
+        parameters: {
+            query?: {
+                asset_kind?: string[] | null;
+                cursor?: string | null;
+                docket_status?: string[] | null;
+                filing_phase?: string[] | null;
+                include_inactive?: boolean;
+                jurisdiction?: string[] | null;
+                limit?: number;
+                matter_id?: string | null;
+                office?: string[] | null;
+                query?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioListResponse"];
                 };
             };
             /** @description Validation Error */

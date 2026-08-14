@@ -1171,7 +1171,7 @@
         "IPLF-030A",
         "IPLF-030B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -7299,36 +7299,76 @@
       "source_kind": "derived",
       "scope_source": "IPLF-030",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "No schema change, no migration, no backfill; read-only projection.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "IP-PORT-02",
+        "IP-PORT-05",
+        "IP-PORT-10"
+      ],
+      "journey_path_ids": [
+        "UJ-04-EXC-02"
+      ],
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-030 canonical scope: Portfolio listing, filters, saved views, columns, and export.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "component": "Existing TrademarkApplication, IpAsset, IpDocketRecord and IpDeadline owners, plus the canonical visible_ip_dockets_filter access policy.",
+          "canonical_writer": "None. This slice is a read-only projection: no new table, migration, writer, portfolio store, access policy, or deadline owner is introduced.",
+          "compatibility_path": "Additive read-only route; no existing surface changes.",
+          "retirement_gate": "Nothing deprecated."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_listing.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md",
+          "revision": "4ae0d52521ba537621b505f25cf3eb8a2dd96fac",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no query-plan or index verification at representative tenant volume, no frontend, no E2E, no deployment.",
+          "fixtures": "Synthetic single- and cross-company tenants; one mark filed in two jurisdictions; an open and a restricted docket with a non-privileged associate; three applications for cursor paging. No real client, mark, proprietor, registry, or provider data.",
+          "assertions": "One mark yields one row per jurisdiction/application with a shared asset id and a distinct application identity; free-text, matter, asset-kind, jurisdiction, office, filing-phase and docket-status filters narrow deterministically, compose, normalize case server-side and fail closed on unknown values; a restricted record contributes no row, count, title or id and cannot be confirmed by targeted search; cursor pages are disjoint and a malformed cursor is rejected with 400; cross-company queries return nothing. registry_sync_state is reported as unavailable rather than a fabricated zero. Counts: 4 passed, ruff clean, OpenAPI client regeneration additive only.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-030A-RELEASE-VERIFICATION",
+          "summary": "Portfolio listing is verified only on isolated SQLite fixtures with small synthetic data. There is no real-PostgreSQL CI, no query-plan or bounded-eager-loading proof at representative tenant volume, no frontend surface, no E2E, and no deployment.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, query-plan and index evidence for the portfolio path at representative volume per ARCH-OPS-11, a portfolio UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
+          "safe_fallback": "The route is read-only and access-filtered by the canonical policy, so an unreleased state exposes nothing; no client consumes the generated types yet.",
+          "milestone_impact": "Blocks IPLF-030A release closure and leaves IP-PORT-10 and the rest of IPLF-030 open.",
+          "next_independent_slice": "Apply the same coverage allocation to IPLF-031A and the remaining M3 foundation slices."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Apply the same coverage allocation to IPLF-031A, 032A, 033A, 034A, 035A, 036A, 037A, 038A and 039G so the rest of the M3 chain can close.",
+        "Add scope-wide aggregate counts; counts are page-scoped today.",
+        "Add query-plan and index evidence for the portfolio path per ARCH-OPS-11.",
+        "Build the portfolio UI with desktop and narrow-mobile evidence."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, no migration, no backfill, no data mutation."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
+      "allocation_review": "M3 foundation slices shipped with empty requirement and journey coverage, which the manifest validator rejects for an implemented slice, structurally blocking the whole M3 chain. This moves the subset IPLF-030A genuinely implements out of IPLF-030B and leaves the remainder there. PRD scope is unchanged and no requirement text was weakened.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "administrative_exception": {
@@ -7359,10 +7399,8 @@
         "COMP-07",
         "COMP-08",
         "IP-PORT-01",
-        "IP-PORT-02",
         "IP-PORT-03",
         "IP-PORT-04",
-        "IP-PORT-05",
         "IP-PORT-06",
         "IP-PORT-07",
         "IP-PORT-08",
@@ -7371,7 +7409,6 @@
       ],
       "journey_path_ids": [
         "UJ-04-EXC-01",
-        "UJ-04-EXC-02",
         "UJ-04-EXC-03",
         "UJ-04-NORMAL"
       ],
@@ -16697,22 +16734,25 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-02",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_listing.py::test_ip_port_02_filters_are_server_owned"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-030B"
+        "IPLF-030A"
       ],
       "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030."
     },
@@ -16778,22 +16818,25 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-05",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_listing.py::test_ip_port_05_one_mark_yields_one_row_per_jurisdiction"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-030B"
+        "IPLF-030A"
       ],
       "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030."
     },
@@ -16921,16 +16964,19 @@
         "planned:IPLF-UJ-04-EXC-03",
         "planned:IPLF-UJ-04-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-030B"
+        "IPLF-030B",
+        "IPLF-030A"
       ],
-      "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030."
+      "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030. | IPLF-030A 2026-08-14: complete/incomplete/unconfirmed/overdue counts are delivered, but sync-failure counts require M5 registry synchronisation, so this requirement stays open."
     },
     {
       "id": "IP-ID-01",
@@ -37859,7 +37905,7 @@
         "planned:IPLF-UJ-04-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -42751,15 +42797,17 @@
         "IP-PORT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-04-EXC-02"
+        "apps/api/tests/test_ip_portfolio_listing.py::test_uj04_exc02_restricted_records_are_omitted_not_teased#IPLF-UJ-04-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-030B"
+        "IPLF-030A"
       ],
       "allocation_rationale": "UJ-04 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-030."
     },

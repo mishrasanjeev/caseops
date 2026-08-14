@@ -7,7 +7,7 @@ Generated; do not edit.
 | UJ-01 | Configure IP workspace | 4 | IPLF-020B, IPLF-021B | 6 | 2 | implemented | passed | false |
 | UJ-02 | Import existing trademark portfolio | 5 | IPLF-032B | 5 | 0 | not_started | not_run | false |
 | UJ-03 | Create trademark application manually | 3 | IPLF-031B, IPLF-039A, IPLF-039H | 3 | 1 | in_progress | not_run | false |
-| UJ-04 | Find and work from portfolio listing | 4 | IPLF-030B | 4 | 0 | not_started | not_run | false |
+| UJ-04 | Find and work from portfolio listing | 4 | IPLF-030B | 4 | 0 | in_progress | not_run | false |
 | UJ-05 | Detect and resolve duplicate | 2 | IPLF-031B | 2 | 0 | not_started | not_run | false |
 | UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033B | 6 | 1 | in_progress | not_run | false |
 | UJ-07 | Reconcile registry update | 4 | IPLF-051B | 4 | 0 | not_started | not_run | false |

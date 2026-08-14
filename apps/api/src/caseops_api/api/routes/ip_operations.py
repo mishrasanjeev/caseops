@@ -102,6 +102,10 @@ from caseops_api.schemas.ip_operations import (
     IpTitleInterestCreateRequest,
     IpWorkspaceReadinessResponse,
 )
+from caseops_api.schemas.ip_portfolio import (
+    IpPortfolioFilters,
+    IpPortfolioListResponse,
+)
 from caseops_api.schemas.ip_records import (
     IpAssetCreateRequest,
     IpAssetResponse,
@@ -208,6 +212,7 @@ from caseops_api.services.ip_operations import (
     review_ip_evidence_candidate,
     verify_ip_deadline_incident,
 )
+from caseops_api.services.ip_portfolio import list_ip_portfolio
 from caseops_api.services.ip_records import (
     correct_ip_identifier,
     create_ip_asset,
@@ -1084,6 +1089,40 @@ async def get_ip_identifier_search(
 @router.get("/dockets", response_model=IpDocketListResponse)
 async def get_ip_dockets(context: IpViewer, session: DbSession) -> IpDocketListResponse:
     return list_ip_dockets(session, context=context)
+
+
+@router.get("/portfolio", response_model=IpPortfolioListResponse)
+async def get_ip_portfolio(
+    context: IpViewer,
+    session: DbSession,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    matter_id: Annotated[str | None, Query(max_length=36)] = None,
+    asset_kind: Annotated[list[str] | None, Query()] = None,
+    jurisdiction: Annotated[list[str] | None, Query()] = None,
+    office: Annotated[list[str] | None, Query()] = None,
+    filing_phase: Annotated[list[str] | None, Query()] = None,
+    docket_status: Annotated[list[str] | None, Query()] = None,
+    include_inactive: bool = False,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: str | None = None,
+) -> IpPortfolioListResponse:
+    filters = IpPortfolioFilters(
+        query=query,
+        matter_id=matter_id,
+        asset_kind=asset_kind or [],
+        jurisdiction=jurisdiction or [],
+        office=office or [],
+        filing_phase=filing_phase or [],
+        docket_status=docket_status or [],
+        include_inactive=include_inactive,
+    )
+    return list_ip_portfolio(
+        session,
+        context=context,
+        filters=filters,
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.post(

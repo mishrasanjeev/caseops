@@ -81,15 +81,15 @@ Generated; do not edit.
 | TRACK-13 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
 | TRACK-14 | TRACK | IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 18 | 2 | implemented | passed | deployment_verified | false |
 | IP-PORT-01 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-02 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
+| IP-PORT-02 | IP-PORT | IPLF-030A | 1 | 1 | implemented | passed | blocked | false |
 | IP-PORT-03 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
 | IP-PORT-04 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-05 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
+| IP-PORT-05 | IP-PORT | IPLF-030A | 1 | 1 | implemented | passed | blocked | false |
 | IP-PORT-06 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
 | IP-PORT-07 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
 | IP-PORT-08 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
 | IP-PORT-09 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-10 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
+| IP-PORT-10 | IP-PORT | IPLF-030B, IPLF-030A | 5 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-01 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-02 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-03 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
