@@ -6387,7 +6387,8 @@
       "evidence_refs": [
         "docs/ip-implementation/SHARED_RELIABILITY_FOUNDATION.md",
         "docs/ip-implementation/evidence/m2/IPLF-027A/local-2026-08-12.md",
-        "docs/ip-implementation/evidence/m2/IPLF-027A/release-attempt-2026-08-13.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027A/release-attempt-2026-08-13.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027A/case-tracking-followup-2026-08-14.md"
       ],
       "evidence_metadata": [
         {
@@ -6407,6 +6408,15 @@
           "assertions": "Independent CI/security/CodeQL/review lineage, exact image/revision/schema/scheduler/health identity, retained dark flags, service-plus-revision capacity headroom without increasing concurrency, lifecycle terminal-state/stale-write/child-resurrection/reopen persistence, 360 px IP-access workflow, and received/sent/reply/filter Notice persistence. The complete release gate correctly records the remaining AI quota and provider-health failures rather than masking them.",
           "result": "passed",
           "recorded_at": "2026-08-13T08:51:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-027A/case-tracking-followup-2026-08-14.md",
+          "revision": "52cb925d3dacd74890b607208588d95fb6000473",
+          "environment": "Exact production workflow 31797818564 against API caseops-api-00291-62b and web caseops-web-00269-pxc at 100% traffic, after exact-main CI 31797818533 passed",
+          "fixtures": "The approved synthetic production-QA tracked case, authenticated QA account, protected provider source, and the unchanged dated Playwright canary at tests/e2e/ram-2026-08-05-prod.spec.ts:358",
+          "assertions": "The exact dated case-tracking canary that previously returned HTTP 409 passed in 10.3 seconds at 360 px against the exact serving descendant release; complete RAM/IP retained three separately typed OpenAI quota failures and Notice passed 2/2",
+          "result": "passed",
+          "recorded_at": "2026-08-14T17:44:08+05:30"
         }
       ],
       "approvals": [],
@@ -6419,21 +6429,12 @@
           "safe_fallback": "Retain the sanitized 503 and no-output behavior; do not substitute synthetic output, weaken release assertions, or change provider/cost ownership merely to obtain a green run.",
           "milestone_impact": "Blocks IPLF-027A complete-release proof, IPLF-026B closure, and M2 release closure while leaving implemented dark-foundation and focused production evidence valid.",
           "next_independent_slice": "IPLF-027B remains inactive pending its approved rollout/operator policy."
-        },
-        {
-          "id": "IPLF-027A-PROD-GATE-31661191199-CASE-TRACKING",
-          "summary": "The exact-release case-tracking canary observed red provider health (HTTP 409) at tests/e2e/ram-2026-08-05-prod.spec.ts:358.",
-          "owner": "Authorized case-tracking provider operator and Engineering/QA",
-          "evidence_needed": "Review the provider-health condition and authorize any real-provider replay decision, then pass the unchanged complete RAM/IP and Notice workflow against the exact serving release.",
-          "safe_fallback": "Keep the provider-health gate fail closed; do not invoke a replay or bypass the health assertion without the required external authority.",
-          "milestone_impact": "Blocks complete-production proof while retaining the exact verified infrastructure-capacity repair and passing lifecycle/Notice evidence.",
-          "next_independent_slice": "Continue only repository-controlled dark-foundation/documentation work; do not activate IPLF-027B."
         }
       ],
       "next_actions": [
-        "Preserve the exact passing CI/security/CodeQL evidence (31661191219, 31661191220, and 31661191204) with this release checkpoint.",
+        "Preserve the exact passing CI/security/CodeQL evidence (31661191219, 31661191220, and 31661191204), plus descendant exact-main CI 31797818533 and the dated case-tracking pass in production workflow 31797818564.",
         "Keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false; retain user activation, operator policy, exception workflows, and named human approvals for IPLF-027B and later allocated slices.",
-        "After the production AI quota and case-tracking provider gates receive their required external action, rerun the unchanged complete RAM/IP and Notice workflow against the exact serving release before claiming deployment verification."
+        "Keep the complete-production gate blocked only on the three OpenAI quota failures; after the production AI provider/account operator restores usable credits, rerun the unchanged complete RAM/IP and Notice workflow against the exact serving release before claiming closure."
       ],
       "data_impact": [
         "Additive migrations 20260812_0001 and 20260812_0002 add the five company-scoped reliability/workflow tables and nullable lifecycle provenance on shared operational children; no existing legal workflow, child operation, or consumer is activated or backfilled into a new authoritative owner.",
@@ -6634,13 +6635,13 @@
       "approvals": [],
       "blockers": [
         {
-          "id": "IPLF-028A-FULL-DATA-MAP",
-          "summary": "The repository registry covers only the six new IPLF-028A governance tables; it is not the complete SQL/object/index/cache/queue/log/export/provider/backup data map required by DATA-GOV-01 through DATA-GOV-03.",
+          "id": "IPLF-028A-RUNTIME-DATA-CLASS-REGISTRY",
+          "summary": "The repository-wide IPLF-028C map inventories the exact current SQL schema and the registered/known object, index, cache, queue, log, export, provider, and backup boundaries, but the IPLF-028A dry-run service still accepts only the six governance classes hard-coded in FOUNDATION_DATA_CLASS_IDS and does not consume a reviewed runtime projection of that map.",
           "owner": "Platform records-governance owner and Engineering",
-          "evidence_needed": "Inventory every in-scope class and column category, attach approved purpose/retention/hold/region/subprocessor fields, and prove the migration/handler registry gate rejects an unregistered class.",
-          "safe_fallback": "Keep every unregistered class outside a data-operation surface and retain the documented dry-run-only boundary.",
-          "milestone_impact": "Blocks IPLF-028A completion and all DATA-GOV release claims while leaving the additive foundation valid.",
-          "next_independent_slice": "Continue repository-controlled inventory and validator work only; do not expose an export, purge, offboarding, or restore endpoint."
+          "evidence_needed": "Define and review a versioned runtime data-class projection, bind the existing company-scoped dry-run request validation to it with fail-closed rejection of unknown or stale IDs, and prove that repository map changes cannot silently diverge from the runtime allowlist.",
+          "safe_fallback": "Keep FOUNDATION_DATA_CLASS_IDS restricted to the six IPLF-028A governance tables, reject every other dry-run class, and retain the no-execution boundary.",
+          "milestone_impact": "Blocks IPLF-028A completion and operational DATA-GOV claims while leaving the additive six-table dry-run foundation and repository-wide IPLF-028C inventory valid.",
+          "next_independent_slice": "Implement only the reviewed fail-closed runtime registry bridge; do not expose an export, purge, offboarding, restore, or other execution endpoint."
         },
         {
           "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
@@ -6663,7 +6664,7 @@
       ],
       "next_actions": [
         "Keep the new records-governance tables unseeded and the service dry-run-only; no route, worker, scheduler, storage adapter, provider adapter, or execute mode is authorized in IPLF-028A.",
-        "Expand the registry to every in-scope data class and enforce the data-map update gate before marking foundation implementation complete.",
+        "Replace the six-class dry-run constant with a reviewed, versioned, fail-closed runtime projection of the repository-wide map before marking the foundation implementation complete.",
         "Obtain explicit legal/privacy/security approval for policy, holds, step-up, four-eyes, and user workflow before designing any real data-operation command.",
         "After independent CI and approved non-live resilience preparation, run the required database-plus-object cutover restore and tenant-export dry run with named operators and reviewers."
       ],
@@ -6806,7 +6807,10 @@
       "primary_behavior": "Repository data-map inventory and fail-closed Definition-of-Ready enforcement",
       "migration_boundary": "No schema migration or runtime data mutation. Future migrations must update the map and include the required data-governance marker.",
       "release_boundary": "Repository/CI control only; no deployment or data-operation activation is claimed by this slice.",
-      "requirement_ids": [],
+      "requirement_ids": [
+        "DATA-GOV-01",
+        "DATA-GOV-03"
+      ],
       "journey_path_ids": [],
       "ownership": [
         {
@@ -6834,7 +6838,17 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md"
       ],
-      "evidence_metadata": [],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md",
+          "revision": "a232a2677e965d7a1efebad3ac18e47478478ad6",
+          "environment": "GitHub Actions pull request #219: CI 31682537182, Security 31682537325, and CodeQL 31682537243",
+          "fixtures": "Canonical repository ORM metadata, Alembic/raw indexes, declared non-SQL boundaries, and negative unregistered-change fixtures",
+          "assertions": "The versioned repository inventory and fail-closed migration/provider/storage/telemetry Definition-of-Ready controls passed the exact-head suite; the 2026-08-14 addendum records the later generated-view drift and its bounded repair pending exact-head publication",
+          "result": "passed",
+          "recorded_at": "2026-08-13T14:59:05+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [
         {
@@ -6857,7 +6871,7 @@
         }
       ],
       "next_actions": [
-        "Run focused validator/control tests and the required CI checks, then merge this repository-only gate through main.",
+        "Run the generated-view repair through exact-head CI, then promote verification only from that immutable evidence; keep the canonical map and projection synchronized for every later data-bearing change.",
         "Keep the current handler fail-closed and do not add a retention, hold, export, purge, offboarding, restore, provider-deletion, or backup execution path.",
         "Obtain the named policy and operational approvals before designing or releasing a runtime data-operation handler."
       ],
@@ -6885,15 +6899,15 @@
           "evidence": "Local/CI validation and explicit no-data-operation boundary"
         }
       ],
-      "allocation_review": "Derived IPLF-028 decomposition under PRD Sections 11.5(21), 13.24 DATA-GOV-01..03, 23.1 M2-F, and 25.2 Definition of Ready.",
-      "implementation_status": "in_progress",
+      "allocation_review": "Derived IPLF-028 decomposition under PRD Sections 11.5(21), 13.24 DATA-GOV-01 and DATA-GOV-03, 23.1 M2-F, and 25.2 Definition of Ready. DATA-GOV-02 remains with the policy-dependent workflow slices and is not claimed here.",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "administrative_exception": {
-        "prd_citation": "PRD Sections 11.5(21), 13.24 DATA-GOV-01..03, 23.1 M2-F, and 25.2",
+        "prd_citation": "PRD Sections 11.5(21), 13.24 DATA-GOV-01 and DATA-GOV-03, 23.1 M2-F, and 25.2",
         "reviewer": "CaseOps program-control reconciliation",
-        "reason": "This bounded repository-control slice supplies Definition-of-Ready enforcement for the parent workflow slice. IPLF-028B retains the reciprocal DATA-GOV and journey allocation; this slice does not claim a user data-operation path.",
+        "reason": "This bounded repository-control slice supplies the DATA-GOV-01 inventory and DATA-GOV-03 Definition-of-Ready facets for the parent workflow slice. IPLF-028B retains the user data-operation journeys and policy-dependent DATA-GOV requirements; this slice has no user journey path.",
         "date": "2026-08-13",
         "milestone": "M2"
       }
@@ -6931,7 +6945,17 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-029A/repository-audit-2026-08-13.md"
       ],
-      "evidence_metadata": [],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-029A/repository-audit-2026-08-13.md",
+          "revision": "76d23c8d81509f936eb4dd1c4c94e19f3b228c08",
+          "environment": "GitHub Actions pull request #220: CI 31760287600, Security 31760287635, and CodeQL 31760287570",
+          "fixtures": "Canonical M2 slice inventory, checked-in ownership/test/evidence references, blocked-row fixtures, and a deliberately stale generated audit",
+          "assertions": "Every active M2 row retains a canonical-writer contract, executable repository test and evidence references, blocked rows retain a named blocker, and generated audit drift fails validation",
+          "result": "passed",
+          "recorded_at": "2026-08-14T07:32:32+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [
         {
@@ -34627,8 +34651,13 @@
         "UJ-64",
         "UJ-65"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+        "scripts/ip_data_governance_map.py"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_data_governance_map.py",
         "planned:IPLF-REQ-DATA-GOV-01",
         "planned:IPLF-UJ-28-EXC-01",
         "planned:IPLF-UJ-28-EXC-02",
@@ -34647,17 +34676,20 @@
         "planned:IPLF-UJ-65-EXC-05",
         "planned:IPLF-UJ-65-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-028B",
+        "IPLF-028C",
         "IPLF-071B"
       ],
-      "allocation_rationale": "DATA-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-028, IPLF-071."
+      "allocation_rationale": "DATA-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-028, IPLF-071. IPLF-028C implements the repository-wide inventory facet; policy-approved runtime behavior and the later workflow/reconciliation facets remain allocated to IPLF-028B and IPLF-071B."
     },
     {
       "id": "DATA-GOV-02",
@@ -34711,8 +34743,13 @@
         "UJ-64",
         "UJ-65"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "scripts/ip_data_governance_map.py",
+        ".github/workflows/ci.yml"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_data_governance_map.py",
         "planned:IPLF-REQ-DATA-GOV-03",
         "planned:IPLF-UJ-28-EXC-01",
         "planned:IPLF-UJ-28-EXC-02",
@@ -34731,17 +34768,20 @@
         "planned:IPLF-UJ-65-EXC-05",
         "planned:IPLF-UJ-65-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-028B",
+        "IPLF-028C",
         "IPLF-071B"
       ],
-      "allocation_rationale": "DATA-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-028, IPLF-071."
+      "allocation_rationale": "DATA-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-028, IPLF-071. IPLF-028C implements the repository Definition-of-Ready gate; later runtime/reconciliation behavior remains allocated to IPLF-028B and IPLF-071B."
     },
     {
       "id": "DATA-GOV-04",
