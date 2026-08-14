@@ -11406,6 +11406,11 @@ export interface components {
              */
             manifest_format: "csv" | "json" | "xlsx";
             /**
+             * Skipped Duplicate Rows
+             * @default 0
+             */
+            skipped_duplicate_rows: number;
+            /**
              * Storage Writes
              * @default 0
              */
@@ -11504,7 +11509,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "valid" | "invalid";
+            status: "valid" | "invalid" | "duplicate";
             /** Team Id */
             team_id?: string | null;
             /** Team Slug */
@@ -23814,6 +23819,11 @@ export interface components {
             created_at: string;
             /** Created Count */
             created_count: number;
+            /**
+             * Duplicate Rows
+             * @default 0
+             */
+            duplicate_rows: number;
             /** Error Message */
             error_message?: string | null;
             /**
@@ -23883,7 +23893,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "valid" | "invalid" | "created" | "failed";
+            status: "valid" | "invalid" | "duplicate" | "created" | "failed";
         };
         /**
          * MatterLifecycleStatusRequest

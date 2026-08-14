@@ -95,6 +95,9 @@ class MatterImportJobStatus(StrEnum):
 class MatterImportRowStatus(StrEnum):
     VALID = "valid"
     INVALID = "invalid"
+    # A row whose only problem is that the matter already exists (in this file
+    # or in the tenant). Excluded from the submission rather than blocking it.
+    DUPLICATE = "duplicate"
     CREATED = "created"
     FAILED = "failed"
 
@@ -1273,6 +1276,12 @@ class MatterBulkImportJob(Base):
     total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     valid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duplicate_rows: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     validation_error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

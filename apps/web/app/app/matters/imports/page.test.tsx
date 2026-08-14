@@ -66,6 +66,7 @@ const validatedJob = {
   total_rows: 2,
   valid_rows: 1,
   invalid_rows: 1,
+  duplicate_rows: 0,
   created_count: 0,
   failed_count: 0,
   validation_error_count: 2,

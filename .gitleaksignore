@@ -36,3 +36,12 @@ a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST
 # suppression is fingerprint-specific; newly introduced generic-key findings
 # remain blocking.
 184925e7ac36929b2d47d4367c038b263b633251:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21
+
+# 2026-08-14 Ram bulk-matter-upload regressions: exact false positive on a
+# matter code passed inline directly after a `token` argument, which reads to
+# the generic-api-key rule as a credential assignment. The call site now binds
+# the code to a name first, so no new commit reproduces it; this suppresses
+# only the historical fingerprint. 6db34b64 is the commit deployed and verified
+# in production, so it is deliberately not rewritten. New generic-key findings
+# remain blocking.
+6db34b644d04fa075fe7e3a0ceb5fb0c391114c3:apps/api/tests/test_20260814_matter_import_ram_workbook.py:generic-api-key:157

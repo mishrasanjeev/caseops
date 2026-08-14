@@ -13997,6 +13997,11 @@
           "sql_type": "INTEGER",
           "nullable": false
         },
+        "duplicate_rows": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
         "error_message": {
           "category_id": "domain_attribute",
           "sql_type": "TEXT",
@@ -22379,7 +22384,7 @@
       }
     }
   ],
-  "schema_fingerprint": "9dc91873bbe75d98add8d1b61780cf82c34af43e7adb98ee953dead8e617b27f",
+  "schema_fingerprint": "1dcbd8e616d9b63863d4422bfaac0c5ea389087d9efbd96afe3f16b31ea9893f",
   "index_inventory": {
     "orm_index_count": 1128,
     "orm_index_fingerprint": "6e488fbdaa586899dc8ed7772844187bad7c062354ceb86cd8d7c6075a6bcf91",

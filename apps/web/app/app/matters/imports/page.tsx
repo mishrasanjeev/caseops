@@ -81,6 +81,7 @@ function statusTone(status: string): "success" | "warning" | "neutral" {
   if (status === "completed" || status === "created" || status === "valid") return "success";
   if (status === "failed" || status === "invalid" || status === "expired") return "warning";
   if (status === "completed_with_errors" || status === "importing") return "warning";
+  // A duplicate is skipped, not rejected: it needs no correction from the user.
   return "neutral";
 }
 
@@ -106,10 +107,15 @@ export default function BulkMatterImportPage() {
     onSuccess: async (result) => {
       setJob(result);
       await queryClient.invalidateQueries({ queryKey: ["matter-imports", "history"] });
+      const skipped = result.duplicate_rows
+        ? ` ${result.duplicate_rows} duplicate rows will be skipped.`
+        : "";
       if (result.invalid_rows) {
-        toast.error(`${result.invalid_rows} rows need correction before they can be imported.`);
+        toast.error(
+          `${result.invalid_rows} rows need correction before they can be imported.${skipped}`,
+        );
       } else {
-        toast.success(`All ${result.valid_rows} matter rows passed validation.`);
+        toast.success(`All ${result.valid_rows} matter rows passed validation.${skipped}`);
       }
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not validate matter import.")),
@@ -126,7 +132,10 @@ export default function BulkMatterImportPage() {
         queryClient.invalidateQueries({ queryKey: ["matters"] }),
         queryClient.invalidateQueries({ queryKey: ["matter-imports", "history"] }),
       ]);
-      const message = `${result.job.created_count} matters created; ${result.job.failed_count} rows failed.`;
+      const skipped = result.job.duplicate_rows
+        ? `; ${result.job.duplicate_rows} duplicate rows skipped`
+        : "";
+      const message = `${result.job.created_count} matters created${skipped}; ${result.job.failed_count} rows failed.`;
       if (result.job.failed_count) toast.error(message);
       else toast.success(message);
     },
@@ -154,9 +163,18 @@ export default function BulkMatterImportPage() {
 
   const pending = previewMutation.isPending || commitMutation.isPending || cancelMutation.isPending;
   const canCommit = Boolean(job && job.status === "validated" && job.valid_rows > 0 && !pending);
-  const errorRows = job?.rows.filter((row) => row.errors.length > 0) ?? [];
+  // Rows needing correction first, then skipped duplicates, then a sample of
+  // the rows that are ready.
+  const errorRows = job?.rows.filter((row) => row.status !== "duplicate" && row.errors.length > 0) ?? [];
+  const duplicateRows = job?.rows.filter((row) => row.status === "duplicate") ?? [];
   const previewRows = job
-    ? [...errorRows, ...job.rows.filter((row) => row.errors.length === 0).slice(0, 50)]
+    ? [
+        ...errorRows,
+        ...duplicateRows,
+        ...job.rows
+          .filter((row) => row.status !== "duplicate" && row.errors.length === 0)
+          .slice(0, 50),
+      ]
     : [];
 
   async function downloadTemplate(format: "csv" | "xlsx") {
@@ -297,7 +315,7 @@ export default function BulkMatterImportPage() {
             Validate data before import
           </Button>
           <p className="text-xs text-[var(--color-mute)]">
-            Limit: 500 rows / 2 MB. Files are checked for unsafe formulas, tenant references, duplicates, required fields, formats, and active users/teams.
+            Limit: 500 rows / 2 MB. Files are checked for unsafe formulas, tenant references, required fields, formats, and active users/teams. Rows that duplicate an existing matter are skipped automatically.
           </p>
         </div>
 
@@ -312,9 +330,10 @@ export default function BulkMatterImportPage() {
             </div>
           ) : (
             <div className="flex flex-col">
-              <div className="grid gap-3 border-b border-[var(--color-line)] bg-[var(--color-bg-2)] p-4 sm:grid-cols-5">
+              <div className="grid gap-3 border-b border-[var(--color-line)] bg-[var(--color-bg-2)] p-4 sm:grid-cols-6">
                 <Metric label="Total records" value={job.total_rows} />
                 <Metric label="Valid" value={job.valid_rows} kind="good" />
+                <Metric label="Duplicates skipped" value={job.duplicate_rows} />
                 <Metric
                   label="Validation errors"
                   value={job.validation_error_count}
@@ -329,10 +348,10 @@ export default function BulkMatterImportPage() {
                   <span className="text-sm text-[var(--color-mute)]">{job.filename}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {job.invalid_rows > 0 || job.failed_count > 0 ? (
+                  {job.invalid_rows > 0 || job.failed_count > 0 || job.duplicate_rows > 0 ? (
                     <Button variant="outline" onClick={() => void downloadErrors()} disabled={downloading !== null}>
                       {downloading === "errors" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      Download error report
+                      Download row report
                     </Button>
                   ) : null}
                   {job.status === "validated" ? (
@@ -360,12 +379,21 @@ export default function BulkMatterImportPage() {
                       <th className="px-3 py-2">Client</th>
                       <th className="px-3 py-2">Court forum no.</th>
                       <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Errors</th>
+                      <th className="px-3 py-2">Outcome</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-line)]">
                     {previewRows.map((row) => (
-                      <tr key={row.id} className={row.errors.length ? "bg-[var(--color-danger-50)]" : undefined}>
+                      <tr
+                        key={row.id}
+                        className={
+                          row.status === "duplicate"
+                            ? "bg-[var(--color-bg-2)]"
+                            : row.errors.length
+                              ? "bg-[var(--color-danger-50)]"
+                              : undefined
+                        }
+                      >
                         <td className="px-3 py-2 tabular-nums">{row.row_number}</td>
                         <td className="px-3 py-2 font-mono text-xs">{normalizedText(row, "matter_code")}</td>
                         <td className="px-3 py-2">{normalizedText(row, "title")}</td>
@@ -375,7 +403,14 @@ export default function BulkMatterImportPage() {
                         </td>
                         <td className="px-3 py-2"><Badge tone={statusTone(row.status)}>{row.status}</Badge></td>
                         <td className="max-w-md px-3 py-2">
-                          {row.errors.length ? (
+                          {row.status === "duplicate" ? (
+                            <div className="text-xs text-[var(--color-mute)]">
+                              <div className="font-medium">Skipped — already exists</div>
+                              <ul className="mt-1 space-y-1">
+                                {row.errors.map((error) => <li key={error}>• {error}</li>)}
+                              </ul>
+                            </div>
+                          ) : row.errors.length ? (
                             <ul className="space-y-1 text-xs text-[var(--color-danger-700)]">
                               {row.errors.map((error) => <li key={error}>• {error}</li>)}
                             </ul>

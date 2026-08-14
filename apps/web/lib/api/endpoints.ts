@@ -373,7 +373,12 @@ export type MatterListParams = {
   max_claim_amount_minor?: number;
 };
 
-export type MatterImportRowStatus = "valid" | "invalid" | "created" | "failed";
+export type MatterImportRowStatus =
+  | "valid"
+  | "invalid"
+  | "duplicate"
+  | "created"
+  | "failed";
 export type MatterImportJobStatus =
   | "validated"
   | "importing"
@@ -404,6 +409,7 @@ export type MatterImportJob = {
   total_rows: number;
   valid_rows: number;
   invalid_rows: number;
+  duplicate_rows: number;
   created_count: number;
   failed_count: number;
   validation_error_count: number;
