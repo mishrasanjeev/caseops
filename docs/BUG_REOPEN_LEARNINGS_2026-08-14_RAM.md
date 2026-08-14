@@ -31,9 +31,9 @@ no catalog entry is selected. Bulk import (`_resolve_import_forum`) did not.
 
 Proven on production before any code changed:
 
-| Path | `forum_level=tribunal`, `court_name="DRT Delhi"` |
-| --- | --- |
-| `POST /api/matters/` | **200** — matter `22184487-8059-41d2-b03a-b17b5d652b35` created |
+| Path                   | `forum_level=tribunal`, `court_name="DRT Delhi"`                      |
+| ---------------------- | --------------------------------------------------------------------- |
+| `POST /api/matters/`   | **200** — matter `22184487-8059-41d2-b03a-b17b5d652b35` created       |
 | Bulk import, same data | **rejected** — "Court is not an active DRAT / DRT catalog selection." |
 
 Two write paths for one business object disagreed, and the stricter one was
@@ -51,8 +51,8 @@ the one a client uses to load a hundred matters at once.
 
 That rule is half right, and the missing half produced this workbook three days
 later. It correctly demanded one master. It then specified strictness in one
-direction only — bulk must not be *looser* than the catalog — and said nothing
-about bulk not being *stricter* than the manual path it was supposed to match.
+direction only — bulk must not be _looser_ than the catalog — and said nothing
+about bulk not being _stricter_ than the manual path it was supposed to match.
 `_LEGACY_CATALOG_OPTIONAL_CATEGORIES` implemented that rule literally: exactly
 three historical families fail open, everything else fails closed.
 
@@ -76,9 +76,9 @@ Three compounding facts made it a hard blocker rather than an inconvenience:
 ## Where my own approach failed, specifically
 
 1. **I wrote a prevention rule from the fix's perspective, not the user's
-   workflow.** Rule 5 describes what the *validator* should do. It never states
-   the user-visible invariant: *a matter a lawyer can create by hand must be
-   loadable in bulk.* A rule phrased as a validation policy cannot be checked
+   workflow.** Rule 5 describes what the _validator_ should do. It never states
+   the user-visible invariant: _a matter a lawyer can create by hand must be
+   loadable in bulk._ A rule phrased as a validation policy cannot be checked
    against a workflow.
 2. **I treated "one source of truth" as "one strictness level".** Sharing a
    master does not mean sharing a rejection policy. The catalog is an
@@ -93,7 +93,7 @@ Three compounding facts made it a hard blocker rather than an inconvenience:
    the same service as the validator. Nothing asserted the two agree, so the
    product shipped a dropdown of values its own importer refused.
 5. **I nearly repeated the pattern while fixing it.** Marking every duplicate
-   row `duplicate` would have dropped *both* copies of an in-file duplicate,
+   row `duplicate` would have dropped _both_ copies of an in-file duplicate,
    because the existing detector flags all occurrences — silent data loss worse
    than the reported bug. Caught only by writing the "the original still
    imports" assertion before trusting the change. Likewise
