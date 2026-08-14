@@ -45,3 +45,9 @@ a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST
 # in production, so it is deliberately not rewritten. New generic-key findings
 # remain blocking.
 6db34b644d04fa075fe7e3a0ceb5fb0c391114c3:apps/api/tests/test_20260814_matter_import_ram_workbook.py:generic-api-key:157
+
+# 2026-08-14 IPLF-028C checkpoint: exact false positive on the public,
+# immutable Cloud Run API image digest recorded at the canonical program
+# checkpoint. This suppresses only the reviewed e18cc266 finding; newly
+# introduced generic-key findings remain blocking.
+e18cc266f557aa3b8006311393b2a65e71986db2:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21
