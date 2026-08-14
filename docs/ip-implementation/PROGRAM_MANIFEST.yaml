@@ -1639,7 +1639,7 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -9212,36 +9212,77 @@
       "source_kind": "derived",
       "scope_source": "IPLF-036",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "No schema change, no migration, no backfill, no code change.",
+      "release_boundary": "No independent release; the implementation released with IPLF-024.",
+      "requirement_ids": [
+        "IP-DOC-11"
+      ],
+      "journey_path_ids": [
+        "UJ-14-NORMAL",
+        "UJ-14-EXC-01",
+        "UJ-14-EXC-02",
+        "UJ-14-EXC-03",
+        "UJ-14-EXC-04"
+      ],
       "ownership": [
         {
-          "classification": "EXTEND",
-          "component": "IPLF-036 canonical scope: Document register/classification/version/approval.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "classification": "LINK",
+          "component": "IPLF-024A/024B document register, taxonomy, naming, versions and privilege policy.",
+          "canonical_writer": "Unchanged. services/ip_document_workflow.py remains the document owner; this slice adds no table, migration, service, route, writer or test and only corrects manifest evidence references.",
+          "compatibility_path": "No code change.",
+          "retirement_gate": "Nothing deprecated."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-024B"
+      ],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_document_workflow.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_document_workflow.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+          "revision": "c00e1906d1e1ae52090bd59560d2b452030670a2",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No new verification beyond re-running the existing IPLF-024 suites. No real-PostgreSQL CI, no frontend, no E2E, no deployment.",
+          "fixtures": "The existing IPLF-024 document fixtures: taxonomy seeds, uploaded versions with OCR quality scores, duplicate content hashes, colliding display names, privileged and confidential labels, and a cross-tenant alias import. No real client document.",
+          "assertions": "Each mapping was checked against the test body rather than the test name. End-to-end classification, naming, version processing and approval lock; low OCR quality withholding AI and search use; duplicate content hash offering reuse across links without duplicating stored content; naming conflicts receiving a deterministic suffix through a required bulk preview; and privileged or confidential documents failing closed for AI retrieval, portal sharing, export and notification content with a typed ip_document_policy_denied 403. Counts: 11 passed across the two existing document suites.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-036A-NO-NEW-VERIFICATION",
+          "summary": "This slice performed no new verification. It maps existing IPLF-024 tests, which are SQLite-only with no real-PostgreSQL CI, no frontend, no E2E and no deployment. IP-DOC-12 additionally depends on the law firm supplying its document-name list, which has not been received.",
+          "owner": "Engineering, and the pilot law firm for the IP-DOC-12 name list",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL for the document suites, a document register UI with desktop and narrow-mobile evidence, dated deployed acceptance, and the firm's supplied document-name list imported as taxonomy aliases.",
+          "safe_fallback": "No behaviour changed; the privilege policy already fails closed.",
+          "milestone_impact": "Blocks IPLF-036A release closure; IP-DOC-01..12 remain open on IPLF-036B.",
+          "next_independent_slice": "Audit the 100 in_progress journey paths that still carry planned: test references and map those with existing passing tests."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Audit the 100 in_progress paths still carrying planned: test references and map those already proven by existing tests.",
+        "Resolve the 18 implemented paths that still carry a planned: reference.",
+        "Obtain the pilot firm's document-name list for IP-DOC-12.",
+        "Build the document register UI with desktop and narrow-mobile evidence."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No code or data change; manifest evidence references only."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
+      "allocation_review": "Audit found the document register, taxonomy, naming, versions, approval locks, duplicate detection and privilege policy already fully implemented and tested by IPLF-024A/024B. There was no implementation gap. All five UJ-14 paths still carried planned: test references, so shipped and passing behaviour was recorded as unevidenced. This slice maps the existing tests to the paths they prove and writes no product code. PRD scope unchanged.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -9284,11 +9325,11 @@
         "IP-DOC-12"
       ],
       "journey_path_ids": [
+        "UJ-14-NORMAL",
         "UJ-14-EXC-01",
         "UJ-14-EXC-02",
         "UJ-14-EXC-03",
-        "UJ-14-EXC-04",
-        "UJ-14-NORMAL"
+        "UJ-14-EXC-04"
       ],
       "ownership": [
         {
@@ -22363,9 +22404,12 @@
         "planned:IPLF-UJ-14-EXC-02",
         "planned:IPLF-UJ-14-EXC-03",
         "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "planned:IPLF-UJ-14-NORMAL",
+        "apps/api/tests/test_ip_document_workflow.py"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "blockers": [],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -22373,7 +22417,8 @@
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
-        "IPLF-036B"
+        "IPLF-036B",
+        "IPLF-036A"
       ],
       "allocation_rationale": "IP-DOC allocation reviewed against PRD requirement family and parent epic scope: IPLF-024, IPLF-036.",
       "not_required_approval": {
@@ -49783,18 +49828,21 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock#IPLF-UJ-14-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
+        "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -49825,18 +49873,21 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-14-EXC-01"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-01"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
+        "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -49867,18 +49918,21 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-14-EXC-02"
+        "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links#IPLF-UJ-14-EXC-02"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
+        "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -49909,18 +49963,21 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-14-EXC-03"
+        "apps/api/tests/test_ip_document_workflow.py::test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix#IPLF-UJ-14-EXC-03"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
+        "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -49951,18 +50008,21 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-14-EXC-04"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-04"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
+        "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
