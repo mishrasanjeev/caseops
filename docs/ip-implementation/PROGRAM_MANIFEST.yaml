@@ -1035,7 +1035,8 @@
         "IPLF-027A",
         "IPLF-027B",
         "IPLF-027C",
-        "IPLF-027D"
+        "IPLF-027D",
+        "IPLF-027E"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -6526,12 +6527,9 @@
       ],
       "journey_path_ids": [
         "UJ-67-EXC-01",
-        "UJ-67-EXC-02",
         "UJ-67-EXC-03",
         "UJ-67-EXC-04",
-        "UJ-67-EXC-05",
-        "UJ-67-EXC-06",
-        "UJ-67-NORMAL"
+        "UJ-67-EXC-06"
       ],
       "ownership": [
         {
@@ -6567,7 +6565,10 @@
       "blockers": [],
       "next_actions": [
         "Implement ARCH-OPS-01..26 foundations with IPLF-019B and IPLF-029B: shared idempotency/outbox/consumer effects, lifecycle workflow versions and transition commands, and the audit/domain-event catalogues.",
-        "Implement and test the seven UJ-67 mixed-revision fencing and migration rollback paths.",
+        "Close UJ-67-EXC-01 with real PostgreSQL lock/table-scan window evidence.",
+        "Close UJ-67-EXC-03 once IPLF-028 supplies an approved backfill owner.",
+        "Close UJ-67-EXC-04 with a real deployment canary and SLO observation.",
+        "Close UJ-67-EXC-06 with an authorized SRE restore/roll-forward rehearsal; only the destructive-downgrade refusal half is covered today.",
         "Add a rule-kind-neutral route alias so /deadline-rules no longer names form and fee kinds."
       ],
       "data_impact": [
@@ -6747,6 +6748,85 @@
         "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
       ],
       "allocation_review": "Pure decomposition of IPLF-027 rule-governance scope out of IPLF-027B, closing the three RULE-GOV residual gaps IPLF-027C recorded. PRD scope is unchanged and no requirement text was weakened.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "blocked",
+      "acceptance_status": "pending"
+    },
+    {
+      "id": "IPLF-027E",
+      "title": "Mixed-revision deployment and rollback journey proof: old and new producer revisions coexist on the expanded schema, an unadmitted contract fails closed, and rollback after a committed event preserves it without a duplicate consumer.",
+      "milestone_id": "M2",
+      "epic_id": "IPLF-027",
+      "source_kind": "derived",
+      "scope_source": "IPLF-027",
+      "primary_behavior": "Mixed-revision coexistence and rollback journey proof",
+      "migration_boundary": "No schema change, no migration, no backfill; test and evidence only.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "ARCH-OPS-10"
+      ],
+      "journey_path_ids": [
+        "UJ-67-NORMAL",
+        "UJ-67-EXC-02",
+        "UJ-67-EXC-05"
+      ],
+      "ownership": [
+        {
+          "classification": "LINK",
+          "component": "IPLF-027A neutral reliability foundation: domain_outbox_events and domain_consumer_effects.",
+          "canonical_writer": "services/domain_outbox.py remains the sole distribution and consumer-effect writer. This slice adds test and evidence only; it introduces no table, migration, service, route, writer, or second migration harness.",
+          "compatibility_path": "No production code changes, so no compatibility path is affected.",
+          "retirement_gate": "Nothing deprecated."
+        }
+      ],
+      "dependencies": [
+        "IPLF-027A"
+      ],
+      "implementation_refs": [
+        "apps/api/tests/test_ip_mixed_revision_rollback.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_mixed_revision_rollback.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md",
+          "revision": "73b50b604183fca7098b89266ac70e0319055863",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. The outbox uses SKIP LOCKED on PostgreSQL and a serialization shim on SQLite, so the concurrency characteristics proved here are not the production ones. No real-PostgreSQL CI, no deployment, no delivery worker, no canary, no SLO observation, and no restore rehearsal.",
+          "fixtures": "One synthetic company; two distinct producer_revision values writing the same expanded schema; catalogue-admitted and catalogue-rejected event contracts; the full three-consumer lifecycle effect set. No real client, provider, deployment, filing, fee, payment, external message, or legal act.",
+          "assertions": "Old and new producer revisions persist distinct immutable envelopes without mutual corruption; a new-revision worker drains the old revision's event through the full consumer set while leaving the other event due; unadmitted schema version, unadmitted event type and a payload missing a required contract field are each rejected with no partial row surviving; runtime controls default fail-closed; a post-rollback worker generation cannot re-claim a succeeded event; exactly one effect row per consumer remains. Counts: 3 passed, ruff clean.",
+          "result": "passed"
+        }
+      ],
+      "approvals": [],
+      "blockers": [
+        {
+          "id": "IPLF-027E-RELEASE-VERIFICATION",
+          "summary": "Mixed revision is simulated at the data boundary by two producer_revision values in one process on SQLite, and rollback is simulated by a later worker generation plus fail-closed default flags. No two-process revision skew, no Alembic downgrade, no image rollback, no traffic shift, and no real-PostgreSQL concurrency are exercised.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, a staging or CI rollout that runs two application revisions concurrently against the expanded schema, and a dated deployed rollback rehearsal with traffic evidence.",
+          "safe_fallback": "Keep the runtime controls fail-closed; no outbox consumer drains and no IP workflow command executes in production.",
+          "milestone_impact": "Blocks IPLF-027E release closure and leaves ARCH-OPS-10 in_progress; it does not block IPLF-027B or IPLF-029B implementation work.",
+          "next_independent_slice": "Continue repository-controlled IPLF-027B ARCH-OPS work."
+        }
+      ],
+      "next_actions": [
+        "Run exact-commit CI on real PostgreSQL to replace the SQLite serialization shim evidence.",
+        "Add a CI or staging rollout that runs two application revisions concurrently.",
+        "Triage the adjacent finding that several IP-program migrations mutating pre-existing tables may not declare a bounded lock_timeout."
+      ],
+      "data_impact": [
+        "No schema change, no migration, no backfill, no data mutation."
+      ],
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
+      ],
+      "allocation_review": "Pure decomposition of IPLF-027 UJ-67 scope out of IPLF-027B, covering only the three paths provable in the repository. The four paths needing real PostgreSQL lock timing, a backfill owner, a deployment canary, or an authorized restore rehearsal stay on IPLF-027B. PRD scope is unchanged and no requirement text was weakened.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
@@ -36805,10 +36885,12 @@
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
         "planned:IPLF-UJ-67-NORMAL",
-        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-10]"
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-10]",
+        "apps/api/tests/test_ip_mixed_revision_rollback.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
       ],
       "blockers": [],
       "implementation_status": "in_progress",
@@ -36818,7 +36900,8 @@
       "slice_ids": [
         "IPLF-019B",
         "IPLF-027B",
-        "IPLF-029B"
+        "IPLF-029B",
+        "IPLF-027E"
       ],
       "allocation_rationale": "ARCH-OPS allocation reviewed against PRD requirement family and parent epic scope: IPLF-019, IPLF-027, IPLF-029."
     },
@@ -41904,7 +41987,7 @@
         "planned:IPLF-UJ-67-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -59769,15 +59852,17 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-67-NORMAL"
+        "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_normal_old_and_new_revisions_coexist#IPLF-UJ-67-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-027B"
+        "IPLF-027E"
       ],
       "allocation_rationale": "UJ-67 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-027."
     },
@@ -59881,15 +59966,17 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-67-EXC-02"
+        "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_exc02_mixed_version_contract_fails_closed#IPLF-UJ-67-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-027B"
+        "IPLF-027E"
       ],
       "allocation_rationale": "UJ-67 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-027."
     },
@@ -60049,15 +60136,17 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-67-EXC-05"
+        "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_exc05_rollback_preserves_history_without_duplicate_consumers#IPLF-UJ-67-EXC-05"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
-        "IPLF-027B"
+        "IPLF-027E"
       ],
       "allocation_rationale": "UJ-67 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-027."
     },
