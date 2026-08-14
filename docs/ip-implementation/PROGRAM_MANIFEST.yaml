@@ -6641,7 +6641,17 @@
         }
       ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-027C-RELEASE-VERIFICATION",
+          "summary": "Rule-governance behaviour is verified only on isolated SQLite fixtures. No real-PostgreSQL CI run, no concurrency proof for the new tenant rule-policy with_for_update path, no frontend surface, no E2E, and no deployment exist.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, concurrency coverage for the rule-policy write path, a tenant rule-policy UI with desktop and narrow-mobile evidence, and dated deployed acceptance on the exact serving revision.",
+          "safe_fallback": "Keep the behaviour unreleased; the additive routes stay unexposed in the product UI and no rule policy is auto-confirmed in production.",
+          "milestone_impact": "Blocks IPLF-027C release closure only; it does not block M2 implementation work on IPLF-027B or IPLF-029B.",
+          "next_independent_slice": "Continue repository-controlled IPLF-027B ARCH-OPS and UJ-67 work."
+        }
+      ],
       "next_actions": [
         "Add real-PostgreSQL concurrency coverage for the tenant rule-policy write path.",
         "Add the tenant rule-policy frontend surface with desktop and narrow-mobile evidence.",
@@ -6712,7 +6722,17 @@
         }
       ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-027D-RELEASE-VERIFICATION",
+          "summary": "Emergency-disable alerting is proved only at the persistence boundary on SQLite. No delivery-worker run, no in-app render, no real-PostgreSQL CI, and no deployment exist. The form rule kind is untested and /deadline-rules remains a misleading route name for form and fee kinds.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, a delivery-worker run proving the in-app alert reaches its recipients, a dedicated form rule-kind test, a rule-kind-neutral route alias, and dated deployed acceptance.",
+          "safe_fallback": "Keep the behaviour unreleased. Alerts are in-app only and no external delivery channel is enabled, so an unreleased state cannot leak a notification.",
+          "milestone_impact": "Blocks IPLF-027D release closure only; RULE-GOV implementation coverage is unaffected.",
+          "next_independent_slice": "Continue repository-controlled IPLF-027B ARCH-OPS and UJ-67 work."
+        }
+      ],
       "next_actions": [
         "Add a dedicated form rule-kind test; form currently shares the fee fixture branch untested.",
         "Add a rule-kind-neutral route alias; /deadline-rules is misleading for form and fee kinds.",
