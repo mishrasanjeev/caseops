@@ -1232,16 +1232,58 @@ _FORUM_LEVEL_ALIASES = {
     "districtandsessionscourt": "lower_court",
     "districtsessionscourt": "lower_court",
     "sessionscourt": "lower_court",
+    "civilcourt": "lower_court",
+    "civiljudge": "lower_court",
+    "commercialcourt": "lower_court",
+    "familycourt": "lower_court",
+    "labourcourt": "lower_court",
+    "magistrate": "lower_court",
+    "judicialmagistrate": "lower_court",
+    "metropolitanmagistrate": "lower_court",
+    "smallcausescourt": "lower_court",
+    "trialcourt": "lower_court",
     "highcourt": "high_court",
     "supremecourt": "supreme_court",
     "supremecourtofindia": "supreme_court",
     "tribunal": "tribunal",
     "consumerforum": "tribunal",
+    "consumercourt": "tribunal",
     "consumercommission": "tribunal",
+    "appellatetribunal": "tribunal",
+    "industrialtribunal": "tribunal",
+    "nationalgreentribunal": "tribunal",
+    "ngt": "tribunal",
+    "centraladministrativetribunal": "tribunal",
+    "cat": "tribunal",
+    "incometaxappellatetribunal": "tribunal",
+    "itat": "tribunal",
+    "cestat": "tribunal",
+    "securitiesappellatetribunal": "tribunal",
+    "sat": "tribunal",
+    "aptel": "tribunal",
+    "rera": "tribunal",
+    "armedforcestribunal": "tribunal",
+    "motoraccidentclaimstribunal": "tribunal",
+    "mact": "tribunal",
     "arbitration": "arbitration",
     "arbitraltribunal": "arbitration",
+    "conciliation": "arbitration",
+    "mediation": "arbitration",
     "advisory": "advisory",
+    "opinion": "advisory",
 }
+
+# The canonical levels ``MatterCreateRequest`` accepts. Bulk rows are checked
+# against this set so an unrecognised Forum produces an actionable message
+# instead of leaking the raw pydantic Literal error to a legal ops user.
+_SUPPORTED_FORUM_LEVELS = (
+    "lower_court",
+    "high_court",
+    "supreme_court",
+    "tribunal",
+    "arbitration",
+    "advisory",
+)
 
 _FORUM_CATEGORY_ALIASES = {
     "supremecourt": "supreme_court",
@@ -1283,16 +1325,32 @@ _FORUM_CATEGORY_LABELS = {
     "appellate_tribunal": "Appellate Tribunal",
 }
 
-# Client-maintained files predating the catalog used human common-court labels
-# and sometimes a descriptive bench name. Rejecting those rows would break the
-# established import contract. Exact values still resolve to catalog IDs, while
-# only these three historical court families retain the old level/name fallback.
-# Specialist and consumer categories introduced by the catalog are fail-closed.
-_LEGACY_CATALOG_OPTIONAL_CATEGORIES = {
-    "supreme_court",
-    "high_court",
-    "district_court",
+# Canonical forum level for every catalog category. Bulk rows whose court text
+# does not resolve to a catalog entry fall back to these levels with the court
+# kept as free text — the same result ``_resolve_forum_selection`` produces for
+# manual matter creation. The catalog cannot cover India (production carries 4
+# DRT and 3 recovery-forum entries, all Delhi), so a category the user picked
+# from our own template dropdown must never be able to block the import.
+_FORUM_CATEGORY_LEVELS = {
+    "supreme_court": "supreme_court",
+    "high_court": "high_court",
+    "district_court": "lower_court",
+    "ncdrc": "tribunal",
+    "state_commission": "tribunal",
+    "district_commission": "tribunal",
+    "drt_drat": "tribunal",
+    "recovery_forum": "tribunal",
+    "company_law_tribunal": "tribunal",
+    "tdsat": "tribunal",
+    "appellate_tribunal": "tribunal",
 }
+
+# Tokens that carry no discriminating power when matching a typed court against
+# the catalog, so "Delhi State Commission" can still resolve to the full
+# "Delhi State Consumer Disputes Redressal Commission" entry.
+_FORUM_MATCH_STOPWORDS = frozenset(
+    {"and", "at", "for", "of", "the", "bench", "court", "forum", "india"}
+)
 
 
 @dataclass(frozen=True)
@@ -1327,6 +1385,23 @@ def _forum_entry_match_keys(entry: ForumCatalogEntry) -> set[str]:
         entry.city,
     }
     return {_controlled_value_key(value) for value in values if value}
+
+
+def _forum_match_tokens(*values: str | None) -> set[str]:
+    tokens: set[str] = set()
+    for value in values:
+        if not value:
+            continue
+        for token in re.split(r"[^a-z0-9]+", value.strip().casefold()):
+            if token and token not in _FORUM_MATCH_STOPWORDS:
+                tokens.add(token)
+    return tokens
+
+
+def _forum_entry_tokens(entry: ForumCatalogEntry) -> set[str]:
+    # Deliberately excludes ``lineage``: every DRT lineage contains "DRT", which
+    # would make an ambiguous "DRT Delhi" look like a unique match.
+    return _forum_match_tokens(entry.name, entry.state, entry.district, entry.city)
 
 
 def _resolved_catalog_entry(entry: ForumCatalogEntry) -> _ResolvedImportForum:
@@ -1384,9 +1459,13 @@ def _resolve_import_forum(
             )
         return _resolved_catalog_entry(entry)
 
+    if not forum_text:
+        # Leave the required-field message to the caller.
+        return _ResolvedImportForum(forum_level=None, court_name=court_text or None)
+
     # Preserve imports generated by earlier CaseOps templates, which used the
-    # canonical enum tokens directly. New human-readable category labels use
-    # the catalog resolver below and therefore require an exact selection.
+    # canonical enum tokens directly. Human-readable category labels go through
+    # the catalog resolver below.
     if forum_text.casefold() in {
         "lower_court",
         "high_court",
@@ -1402,41 +1481,49 @@ def _resolve_import_forum(
 
     category = _FORUM_CATEGORY_ALIASES.get(_controlled_value_key(forum_text))
     if category is None:
+        normalized_level = _normalise_forum_level(forum_text)
+        if normalized_level not in _SUPPORTED_FORUM_LEVELS:
+            return _ResolvedImportForum(
+                forum_level=None,
+                court_name=court_text or None,
+                error=(
+                    f"Forum '{forum_text}' is not a supported forum hierarchy value. "
+                    f"Use one of: {', '.join(_FORUM_CATEGORY_LABELS.values())}, "
+                    "Tribunal, Arbitration, Advisory."
+                ),
+            )
         return _ResolvedImportForum(
-            forum_level=_normalise_forum_level(forum_text),
+            forum_level=normalized_level,
             court_name=court_text or None,
         )
 
     candidates = [entry for entry in catalog_entries if _catalog_category(entry) == category]
     match_key = _controlled_value_key(court_text)
     if match_key:
-        candidates = [
-            entry for entry in candidates if match_key in _forum_entry_match_keys(entry)
-        ]
-    if len(candidates) == 1:
+        exact = [entry for entry in candidates if match_key in _forum_entry_match_keys(entry)]
+        if len(exact) == 1:
+            return _resolved_catalog_entry(exact[0])
+        if not exact:
+            # "Delhi State Commission" should still enrich from the full
+            # "Delhi State Consumer Disputes Redressal Commission" entry.
+            supplied_tokens = _forum_match_tokens(court_text)
+            if supplied_tokens:
+                subset = [
+                    entry
+                    for entry in candidates
+                    if supplied_tokens <= _forum_entry_tokens(entry)
+                ]
+                if len(subset) == 1:
+                    return _resolved_catalog_entry(subset[0])
+    elif len(candidates) == 1:
         return _resolved_catalog_entry(candidates[0])
 
-    if category in _LEGACY_CATALOG_OPTIONAL_CATEGORIES:
-        return _ResolvedImportForum(
-            forum_level={
-                "supreme_court": "supreme_court",
-                "high_court": "high_court",
-                "district_court": "lower_court",
-            }[category],
-            court_name=court_text or None,
-        )
-
-    label = _FORUM_CATEGORY_LABELS[category]
-    if not match_key:
-        reason = f"Court is required for {label} and must use the active forum catalog."
-    elif not candidates:
-        reason = f"Court is not an active {label} catalog selection."
-    else:
-        reason = f"Court matches multiple {label} catalog selections; use the exact name."
+    # No unambiguous catalog entry. Keep the category's canonical level and the
+    # court the user typed, exactly as manual matter creation does, rather than
+    # blocking an import on catalog coverage the tenant cannot influence.
     return _ResolvedImportForum(
-        forum_level=None,
+        forum_level=_FORUM_CATEGORY_LEVELS[category],
         court_name=court_text or None,
-        error=reason,
     )
 
 
@@ -1497,6 +1584,7 @@ def _directory_lookups(
     context: SessionContext,
 ) -> tuple[
     dict[str, CompanyMembership],
+    dict[str, CompanyMembership | None],
     dict[str, Team | None],
     dict[str, Team | None],
     set[tuple[str, str]],
@@ -1513,11 +1601,30 @@ def _directory_lookups(
             )
         ).unique()
     )
-    members_by_email = {
-        membership.user.email.strip().lower(): membership
+    active_memberships = [
+        membership
         for membership in memberships
         if membership.user is not None and membership.user.is_active
+    ]
+    members_by_email = {
+        membership.user.email.strip().lower(): membership
+        for membership in active_memberships
     }
+    # Client-maintained files name people rather than quoting work emails, and
+    # the header aliases already accept a bare "Matter Owner"/"Responsible
+    # Lawyer" column. ``None`` marks a name shared by two active users.
+    members_by_name: dict[str, CompanyMembership | None] = {}
+    for membership in active_memberships:
+        for key in {
+            _exact_business_match_key(membership.user.full_name),
+            _business_match_key(membership.user.full_name),
+        }:
+            if not key:
+                continue
+            if key not in members_by_name:
+                members_by_name[key] = membership
+            elif members_by_name[key] is not None and members_by_name[key].id != membership.id:
+                members_by_name[key] = None
     teams = list(
         session.scalars(
             select(Team).where(
@@ -1582,12 +1689,30 @@ def _directory_lookups(
         remember_practice_area(team.slug, team.name)
     return (
         members_by_email,
+        members_by_name,
         teams_by_exact_key,
         teams_by_normalized_key,
         team_memberships,
         practice_areas_by_exact_key,
         practice_areas_by_normalized_key,
     )
+
+
+def _resolve_member(
+    value: str,
+    *,
+    by_email: dict[str, CompanyMembership],
+    by_name: dict[str, CompanyMembership | None],
+) -> tuple[CompanyMembership | None, bool]:
+    """Resolve a person reference. Returns (membership, ambiguous)."""
+    membership = by_email.get(value.strip().lower())
+    if membership is not None:
+        return membership, False
+    for key in (_exact_business_match_key(value), _business_match_key(value)):
+        if key in by_name:
+            resolved = by_name[key]
+            return resolved, resolved is None
+    return None, False
 
 
 def _valid_phone(value: str | None) -> bool:
@@ -1618,6 +1743,7 @@ def dry_run_bulk_matter_import(
     available_document_keys = {_document_key(name) for name in available_document_filenames}
     (
         members_by_email,
+        members_by_name,
         teams_by_exact_key,
         teams_by_normalized_key,
         team_memberships,
@@ -1654,34 +1780,13 @@ def dry_run_bulk_matter_import(
             )
         )
 
-    matter_codes = [
-        row.get("matter_code", "").strip()
-        for _parsed, row, _unsafe in canonical_rows
-        if row.get("matter_code", "").strip()
-    ]
-    title_client_keys = [
-        _normalised_key(row.get("title"), row.get("client_name"))
-        for _parsed, row, _unsafe in canonical_rows
-        if row.get("title", "").strip()
-    ]
-    duplicate_import_codes = {
-        code.lower()
-        for code in matter_codes
-        if sum(1 for candidate in matter_codes if candidate.lower() == code.lower()) > 1
-    }
-    duplicate_import_title_clients = {
-        key for key in title_client_keys if title_client_keys.count(key) > 1
-    }
-    case_numbers = [
-        row.get("case_number", "").strip()
-        for _parsed, row, _unsafe in canonical_rows
-        if row.get("case_number", "").strip()
-    ]
-    duplicate_import_case_numbers = {
-        number.lower()
-        for number in case_numbers
-        if sum(1 for candidate in case_numbers if candidate.lower() == number.lower()) > 1
-    }
+    # First occurrence wins. Flagging every copy of an in-file duplicate was
+    # safe while duplicates blocked the import, but now that they are skipped it
+    # would drop the original too, so these are claimed as rows are walked in
+    # file order rather than precomputed.
+    seen_import_codes: set[str] = set()
+    seen_import_title_clients: set[str] = set()
+    seen_import_case_numbers: set[str] = set()
 
     existing_candidates = _visible_existing_matter_candidates(session, context=context)
     existing_by_code: dict[str, list[ExistingMatterCandidate]] = {}
@@ -1748,8 +1853,24 @@ def dry_run_bulk_matter_import(
         responsible_lawyer_email = (
             row.get("responsible_lawyer_email", "").strip().lower() or None
         )
-        owner_membership = members_by_email.get(owner_email or "")
-        responsible_membership = members_by_email.get(responsible_lawyer_email or "")
+        # The stored value is casefolded for matching; error messages quote the
+        # text the user actually typed so the row is findable in their file.
+        owner_supplied = row.get("owner_email", "").strip() or None
+        responsible_supplied = row.get("responsible_lawyer_email", "").strip() or None
+        owner_membership, owner_ambiguous = (
+            _resolve_member(owner_email, by_email=members_by_email, by_name=members_by_name)
+            if owner_email
+            else (None, False)
+        )
+        responsible_membership, responsible_ambiguous = (
+            _resolve_member(
+                responsible_lawyer_email,
+                by_email=members_by_email,
+                by_name=members_by_name,
+            )
+            if responsible_lawyer_email
+            else (None, False)
+        )
         team, team_lookup_ambiguous = (
             _resolve_team(
                 team_slug,
@@ -1775,10 +1896,27 @@ def dry_run_bulk_matter_import(
             errors.append(filing_date_error)
         if not _valid_phone(client_contact_number):
             errors.append("Client contact number must contain 7 to 20 digits.")
-        if owner_email and owner_membership is None:
-            errors.append("Matter owner must match an active user in this company.")
-        if responsible_lawyer_email and responsible_membership is None:
-            errors.append("Responsible lawyer must match an active user in this company.")
+        for label, value, membership, ambiguous in (
+            ("Matter owner", owner_supplied, owner_membership, owner_ambiguous),
+            (
+                "Responsible lawyer",
+                responsible_supplied,
+                responsible_membership,
+                responsible_ambiguous,
+            ),
+        ):
+            if not value or membership is not None:
+                continue
+            if ambiguous:
+                errors.append(
+                    f"{label} '{value}' matches more than one active user; "
+                    "use the work email address."
+                )
+            else:
+                errors.append(
+                    f"{label} must match an active user in this company by work "
+                    f"email or full name; '{value}' did not match."
+                )
         if team_lookup_ambiguous:
             errors.append(
                 "Assigned team matches more than one active team; use an exact team "
@@ -1792,7 +1930,10 @@ def dry_run_bulk_matter_import(
                 ("Responsible lawyer", responsible_membership),
             ):
                 if membership and (team.id, membership.id) not in team_memberships:
-                    errors.append(f"{label} must belong to the assigned team.")
+                    errors.append(
+                        f"{label} must belong to the assigned team '{team.name}'. "
+                        "Add them to that team, or clear Assigned Team for this row."
+                    )
         if category == "unsupported":
             errors.append("Document category is unsupported.")
             category = None
@@ -1824,33 +1965,44 @@ def dry_run_bulk_matter_import(
                 )
             )
 
+        # Duplicate findings are collected apart from validation errors: a row
+        # that is only a duplicate is skipped from the submission, not rejected
+        # back to the user for correction.
+        duplicate_reasons: list[str] = []
         duplicate_candidates: list[BulkMatterImportDuplicateCandidate] = []
         if matter_code:
-            if matter_code.lower() in duplicate_import_codes:
-                errors.append("Duplicate matter code in this import file.")
+            if matter_code.lower() in seen_import_codes:
+                duplicate_reasons.append("Duplicate matter code in this import file.")
+            else:
+                seen_import_codes.add(matter_code.lower())
             duplicate_candidates.extend(
                 _duplicate_candidate_record(candidate)
                 for candidate in existing_by_code.get(matter_code.lower(), [])
             )
         title_client_key = _normalised_key(title, client_name)
-        if title and title_client_key in duplicate_import_title_clients:
-            errors.append("Duplicate matter title/client in this import file.")
+        if title:
+            if title_client_key in seen_import_title_clients:
+                duplicate_reasons.append("Duplicate matter title/client in this import file.")
+            else:
+                seen_import_title_clients.add(title_client_key)
         duplicate_candidates.extend(
             _duplicate_candidate_record(candidate)
             for candidate in existing_by_title_client.get(title_client_key, [])
             if candidate.matter_id
         )
         if duplicate_candidates:
-            errors.append("Duplicate matter candidate exists for this company.")
+            duplicate_reasons.append("Duplicate matter candidate exists for this company.")
         if case_number:
-            if case_number.lower() in duplicate_import_case_numbers:
-                errors.append("Duplicate case number in this import file.")
+            if case_number.lower() in seen_import_case_numbers:
+                duplicate_reasons.append("Duplicate case number in this import file.")
+            else:
+                seen_import_case_numbers.add(case_number.lower())
             case_candidates = existing_by_case_number.get(case_number.lower(), [])
             duplicate_candidates.extend(
                 _duplicate_candidate_record(candidate) for candidate in case_candidates
             )
             if case_candidates:
-                errors.append("Duplicate case number exists for this company.")
+                duplicate_reasons.append("Duplicate case number exists for this company.")
 
         if matter_status == "disposed":
             errors.append(
@@ -1904,10 +2056,17 @@ def dry_run_bulk_matter_import(
                     message = str(item.get("msg", "Invalid value."))
                     errors.append(f"{loc}: {message}" if loc else message)
 
+        if errors:
+            row_status: Literal["valid", "invalid", "duplicate"] = "invalid"
+        elif duplicate_reasons:
+            row_status = "duplicate"
+        else:
+            row_status = "valid"
+
         row_plans.append(
             BulkMatterImportRowPlan(
                 row_number=parsed.row_number,
-                status="invalid" if errors else "valid",
+                status=row_status,
                 matter_code=matter_code,
                 title=title,
                 matter_type=matter_type,
@@ -1941,12 +2100,13 @@ def dry_run_bulk_matter_import(
                 ),
                 document_references=document_references,
                 duplicate_candidates=duplicate_candidates,
-                errors=sorted(set(errors)),
+                errors=sorted(set(errors + duplicate_reasons)),
             )
         )
 
     valid_count = sum(1 for row in row_plans if row.status == "valid")
     duplicate_rows = sum(1 for row in row_plans if row.duplicate_candidates)
+    skipped_duplicate_count = sum(1 for row in row_plans if row.status == "duplicate")
     document_reference_count = sum(len(row.document_references) for row in row_plans)
     unsupported_document_reference_count = sum(
         1
@@ -1958,8 +2118,9 @@ def dry_run_bulk_matter_import(
         manifest_format=parsed_import.manifest_format,
         total_rows=len(row_plans),
         valid_rows=valid_count,
-        invalid_rows=len(row_plans) - valid_count,
+        invalid_rows=len(row_plans) - valid_count - skipped_duplicate_count,
         duplicate_candidate_rows=duplicate_rows,
+        skipped_duplicate_rows=skipped_duplicate_count,
         document_reference_count=document_reference_count,
         unsupported_document_reference_count=unsupported_document_reference_count,
         available_document_count=len(available_document_filenames),
@@ -2169,20 +2330,29 @@ def _matter_template_xlsx_bytes(
         ],
         [
             "People",
-            "Matter Owner and Responsible Lawyer must be active work-email " +
-            "addresses in this company.",
+            (
+                "Matter Owner and Responsible Lawyer accept an active work-email "
+                + "address or the person's full name. Use the email when two active "
+                + "users share a name."
+            ),
         ],
         ["Teams", "Assigned Team must be an active team name or slug in this company."],
         [
             "Duplicates",
-            "Matter Code, Case Number, and matching Matter Title + Client Name are checked.",
+            (
+                "Matter Code, Case Number, and matching Matter Title + Client Name are "
+                + "checked. A row that repeats an earlier row or an existing matter is "
+                + "skipped automatically; the first copy is still imported."
+            ),
         ],
         ["Import", "Upload this file, review every validation error, then confirm import."],
         [
             "Forum catalog",
             (
-                "Use Forum Catalog for the exact Court value. Manual creation, editing, "
-                + "CSV, and XLSX uploads are validated against this same active master."
+                "Forum is required and must be one of the Forum values listed in "
+                + "Reference Values. Court is optional: an exact value from Forum "
+                + "Catalog links the matter to the master catalog and fills in state, "
+                + "district, and city, while any other court name is kept as typed."
             ),
         ],
         [
@@ -2335,6 +2505,13 @@ def _sanitized_raw(row: ParsedMatterImportRow) -> dict[str, str]:
     }
 
 
+def _row_status(plan_status: str) -> MatterImportRowStatus:
+    return {
+        "valid": MatterImportRowStatus.VALID,
+        "duplicate": MatterImportRowStatus.DUPLICATE,
+    }.get(plan_status, MatterImportRowStatus.INVALID)
+
+
 def _normalized_plan(plan: BulkMatterImportRowPlan) -> dict[str, object]:
     return plan.model_dump(
         mode="json",
@@ -2406,6 +2583,7 @@ def _job_response(
         total_rows=job.total_rows,
         valid_rows=job.valid_rows,
         invalid_rows=job.invalid_rows,
+        duplicate_rows=job.duplicate_rows,
         created_count=job.created_count,
         failed_count=job.failed_count,
         validation_error_count=job.validation_error_count,
@@ -2491,9 +2669,14 @@ def preview_matter_import(
         total_rows=plan.summary.total_rows,
         valid_rows=plan.summary.valid_rows,
         invalid_rows=plan.summary.invalid_rows,
+        duplicate_rows=plan.summary.skipped_duplicate_rows,
         created_count=0,
         failed_count=0,
-        validation_error_count=sum(len(row.errors) for row in plan.rows),
+        # Skipped duplicates are not corrections the user has to make, so they
+        # must not appear in the validation-error total.
+        validation_error_count=sum(
+            len(row.errors) for row in plan.rows if row.status != "duplicate"
+        ),
         created_at=now,
         updated_at=now,
         expires_at=now + MATTER_IMPORT_PREVIEW_TTL,
@@ -2511,11 +2694,7 @@ def preview_matter_import(
                 raw_json=_sanitized_raw(source_row),
                 normalized_json=_normalized_plan(row_plan),
                 errors_json=row_plan.errors,
-                status=(
-                    MatterImportRowStatus.VALID
-                    if row_plan.status == "valid"
-                    else MatterImportRowStatus.INVALID
-                ),
+                status=_row_status(row_plan.status),
                 created_at=now,
                 updated_at=now,
             )
@@ -2734,11 +2913,7 @@ def commit_matter_import(
             plan = plans_by_number[row.row_number]
             row.normalized_json = _normalized_plan(plan)
             row.errors_json = plan.errors
-            row.status = (
-                MatterImportRowStatus.VALID
-                if plan.status == "valid"
-                else MatterImportRowStatus.INVALID
-            )
+            row.status = _row_status(plan.status)
             row.updated_at = _now()
         job.valid_rows = sum(
             1 for row in persisted_rows if row.status == MatterImportRowStatus.VALID
@@ -2746,13 +2921,25 @@ def commit_matter_import(
         job.invalid_rows = sum(
             1 for row in persisted_rows if row.status == MatterImportRowStatus.INVALID
         )
-        job.validation_error_count = sum(len(row.errors_json or []) for row in persisted_rows)
+        job.duplicate_rows = sum(
+            1 for row in persisted_rows if row.status == MatterImportRowStatus.DUPLICATE
+        )
+        job.validation_error_count = sum(
+            len(row.errors_json or [])
+            for row in persisted_rows
+            if row.status != MatterImportRowStatus.DUPLICATE
+        )
         if not job.valid_rows:
             job.status = MatterImportJobStatus.COMPLETED_WITH_ERRORS
             job.failed_count = job.total_rows
             job.imported_at = _now()
             job.updated_at = job.imported_at
             session.commit()
+            if job.duplicate_rows and not job.invalid_rows:
+                _raise_bad_request(
+                    "Every row in this import already exists as a matter, so "
+                    "there is nothing left to create."
+                )
             _raise_bad_request("No valid matter rows remain after commit-time revalidation.")
 
     claim_conditions = [
@@ -2852,7 +3039,12 @@ def commit_matter_import(
         session.scalars(select(MatterBulkImportRow).where(MatterBulkImportRow.job_id == job.id))
     )
     job.created_count = sum(1 for row in final_rows if row.status == MatterImportRowStatus.CREATED)
-    job.failed_count = job.total_rows - job.created_count
+    job.duplicate_rows = sum(
+        1 for row in final_rows if row.status == MatterImportRowStatus.DUPLICATE
+    )
+    # A duplicate that was deliberately skipped is not a failed row: an import
+    # whose only excluded rows were duplicates completed successfully.
+    job.failed_count = job.total_rows - job.created_count - job.duplicate_rows
     job.status = (
         MatterImportJobStatus.COMPLETED
         if job.failed_count == 0
@@ -2881,7 +3073,11 @@ def commit_matter_import(
         job=job,
         event_type="matter_import.completed",
         title="Matter import completed",
-        body=f"{job.created_count} matters were created; {job.failed_count} rows failed.",
+        body=(
+            f"{job.created_count} matters were created; "
+            f"{job.duplicate_rows} duplicate rows were skipped; "
+            f"{job.failed_count} rows failed."
+        ),
     )
     session.commit()
     job = _load_job(session, context=context, job_id=job.id)
@@ -2938,7 +3134,13 @@ def matter_import_error_report(
             .where(
                 MatterBulkImportRow.job_id == job.id,
                 MatterBulkImportRow.status.in_(
-                    [MatterImportRowStatus.INVALID, MatterImportRowStatus.FAILED]
+                    [
+                        MatterImportRowStatus.INVALID,
+                        MatterImportRowStatus.FAILED,
+                        # Skipped duplicates are not errors, but the user still
+                        # needs a record of exactly what was excluded.
+                        MatterImportRowStatus.DUPLICATE,
+                    ]
                 ),
             )
             .order_by(MatterBulkImportRow.row_number, MatterBulkImportRow.id)

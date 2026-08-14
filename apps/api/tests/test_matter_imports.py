@@ -924,7 +924,10 @@ def test_bulk_matter_import_reports_invalid_rows_and_unsupported_documents(
         "missing",
         "invalid",
     ]
-    assert rows[1]["status"] == "invalid"
+    # Ram BUG-003 (2026-08-14): a row whose only problem is duplication is
+    # skipped from the submission instead of being rejected for correction.
+    # The first row claimed ADP11-BAD, so this repeat is the skipped copy.
+    assert rows[1]["status"] == "duplicate"
     assert "Duplicate matter code in this import file." in rows[1]["errors"]
 
 
@@ -1035,7 +1038,10 @@ def test_bulk_matter_import_duplicate_detection_is_tenant_scoped(
     assert response_b.status_code == 200, response_b.text
     row_a = response_a.json()["rows"][0]
     row_b = response_b.json()["rows"][0]
-    assert row_a["status"] == "invalid"
+    # Ram BUG-003 (2026-08-14): a row that already exists in the tenant is
+    # skipped, not rejected. Tenant isolation is unchanged — tenant B still
+    # sees no candidate and stays importable.
+    assert row_a["status"] == "duplicate"
     assert row_a["duplicate_candidates"][0]["matter_code"] == "ADP11-DUP"
     assert row_b["status"] == "valid"
     assert row_b["duplicate_candidates"] == []
@@ -1301,7 +1307,7 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
         b"Matter Title,Matter Code,Practice Area,Forum,Court\n"
         b"Catalog-backed recovery,CATALOG-DRT-2,Commercial,DRAT / DRT,DRT-2\n"
         b"Catalog-backed High Court,CATALOG-HC-DELHI,Commercial,High Court,Delhi High Court\n"
-        b"Invalid invented tribunal,CATALOG-DRT-99,Commercial,DRAT / DRT,DRT-99\n"
+        b"Uncatalogued tribunal,CATALOG-DRT-99,Commercial,DRAT / DRT,DRT-99\n"
     )
 
     preview = client.post(
@@ -1312,9 +1318,13 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
 
     assert preview.status_code == 200, preview.text
     job = preview.json()
-    assert job["valid_rows"] == 2
-    assert job["invalid_rows"] == 1
-    valid_row, high_court_row, invalid_row = job["rows"]
+    # Ram BUG-002 (2026-08-14): a court outside the catalog no longer blocks the
+    # row. It keeps the category's canonical level with the court as free text,
+    # which is exactly what manual matter creation stores for the same input.
+    # Exact catalog values still enrich with lineage.
+    assert job["valid_rows"] == 3
+    assert job["invalid_rows"] == 0
+    valid_row, high_court_row, uncatalogued_row = job["rows"]
     assert valid_row["normalized"]["forum_catalog_entry_id"] == "drt:delhi:drt-2"
     assert valid_row["normalized"]["forum_level"] == "tribunal"
     assert valid_row["normalized"]["court_name"] == "DRT-2"
@@ -1322,9 +1332,10 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
     assert high_court_row["normalized"]["forum_catalog_entry_id"] == "hc:delhi"
     assert high_court_row["normalized"]["forum_level"] == "high_court"
     assert high_court_row["normalized"]["court_name"] == "Delhi High Court"
-    assert invalid_row["errors"] == [
-        "Court is not an active DRAT / DRT catalog selection."
-    ]
+    assert uncatalogued_row["errors"] == []
+    assert uncatalogued_row["normalized"]["forum_level"] == "tribunal"
+    assert uncatalogued_row["normalized"]["court_name"] == "DRT-99"
+    assert "forum_catalog_entry_id" not in uncatalogued_row["normalized"]
 
     committed = client.post(
         f"/api/matters/imports/{job['id']}/commit",
@@ -1332,8 +1343,8 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
     )
     assert committed.status_code == 200, committed.text
     result = committed.json()
-    assert result["job"]["status"] == "completed_with_errors"
-    assert len(result["created_matter_ids"]) == 2
+    assert result["job"]["status"] == "completed"
+    assert len(result["created_matter_ids"]) == 3
 
     records = []
     for matter_id in result["created_matter_ids"]:

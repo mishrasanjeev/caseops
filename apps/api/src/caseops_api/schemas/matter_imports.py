@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 BulkMatterImportManifestFormat = Literal["csv", "json", "xlsx"]
-BulkMatterImportRowStatus = Literal["valid", "invalid", "created", "failed"]
+BulkMatterImportRowStatus = Literal["valid", "invalid", "duplicate", "created", "failed"]
 BulkMatterImportJobStatus = Literal[
     "validated",
     "importing",
@@ -39,7 +39,7 @@ class BulkMatterImportDocumentReference(BaseModel):
 
 class BulkMatterImportRowPlan(BaseModel):
     row_number: int
-    status: Literal["valid", "invalid"]
+    status: Literal["valid", "invalid", "duplicate"]
     matter_code: str | None = None
     title: str | None = None
     matter_type: str | None = None
@@ -86,6 +86,7 @@ class BulkMatterImportDryRunSummary(BaseModel):
     valid_rows: int
     invalid_rows: int
     duplicate_candidate_rows: int
+    skipped_duplicate_rows: int = 0
     document_reference_count: int
     unsupported_document_reference_count: int
     available_document_count: int
@@ -123,6 +124,7 @@ class MatterImportJobResponse(BaseModel):
     total_rows: int
     valid_rows: int
     invalid_rows: int
+    duplicate_rows: int = 0
     created_count: int
     failed_count: int
     validation_error_count: int
