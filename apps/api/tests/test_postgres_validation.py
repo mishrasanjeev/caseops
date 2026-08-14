@@ -1996,3 +1996,35 @@ def test_notice_direction_and_reply_checks_on_postgres(pg_engine):
                         **invalid_state,
                     },
                 )
+
+
+def test_ip_rule_governance_fingerprint_uses_real_postgres_read_only_snapshot(
+    pg_engine,
+) -> None:
+    from caseops_api.scripts.ip_rule_governance_fingerprint import fingerprint_database
+
+    snapshot = fingerprint_database(pg_engine)
+
+    assert snapshot["database_context"]["dialect"] == "postgresql"
+    assert snapshot["database_context"]["alembic_heads"]
+    digest = snapshot["overall_sha256"]
+    assert isinstance(digest, str)
+    assert len(digest) == 64
+    assert set(digest) <= set("0123456789abcdef")
+
+    # The fingerprint transaction rolled back and did not leave a pooled
+    # connection read-only. A fresh transaction must still permit a temp write.
+    with pg_engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TEMP TABLE caseops_a0_fingerprint_write_probe "
+            "(value integer NOT NULL) ON COMMIT DROP"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO caseops_a0_fingerprint_write_probe (value) VALUES (1)"
+        )
+        assert (
+            connection.exec_driver_sql(
+                "SELECT value FROM caseops_a0_fingerprint_write_probe"
+            ).scalar_one()
+            == 1
+        )
