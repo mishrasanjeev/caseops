@@ -604,6 +604,7 @@ export default function MatterOverviewPage() {
       </Card>
 
       <ConflictCheckCard
+        key={data.matter.id}
         matterId={data.matter.id}
         matterLifecycleVersion={data.matter.lifecycle_version}
         opposingParty={data.matter.opposing_party}

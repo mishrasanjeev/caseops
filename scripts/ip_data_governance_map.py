@@ -86,6 +86,11 @@ RISKY_PATHS = {
     "infra/cloudrun/api-service.yaml",
     "infra/cloudrun/document-worker-job.yaml",
 }
+RISKY_SOURCE_ROOTS = (
+    "apps/api/src/",
+    "apps/web/",
+    "infra/",
+)
 RISKY_SOURCE_PATTERN = re.compile(
     r"\b(?:"
     r"google\.cloud|boto3|azure\.storage|storage\.Client|"
@@ -1214,7 +1219,9 @@ def change_gate_errors(
             risky_paths.append(path)
             continue
         source = source_by_path.get(path, "")
-        if path in RISKY_PATHS or RISKY_SOURCE_PATTERN.search(source):
+        if path in RISKY_PATHS or (
+            path.startswith(RISKY_SOURCE_ROOTS) and RISKY_SOURCE_PATTERN.search(source)
+        ):
             risky_paths.append(path)
     errors: list[str] = []
     if risky_paths and not map_changed:
