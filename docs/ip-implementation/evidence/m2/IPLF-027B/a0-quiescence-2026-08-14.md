@@ -2,13 +2,17 @@
 
 ## Status and boundary
 
-This artifact records schema-free A0 application and release-control
-implementation anchor `f8a3c2c579b5d98c77827a3651cebd6c8a42a12a`, rebased on
-canonical predecessor `3177f0176305e8790f40c3f771daebe595087955`. It does not
-claim exact-head GitHub checks, merge, deployment, production drain, migration,
+This artifact records schema-free A0 application, fingerprint, deploy-control,
+and production-acceptance implementation anchor
+`8775ce3059000fb586a29a969c21b8b9bf321e19`, based on canonical production
+predecessor `3177f0176305e8790f40c3f771daebe595087955`. It also records one
+bounded, successful fixture-preparation run while both production services
+still served that exact predecessor. It does not claim exact-anchor GitHub
+checks, merge, A0 deployment, pre-route fingerprint capture, production A0
+verification, drain, revision retirement, `T_FENCE`, A1 migration, A2
 activation, or completion of IPLF-027B, RULE-GOV-01..08, UJ-47, UJ-67, or the
-IP program. The immutable implementation anchor has repository-local evidence
-only; this separate evidence head and all release evidence remain pending.
+IP program. The separate evidence head and all remaining release evidence are
+pending.
 
 The existing `CASEOPS_IP_RULE_GOVERNANCE_ENABLED` setting remains `false` by
 default. With the flag off, the canonical service rejects each in-scope writer
@@ -26,8 +30,13 @@ update, audit write, or commit. The typed detail is:
 
 Setting the flag to `true` preserves the existing governance service paths.
 The five existing legal-deadline mutation paths remain operable with the flag
-off. A0 adds no schema, endpoint, worker, scheduler, provider call, legal act,
-or external effect.
+off. The A0 application change adds no schema, endpoint, worker, recurring
+scheduler, provider call, or real legal act. Its controlled release proof is
+not database-write-free: predecessor preparation intentionally created a
+synthetic QA governance fixture, and scheduled verification creates synthetic
+Matter/deadline/audit history before disposing the Matter. Those bounded writes
+have no client data, notification intent, provider delivery, filing, payment,
+message, or other external legal effect.
 
 ## Writer inventory
 
@@ -100,6 +109,23 @@ The production failures are only the unchanged recommendation/citation HTTP
 This remains a red global production gate. No provider recovery is inferred,
 and the authority-metadata scheduler remains paused.
 
+### Superseded A0 candidate check history
+
+PR #227 head `ee7fc8806ba047f8e43169320960b0582a63a25c` did not pass its
+complete CI gate. CI run `31824470731` failed only Playwright job
+`94853466029`: 139 tests passed, one failed, and one skipped. API Ruff, all ten
+API pytest shards, aggregate API coverage, real PostgreSQL validation, and the
+web job passed; Security run `31824470754` and CodeQL run `31824470753` also
+passed. The single failure was the existing dated
+`iplf-023b-deadline-workflow-2026-08-09.spec.ts`: its local app harness expected
+deadline proposal HTTP 201 but received the intentional A0 governance HTTP 503
+because the harness had not explicitly enabled
+`CASEOPS_IP_RULE_GOVERNANCE_ENABLED`. This was a test-environment configuration
+gap, not a production deadline regression or a passing exact-head gate.
+Implementation anchor `8775ce3059000fb586a29a969c21b8b9bf321e19` makes the
+local/app enablement explicit; it must receive a new complete exact-head CI,
+Security, and CodeQL verdict.
+
 The serving API predecessor does not contain the A0 fence and has no explicit
 governance environment override; its setting only falls back to the existing
 default false. It is therefore part of the unfenced writer-capable retirement
@@ -109,17 +135,150 @@ cohort after exact A0 is serving. The manually invokable
 and must be repinned to exact A0 without execution. Recheck that no
 writer-capable execution is running immediately before rollout.
 
+### Completed predecessor-only fixture preparation
+
+The one-time `prepare` mode completed while both canonical production origins
+reported exact predecessor `3177f0176305e8790f40c3f771daebe595087955`. The
+isolated production Playwright config ran one test successfully in 4.8 seconds
+(4.5-second test body) and exited 0; the post-run timestamp was
+`2026-08-15T00:23:59+05:30`. This is direct operator-observed local command
+output, not an external workflow execution, so it has no external run ID. It
+created the deterministic synthetic IP QA docket,
+working calendar, rule version, company rule-policy selection, and selection
+anchor needed by the post-route acceptance. Temporary reviewer and legal-
+approver administrators were deactivated before completion. The durable
+synthetic governance fixture and its audit history intentionally remain so the
+pre-route fingerprint durably captures the exact state consumed after routing.
+The run
+created no notification intent or external delivery and proves preparation
+only; it does not prove the A0 fence, deployment, drain, or release.
+
+Preparation is permitted only while API and web both serve the hard-coded
+predecessor. If it must be repeated, use the checked-in secret-safe command in
+`tests/e2e/iplf-027b-a0-quiescence-2026-08-14-prod.spec.ts`; do not weaken or
+override its exact-origin, exact-release, reserved-shape, or cleanup guards. If
+either serving release differs, stop and re-review the predecessor boundary.
+
+### Read-only database/audit fingerprint control
+
+The exact A0 API image includes the module invoked as
+`python -m caseops_api.scripts.ip_rule_governance_fingerprint`. It reads one consistent,
+database-enforced read-only snapshot and streams primary-key-ordered rows in
+batches of 500. It fingerprints every persisted column of `IpRuleSet`,
+`IpRuleVersion`, and `CompanyIpRulePolicy`, plus only `AuditEvent` rows whose
+action begins `ip.rule_version.` **or** whose target type is
+`ip_rule_set`, `ip_rule_version`, or `company_ip_rule_policy`. The OR boundary
+also detects malformed or alternate governance audit writes. Canonical JSON
+output contains only row counts,
+per-column/overall maximum timestamps, content SHA-256 values, the explicit
+audit filter, sorted Alembic heads/current schema, a capture timestamp, and an
+overall SHA-256. It never emits row values. The PostgreSQL path asserts a
+repeatable-read, read-only transaction and a 60-second per-statement timeout.
+`captured_at` is evidence metadata outside the equality/hash body, so unchanged
+captures compare equal. A query or serialization error exits 1 without partial
+stdout; a comparison drift exits 3 and identifies only the changed dataset,
+not its contents.
+
+The canonical deploy has an A0-only, default-off pre-route hook. When opted in,
+it first builds the exact image, completes the schema-free migration, reconciles
+recurring jobs, repins `caseops-ip-qa-bootstrap` without changing its execution
+count/latest execution, and proves that no Cloud Run Job execution lacks a
+terminal `Completed` condition. Only then does it configure and run the
+fingerprint job, persist/validate the baseline, print its SHA-256, and continue
+to API routing. Any failure aborts before `gcloud run deploy caseops-api`.
+Ordinary deploys do not enter this branch. Use a new, non-existing evidence
+path:
+
+```bash
+A0_RELEASE_SHA="<40-lowercase-hex>"
+CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE=true \
+CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT="outputs/a0-fingerprint-pre-route.json" \
+  bash scripts/deploy-prod.sh "${A0_RELEASE_SHA}"
+```
+
+After successful deployment, take `A0_IMAGE` from the exact immutable digest
+printed by the same deploy and extract the already-captured baseline SHA:
+
+```bash
+A0_IMAGE="asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:<64-lowercase-hex>"
+BASELINE_SHA="$(python -c 'import json; print(json.load(open("outputs/a0-fingerprint-pre-route.json", encoding="utf-8"))["overall_sha256"])')"
+test "${#BASELINE_SHA}" -eq 64
+```
+
+Every later observation is an enforced comparison, not an operator eyeball
+check. Run the same form immediately after `T_ROUTE`, after the first 301
+second drain and old-request/log review, at `T_FENCE`, and after the second
+301 second plus log-ingestion window. Use distinct output/evidence names at
+each boundary:
+
+```bash
+bash scripts/ip-rule-governance-fingerprint-job.sh \
+  execute "${A0_IMAGE}" "${BASELINE_SHA}" \
+  > a0-fingerprint-BOUNDARY.json \
+  2> a0-fingerprint-BOUNDARY.execution.log
+```
+
+Any nonzero execution, exit 3 drift, image mismatch, absent execution
+identity, non-successful exact execution description, or missing canonical JSON
+blocks legacy revision deletion, `T_FENCE`, and A1. The wrapper captures the
+execution identity from the execute response, requires its exact image,
+terminal success and 1/1 task count, and polls only that execution's logs for a
+bounded ingestion window. Preserve every snapshot, execution log/identity,
+exact image digest, and comparison exit status in release evidence. The
+fingerprint job is a temporary release control and must remain outside
+recurring scheduler inventory.
+
+### Exact-release production acceptance and synthetic-data boundary
+
+`playwright.ip-a0-prod.config.ts` selects only the dated IPLF-027B production
+spec, uses empty storage state with one worker, and disables trace, screenshot,
+and video retention. The general and app Playwright configs explicitly exclude
+that spec. The test hard-codes `https://caseops.ai`,
+`https://api.caseops.ai`, `caseops-ip-qa`, and `ip-qa-bot@caseops.ai`, rejects
+redirects, and requires both release-identity endpoints to equal the supplied
+40-character release before authentication or mutation. The canonical
+production workflow supplies only the scoped QA password, exact serving SHA,
+and `verify` mode; it never prepares governance state.
+
+Verification first reconciles only prior Matters matching the complete reserved
+synthetic A0 shape. It proves all three governance endpoints return the typed
+503 with deliberately non-mutating fallback payloads, then exercises all five
+legal-deadline writers over the prepared immutable rule selection. Each run
+creates synthetic Matter, conflict-check, docket, deadline, responsibility,
+operational projection, and audit history. Empty reminder offsets are required,
+both impact reads must show no notification intents, and no provider or
+recipient delivery is invoked. A `finally` block disposes the current synthetic
+Matter through the lifecycle endpoint, proves it remains inactive after reload,
+and proves its child docket is no longer operational. Disposed Matter, docket,
+deadline, conflict-check, projection, and audit history remain as intentional
+production QA evidence; `verify-only` means that the run does not create or
+change the governance fixture, not that it performs no database writes. A
+failed or interrupted run remains a failed production gate, and the next run
+must reconcile any exact-shape operational residue before continuing.
+
 ## A0 / A1 / A2 rollout protocol
 
 ### A0 - deploy and prove quiescence
 
-1. Before deployment, record the exact writer-capable revision allowlist, zero
-   running Cloud Run Job executions, and a read-only fingerprint/max-timestamp
-   snapshot for rule sets, rule versions, company policies, and governance
-   audits. Validate and merge A0, then deploy that exact revision with
-   `CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false` explicitly present on the API
-   container. Repin any manually invokable writer-era job image, including
-   `caseops-ip-qa-bootstrap`, to the exact A0 digest without executing it.
+1. While API and web still serve exact predecessor `3177f017...`, complete the
+   isolated one-time `prepare` mode before the baseline. The recorded run has
+   already passed and left only the intentional persistent synthetic governance
+   fixture plus inactive temporary administrator records. Reassert that exact
+   serving identity immediately before rollout; if production has changed,
+   abort rather than bypassing or editing the predecessor guard. Validate and
+   merge exact A0, re-enumerate the writer-capable revision allowlist, and invoke
+   the canonical deploy with its A0 baseline hook enabled and a new evidence
+   path. The hook builds the exact image, completes the schema-free migrate job,
+   reconciles recurring jobs, repins `caseops-ip-qa-bootstrap` to the exact A0
+   digest with its material configuration and execution identity/count
+   unchanged, and proves no Cloud Run Job execution lacks a terminal
+   `Completed` condition. It then captures and validates the read-only
+   rule/version/policy/governance-audit fingerprint, including the prepared
+   fixture, as the final pre-route control. Only after those checks pass may the
+   deploy create the API revision with
+   `CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false` explicitly present. Preserve the
+   printed baseline SHA-256 and snapshot; any hook failure must leave API
+   traffic on the predecessor.
 2. Route 100% of API traffic to exact A0. The canonical deploy script uses
    `--to-latest --clear-tags` and now fails unless observed generation, ready
    conditions, latest-created/latest-ready identity, exact release SHA,
@@ -254,22 +413,22 @@ this artifact. A2 is forbidden if any runtime, reviewer, evaluator,
 effective-range/emergency-disable, PostgreSQL-ownership/concurrency,
 negative-test, or exact deployed evidence gate is missing.
 
-## Local verification
+## Repository verification
 
-The candidate currently has repository-local evidence only:
+Implementation anchor `8775ce3059000fb586a29a969c21b8b9bf321e19` has the
+following local evidence. The completed predecessor preparation is recorded
+separately above and does not convert these results into A0 deployment proof:
 
 | Command | Result |
 |---|---|
-| `uv --directory apps/api run pytest -q tests/test_ip_rule_governance_quiescence.py` | 9 passed |
-| `uv --directory apps/api run pytest -q tests/test_ip_deadline_workflow.py` | 9 passed; governance setup/transition use explicit true, while all five legal-deadline writers are exercised after switching false |
-| combined focused tests | 18 passed; zero skipped |
-| `uv --directory apps/api run pytest -q tests/test_deploy_prod_hardening.py` | 19 passed; includes exact traffic/config/image success and fail-closed traffic, generation, flag, and immutable-image drift |
-| combined A0 service/workflow/deploy-hardening suite | 37 passed; zero skipped |
-| `uv --directory apps/api run pytest -q tests/test_ip_data_governance_map.py` | 10 passed; exact 028C projection/control regression retained after rebase |
-| focused Ruff | passed |
-| `uv --directory apps/api run ruff format --check src/caseops_api/services/ip_deadline_workflow.py tests/test_ip_rule_governance_quiescence.py tests/test_ip_deadline_workflow.py tests/test_deploy_prod_hardening.py` | 4 A0-changed Python files already formatted |
-| `bash -n scripts/deploy-prod.sh` | passed with Git for Windows Bash |
-| program, ownership, ARCH-OPS, data-class, data-governance registry/map, change-gate, and M2 ownership validators | passed |
+| combined fingerprint, fence, deadline-workflow, deploy-hardening, and image-pinning pytest command | 60 passed; zero skipped |
+| `uv --directory apps/api run ruff check src tests` | passed |
+| scoped Ruff format checks for the new/changed A0 Python files | passed; unrelated whole-file mixed-EOL churn was not incorporated |
+| `bash -n scripts/deploy-prod.sh` and `bash -n scripts/ip-rule-governance-fingerprint-job.sh` | passed with Git for Windows Bash |
+| `uv --directory apps/api lock --check` | passed; no lockfile change |
+| dedicated A0 production and app IPLF-023B Playwright collection | each selected exactly its intended one test |
+| rebuild-first `iplf-023b-deadline-workflow-2026-08-09.spec.ts` app run | 1 passed; proves explicit local governance enablement fixes the superseded `ee7` harness failure |
+| program, ownership, ARCH-OPS, data-class, data-governance registry/map, change-gate, and M2 ownership validators | passed after this reconciliation |
 
 The focused fence tests use a session sentinel that fails on any database
 access. They cover all three governance writers, the exact typed 503, false ->
@@ -279,13 +438,20 @@ tests set up rule governance with the flag true, switch it off, and then prove
 deadline proposal, confirmation, recalculation, override, and completion plus
 their audit/projection behavior remain operable. The separate exception test
 retains transition and tenant-isolation coverage with governance enabled.
+Fingerprint tests prove deterministic all-column hashing, OR-scoped audit
+filtering, mutation and comparison mismatch detection, capture-time exclusion,
+no write/commit, query and serialization failure, strict evidence validation,
+and PostgreSQL transaction-control assertions with a fake connection. A real
+PostgreSQL invocation of the new marked test remains an exact-head CI gate; no
+local SQLite or fake-connection result substitutes for it.
 
 ## Remaining release gate
 
-A0 has exact implementation anchor `f8a3c2c579b5d98c77827a3651cebd6c8a42a12a`
-but remains unreleased until the evidence head passes independent review and
-complete exact-head CI/Security/CodeQL, canonical merge, exact image/revision
-deployment, 100% traffic identity,
+A0 has exact implementation anchor `8775ce3059000fb586a29a969c21b8b9bf321e19`
+and a completed exact-predecessor fixture-preparation run, but remains
+unreleased until the evidence head passes independent review and complete
+exact-head CI/Security/CodeQL, canonical merge, pre-route fingerprint capture,
+exact image/revision deployment, 100% traffic identity,
 legacy-route removal, explicit writer-capable legacy-revision termination,
 observed shutdown,
 revision-log plus rule/version/policy/audit no-write proof, and the same dated
