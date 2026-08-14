@@ -1059,3 +1059,26 @@ could pass while the actual main navigation remained broken. The regression now
 starts at the shared desktop/mobile navigation primitive and proves the loaded
 destination. The summary workbook records the item-level fix separately from
 the release-level migration blocker.
+
+## CaseOps BUG-001..004 — Ram 2026-08-14 Bulk Matter Upload
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps_Bug_list_Ram14Aug2026.xlsx`.
+Summary workbook: `C:\Users\mishr\Downloads\CaseOps_Bug_list_Ram14Aug2026_BugFixSummary.xlsx`.
+Permanent learning record: `docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md`.
+Fix commit: `6db34b64` (deployed) on `claude/bulk-import-ram-20260814`, PR #222.
+
+| ID | Classification | Formal verdict | Evidence / action |
+| --- | --- | --- | --- |
+| BUG-001 | Valid CaseOps import/validation bug | `Properly fixed` | Forum values outside the alias tables leaked the raw pydantic Literal error to the user. Aliases expanded and unsupported values now return an actionable message. `tests/e2e/ram-2026-08-14-prod.spec.ts:286` PASSED on deployed `6db34b64` (rev `caseops-api-00289-l9g`); prod matter `RAM814-FAM` stored `forum_level=lower_court`. |
+| BUG-002 | Valid CaseOps import/validation bug | `Properly fixed` | Bulk import was stricter than manual creation for the identical object; proved on production that `POST /api/matters/` accepted `tribunal` + free-text "DRT Delhi" while bulk rejected it. Categories now fail open to the canonical level, with scoped token matching retaining lineage on match. `tests/e2e/ram-2026-08-14-prod.spec.ts:286,352` PASSED on `6db34b64`. |
+| BUG-003 | Valid, reported one layer off | `Properly fixed` | Duplicates were already excluded from creation; the defect was classifying them `invalid`. New `duplicate` row status is skipped and excluded from `validation_error_count`/`failed_count`, first-occurrence-wins so the original still imports. `tests/e2e/ram-2026-08-14-prod.spec.ts:409` PASSED on `6db34b64`. |
+| BUG-004 | Valid in part | `Properly fixed` | Header aliases accepted a bare name column while resolution was email-only. Owner/lawyer now resolve by unique full name too; ambiguous names rejected, not guessed. `tests/e2e/ram-2026-08-14-prod.spec.ts:467` PASSED on `6db34b64`. |
+| ADJ-TEAM-SCOPING-2026-08-14 | Not a defect | n/a | "Matter owner must belong to the assigned team" also fires on manual creation (`services/matters.py:1376`). It is a scoping control; only the message was made actionable. Deliberately not weakened. |
+| ADJ-DEPLOY-COLLISION-2026-08-14 | Valid release-process defect (self-inflicted) | `Properly fixed` | Deploying migration-bearing `6db34b64` from an unmerged branch applied `20260814_0001` to production and failed the concurrent `f24d5aff` migrate job (`caseops-migrate-job-2kg2t`) with `Can't locate revision identified by '20260814_0001'`. Resolved by merging PR #222 so the revision rejoins the chain. `alembic_version` was never hand-edited. |
+
+Why this case reopened: the 2026-08-11 prevention rule 5 specified strictness
+in one direction only and was implemented as a three-family allowlist, making
+bulk import stricter than the manual path it was meant to match. That rule is
+now annotated as superseded in place. Two structural guards close the class:
+`test_bulk_import_is_never_stricter_than_manual_creation` and
+`test_every_forum_the_template_offers_can_actually_be_imported`.
