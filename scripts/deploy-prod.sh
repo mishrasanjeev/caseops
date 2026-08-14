@@ -74,6 +74,30 @@ API_MIN_INSTANCES="${API_MIN_INSTANCES:-1}"
 # warm. caseops-web is stateless (no DB / sidecar); one cpu=1/512Mi
 # warm instance is ~$10-18/mo. Override with WEB_MIN_INSTANCES=0.
 WEB_MIN_INSTANCES="${WEB_MIN_INSTANCES:-1}"
+# IPLF-027B A0 only: opt in to a fail-closed governance fingerprint at the
+# final pre-route boundary, after migration and job reconciliation. Ordinary
+# releases preserve the historical path exactly.
+A0_CAPTURE_RULE_GOVERNANCE_BASELINE="${CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE:-false}"
+A0_RULE_GOVERNANCE_BASELINE_OUTPUT="${CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT:-}"
+
+if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "true" && "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "false" ]]; then
+  echo "ERROR: CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE must be true or false."
+  exit 2
+fi
+if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
+  if [[ -z "${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}" ]]; then
+    echo "ERROR: CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT is required for A0 capture."
+    exit 2
+  fi
+  if [[ -e "${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}" ]]; then
+    echo "ERROR: refusing to overwrite existing A0 fingerprint evidence ${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}."
+    exit 2
+  fi
+  if [[ ! -d "$(dirname "${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}")" ]]; then
+    echo "ERROR: A0 fingerprint evidence directory does not exist."
+    exit 2
+  fi
+fi
 
 if [[ "$#" -gt 1 ]]; then
   echo "Usage: scripts/deploy-prod.sh [commit-sha]"
@@ -171,6 +195,160 @@ python scripts/scheduler_inventory.py reconcile \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --image "${API_IMMUTABLE_IMAGE}"
+
+if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
+  echo "--- IPLF-027B A0 final pre-route quiescence baseline ---"
+  # This manually invokable writer-era job is not part of recurring inventory.
+  # Pin it without execution before establishing the no-writer baseline.
+  A0_QA_JOB_BEFORE=""
+  A0_QA_JOB_AFTER=""
+  A0_BASELINE_TEMP=""
+  cleanup_a0_control_files() {
+    [[ -z "${A0_QA_JOB_BEFORE}" ]] || rm -f -- "${A0_QA_JOB_BEFORE}"
+    [[ -z "${A0_QA_JOB_AFTER}" ]] || rm -f -- "${A0_QA_JOB_AFTER}"
+    [[ -z "${A0_BASELINE_TEMP}" ]] || rm -f -- "${A0_BASELINE_TEMP}"
+  }
+  trap cleanup_a0_control_files EXIT
+  A0_QA_JOB_BEFORE=$(mktemp)
+  A0_QA_JOB_AFTER=$(mktemp)
+  gcloud run jobs describe caseops-ip-qa-bootstrap \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format=json > "${A0_QA_JOB_BEFORE}"
+  gcloud run jobs update caseops-ip-qa-bootstrap \
+    --image "${API_IMMUTABLE_IMAGE}" \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --quiet
+  gcloud run jobs describe caseops-ip-qa-bootstrap \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format=json > "${A0_QA_JOB_AFTER}"
+  if ! python - "${A0_QA_JOB_BEFORE}" "${A0_QA_JOB_AFTER}" \
+    "${API_IMMUTABLE_IMAGE}" "caseops-runtime@${PROJECT}.iam.gserviceaccount.com" \
+    "${PROJECT}:${REGION}:caseops-db" <<'PY'
+import json
+from copy import deepcopy
+import sys
+
+before_path, after_path, image, service_account, cloud_sql = sys.argv[1:]
+before = json.load(open(before_path, encoding="utf-8"))
+after = json.load(open(after_path, encoding="utf-8"))
+metadata = after.get("metadata", {})
+status = after.get("status", {})
+before_template = before.get("spec", {}).get("template", {})
+before_job_spec = before_template.get("spec", {})
+before_task_spec = before_job_spec.get("template", {}).get("spec", {})
+before_container = (before_task_spec.get("containers") or [{}])[0]
+after_template = after.get("spec", {}).get("template", {})
+job_spec = after_template.get("spec", {})
+task_spec = job_spec.get("template", {}).get("spec", {})
+container = (task_spec.get("containers") or [{}])[0]
+before_annotations = before_template.get("metadata", {}).get("annotations", {})
+annotations = after_template.get("metadata", {}).get("annotations", {})
+errors = []
+if str(metadata.get("generation")) != str(status.get("observedGeneration")):
+    errors.append("generation")
+if not any(
+    item.get("type") == "Ready" and str(item.get("status")).lower() == "true"
+    for item in status.get("conditions", [])
+):
+    errors.append("ready")
+if container.get("image") != image:
+    errors.append("image")
+if container.get("command") != ["caseops-bootstrap-ip-production-qa"]:
+    errors.append("command")
+if before_container.get("args") != container.get("args"):
+    errors.append("args_changed")
+if container.get("args") not in (None, []):
+    errors.append("args")
+env = {item.get("name"): item.get("value") for item in container.get("env", [])}
+if env.get("CASEOPS_AUTO_MIGRATE") != "false":
+    errors.append("auto_migrate")
+if task_spec.get("serviceAccountName") != service_account:
+    errors.append("service_account")
+if annotations.get("run.googleapis.com/cloudsql-instances") != cloud_sql:
+    errors.append("cloud_sql")
+if job_spec.get("taskCount") != 1:
+    errors.append("task_count")
+if job_spec.get("parallelism") not in (None, 1):
+    errors.append("parallelism")
+if task_spec.get("maxRetries") != 0:
+    errors.append("max_retries")
+if task_spec.get("timeoutSeconds") not in (600, "600", "600s"):
+    errors.append("timeout")
+for field in ("taskCount", "parallelism"):
+    if before_job_spec.get(field) != job_spec.get(field):
+        errors.append(f"{field}_changed")
+for field in ("maxRetries", "timeoutSeconds"):
+    if before_task_spec.get(field) != task_spec.get(field):
+        errors.append(f"{field}_changed")
+normalized_before_task_spec = deepcopy(before_task_spec)
+normalized_containers = normalized_before_task_spec.get("containers", [])
+if normalized_containers:
+    normalized_containers[0]["image"] = image
+if normalized_before_task_spec != task_spec:
+    errors.append("all_container_configuration_changed")
+for annotation in (
+    "run.googleapis.com/cloudsql-instances",
+    "run.googleapis.com/execution-environment",
+):
+    if before_annotations.get(annotation) != annotations.get(annotation):
+        errors.append(f"{annotation}_changed")
+before_status = before.get("status", {})
+if before_status.get("executionCount") != status.get("executionCount"):
+    errors.append("execution_count_changed")
+if before_status.get("latestCreatedExecution", {}).get("name") != status.get(
+    "latestCreatedExecution", {}
+).get("name"):
+    errors.append("latest_execution_changed")
+if errors:
+    print("QA bootstrap repin verification failed: " + ",".join(errors), file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
+    rm -f -- "${A0_QA_JOB_BEFORE}" "${A0_QA_JOB_AFTER}"
+    echo "ERROR: caseops-ip-qa-bootstrap repin proof failed without execution."
+    exit 1
+  fi
+  rm -f -- "${A0_QA_JOB_BEFORE}" "${A0_QA_JOB_AFTER}"
+  A0_QA_JOB_BEFORE=""
+  A0_QA_JOB_AFTER=""
+
+  NONTERMINAL_EXECUTIONS=$(gcloud run jobs executions list \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format=json | python -c 'import json, sys; rows=json.load(sys.stdin); print("\n".join(str(row.get("metadata", {}).get("name", "<unknown>")) for row in rows if not any(condition.get("type") == "Completed" for condition in row.get("status", {}).get("conditions", []))))')
+  if [[ -n "${NONTERMINAL_EXECUTIONS}" ]]; then
+    echo "ERROR: nonterminal Cloud Run Job executions remain; refusing the A0 baseline:"
+    printf '%s\n' "${NONTERMINAL_EXECUTIONS}"
+    exit 1
+  fi
+
+  bash scripts/ip-rule-governance-fingerprint-job.sh \
+    configure "${API_IMMUTABLE_IMAGE}" "${HEAD_SHA}"
+  A0_BASELINE_TEMP=$(mktemp "${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}.tmp.XXXXXX")
+  if ! bash scripts/ip-rule-governance-fingerprint-job.sh \
+    execute "${API_IMMUTABLE_IMAGE}" > "${A0_BASELINE_TEMP}"; then
+    rm -f -- "${A0_BASELINE_TEMP}"
+    echo "ERROR: A0 pre-route rule-governance fingerprint failed; aborting before API routing."
+    exit 1
+  fi
+  if ! A0_RULE_GOVERNANCE_BASELINE_SHA=$(python \
+    scripts/validate_ip_rule_governance_fingerprint.py \
+    --require-postgresql \
+    --print-sha \
+    "${A0_BASELINE_TEMP}"); then
+    rm -f -- "${A0_BASELINE_TEMP}"
+    echo "ERROR: A0 fingerprint output was not the complete canonical snapshot; aborting before API routing."
+    exit 1
+  fi
+  mv -- "${A0_BASELINE_TEMP}" "${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}"
+  A0_BASELINE_TEMP=""
+  echo "A0_RULE_GOVERNANCE_BASELINE_SHA256=${A0_RULE_GOVERNANCE_BASELINE_SHA}"
+  echo "  pre-route evidence=${A0_RULE_GOVERNANCE_BASELINE_OUTPUT}"
+  trap - EXIT
+fi
 
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.

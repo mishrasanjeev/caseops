@@ -3,7 +3,12 @@ import path from "node:path";
 
 import { defineConfig } from "@playwright/test";
 
-import { apiBaseUrl, e2eEnv, repoRoot, webBaseUrl } from "./tests/e2e/support/env";
+import {
+  apiBaseUrl,
+  e2eEnv,
+  repoRoot,
+  webBaseUrl,
+} from "./tests/e2e/support/env";
 
 const browserExecutableCandidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -16,6 +21,9 @@ const browserExecutablePath = browserExecutableCandidates.find((candidate) =>
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
+  // The live-tenant A0 canary is permitted only through its dedicated exact-
+  // release config/workflow, never the general local Playwright entrypoint.
+  testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,
@@ -23,10 +31,7 @@ export default defineConfig({
     timeout: 15_000,
   },
   globalSetup: path.join("tests", "e2e", "global-setup.ts"),
-  reporter: [
-    ["list"],
-    ["html", { open: "never" }],
-  ],
+  reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: webBaseUrl,
     headless: true,

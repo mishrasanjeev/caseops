@@ -18,6 +18,9 @@ const webBaseUrl = process.env.CASEOPS_WEB_BASE_URL ?? "http://127.0.0.1:3100";
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
+  // This production-only acceptance owns real QA credentials and exact-release
+  // gates. It runs only through its dedicated config/workflow, never app CI.
+  testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
   testMatch: [
     /marketing\.spec\.ts/,
     /app-spine\.spec\.ts/,
