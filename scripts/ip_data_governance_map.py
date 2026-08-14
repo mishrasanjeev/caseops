@@ -667,7 +667,8 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             "kind": "provider_held_object",
             "purpose": (
                 "Configured or optional LLM, embedding, and prompt-cache provider request/response "
-                "content and derived vectors."
+                "content and derived vectors, including bounded authority-metadata extraction "
+                "and its one-document provider canary."
             ),
             "sensitivity": "privileged_or_confidential",
             "source_licence_limits": (
@@ -676,6 +677,7 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             ),
             "implementation_refs": [
                 "apps/api/src/caseops_api/services/llm.py",
+                "apps/api/src/caseops_api/scripts/extract_authority_metadata.py",
                 "apps/api/src/caseops_api/services/embeddings.py",
                 "apps/api/src/caseops_api/core/settings.py",
             ],
