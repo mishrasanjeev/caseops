@@ -104,7 +104,7 @@ The serving API predecessor does not contain the A0 fence and has no explicit
 governance environment override; its setting only falls back to the existing
 default false. It is therefore part of the unfenced writer-capable retirement
 cohort after exact A0 is serving. The manually invokable
-`caseops-ip-qa-bootstrap` job remains on predecessor image digest
+`caseops-ip-qa-bootstrap` job remains on older unfenced writer-era image digest
 `sha256:a240a974dbd8ed12a05b9ee179209dc1d8da3618fed2899bd07e877e84d78b4b`
 and must be repinned to exact A0 without execution. Recheck that no
 writer-capable execution is running immediately before rollout.
