@@ -12,6 +12,13 @@ would still read as a failed upload.
 
 Additive and backfilled from the existing rows, so historical jobs report the
 same duplicate count they would report if revalidated today.
+
+DATA-GOVERNANCE-MAP: updated
+The new ``matter_bulk_import_jobs.duplicate_rows`` column is a non-nullable
+integer counter carrying no client, privileged, or personal content. It is
+registered in ``docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml`` as a
+``domain_attribute`` under the existing ``matter_bulk_import_jobs`` class,
+whose policy profile and tenant scoping are unchanged by this revision.
 """
 
 from __future__ import annotations
