@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import SimpleNamespace
+from typing import NoReturn
 
 import pytest
 from fastapi import HTTPException
@@ -25,9 +26,17 @@ class _NoDatabaseAccess:
     def __init__(self) -> None:
         self.accesses: list[str] = []
 
-    def __getattr__(self, name: str) -> object:
+    def _fail(self, name: str) -> NoReturn:
         self.accesses.append(name)
         raise _DatabaseAccessAttempted(name)
+
+    @property
+    def get(self) -> NoReturn:
+        self._fail("get")
+
+    @property
+    def scalar(self) -> NoReturn:
+        self._fail("scalar")
 
 
 Writer = Callable[[_NoDatabaseAccess], object]

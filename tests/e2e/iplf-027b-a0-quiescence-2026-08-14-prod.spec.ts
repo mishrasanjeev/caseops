@@ -752,7 +752,7 @@ async function prepareFixture(
           201,
           "propose the deterministic A0 rule",
         ));
-      rule = await jsonResponse<RuleRecord>(
+      await jsonResponse<RuleRecord>(
         await api.post(
           `${PROD_API_BASE_URL}/api/ip/deadline-rules/${candidate.id}/activate`,
           {
