@@ -58,6 +58,10 @@ not upgrade the verdict.
   - confirm the user-visible error remains actionable
 - Mobile or responsive bugs:
   - verify on an actual mobile viewport, not desktop only
+- Bulk, import, or migration bugs:
+  - diff the bulk path against the interactive path that writes the same object
+  - prove the bulk path accepts everything the interactive path accepts
+  - check any generated template/dropdown against the validator that reads it
 
 - Catalog-backed selector bugs:
   - assert the complete user-facing invariant, not only seeded examples
@@ -440,3 +444,47 @@ For every terminal lifecycle repair, add all of the following where applicable:
 - `/api/health` or an HTTP 200 response proves availability, not deployed
   commit identity. Do not issue a clean production verdict without a build
   fingerprint or an explicitly documented equivalent.
+
+### Two-path parity and picker/validator agreement (added 2026-08-14)
+
+These rules exist because a prevention rule I wrote on 2026-08-11 caused Ram's
+2026-08-14 workbook three days later. That rule required the forum hierarchy to
+have "one server-owned active master" and to "reject ambiguous/invented
+values". It specified strictness in one direction only, was implemented as a
+three-family allowlist, and thereby made bulk matter import **stricter** than
+the manual create path it was meant to match. With four DRT entries in the
+production catalog for all of India, a Mumbai DRT matter became unimportable
+while the identical payload created fine by hand.
+
+- **Parity between two write paths is a two-way property.** When two entry
+  points create the same business object, the bulk/import/migration path must
+  accept everything the interactive path accepts. Assert it with a test that
+  drives both paths over the same inputs. Sharing a reference master does not
+  mean sharing a rejection policy.
+- **A picker must never offer a value its own validator rejects.** Generated
+  templates, dropdowns, and reference sheets share one exported constant with
+  the validator, and a test iterates that constant end to end. A dropdown of
+  categories with no matching test is an open defect.
+- **Measure a reference catalog before gating a workflow on it.** Record
+  per-category row counts against real-world scope. If a category cannot cover
+  the tenants who will file under it, enrich on match and fail open on miss.
+  Failing open must never become guessing: an ambiguous match keeps the user's
+  text and drops the derived lineage rather than selecting a row.
+- **Never let a backend enum reach a user.** Validate before handing a value to
+  a pydantic `Literal`, and emit product vocabulary. Assert the absence of the
+  leaked string in the regression, not only the presence of a nicer one.
+- **"Excluded" must prove the good sibling survives.** When converting a
+  blocking condition into a skip, test that the non-offending row still lands.
+  For in-file duplicates that means first-occurrence-wins with an explicit
+  assertion that the original is created — flagging every copy silently drops
+  the original too.
+- **A new row state is not shipped until counters and copy follow it.** Thread
+  it through job counters, terminal job status, notification text, downloadable
+  reports, and the page. Otherwise the user still reads "failed" while the
+  internals say "skipped".
+- **Classify the report before fixing it.** A row may describe a real symptom
+  at the wrong layer. Reproduce first and state which layer actually
+  misbehaves, or the fix lands somewhere that changes nothing.
+- **Phrase every prevention rule as a user-visible invariant.** A rule that
+  describes validator behaviour cannot be falsified by a workflow test. Write
+  the sentence a tester would write, then name the test that proves it.
