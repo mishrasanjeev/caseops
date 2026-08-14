@@ -814,6 +814,13 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     }
     timeout_for_purpose = per_purpose_timeout.get(purpose or "", 60.0)
     retries_for_purpose = per_purpose_retries.get(purpose or "", 2)
+    # The corpus metadata job can fan out hundreds of thousands of calls.
+    # Retrying a paid-quota rejection inside every OpenAI SDK call delays the
+    # worker's process-wide stop signal and multiplies useless requests.  Let
+    # the job observe the first response immediately; ordinary transient
+    # errors remain per-document failures and can be retried by a later run.
+    if provider_name == "openai" and purpose == PURPOSE_METADATA_EXTRACT:
+        retries_for_purpose = 0
     if provider_name == "anthropic":
         return AnthropicProvider(
             # 2026-04-26 cost-discipline default: Haiku, not Opus.
@@ -850,7 +857,9 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
 
 _QUOTA_EXHAUSTED_MARKERS = (
     "credit balance is too low",
+    "credit_balance_exhausted",
     "insufficient_quota",
+    "no credits remaining",
     "exceeded your current quota",
     "billing_hard_limit_reached",
 )

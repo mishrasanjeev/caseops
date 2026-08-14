@@ -36,7 +36,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import or_, select, text
+from sqlalchemy import func, or_, select, text
 
 from caseops_api.db.models import AuthorityDocument, ModelRun
 from caseops_api.db.session import get_session_factory
@@ -46,6 +46,7 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     build_provider,
 )
 
@@ -90,6 +91,9 @@ _PRICE_TABLE: dict[str, tuple[float, float]] = {
 }
 _DEFAULT_RATES = (15.0, 75.0)  # Opus — conservative default
 _DEFAULT_DAILY_USD_CAP = 100.0
+EXIT_DAILY_CAP_REACHED = 2
+EXIT_QUOTA_EXHAUSTED = 3
+EXIT_PROVIDER_CANARY_FAILED = 4
 
 
 def _rates_for(model: str | None) -> tuple[float, float]:
@@ -101,6 +105,7 @@ def _rates_for(model: str | None) -> tuple[float, float]:
             return rates
     return _DEFAULT_RATES
 _HALT_FLAG = threading.Event()
+_QUOTA_EXHAUSTED_FLAG = threading.Event()
 # Re-check the cap every N completed extractions so a runaway cannot
 # overshoot by more than a few seconds of throughput.
 _CAP_CHECK_EVERY_N = 50
@@ -180,6 +185,32 @@ def _record_model_run(
     session.flush()
 
 
+def _record_error_model_run(
+    session,
+    *,
+    provider: LLMProvider,
+    error: LLMProviderError,
+) -> None:
+    """Best-effort audit row for a provider call that returned no completion."""
+    try:
+        _record_model_run(
+            session,
+            completion=LLMCompletion(
+                text="",
+                provider=getattr(provider, "name", "unknown"),
+                model=getattr(provider, "model", "unknown"),
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            status="error",
+            error=str(error)[:500],
+        )
+        session.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("failed to record error ModelRun")
+
+
 class _Extracted(BaseModel):
     neutral_citation: str | None = Field(default=None, max_length=200)
     case_reference: str | None = Field(default=None, max_length=200)
@@ -232,10 +263,23 @@ _stats = {
     "updated": 0,
     "skipped_no_text": 0,
     "llm_error": 0,
+    "quota_exhausted": 0,
     "parse_error": 0,
     "nothing_to_set": 0,
     "started_at": 0.0,
 }
+
+
+def _reset_run_state() -> None:
+    """Reset process-local signals so repeated in-process runs are isolated."""
+    global _processed_since_cap_check
+    _HALT_FLAG.clear()
+    _QUOTA_EXHAUSTED_FLAG.clear()
+    with _cap_check_lock:
+        _processed_since_cap_check = 0
+    with _stats_lock:
+        for key in _stats:
+            _stats[key] = 0 if key != "started_at" else 0.0
 
 
 def _strip_code_fence(text: str) -> str:
@@ -267,13 +311,18 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def _fetch_targets(
-    limit: int | None, force: bool, only_missing: str | None
+    limit: int | None,
+    force: bool,
+    only_missing: str | None,
+    provider_canary: bool = False,
 ) -> list[str]:
     """Returns a list of document ids. We fetch ids only so the big
     document_text payload is not kept in memory for the worker pool."""
     Session = get_session_factory()
     with Session() as s:
         stmt = select(AuthorityDocument.id).order_by(AuthorityDocument.created_at)
+        if provider_canary:
+            stmt = stmt.where(func.length(AuthorityDocument.document_text) >= 200)
         if not force:
             if only_missing == "citation":
                 stmt = stmt.where(AuthorityDocument.neutral_citation.is_(None))
@@ -305,6 +354,10 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
         prompt = _build_user_prompt(head, tail)
 
         # Cap check — fast-path bail before spending tokens.
+        # A worker submitted just before a sibling observes exhausted quota
+        # drains without spending another provider request.
+        if _QUOTA_EXHAUSTED_FLAG.is_set():
+            return {"ok": False, "reason": "quota_halt"}
         if _HALT_FLAG.is_set():
             return {"ok": False, "reason": "daily_cap_halt"}
 
@@ -317,29 +370,23 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
                 temperature=0.0,
                 max_tokens=512,
             )
+        except LLMQuotaExhaustedError as exc:
+            # This typed subclass must precede LLMProviderError. Exhausted
+            # account credit affects the whole sweep, rather than one row.
+            _QUOTA_EXHAUSTED_FLAG.set()
+            with _stats_lock:
+                _stats["llm_error"] += 1
+                _stats["quota_exhausted"] += 1
+            logger.error("upstream quota exhausted on %s: %s", doc_id, exc)
+            _record_error_model_run(s, provider=provider, error=exc)
+            return {"ok": False, "reason": "quota_exhausted"}
         except LLMProviderError as exc:
             with _stats_lock:
                 _stats["llm_error"] += 1
             logger.warning("llm error on %s: %s", doc_id, exc)
             # Record the failed call for spend visibility too — tokens
             # billed by the provider on a 4xx are still real charges.
-            try:
-                _record_model_run(
-                    s,
-                    completion=LLMCompletion(
-                        text="",
-                        provider=getattr(provider, "name", "unknown"),
-                        model=getattr(provider, "model", "unknown"),
-                        prompt_tokens=0,
-                        completion_tokens=0,
-                        latency_ms=0,
-                    ),
-                    status="error",
-                    error=str(exc)[:500],
-                )
-                s.commit()
-            except Exception:  # noqa: BLE001
-                logger.exception("failed to record error ModelRun")
+            _record_error_model_run(s, provider=provider, error=exc)
             return {"ok": False, "reason": "llm_error"}
 
         # Record the successful Opus call so corpus spend is finally
@@ -391,14 +438,19 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
         if not updates:
             with _stats_lock:
                 _stats["nothing_to_set"] += 1
-            return {"ok": True, "updated": False}
+            return {"ok": True, "updated": False, "provider_completed": True}
 
         for key, value in updates.items():
             setattr(doc, key, value)
         s.commit()
         with _stats_lock:
             _stats["updated"] += 1
-        return {"ok": True, "updated": True, "fields": list(updates.keys())}
+        return {
+            "ok": True,
+            "updated": True,
+            "fields": list(updates.keys()),
+            "provider_completed": True,
+        }
 
 
 def _maybe_check_cap() -> None:
@@ -436,9 +488,8 @@ def _maybe_check_cap() -> None:
         )
 
 
-def _progress_ticker(total: int) -> None:
-    while True:
-        time.sleep(15)
+def _progress_ticker(total: int, finished: threading.Event) -> None:
+    while not finished.wait(15):
         with _stats_lock:
             done = _stats["processed"]
             updated = _stats["updated"]
@@ -460,15 +511,34 @@ def run(
     concurrency: int,
     force: bool,
     only_missing: str | None,
+    provider_canary: bool = False,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    ids = _fetch_targets(limit=limit, force=force, only_missing=only_missing)
+    _reset_run_state()
+    if provider_canary:
+        limit = 1
+        concurrency = 1
+        force = False
+        only_missing = "any"
+        logger.info(
+            "provider canary enabled: requiring one metadata-missing document "
+            "with at least 200 text characters"
+        )
+    ids = _fetch_targets(
+        limit=limit,
+        force=force,
+        only_missing=only_missing,
+        provider_canary=provider_canary,
+    )
     total = len(ids)
     logger.info("targets: %d documents", total)
     if total == 0:
+        if provider_canary:
+            logger.error("provider canary failed: no eligible target document")
+            return EXIT_PROVIDER_CANARY_FAILED
         return 0
 
     # Pre-flight cap gate so a no-op start when the cap is already
@@ -486,7 +556,7 @@ def run(
                 "CASEOPS_LAYER2_DAILY_USD_CAP, or set it to 0 to disable.",
                 spend, cap,
             )
-            return 2
+            return EXIT_DAILY_CAP_REACHED
         logger.info(
             "spend pre-flight: $%.2f / $%.2f cap used so far in the last 24h",
             spend, cap,
@@ -498,31 +568,116 @@ def run(
     with _stats_lock:
         _stats["started_at"] = time.time()
 
-    ticker = threading.Thread(target=_progress_ticker, args=(total,), daemon=True)
+    finished = threading.Event()
+    ticker = threading.Thread(
+        target=_progress_ticker,
+        args=(total, finished),
+        daemon=True,
+    )
     ticker.start()
 
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = [pool.submit(_extract_one, doc_id, provider) for doc_id in ids]
-        for fut in as_completed(futures):
-            with _stats_lock:
-                _stats["processed"] += 1
-            try:
-                fut.result()
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("unexpected failure: %s", exc)
+    submitted = 0
+    stop_logged = False
+    provider_canary_succeeded = False
+    id_iter = iter(ids)
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            in_flight: dict[object, str] = {}
+
+            def submit_next() -> bool:
+                nonlocal submitted
+                try:
+                    doc_id = next(id_iter)
+                except StopIteration:
+                    return False
+                future = pool.submit(_extract_one, doc_id, provider)
+                in_flight[future] = doc_id
+                submitted += 1
+                return True
+
+            # Keep a bounded rolling window. The former list comprehension
+            # enqueued every corpus row (803k in the incident) before the
+            # first quota response could be observed.
+            for _ in range(min(concurrency, total)):
+                submit_next()
+
+            while in_flight:
+                future = next(as_completed(tuple(in_flight)))
+                doc_id = in_flight.pop(future)
+                with _stats_lock:
+                    _stats["processed"] += 1
+                try:
+                    result = future.result()
+                except LLMQuotaExhaustedError as exc:
+                    # Defence in depth: _extract_one handles and audits this,
+                    # but a future refactor must still stop the outer driver.
+                    _QUOTA_EXHAUSTED_FLAG.set()
+                    logger.error("quota stop escaped worker for %s: %s", doc_id, exc)
+                    result = {"ok": False, "reason": "quota_exhausted"}
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("unexpected failure on %s: %s", doc_id, exc)
+                    result = {"ok": False, "reason": "unexpected_error"}
+
+                reason = result.get("reason") if isinstance(result, dict) else None
+                if (
+                    provider_canary
+                    and isinstance(result, dict)
+                    and result.get("ok") is True
+                    and result.get("provider_completed") is True
+                ):
+                    provider_canary_succeeded = True
+                if reason in {"quota_exhausted", "quota_halt"}:
+                    _QUOTA_EXHAUSTED_FLAG.set()
+                elif reason == "daily_cap_halt":
+                    _HALT_FLAG.set()
+
+                stopping = _QUOTA_EXHAUSTED_FLAG.is_set() or _HALT_FLAG.is_set()
+                if stopping:
+                    if not stop_logged:
+                        stop_logged = True
+                        stop_name = (
+                            "upstream quota exhausted"
+                            if _QUOTA_EXHAUSTED_FLAG.is_set()
+                            else "daily spend cap reached"
+                        )
+                        logger.error(
+                            "%s; draining only in-flight work "
+                            "(submitted=%d in_flight=%d unsubmitted=%d)",
+                            stop_name,
+                            submitted,
+                            len(in_flight),
+                            total - submitted,
+                        )
+                    continue
+
+                submit_next()
+    finally:
+        finished.set()
 
     elapsed = time.time() - _stats["started_at"]
     logger.info(
-        "done: processed=%d updated=%d no_text=%d llm_err=%d parse_err=%d "
-        "nothing_to_set=%d elapsed=%.0fs",
+        "done: processed=%d submitted=%d updated=%d no_text=%d llm_err=%d "
+        "quota_exhausted=%d parse_err=%d nothing_to_set=%d elapsed=%.0fs",
         _stats["processed"],
+        submitted,
         _stats["updated"],
         _stats["skipped_no_text"],
         _stats["llm_error"],
+        _stats["quota_exhausted"],
         _stats["parse_error"],
         _stats["nothing_to_set"],
         elapsed,
     )
+    if _QUOTA_EXHAUSTED_FLAG.is_set():
+        return EXIT_QUOTA_EXHAUSTED
+    if _HALT_FLAG.is_set():
+        return EXIT_DAILY_CAP_REACHED
+    if provider_canary and not provider_canary_succeeded:
+        logger.error(
+            "provider canary failed: target did not produce a successful "
+            "provider completion"
+        )
+        return EXIT_PROVIDER_CANARY_FAILED
     return 0
 
 
@@ -546,12 +701,21 @@ def main(argv: Iterable[str] | None = None) -> int:
             "or any of citation/case_ref."
         ),
     )
+    parser.add_argument(
+        "--provider-canary",
+        action="store_true",
+        help=(
+            "Fail-closed live-provider probe: select one eligible metadata-missing "
+            "document and force --limit=1 --concurrency=1."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(
         limit=args.limit,
         concurrency=args.concurrency,
         force=args.force,
         only_missing=args.only_missing,
+        provider_canary=args.provider_canary,
     )
 
 
