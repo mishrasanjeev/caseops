@@ -16,14 +16,14 @@
     "acceptance_status": "pending",
     "active_slice": "IPLF-028A",
     "checkpoint": {
-      "recorded_at": "2026-08-13T13:02:10+05:30",
-      "repository_revision": "2aa839d5391b12479ead576645c89c45ff6de09f",
-      "environment": "IPLF-028A was merged through PR #217 as exact canonical main 2aa839d5391b12479ead576645c89c45ff6de09f after full exact-head CI 31671172662, Security 31671172657, CodeQL 31671172671, and automated review 31671172666 all passed. The additive empty foundation is deployed: migration caseops-migrate-job-kq56w succeeded; API caseops-api-00286-8x7 and web caseops-web-00264-xpn each receive 100% traffic; API and web expose the full matching release SHA. Immutable API digest sha256:bd39abed8b81d7cebefc2691761428aa418a278bc29968d3c7b58d1d26ad2daa and web digest sha256:6ef033cd9c3f7df86929e211e9333053e4dec08ad32b7562ae4ae204f8707c26 are recorded. API concurrency remains 1 and service/revision scale ceilings remain 20; all six scheduler bindings match the exact API digest. CASEOPS_AUTO_MIGRATE=false; CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED are absent/default-false. Exact-main CI 31674495913 passed after merge/deploy. Exact-release production workflow 31674495928 confirmed the serving API/web SHA and revisions, then finished red: RAM/IP 65 passed, 4 failed, 3 documented skips; Notice 2 passed. Its four failures remain the three typed OpenAI quota 503 recommendation responses and the case-tracking-provider health HTTP 409; this does not certify a green production suite. No outbox consumer, IP workflow command, provider switch, filing, fee, payment, external message, data export, purge, offboarding, restore, or other real legal/data act is enabled. Named human acceptance is not inferred.",
-      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A have completed repository-controlled implementation and deployment verification. IPLF-027A has completed repository implementation, independent review, canonical merge, exact deployment, and focused production evidence as a deployed dark foundation; its release gate remains blocked by the exact complete-production failures recorded below and does not claim activation or human acceptance. IPLF-028A now has a merged, deployed, additive, unseeded dry-run foundation with exact migration/image/revision/scheduler evidence, but remains in progress and blocked: it does not complete the full data map, authorized retention/hold workflow, data-operation execution, export/purge/offboarding/restore, or resilience rehearsal. IPLF-026B remains separately blocked by production OpenAI quota availability, although its dependent Notice phase now runs and passed on workflow 31661191199. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
+      "recorded_at": "2026-08-14T19:51:53+05:30",
+      "repository_revision": "8d9654bbe556ad4fa24caf64578ac9cf55343a0e",
+      "environment": "PR #225 merged as exact canonical main 8d9654bbe556ad4fa24caf64578ac9cf55343a0e after its exact-head CI 31801650057, Security 31801650072, and CodeQL 31801649992 passed; Codex-review workflow 31805558827 completed green at its key-availability guard while its actual review step was skipped. Exact-main CI 31805582426, Security 31805582335, and CodeQL 31805582374 also passed. Migration caseops-migrate-job-5zsdl succeeded on the exact API digest. API caseops-api-00292-sr5 and web caseops-web-00270-z4k each receive 100% traffic and expose the matching release SHA; immutable digests are API sha256:de2ce8390e727d7c612a21829d1a6c636f1efdb3c619e4515d5d5c194ce79629 and web sha256:b4f42ab054b98f4a99288d3d8737b39ea636cda393c08a0ff145fa4987f0b8dd. The six-row scheduler audit passes on the exact API image: five schedulers are enabled and authority metadata is intentionally paused with a 43200-second job timeout. Strict one-document canary caseops-extract-authority-metadata-sh7jg made one OpenAI request, received credit_balance_exhausted, performed no retry or update, and exited with typed quota code 3; the later pt89c success was only a read-only ModelRun inspection and is not provider recovery. Exact-release production workflow 31805582341 remains red: RAM/IP 69 passed, 3 failed, 4 skipped; Notice 2 passed. All three failures are the known OpenAI quota 503 recommendation/citation checks. Public API health and web availability pass, but availability does not certify the provider or complete production suite. CASEOPS_AUTO_MIGRATE=false; the legal-rule rollout flag is absent/default-false; no outbox consumer, IP workflow command, provider switch, filing, fee, payment, external message, data export, purge, offboarding, restore, or other real legal/data act is enabled. Named human acceptance is not inferred.",
+      "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A retain their repository-controlled implementation evidence and recorded release states. IPLF-001C now also has exact deployed fail-fast containment evidence for the exhausted-credit authority-metadata incident; the safe result is a deliberately paused scheduler, not a recovered provider. IPLF-027A remains a deployed dark foundation whose dated case-tracking canary and all four 14 August bulk-import scenarios now pass; its complete-production gate is blocked only by the three OpenAI quota failures and it does not claim activation or human acceptance. IPLF-028A has a merged, deployed, additive, unseeded six-class dry-run foundation, and IPLF-028C inventories the exact SQL schema plus registered/known non-SQL boundaries; IPLF-028A remains in progress because its runtime allowlist does not consume that reviewed map and no authorized retention/hold, execution, export/purge/offboarding/restore, or recovery workflow exists. The IPLF-028C generated-view freshness repair is implemented on a focused branch but remains not_run until its own immutable exact-head CI and publication. IPLF-029A remains in progress: its exact CI proves the repository audit control, not closure of every M2 row. IPLF-026B remains blocked by production OpenAI quota availability. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-028A",
-      "next_action": "Merge the release-evidence update only after its own required checks pass. Preserve exact-release production workflow 31674495928 as a red global gate: three OpenAI quota 503 recommendation responses and one case-tracking-provider health HTTP 409 remain unresolved. Keep all IPLF-028A data-operation surfaces nonexistent or dry-run only; keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false. Continue the independent full data-map/registry enforcement work only; do not expose an export, purge, offboarding, restore, or legal-hold activation workflow without the named policy, legal/privacy/security, and operator approvals. Retain the separate IPLF-027A release gate as blocked until the production AI provider/account operator restores usable quota for the configured CaseOps OpenAI project and the authorized case-tracking provider operator reviews the HTTP 409 health/replay condition; then rerun the unchanged complete RAM/IP and Notice workflow against its exact serving release. Do not fabricate named legal/security/pilot/UAT approval or M0 human program lock.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-028A/release-attempt-2026-08-13.md"
+      "next_action": "Publish the IPLF-028C generated-view freshness repair only after its own exact-head CI passes, then continue IPLF-028A only with the reviewed fail-closed runtime registry bridge; keep every data-operation surface dry-run-only and do not expose export, purge, offboarding, restore, or legal-hold activation without named approvals. Keep caseops-extract-authority-metadata-daily PAUSED. After the production AI provider/account operator restores usable credits, rerun the unchanged strict one-document canary and require an explicit provider-completed result before a reviewed inventory change can enable the scheduler; then rerun the unchanged complete RAM/IP and Notice production workflow. For IPLF-027, release the schema-free, default-false A0 server writer fence and drain every legacy revision before any ownership migration; do not merge the current mixed-revision-unsafe schema/runtime branch directly. Keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false. Do not fabricate named legal/security/pilot/UAT approval or M0 human program lock.",
+      "evidence_ref": "docs/ip-implementation/evidence/m1/IPLF-001C/authority-metadata-quota-containment-2026-08-14.md"
     }
   },
   "milestones": [
@@ -73,6 +73,7 @@
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
         "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001C/authority-metadata-quota-containment-2026-08-14.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ]
@@ -346,7 +347,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
-        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md"
+        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001C/authority-metadata-quota-containment-2026-08-14.md"
       ]
     },
     {
@@ -2930,7 +2932,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
         "docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md",
-        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md"
+        "docs/ip-implementation/evidence/m1/IPLF-001C/reconciliation-2026-08-05.md",
+        "docs/ip-implementation/evidence/m1/IPLF-001C/authority-metadata-quota-containment-2026-08-14.md"
       ],
       "evidence_metadata": [
         {
@@ -2941,6 +2944,15 @@
           "assertions": "immutable image, enabled state, cadence, timezone, target, dedicated identity, job-scoped Invoker, recorded attempt, scheduler delivery, latest workload outcome including running/unknown separation, paused legacy compatibility path, and retained fail-closed provider-spend evidence",
           "result": "passed",
           "recorded_at": "2026-08-06T11:45:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m1/IPLF-001C/authority-metadata-quota-containment-2026-08-14.md",
+          "revision": "8d9654bbe556ad4fa24caf64578ac9cf55343a0e",
+          "environment": "Production API caseops-api-00292-sr5 and web caseops-web-00270-z4k at 100% traffic; exact-main CI 31805582426; scheduler audit on the exact API digest; strict authority provider canary caseops-extract-authority-metadata-sh7jg; production workflow 31805582341",
+          "fixtures": "Canonical six-job scheduler inventory, one eligible metadata-missing authority document, sanitized ModelRun error evidence, and the unchanged complete production Playwright suites",
+          "assertions": "Exact build/migration/revision/image lineage; five enabled schedulers and one intentionally paused authority scheduler; 43200-second authority timeout; one-request/no-retry quota stop with typed exit 3 and durable error audit; 69 passed/3 quota failures/4 skips in RAM plus Notice 2/2",
+          "result": "passed",
+          "recorded_at": "2026-08-14T19:51:53+05:30"
         }
       ],
       "approvals": [
@@ -2952,9 +2964,9 @@
       ],
       "blockers": [],
       "next_actions": [
-        "Continue natural execution monitoring as operational SLO evidence, without an elapsed-time release threshold.",
-        "Investigate workload failures separately from scheduler delivery drift and preserve the provider-spend cap.",
-        "Preserve exact-release scheduler evidence while IPLF-019A proceeds."
+        "Keep the authority-metadata scheduler PAUSED until the configured OpenAI account has usable credits and the unchanged strict one-document provider canary records an explicit successful provider completion.",
+        "After that canary, enable only through a reviewed scheduler-inventory change and reconcile/audit all six exact-image rows; do not treat read-only inspection executions as provider recovery.",
+        "Continue natural execution monitoring for the five desired-enabled schedulers as operational SLO evidence, without an arbitrary elapsed-time release threshold."
       ],
       "data_impact": [
         "No application, tenant, provider, credential, scheduler, or job data is mutated by the read-only audit.",
@@ -2972,6 +2984,12 @@
           "disposition": "updated",
           "owner": "Engineering/SRE",
           "evidence": "Removed stale observation-window blocker and linked current reconciliation"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m1/IPLF-001C/authority-metadata-quota-containment-2026-08-14.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE and AI provider account operator",
+          "evidence": "Exact release, scheduler pause, bounded quota canary, durable error audit, and quota-only production failure boundary"
         }
       ],
       "allocation_review": "Derived reconciliation slice preserves the parent scheduler scope and canonical owners. The administrative exception remains appropriate because this release-control tail introduces no separate user journey.",
