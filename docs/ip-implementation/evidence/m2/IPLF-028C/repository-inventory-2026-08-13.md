@@ -55,10 +55,10 @@ The initial inventory/control implementation at exact revision
 merged. Those checks included the focused map tests, the full API shards,
 PostgreSQL validation, web tests/build, and the Playwright app suite. This
 supports the `implemented` state for the original bounded repository inventory
-and Definition-of-Ready control. The later generated-view regression reopens
-verification to `not_run` until the repair has immutable exact-head CI;
-release and acceptance remain `blocked / pending` on the separately listed
-policy and recovery gates.
+and Definition-of-Ready control. The later generated-view regression
+temporarily reopened verification. The immutable repair evidence below restores
+the bounded repository-control verification to `passed`; release and acceptance
+remain `blocked / pending` on the separately listed policy and recovery gates.
 
 ## Remaining blockers
 
@@ -88,9 +88,19 @@ human-readable fields, a missing projection, CRLF bytes, and the non-recursive
 repair path. It regenerates the view to 3,939 total columns and 22 columns for
 `matter_bulk_import_jobs`. Focused local verification from the isolated repair
 worktree passed ten map tests and the canonical `validate`, `generate`, and
-`render` commands. Exact-head CI and main publication remain required before
-verification can return to `passed`; the release gate remains separately
-blocked. This closes only the repository inventory/Definition-of-Ready
-implementation facets of `DATA-GOV-01` and `DATA-GOV-03`; it does not claim
-approved `DATA-GOV-02` policy values, expand the six-class runtime registry, or
+`render` commands.
+
+The repair at immutable revision
+`16c4da10a8105def1ebf8131cc250cafdd6fad26` passed PR #226 CI
+`31810996938`, Security `31810996895`, and CodeQL `31810996896`. CI included
+all ten API coverage shards, aggregate coverage, PostgreSQL/pgvector, web
+typecheck/Vitest/build, and the app Playwright suite. That exact evidence
+restores the bounded repository-control verification to `passed`. The later
+evidence-only promotion commit is not yet merged or published to canonical
+main and must pass its own complete exact-head checks before merge.
+
+The release gate remains separately blocked. This closes only the repository
+inventory/Definition-of-Ready implementation facets of `DATA-GOV-01` and
+`DATA-GOV-03`; it does not claim approved `DATA-GOV-02` policy values, expand
+the six-class runtime registry, prove production topology or recovery, or
 satisfy a release or acceptance gate.
