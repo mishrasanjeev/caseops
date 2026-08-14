@@ -91,11 +91,24 @@ audited non-terminal transition; that is not an automatic terminal escape.
 4. Responsive regressions must assert the visible surface, container overflow,
    and the bounds of every control at 390px, 1024px, and 1280px or equivalent
    product breakpoints.
-5. Any new hierarchy offered by both manual and bulk creation must have one
-   server-owned active master. Persist its ID and derived lineage, revalidate on
-   preview and commit, and reject ambiguous/invented values. If a historical
-   import contract needs a compatibility path, keep it explicit and narrower
-   than the new catalog-backed categories.
+5. **SUPERSEDED 2026-08-14 — see
+   `docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md` rules 1-3.** This rule as
+   written caused Ram's 2026-08-14 BUG-001/BUG-002. It specified strictness in
+   one direction only (bulk must not be looser than the catalog) and was
+   implemented literally as `_LEGACY_CATALOG_OPTIONAL_CATEGORIES`, which made
+   bulk import *stricter* than the manual create path it was meant to match.
+   With only 4 DRT entries in the production catalog for all of India, that
+   gate made a Mumbai DRT matter unimportable while the identical payload
+   created fine by hand. The single-master requirement stands; the
+   fail-closed-by-default requirement does not.
+
+   Original text, retained as history:
+
+   > Any new hierarchy offered by both manual and bulk creation must have one
+   > server-owned active master. Persist its ID and derived lineage, revalidate on
+   > preview and commit, and reject ambiguous/invented values. If a historical
+   > import contract needs a compatibility path, keep it explicit and narrower
+   > than the new catalog-backed categories.
 6. Never classify a release as fixed from source tests alone. Record commit,
    image/revision, migration, traffic, local build, local replay, production
    replay, cleanup, and final persisted state.

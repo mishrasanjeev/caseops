@@ -1353,6 +1353,17 @@ _FORUM_MATCH_STOPWORDS = frozenset(
 )
 
 
+# Every Forum value the template's own dropdown offers. Exported so the
+# regression suite can assert the invariant that broke on 2026-08-14: the
+# template must never offer a Forum the importer then rejects.
+MATTER_IMPORT_TEMPLATE_FORUMS: tuple[str, ...] = (
+    *_FORUM_CATEGORY_LABELS.values(),
+    "Tribunal",
+    "Arbitration",
+    "Advisory",
+)
+
+
 @dataclass(frozen=True)
 class _ResolvedImportForum:
     forum_level: str | None
@@ -2283,12 +2294,7 @@ def _matter_template_xlsx_bytes(
     ]
     reference_rows = [["Matter Status", "Forum", "Practice Area"]]
     statuses = ["active", "intake", "on_hold"]
-    forums = [
-        *_FORUM_CATEGORY_LABELS.values(),
-        "Tribunal",
-        "Arbitration",
-        "Advisory",
-    ]
+    forums = list(MATTER_IMPORT_TEMPLATE_FORUMS)
     max_reference_rows = max(len(statuses), len(forums), len(_DEFAULT_PRACTICE_AREAS))
     for index in range(max_reference_rows):
         reference_rows.append(
@@ -3177,6 +3183,7 @@ __all__ = [
     "MATTER_IMPORT_DOCUMENT_MANIFEST_MAX_BYTES",
     "MATTER_IMPORT_MAPPING_MAX_BYTES",
     "MATTER_IMPORT_MAX_ROWS",
+    "MATTER_IMPORT_TEMPLATE_FORUMS",
     "cancel_matter_import",
     "commit_matter_import",
     "dry_run_bulk_matter_import",

@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 
 from caseops_api.db.models import CompanyMembership, Matter
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.matter_imports import MATTER_IMPORT_TEMPLATE_FORUMS
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_matter_imports import _create_matter, _invite_user
 
@@ -327,3 +328,98 @@ def test_inactive_user_is_still_rejected_by_name(client: TestClient) -> None:
     )
     assert rows[0]["status"] == "invalid"
     assert rows[0]["owner_membership_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Structural guards.
+#
+# These exist because the 2026-08-11 fix created the 2026-08-14 bugs. That fix
+# gave the forum hierarchy one server-owned master and made bulk import reject
+# "ambiguous/invented" values — but nothing asserted the other direction, so
+# bulk import silently became stricter than the manual create path and the
+# template's own dropdown started offering values the importer refused.
+#
+# Parity is a two-way property. Assert it as one.
+# ---------------------------------------------------------------------------
+
+
+def test_every_forum_the_template_offers_can_actually_be_imported(
+    client: TestClient,
+) -> None:
+    """The product must never offer a Forum its own importer rejects."""
+    token = str(bootstrap_company(client)["access_token"])
+
+    header = b"Matter Title,Matter Code,Practice Area,Forum,Court\n"
+    lines = [
+        (
+            f"Forum probe {index},TPL-{index:02d},Commercial,{forum},"
+            # A plausible hand-typed court that is deliberately NOT a catalog
+            # value, which is how a practitioner outside Delhi must file.
+            f"{forum} Bench Mumbai\n"
+        ).encode()
+        for index, forum in enumerate(MATTER_IMPORT_TEMPLATE_FORUMS)
+    ]
+    rows = _dry_run_rows(client, token, header + b"".join(lines))
+
+    assert len(rows) == len(MATTER_IMPORT_TEMPLATE_FORUMS)
+    offending = {
+        forum: row["errors"]
+        for forum, row in zip(MATTER_IMPORT_TEMPLATE_FORUMS, rows, strict=True)
+        if row["status"] != "valid"
+    }
+    assert not offending, f"template offers unimportable Forum values: {offending}"
+    # Each one resolves to a real canonical level, never None.
+    assert all(row["forum_level"] for row in rows)
+
+
+def test_bulk_import_is_never_stricter_than_manual_creation(
+    client: TestClient,
+) -> None:
+    """Whatever POST /api/matters/ accepts, the importer must accept too.
+
+    This is the exact drift that produced BUG-001 and BUG-002: manual creation
+    stored ``forum_level=tribunal`` with a free-text court while the importer
+    refused the identical payload.
+    """
+    token = str(bootstrap_company(client)["access_token"])
+    probes = [
+        ("tribunal", "DRT Delhi"),
+        ("tribunal", "Recovery Officer Mumbai"),
+        ("lower_court", "Saket District Court"),
+        ("high_court", "Bombay High Court, Nagpur Bench"),
+        ("supreme_court", "Supreme Court of India"),
+        ("arbitration", "SIAC Tribunal"),
+        ("advisory", ""),
+    ]
+
+    for index, (forum_level, court_name) in enumerate(probes):
+        manual = client.post(
+            "/api/matters/",
+            headers=auth_headers(token),
+            json={
+                "title": f"Manual parity {index}",
+                "matter_code": f"PARITY-M-{index:02d}",
+                "practice_area": "Commercial",
+                "forum_level": forum_level,
+                "court_name": court_name or None,
+                "status": "intake",
+            },
+        )
+        assert manual.status_code == 200, (
+            f"manual create rejected {forum_level}/{court_name!r}: {manual.text}"
+        )
+
+    header = b"Matter Title,Matter Code,Practice Area,Forum,Court\n"
+    lines = [
+        f"Bulk parity {index},PARITY-B-{index:02d},Commercial,{level},{court}\n".encode()
+        for index, (level, court) in enumerate(probes)
+    ]
+    rows = _dry_run_rows(client, token, header + b"".join(lines))
+
+    rejected = {
+        f"{level}/{court}": row["errors"]
+        for (level, court), row in zip(probes, rows, strict=True)
+        if row["status"] != "valid"
+    }
+    assert not rejected, f"bulk import is stricter than manual creation: {rejected}"
+    assert [row["forum_level"] for row in rows] == [level for level, _ in probes]
