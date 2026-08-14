@@ -3,8 +3,9 @@
 Ownership: `bulk_import_jobs` is the **neutral** import owner tagged by domain;
 `ip_import_rows` is the typed IP staging table. The legacy
 `matter_bulk_import_jobs` and `employee_bulk_import_jobs` owners are untouched
-and remain canonical for their domains. No `ip_import_jobs` table exists, and
-Matter row-commit logic is not reused as generic orchestration.
+and remain canonical for their domains. ARCH-OPS-23 forbids an IP-specific job
+table, so no such table is introduced here, and Matter row-commit logic is not
+reused as generic orchestration.
 
 Commit materialises records through the existing `create_ip_docket` writer
 rather than inserting docket rows directly.
