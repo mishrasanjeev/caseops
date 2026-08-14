@@ -48,6 +48,19 @@ def test_audit_rejects_active_blocked_slice_without_named_blocker() -> None:
     assert any("active blocked slice requires an explicit blocker" in error for error in errors)
 
 
+def test_audit_rejects_a_stale_generated_view(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "M2_OWNERSHIP_AUDIT.md"
+    target.write_text("stale\n", encoding="utf-8")
+    monkeypatch.setattr(ip_m2_ownership_audit, "GENERATED_VIEW_PATH", target)
+
+    errors = ip_m2_ownership_audit.validate(_manifest())
+
+    assert any(
+        "stale or independently edited generated M2 ownership audit" in error
+        for error in errors
+    )
+
+
 def test_render_is_explicit_about_repository_evidence_boundary(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "M2_OWNERSHIP_AUDIT.md"
     monkeypatch.setattr(ip_m2_ownership_audit, "GENERATED_VIEW_PATH", target)

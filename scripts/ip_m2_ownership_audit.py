@@ -73,6 +73,15 @@ def _existing_reference(reference: object) -> bool:
     return path is not None and path.is_file()
 
 
+def _display_path(path: Path) -> str:
+    """Return a repository-relative path when possible for clear CI errors."""
+
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def _m2_slices(manifest: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     slices = manifest.get("slices", [])
     if not isinstance(slices, list):
@@ -134,7 +143,9 @@ def _active_slice_errors(row: Mapping[str, Any]) -> list[str]:
     return errors
 
 
-def validate(manifest: dict[str, Any] | None = None) -> list[str]:
+def validate(
+    manifest: dict[str, Any] | None = None, *, check_generated_view: bool = True
+) -> list[str]:
     """Return every M2 audit failure without changing program state."""
 
     if manifest is None:
@@ -158,6 +169,18 @@ def validate(manifest: dict[str, Any] | None = None) -> list[str]:
             errors.extend(_ownership_errors(slice_id, row.get("ownership")))
         else:
             errors.append(f"{slice_id}: unknown implementation_status {status!r}")
+    if check_generated_view and not errors:
+        expected = _render_markdown(manifest)
+        if not GENERATED_VIEW_PATH.is_file():
+            errors.append(
+                "missing generated M2 ownership audit "
+                f"{_display_path(GENERATED_VIEW_PATH)}"
+            )
+        elif GENERATED_VIEW_PATH.read_text(encoding="utf-8") != expected:
+            errors.append(
+                "stale or independently edited generated M2 ownership audit "
+                f"{_display_path(GENERATED_VIEW_PATH)}"
+            )
     return errors
 
 
@@ -173,14 +196,9 @@ def _row_state(row: Mapping[str, Any]) -> str:
     return "not-started-or-planned"
 
 
-def render(manifest: dict[str, Any] | None = None) -> Path:
-    """Render the auditable M2 inventory; the program manifest remains canonical."""
+def _render_markdown(manifest: Mapping[str, Any]) -> str:
+    """Build the checked-in audit projection without mutating the repository."""
 
-    if manifest is None:
-        manifest = _load(MANIFEST_PATH)
-    errors = validate(manifest)
-    if errors:
-        raise ValueError("cannot render invalid M2 ownership audit: " + "; ".join(errors))
     rows = _m2_slices(manifest)
     lines = [
         "# M2 One-Writer Reconciliation Audit",
@@ -227,8 +245,19 @@ def render(manifest: dict[str, Any] | None = None) -> Path:
             "",
         ]
     )
+    return "\n".join(lines)
+
+
+def render(manifest: dict[str, Any] | None = None) -> Path:
+    """Render the auditable M2 inventory; the program manifest remains canonical."""
+
+    if manifest is None:
+        manifest = _load(MANIFEST_PATH)
+    errors = validate(manifest, check_generated_view=False)
+    if errors:
+        raise ValueError("cannot render invalid M2 ownership audit: " + "; ".join(errors))
     GENERATED_VIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
-    GENERATED_VIEW_PATH.write_text("\n".join(lines), encoding="utf-8")
+    GENERATED_VIEW_PATH.write_text(_render_markdown(manifest), encoding="utf-8")
     return GENERATED_VIEW_PATH
 
 
