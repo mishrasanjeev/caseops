@@ -264,7 +264,29 @@ test.describe.serial("Ram 2026-07-22 deployed optional conflict review", () => {
       overlapName,
       `Independent Opponent ${RUN_ID}`,
     );
+    // Register this before navigation so a fast successful response cannot
+    // race past the diagnostic.  This remains an end-user UI assertion below;
+    // it additionally proves that the browser received the expected empty
+    // payload if the card ever stays in its loading state.
+    const initialConflictChecksPromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/matters/${intakeMatter!.id}/conflict-checks` &&
+        response.request().method() === "GET",
+    );
     await page.goto(`${PROD_BASE_URL}/app/matters/${intakeMatter.id}`);
+    const initialConflictChecks = await initialConflictChecksPromise;
+    await expectStatus(
+      initialConflictChecks,
+      200,
+      "load the Intake Matter's empty conflict-check history",
+    );
+    const initialConflictPayload = (await initialConflictChecks.json()) as {
+      matter_id: string;
+      checks: unknown[];
+    };
+    expect(initialConflictPayload.matter_id).toBe(intakeMatter.id);
+    expect(initialConflictPayload.checks).toEqual([]);
 
     const conflictCard = page.getByTestId("matter-conflict-card");
     await expect(conflictCard).toContainText("No conflict check has been run yet.");
@@ -314,6 +336,7 @@ test.describe.serial("Ram 2026-07-22 deployed optional conflict review", () => {
     const runResponse = await runPromise;
     await expectStatus(runResponse, 200, "run production conflict review");
     const clearedCheck = (await runResponse.json()) as {
+      id: string;
       status: string;
       matter_lifecycle_version: number;
     };
@@ -340,7 +363,39 @@ test.describe.serial("Ram 2026-07-22 deployed optional conflict review", () => {
     onHoldMatter = (await onHoldActivation.json()) as MatterRecord;
     expect(onHoldMatter.status).toBe("active");
 
+    // This is a new page document, so capture the exact API result before
+    // asserting its user-visible projection. If the cleared badge is absent,
+    // this distinguishes a stale server record from a client rendering/query
+    // issue without weakening the UI regression check.
+    const reloadedConflictChecksPromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/matters/${onHoldMatter!.id}/conflict-checks` &&
+        response.request().method() === "GET",
+    );
     await page.goto(`${PROD_BASE_URL}/app/matters/${onHoldMatter.id}`);
+    const reloadedConflictChecks = await reloadedConflictChecksPromise;
+    await expectStatus(
+      reloadedConflictChecks,
+      200,
+      "reload the cleared conflict-check history after ordinary activation",
+    );
+    const reloadedConflictPayload = (await reloadedConflictChecks.json()) as {
+      matter_id: string;
+      checks: Array<{
+        id: string;
+        status: string;
+        matter_lifecycle_version: number;
+      }>;
+    };
+    expect(reloadedConflictPayload.matter_id).toBe(onHoldMatter.id);
+    expect(reloadedConflictPayload.checks).toContainEqual(
+      expect.objectContaining({
+        id: clearedCheck.id,
+        status: "cleared",
+        matter_lifecycle_version: onHoldMatter.lifecycle_version,
+      }),
+    );
     await expect(conflictCard.getByTestId("conflict-status-cleared")).toBeVisible();
 
     const beforeDispose = onHoldMatter;
