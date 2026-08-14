@@ -16,12 +16,7 @@
  * revision with playwright.prod-ram.config.ts (which selects this file by its
  * dated name). Browser media is disabled by the production config.
  */
-import {
-  expect,
-  test,
-  type APIResponse,
-  type Page,
-} from "@playwright/test";
+import { expect, test, type APIResponse, type Page } from "@playwright/test";
 
 const envOr = (key: string, fallback: string): string =>
   (process.env[key] ?? "").trim() || fallback;
@@ -262,6 +257,15 @@ function code(suffix: string): string {
   return `RAM814-${suffix}-${RUN_ID}`.replace(/[^A-Z0-9-]/g, "").slice(0, 78);
 }
 
+// Matter-import duplicate detection intentionally treats the title/client pair
+// as an identity signal in addition to matter code.  These production-safe
+// fixtures therefore need a unique client as well as a unique code: otherwise
+// a valid first verification makes a later verification look like an import
+// regression merely because it reuses the same human-facing title.
+function client(suffix: string): string {
+  return `Ram 814 ${suffix} ${RUN_ID}`.slice(0, 120);
+}
+
 test.describe("Ram 2026-08-14 bulk matter upload", () => {
   test.beforeAll(async ({ playwright }) => {
     if (!IS_LOCAL) return;
@@ -289,15 +293,61 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
     await signIn(page);
     await page.goto(`${BASE_URL}/app/matters/imports`);
     await expect(page.getByTestId("matter-import-file")).toBeVisible();
+    const clientName = client("FORUMS");
 
     // Exactly the shapes Ram reported: Forum taken from the product's own
     // template dropdown, Court typed as a practitioner would write it.
     const rows = [
-      ["DRT natural name", code("DRT"), "Commercial", "active", "Acme", "DRAT / DRT", "DRT Delhi", ""],
-      ["DRT with no court", code("DRTNC"), "Commercial", "active", "Acme", "DRAT / DRT", "", ""],
-      ["State Commission short", code("SC"), "Commercial", "active", "Acme", "State Commission", "Delhi State Commission", ""],
-      ["Recovery outside Delhi", code("REC"), "Commercial", "active", "Acme", "Recovery Forums", "Recovery Officer Mumbai", ""],
-      ["Family court matter", code("FAM"), "Civil", "active", "Acme", "Family Court", "Saket Family Court", ""],
+      [
+        "DRT natural name",
+        code("DRT"),
+        "Commercial",
+        "active",
+        clientName,
+        "DRAT / DRT",
+        "DRT Delhi",
+        "",
+      ],
+      [
+        "DRT with no court",
+        code("DRTNC"),
+        "Commercial",
+        "active",
+        clientName,
+        "DRAT / DRT",
+        "",
+        "",
+      ],
+      [
+        "State Commission short",
+        code("SC"),
+        "Commercial",
+        "active",
+        clientName,
+        "State Commission",
+        "Delhi State Commission",
+        "",
+      ],
+      [
+        "Recovery outside Delhi",
+        code("REC"),
+        "Commercial",
+        "active",
+        clientName,
+        "Recovery Forums",
+        "Recovery Officer Mumbai",
+        "",
+      ],
+      [
+        "Family court matter",
+        code("FAM"),
+        "Civil",
+        "active",
+        clientName,
+        "Family Court",
+        "Saket Family Court",
+        "",
+      ],
     ];
 
     const [preview] = await Promise.all([
@@ -324,11 +374,17 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
     const confirm = page.getByTestId("matter-import-confirm");
     await expect(confirm).toHaveText(/Confirm import \(5\)/);
     await expect(confirm).toBeEnabled();
-    await expect(page.getByText("Validation errors").locator("..")).toContainText("0");
-    await expect(page.getByText(/is not an active .* catalog selection/)).toHaveCount(0);
+    await expect(
+      page.getByText("Validation errors").locator(".."),
+    ).toContainText("0");
+    await expect(
+      page.getByText(/is not an active .* catalog selection/),
+    ).toHaveCount(0);
     await expect(page.getByText(/Court is required for/)).toHaveCount(0);
     // BUG-001: the raw pydantic enum must never reach the page.
-    await expect(page.getByText(/Input should be 'lower_court'/)).toHaveCount(0);
+    await expect(page.getByText(/Input should be 'lower_court'/)).toHaveCount(
+      0,
+    );
 
     const [commit] = await Promise.all([
       page.waitForResponse(
@@ -356,6 +412,7 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
     await page.goto(`${BASE_URL}/app/matters/imports`);
 
     const matterCode = code("EXACT");
+    const clientName = client("EXACT");
     const [preview] = await Promise.all([
       page.waitForResponse(
         (response) =>
@@ -369,7 +426,16 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
           mimeType:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           buffer: buildXlsx([
-            ["Exact DRT bench", matterCode, "Commercial", "active", "Acme", "DRAT / DRT", "DRT-2", ""],
+            [
+              "Exact DRT bench",
+              matterCode,
+              "Commercial",
+              "active",
+              clientName,
+              "DRAT / DRT",
+              "DRT-2",
+              "",
+            ],
           ]),
         })
         .then(() => page.getByTestId("matter-import-validate").click()),
@@ -414,6 +480,7 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
 
     const keeper = code("KEEP");
     const clean = code("CLEAN");
+    const clientName = client("DUPES");
     const [preview] = await Promise.all([
       page.waitForResponse(
         (response) =>
@@ -427,9 +494,36 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
           mimeType:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           buffer: buildXlsx([
-            ["Keeper", keeper, "Commercial", "active", "Acme", "High Court", "Delhi High Court", ""],
-            ["Keeper", keeper, "Commercial", "active", "Acme", "High Court", "Delhi High Court", ""],
-            ["Clean row", clean, "Commercial", "active", "Acme", "High Court", "Delhi High Court", ""],
+            [
+              "Keeper",
+              keeper,
+              "Commercial",
+              "active",
+              clientName,
+              "High Court",
+              "Delhi High Court",
+              "",
+            ],
+            [
+              "Keeper",
+              keeper,
+              "Commercial",
+              "active",
+              clientName,
+              "High Court",
+              "Delhi High Court",
+              "",
+            ],
+            [
+              "Clean row",
+              clean,
+              "Commercial",
+              "active",
+              clientName,
+              "High Court",
+              "Delhi High Court",
+              "",
+            ],
           ]),
         })
         .then(() => page.getByTestId("matter-import-validate").click()),
@@ -437,8 +531,12 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
     await expectStatus(preview, 200, "validate duplicate rows");
 
     // Skipped, not rejected: no correction is demanded of the user.
-    await expect(page.getByText("Duplicates skipped").locator("..")).toContainText("1");
-    await expect(page.getByText("Validation errors").locator("..")).toContainText("0");
+    await expect(
+      page.getByText("Duplicates skipped").locator(".."),
+    ).toContainText("1");
+    await expect(
+      page.getByText("Validation errors").locator(".."),
+    ).toContainText("0");
     await expect(page.getByText(/Skipped — already exists/)).toBeVisible();
     const confirm = page.getByTestId("matter-import-confirm");
     await expect(confirm).toHaveText(/Confirm import \(2\)/);
@@ -476,8 +574,7 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
     await expectStatus(employees, 200, "read company directory");
     const payload = (await employees.json()) as Record<string, unknown>;
     const list = Object.values(payload).find(Array.isArray) as
-      | Array<{ email?: string; full_name?: string }>
-      | undefined;
+      Array<{ email?: string; full_name?: string }> | undefined;
     expect(list, "employee directory should be a list").toBeTruthy();
 
     // Pick a full name that belongs to exactly one active user, so the
@@ -494,6 +591,7 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
     );
 
     await page.goto(`${BASE_URL}/app/matters/imports`);
+    const clientName = client("OWNER");
     const [preview] = await Promise.all([
       page.waitForResponse(
         (response) =>
@@ -507,7 +605,16 @@ test.describe("Ram 2026-08-14 bulk matter upload", () => {
           mimeType:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           buffer: buildXlsx([
-            ["Owner by name", code("OWN"), "Commercial", "active", "Acme", "High Court", "Delhi High Court", uniqueName ?? ""],
+            [
+              "Owner by name",
+              code("OWN"),
+              "Commercial",
+              "active",
+              clientName,
+              "High Court",
+              "Delhi High Court",
+              uniqueName ?? "",
+            ],
           ]),
         })
         .then(() => page.getByTestId("matter-import-validate").click()),
