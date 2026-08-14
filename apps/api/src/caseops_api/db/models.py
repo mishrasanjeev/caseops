@@ -16213,3 +16213,106 @@ class TenantDataOperationItem(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class BulkImportJob(Base):
+    """Neutral, domain-tagged bulk import owner (ARCH-OPS-23).
+
+    Deliberately not IP-specific: `domain` selects the typed row table. The
+    legacy `matter_bulk_import_jobs` and `employee_bulk_import_jobs` owners stay
+    canonical for their domains and are not migrated here.
+    """
+
+    __tablename__ = "bulk_import_jobs"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_bulk_import_job_company"),
+        UniqueConstraint(
+            "company_id", "domain", "idempotency_key", name="uq_bulk_import_job_idempotency"
+        ),
+        CheckConstraint("domain IN ('ip_trademark')", name="ck_bulk_import_job_domain"),
+        CheckConstraint(
+            "status IN ('staged', 'preview_ready', 'committed', "
+            "'committed_with_errors', 'failed', 'cancelled')",
+            name="ck_bulk_import_job_status",
+        ),
+        CheckConstraint("total_rows >= 0", name="ck_bulk_import_job_total_rows"),
+        Index("ix_bulk_import_jobs_company_domain", "company_id", "domain"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    domain: Mapped[str] = mapped_column(String(32), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="staged")
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    committed_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    preview_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    preview_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpImportRow(Base):
+    """Typed IP staging row for one `bulk_import_jobs` entry."""
+
+    __tablename__ = "ip_import_rows"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "company_id"],
+            ["bulk_import_jobs.id", "bulk_import_jobs.company_id"],
+            name="fk_ip_import_row_job_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("job_id", "row_number", name="uq_ip_import_row_number"),
+        CheckConstraint("row_number > 0", name="ck_ip_import_row_number_positive"),
+        CheckConstraint(
+            "validation_status IN ('valid', 'invalid')",
+            name="ck_ip_import_row_validation_status",
+        ),
+        CheckConstraint(
+            "commit_status IN ('pending', 'committed', 'failed', 'skipped')",
+            name="ck_ip_import_row_commit_status",
+        ),
+        Index("ix_ip_import_rows_job_commit", "job_id", "commit_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    job_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    normalized_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    validation_status: Mapped[str] = mapped_column(String(16), nullable=False, default="valid")
+    errors_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    commit_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    commit_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )

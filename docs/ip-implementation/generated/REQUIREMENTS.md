@@ -436,7 +436,7 @@ Generated; do not edit.
 | ARCH-OPS-20 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
 | ARCH-OPS-21 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
 | ARCH-OPS-22 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
-| ARCH-OPS-23 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
+| ARCH-OPS-23 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B, IPLF-032A | 17 | 2 | in_progress | not_run | blocked | false |
 | ARCH-OPS-24 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
 | ARCH-OPS-25 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
 | ARCH-OPS-26 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |

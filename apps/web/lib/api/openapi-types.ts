@@ -4902,6 +4902,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Job */
+        post: operations["post_ip_import_job_api_ip_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Import Job */
+        get: operations["get_ip_import_job_api_ip_imports__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Commit */
+        post: operations["post_ip_import_commit_api_ip_imports__job_id__commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}/revalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Revalidation */
+        post: operations["post_ip_import_revalidation_api_ip_imports__job_id__revalidate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/operational-deadlines": {
         parameters: {
             query?: never;
@@ -19556,6 +19624,115 @@ export interface components {
             source: string;
             /** Supersedes Identifier Id */
             supersedes_identifier_id: string | null;
+        };
+        /** IpImportCommitRequest */
+        IpImportCommitRequest: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Preview Token */
+            preview_token: string;
+        };
+        /** IpImportCommitResponse */
+        IpImportCommitResponse: {
+            job: components["schemas"]["IpImportJobRecord"];
+            /**
+             * Replayed
+             * @default false
+             */
+            replayed: boolean;
+            /** Rows */
+            rows: components["schemas"]["IpImportRowRecord"][];
+        };
+        /** IpImportJobCreateRequest */
+        IpImportJobCreateRequest: {
+            /** Filename */
+            filename: string;
+            /** Rows */
+            rows: components["schemas"]["IpImportRowInput"][];
+        };
+        /** IpImportJobRecord */
+        IpImportJobRecord: {
+            /** Committed At */
+            committed_at: string | null;
+            /** Committed Rows */
+            committed_rows: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Creator Label Snapshot */
+            creator_label_snapshot: string;
+            /** Domain */
+            domain: string;
+            /** Failed Rows */
+            failed_rows: number;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /** Invalid Rows */
+            invalid_rows: number;
+            /** Preview Expires At */
+            preview_expires_at: string | null;
+            /** Preview Token */
+            preview_token: string | null;
+            /** Source Sha256 */
+            source_sha256: string;
+            /** Status */
+            status: string;
+            /** Total Rows */
+            total_rows: number;
+            /** Valid Rows */
+            valid_rows: number;
+            /** Version */
+            version: number;
+        };
+        /** IpImportPreviewResponse */
+        IpImportPreviewResponse: {
+            job: components["schemas"]["IpImportJobRecord"];
+            /**
+             * Preview Expired
+             * @default false
+             */
+            preview_expired: boolean;
+            /** Rows */
+            rows: components["schemas"]["IpImportRowRecord"][];
+        };
+        /**
+         * IpImportRowInput
+         * @description One staged portfolio row as supplied by the operator.
+         */
+        IpImportRowInput: {
+            /** Row Number */
+            row_number: number;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
+        };
+        /** IpImportRowRecord */
+        IpImportRowRecord: {
+            /** Commit Error Code */
+            commit_error_code?: string | null;
+            /** Commit Status */
+            commit_status: string;
+            /** Created Docket Id */
+            created_docket_id?: string | null;
+            /** Errors */
+            errors?: {
+                [key: string]: unknown;
+            }[];
+            /** Id */
+            id: string;
+            /** Normalized */
+            normalized?: {
+                [key: string]: unknown;
+            };
+            /** Row Number */
+            row_number: number;
+            /** Validation Status */
+            validation_status: string;
         };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
@@ -40804,6 +40981,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpIdentifierResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_job_api_ip_imports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpImportJobCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_import_job_api_ip_imports__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_commit_api_ip_imports__job_id__commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportCommitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_revalidation_api_ip_imports__job_id__revalidate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1448,7 +1448,7 @@
         "IPLF-032A",
         "IPLF-032B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -8486,36 +8486,83 @@
       "source_kind": "derived",
       "scope_source": "IPLF-032",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "Additive expand 20260814_0002 with bounded PostgreSQL lock_timeout; empty rollback proven; no backfill.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "ARCH-OPS-23"
+      ],
+      "journey_path_ids": [
+        "UJ-02-NORMAL",
+        "UJ-02-EXC-01",
+        "UJ-02-EXC-02",
+        "UJ-02-EXC-03",
+        "UJ-02-EXC-04"
+      ],
       "ownership": [
         {
-          "classification": "REPLACE",
-          "component": "IPLF-032 canonical scope: Introduce neutral `bulk_import_jobs`, typed `ip_import_rows`, validation/preview/commit/history/error report and read-only adapters over legacy Matter/Employee jobs; do not alias or dual-write their job state.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "classification": "NEW",
+          "component": "bulk_import_jobs (neutral, domain-tagged) and ip_import_rows (typed IP staging).",
+          "canonical_writer": "services/ip_imports.py owns staging and orchestration only. Portfolio records are materialised through the existing create_ip_docket writer. matter_bulk_import_jobs and employee_bulk_import_jobs remain canonical for their own domains and are neither migrated nor rewritten; no ip_import_jobs table exists and Matter row-commit logic is not reused as generic orchestration.",
+          "compatibility_path": "Additive tables and four additive routes; no existing import surface changes.",
+          "retirement_gate": "No legacy import owner is retired. Read-only adapters over the legacy jobs remain unbuilt and are tracked on IPLF-032B."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260814_0002_ip_bulk_import_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_imports.py",
+        "apps/api/src/caseops_api/services/ip_imports.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_bulk_import.py",
+        "apps/api/tests/test_20260814_ip_bulk_import_migration.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md",
+          "revision": "640238496fbdaa08371650ddeae72de0941e46ca",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no concurrency proof for the with_for_update job path, no frontend, no E2E, no deployment.",
+          "fixtures": "Synthetic single- and cross-company tenants; valid, invalid and formula-injection rows; a Matter deleted between preview and commit; a foreign-tenant matter id alongside a nonexistent id. No real client, mark, proprietor, registry or spreadsheet file.",
+          "assertions": "Staging writes nothing to the portfolio; invalid rows carry typed field/code errors and are skipped rather than dropped; an expired preview blocks commit and the superseded token cannot be replayed after revalidation; a row that becomes uncommittable fails alone while siblings commit and the job ends committed_with_errors; replay with the same idempotency key returns the original terminal result and creates no duplicate while a different key is refused; a foreign-tenant reference and a nonexistent reference produce identical errors with no disclosure; formula prefixes are neutralised; the expand is additive with both legacy import owners surviving upgrade and rollback, no ip_import_jobs table exists, and the empty rollback is clean. Counts: 7 passed plus 11 passed across migration/order/governance gates, ruff clean, data-governance map valid, OpenAPI regeneration additive only.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-032A-RELEASE-VERIFICATION",
+          "summary": "The import API accepts already-parsed JSON rows only. There is no CSV/XLSX upload or template, no duplicate suggestion, no cancel/retry/history, no background execution for large imports, a 1000-row cap, no frontend, no E2E, and no real-PostgreSQL CI or deployment.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, file parsing with encoding/delimiter handling and a template, duplicate suggestion and reconciliation, background execution with cancel/retry/history, an import UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
+          "safe_fallback": "All four routes are additive and access-scoped; no client consumes them and commit only creates dockets through the canonical writer.",
+          "milestone_impact": "Blocks IPLF-032A release closure; IP-PORT-08 and the legacy read-only adapters remain open on IPLF-030B and IPLF-032B.",
+          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-033A."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Add CSV/XLSX parsing, a template download, and encoding/delimiter handling for IP-PORT-08.",
+        "Add duplicate suggestion across the staged set and against existing records.",
+        "Add cancel, retry and history, and move large commits to background execution.",
+        "Build read-only adapters over the legacy Matter/Employee import jobs on IPLF-032B."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds bulk_import_jobs and ip_import_rows, both company-scoped and registered in the data-governance map with registry_fail_closed disposition.",
+        "Commit creates ip_docket_records through the canonical writer; no retention, export, purge or restore behaviour is enabled."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "allocation_review": "M3 foundation slices shipped with empty coverage. This allocates the UJ-02 paths and the ARCH-OPS-23 neutral-import ownership rule that IPLF-032A actually implements, out of IPLF-032B. ARCH-OPS-23 stays co-owned and open because legacy read-only adapters are not built. PRD scope unchanged.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -8544,13 +8591,7 @@
       "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
       "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
       "requirement_ids": [],
-      "journey_path_ids": [
-        "UJ-02-EXC-01",
-        "UJ-02-EXC-02",
-        "UJ-02-EXC-03",
-        "UJ-02-EXC-04",
-        "UJ-02-NORMAL"
-      ],
+      "journey_path_ids": [],
       "ownership": [
         {
           "classification": "REPLACE",
@@ -42111,10 +42152,13 @@
         "planned:IPLF-UJ-67-EXC-05",
         "planned:IPLF-UJ-67-EXC-06",
         "planned:IPLF-UJ-67-NORMAL",
-        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-23]"
+        "apps/api/tests/test_ip_arch_ops_contract.py::test_each_arch_ops_requirement_has_an_active_control[ARCH-OPS-23]",
+        "apps/api/tests/test_ip_bulk_import.py",
+        "apps/api/tests/test_20260814_ip_bulk_import_migration.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md"
+        "docs/ip-implementation/evidence/m2/IPLF-019B/release-2026-08-06.md",
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
       ],
       "blockers": [],
       "implementation_status": "in_progress",
@@ -42124,9 +42168,10 @@
       "slice_ids": [
         "IPLF-019B",
         "IPLF-027B",
-        "IPLF-029B"
+        "IPLF-029B",
+        "IPLF-032A"
       ],
-      "allocation_rationale": "ARCH-OPS allocation reviewed against PRD requirement family and parent epic scope: IPLF-019, IPLF-027, IPLF-029.",
+      "allocation_rationale": "ARCH-OPS allocation reviewed against PRD requirement family and parent epic scope: IPLF-019, IPLF-027, IPLF-029. | IPLF-032A 2026-08-14: neutral bulk_import_jobs plus typed ip_import_rows delivered; legacy read-only adapters remain unbuilt so this stays open.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -42367,8 +42412,8 @@
         "planned:IPLF-UJ-02-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -47386,15 +47431,17 @@
       "test_id": "IPLF-UJ-02-NORMAL",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-02-NORMAL"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_normal_import_trademark_portfolio#IPLF-UJ-02-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-032B"
+        "IPLF-032A"
       ],
       "allocation_rationale": "UJ-02 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-032.",
       "not_required_approval": {
@@ -47414,15 +47461,17 @@
       "test_id": "IPLF-UJ-02-EXC-01",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-02-EXC-01"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc01_expired_preview_requires_revalidation#IPLF-UJ-02-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-032B"
+        "IPLF-032A"
       ],
       "allocation_rationale": "UJ-02 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-032.",
       "not_required_approval": {
@@ -47442,15 +47491,17 @@
       "test_id": "IPLF-UJ-02-EXC-02",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-02-EXC-02"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc02_individual_rows_can_fail_without_aborting_siblings#IPLF-UJ-02-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-032B"
+        "IPLF-032A"
       ],
       "allocation_rationale": "UJ-02 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-032.",
       "not_required_approval": {
@@ -47470,15 +47521,17 @@
       "test_id": "IPLF-UJ-02-EXC-03",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-02-EXC-03"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc03_repeated_commit_returns_original_result#IPLF-UJ-02-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-032B"
+        "IPLF-032A"
       ],
       "allocation_rationale": "UJ-02 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-032.",
       "not_required_approval": {
@@ -47498,15 +47551,17 @@
       "test_id": "IPLF-UJ-02-EXC-04",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-02-EXC-04"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc04_cross_tenant_reference_is_rejected_without_disclosure#IPLF-UJ-02-EXC-04"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-032B"
+        "IPLF-032A"
       ],
       "allocation_rationale": "UJ-02 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-032.",
       "not_required_approval": {

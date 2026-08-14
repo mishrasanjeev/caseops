@@ -71,6 +71,12 @@ from caseops_api.schemas.ip_documents import (
     IpDocumentUploadMetadata,
     IpDocumentUploadResponse,
 )
+from caseops_api.schemas.ip_imports import (
+    IpImportCommitRequest,
+    IpImportCommitResponse,
+    IpImportJobCreateRequest,
+    IpImportPreviewResponse,
+)
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
     IpDocketEventPreviewResponse,
@@ -186,6 +192,12 @@ from caseops_api.services.ip_documents import (
     preview_ip_document_name,
     seed_ip_document_taxonomy,
     upsert_ip_document_taxonomy_entry,
+)
+from caseops_api.services.ip_imports import (
+    commit_ip_import_job,
+    create_ip_import_job,
+    preview_ip_import_job,
+    revalidate_ip_import_job,
 )
 from caseops_api.services.ip_lifecycle import (
     append_ip_docket_event,
@@ -1089,6 +1101,47 @@ async def get_ip_identifier_search(
         IpIdentifierResponse.model_validate(row)
         for row in search_ip_identifiers(session, context=context, query=query)
     ]
+
+
+@router.post(
+    "/imports",
+    response_model=IpImportPreviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_import_job(
+    payload: IpImportJobCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return create_ip_import_job(session, context=context, payload=payload)
+
+
+@router.get("/imports/{job_id}", response_model=IpImportPreviewResponse)
+async def get_ip_import_job(
+    job_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return preview_ip_import_job(session, context=context, job_id=job_id)
+
+
+@router.post("/imports/{job_id}/revalidate", response_model=IpImportPreviewResponse)
+async def post_ip_import_revalidation(
+    job_id: str,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return revalidate_ip_import_job(session, context=context, job_id=job_id)
+
+
+@router.post("/imports/{job_id}/commit", response_model=IpImportCommitResponse)
+async def post_ip_import_commit(
+    job_id: str,
+    payload: IpImportCommitRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportCommitResponse:
+    return commit_ip_import_job(session, context=context, job_id=job_id, payload=payload)
 
 
 @router.get("/dockets", response_model=IpDocketListResponse)
