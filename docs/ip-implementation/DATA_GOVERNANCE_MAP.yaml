@@ -3,11 +3,10 @@
   "slice_id": "IPLF-028C",
   "status": "repository_inventory_snapshot_policy_unapproved",
   "policy_status": "pending_named_human_approval",
-  "purpose": "Versioned repository inventory for DATA-GOV-01 through DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
+  "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
   "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation.",
   "requirement_refs": [
     "DATA-GOV-01",
-    "DATA-GOV-02",
     "DATA-GOV-03"
   ],
   "disposition_handlers": [

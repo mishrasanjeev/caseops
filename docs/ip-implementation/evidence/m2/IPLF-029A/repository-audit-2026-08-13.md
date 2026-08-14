@@ -21,11 +21,24 @@ For a `deployment_verified` slice, the control also requires an existing
 evidence artifact. It reports the canonical manifest's status; it does not
 inspect a live service or promote any status itself.
 
+The audit implementation at exact revision
+`76d23c8d81509f936eb4dd1c4c94e19f3b228c08` passed pull-request CI
+`31760287600`, Security `31760287635`, and CodeQL `31760287570` before PR #220
+merged. Those checks included the negative generated-view regression and the
+full API, PostgreSQL, web, and Playwright gates. This is immutable evidence that
+the bounded repository audit control works. It does not prove the canonical
+slice's separate requirement to close every M2 row, so IPLF-029A remains
+`in_progress / not_run / blocked / pending` while the unresolved rows listed
+below remain open.
+
 ## Remaining M2 closure conditions
 
 The audit deliberately retains, rather than conceals, the current incomplete
-work: the provider-gated IPLF-026B release, unimplemented IPLF-027B and
-IPLF-028B user workflows, policy/recovery and data-operation blockers in
-IPLF-028, and all named acceptance. The result is a Definition-of-Ready guard,
-not a claim of legal, security, pilot, UAT, production, recovery, or data
-operation completion.
+work: the provider-gated IPLF-026B release; the remaining IPLF-027 and
+IPLF-028B user workflows; the six-class IPLF-028A runtime registry boundary;
+the policy/recovery and data-operation blockers in IPLF-028; and all named
+acceptance. IPLF-028C now supplies only the repository inventory and
+Definition-of-Ready facets of `DATA-GOV-01` and `DATA-GOV-03`; it does not
+satisfy `DATA-GOV-02` or any runtime/recovery facet. The result is a
+Definition-of-Ready guard, not a claim of legal, security, pilot, UAT,
+production, recovery, or data-operation completion.
