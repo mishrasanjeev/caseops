@@ -1131,7 +1131,7 @@
         "IPLF-029A",
         "IPLF-029B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -6920,21 +6920,47 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "scripts/ip_m2_ownership_audit.py",
+        ".github/workflows/ci.yml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_m2_ownership_audit.py",
+        "python scripts/ip_m2_ownership_audit.py validate"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-029A/repository-audit-2026-08-13.md"
+      ],
       "evidence_metadata": [],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-029A-UNRESOLVED-M2-ROWS",
+          "summary": "The audit validates repository references and makes active blocked work explicit, but it cannot close IPLF-026B provider failures, IPLF-027B/028B unimplemented user workflows, IPLF-028 policy/recovery gates, or named human acceptance.",
+          "owner": "Program control with the named slice, provider, Records/Privacy/Legal/Security, and acceptance owners",
+          "evidence_needed": "Each remaining M2 slice needs its specified canonical-writer journey proof, exact serving release evidence where applicable, external-provider recovery, approved data/recovery evidence, and named acceptance without inference.",
+          "safe_fallback": "Keep every unresolved row visibly blocked or not-started; the audit must not upgrade a status or enable an application operation.",
+          "milestone_impact": "M2 cannot claim its one-writer/reconciliation exit until every row has its independently required evidence.",
+          "next_independent_slice": "Maintain the CI audit while implementing only the next bounded, dependency-ready repository slice."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Run the audit in CI and preserve the explicit blocked/not-started states for every unresolved M2 row.",
+        "Do not treat repository reference validation as a replacement for production journeys, human approval, or external-provider recovery."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, application-data, object, provider, queue, or external mutation is introduced."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/generated/M2_OWNERSHIP_AUDIT.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Generated M2 inventory with implementation/release/test/evidence/blocker counts and explicit evidence boundary"
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
