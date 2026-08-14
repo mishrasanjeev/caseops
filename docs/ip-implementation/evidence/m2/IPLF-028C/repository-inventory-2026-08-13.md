@@ -96,8 +96,13 @@ The repair at immutable revision
 all ten API coverage shards, aggregate coverage, PostgreSQL/pgvector, web
 typecheck/Vitest/build, and the app Playwright suite. That exact evidence
 restores the bounded repository-control verification to `passed`. The later
-evidence-only promotion commit is not yet merged or published to canonical
-main and must pass its own complete exact-head checks before merge.
+evidence-only promotion head
+`2ccb51f648e8f29b560d98a3a53e0f245daef08b` passed CI `31815350114`,
+Security `31815350119`, and CodeQL `31815350200`, then PR #226 merged through
+canonical main `3177f0176305e8790f40c3f771daebe595087955`. Exact-main CI
+`31819401226`, Security `31819401221`, and CodeQL `31819401234` also passed.
+Canonical publication changes no runtime-operation, policy, recovery, release,
+or acceptance conclusion.
 
 The release gate remains separately blocked. This closes only the repository
 inventory/Definition-of-Ready implementation facets of `DATA-GOV-01` and

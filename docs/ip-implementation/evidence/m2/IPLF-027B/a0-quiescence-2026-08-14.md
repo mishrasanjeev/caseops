@@ -2,13 +2,13 @@
 
 ## Status and boundary
 
-This artifact records a schema-free A0 application and release-control
-candidate based on
-canonical release `8d9654bbe556ad4fa24caf64578ac9cf55343a0e`. It does not
-claim independent CI, merge, deployment, production drain, migration,
+This artifact records schema-free A0 application and release-control
+implementation anchor `f8a3c2c579b5d98c77827a3651cebd6c8a42a12a`, rebased on
+canonical predecessor `3177f0176305e8790f40c3f771daebe595087955`. It does not
+claim exact-head GitHub checks, merge, deployment, production drain, migration,
 activation, or completion of IPLF-027B, RULE-GOV-01..08, UJ-47, UJ-67, or the
-IP program. An immutable candidate revision is recorded only after publication;
-it is not release evidence until its own required checks pass.
+IP program. The immutable implementation anchor has repository-local evidence
+only; this separate evidence head and all release evidence remain pending.
 
 The existing `CASEOPS_IP_RULE_GOVERNANCE_ENABLED` setting remains `false` by
 default. With the flag off, the canonical service rejects each in-scope writer
@@ -75,6 +75,40 @@ The following paths are deliberately excluded:
   The planned A1 endpoint must be protected by this fence from its first
   revision; A0 does not introduce it.
 
+## Fresh pre-A0 production baseline
+
+PR #226 merged as exact canonical main
+`3177f0176305e8790f40c3f771daebe595087955` after both its repair and
+promotion heads passed their complete required checks. Exact-main CI
+`31819401226`, Security `31819401221`, and CodeQL `31819401234` also passed.
+The normal build/deploy path produced and served this exact predecessor:
+
+| Evidence | Exact identity/result |
+|---|---|
+| API Cloud Build | `e25baf00-ec0a-4ae2-848b-74e8e56a8f99` - success |
+| API immutable image | `sha256:ade0528b789513012960f9ceae2fb915d41306d604512befb0b0641e22b62537` |
+| API service | `caseops-api-00293-nf2` - ready, untagged latest, 100% traffic, exact full release SHA |
+| Web Cloud Build | `174759dd-aab0-48e2-96c9-eff2b586c9ad` - success |
+| Web immutable image | `sha256:d2f08ae2a0786d3489dc7cd70a6072c229b37524a630df6f2c7ee973043dbfbe` |
+| Web service | `caseops-web-00271-cgk` - ready, untagged latest, 100% traffic, exact full release SHA |
+| Migration | `caseops-migrate-job-6wn7k` - 1/1 success on the exact API image |
+| Canonical recurring jobs | all six on the exact API image; five schedulers enabled and authority metadata intentionally paused with timeout 43200 |
+| Production workflow | `31819401239` - RAM/IP 69 passed, 3 failed, 4 skipped; Notice 2 passed |
+
+The production failures are only the unchanged recommendation/citation HTTP
+503 set caused by exhausted OpenAI credits; bulk import and case tracking pass.
+This remains a red global production gate. No provider recovery is inferred,
+and the authority-metadata scheduler remains paused.
+
+The serving API predecessor does not contain the A0 fence and has no explicit
+governance environment override; its setting only falls back to the existing
+default false. It is therefore part of the unfenced writer-capable retirement
+cohort after exact A0 is serving. The manually invokable
+`caseops-ip-qa-bootstrap` job remains on predecessor image digest
+`sha256:a240a974dbd8ed12a05b9ee179209dc1d8da3618fed2899bd07e877e84d78b4b`
+and must be repinned to exact A0 without execution. Recheck that no
+writer-capable execution is running immediately before rollout.
+
 ## A0 / A1 / A2 rollout protocol
 
 ### A0 - deploy and prove quiescence
@@ -111,9 +145,36 @@ The following paths are deliberately excluded:
    unfenced writer-capable cohort, oldest first and the immediate predecessor
    last. The 2026-08-14 pre-deploy audit found it begins at
    `caseops-api-00258-zv8` (release `d8ac94d`, where these writers first shipped)
-   and currently ends at `caseops-api-00292-sr5`; include any later unfenced
-   predecessor introduced before A0. Recheck every exact target immediately
-   before deletion. Preserve the pre-00258 revisions and never use a wildcard.
+   and currently ends at exact predecessor `caseops-api-00293-nf2`. The audited
+   36-revision allowlist is:
+
+   ```text
+   caseops-api-00258-zv8  caseops-api-00259-kpk
+   caseops-api-00260-j75  caseops-api-00261-xnb
+   caseops-api-00262-8p5  caseops-api-00263-zl4
+   caseops-api-00264-jmx  caseops-api-00265-7zt
+   caseops-api-00266-lcq  caseops-api-00267-swr
+   caseops-api-00268-6p9  caseops-api-00269-d5g
+   caseops-api-00270-5zs  caseops-api-00271-cg8
+   caseops-api-00272-2cs  caseops-api-00273-v99
+   caseops-api-00274-phv  caseops-api-00275-f7n
+   caseops-api-00276-zq8  caseops-api-00277-2ws
+   caseops-api-00278-4rq  caseops-api-00279-6pg
+   caseops-api-00280-qpf  caseops-api-00281-9bt
+   caseops-api-00282-j82  caseops-api-00283-k2x
+   caseops-api-00284-jzh  caseops-api-00285-skg
+   caseops-api-00286-8x7  caseops-api-00287-ml7
+   caseops-api-00288-ccf  caseops-api-00289-l9g
+   caseops-api-00290-plb  caseops-api-00291-62b
+   caseops-api-00292-sr5  caseops-api-00293-nf2
+   ```
+
+   Revisions 00258 through 00292 are currently retired; 00293 is the active
+   3177 predecessor and becomes eligible only after exact A0 is ready at 100%
+   and the full drain preconditions pass. Include any later unfenced predecessor
+   introduced before A0, and recheck every exact target both immediately before
+   deployment and immediately before deletion. Preserve all pre-00258 revisions
+   and never use a wildcard.
 6. Prove deletion completion three ways: each exact target `describe` returns
    genuine `NOT_FOUND`, a fresh revision list has an empty intersection with
    the allowlist, and Admin Activity has one successful revision-delete event
@@ -204,8 +265,10 @@ The candidate currently has repository-local evidence only:
 | combined focused tests | 18 passed; zero skipped |
 | `uv --directory apps/api run pytest -q tests/test_deploy_prod_hardening.py` | 19 passed; includes exact traffic/config/image success and fail-closed traffic, generation, flag, and immutable-image drift |
 | combined A0 service/workflow/deploy-hardening suite | 37 passed; zero skipped |
+| `uv --directory apps/api run pytest -q tests/test_ip_data_governance_map.py` | 10 passed; exact 028C projection/control regression retained after rebase |
 | focused Ruff | passed |
-| `uv --directory apps/api run ruff format --check src/caseops_api/services/ip_deadline_workflow.py tests/test_ip_rule_governance_quiescence.py tests/test_ip_deadline_workflow.py` | 3 files already formatted |
+| `uv --directory apps/api run ruff format --check src/caseops_api/services/ip_deadline_workflow.py tests/test_ip_rule_governance_quiescence.py tests/test_ip_deadline_workflow.py tests/test_deploy_prod_hardening.py` | 4 A0-changed Python files already formatted |
+| `bash -n scripts/deploy-prod.sh` | passed with Git for Windows Bash |
 | program, ownership, ARCH-OPS, data-class, data-governance registry/map, change-gate, and M2 ownership validators | passed |
 
 The focused fence tests use a session sentinel that fails on any database
@@ -219,8 +282,10 @@ retains transition and tenant-isolation coverage with governance enabled.
 
 ## Remaining release gate
 
-A0 remains unreleased until it has an exact commit, independent review and CI,
-canonical merge, exact image/revision deployment, 100% traffic identity,
+A0 has exact implementation anchor `f8a3c2c579b5d98c77827a3651cebd6c8a42a12a`
+but remains unreleased until the evidence head passes independent review and
+complete exact-head CI/Security/CodeQL, canonical merge, exact image/revision
+deployment, 100% traffic identity,
 legacy-route removal, explicit writer-capable legacy-revision termination,
 observed shutdown,
 revision-log plus rule/version/policy/audit no-write proof, and the same dated

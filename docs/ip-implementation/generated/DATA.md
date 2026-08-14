@@ -4,4 +4,4 @@ Generated; do not edit.
 
 | Slice | Data impact |
 | --- | --- |
-| IPLF-028A | Additive migration 20260813_0001 creates six unseeded company-scoped records-governance tables. It creates no retention policy, legal hold, tenant operation, export, purge, offboarding, restore, object, provider, or backup mutation.; Database constraints and triggers keep manifests/items immutable, prohibit execute mode and safe_to_execute=true, require explicit indefinite-retention references, retain hold/version evidence, and refuse a destructive downgrade once governance evidence exists. |
+| IPLF-027B | A0 is a schema-free application/release-control change and adds no migration, table, column, index, constraint, seed, backfill, or data rewrite. With the explicit false flag, the three rule-governance services reject before authoritative database or audit access while all five existing legal-deadline writers continue over already selected immutable rules.; A1 data expansion, backfill, reconciliation, and later constraint contraction remain unimplemented and unauthorized by this A0 record. |
