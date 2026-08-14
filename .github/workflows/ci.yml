@@ -70,8 +70,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
-        total_shards: [8]
+        # Ten balanced shards leave realistic headroom for the slowest
+        # coverage-heavy suites while preserving whole-file isolation.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        total_shards: [10]
     steps:
       - uses: actions/checkout@v4
 
@@ -93,30 +95,17 @@ jobs:
           PYTEST_SHARD: ${{ matrix.shard }}
           PYTEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import os
-
-          shard = int(os.environ["PYTEST_SHARD"])
-          total_shards = int(os.environ["PYTEST_TOTAL_SHARDS"])
-          files = sorted(Path("tests").rglob("test_*.py"))
-          selected = [
-              path.as_posix()
-              for index, path in enumerate(files)
-              if index % total_shards == shard - 1
-          ]
-
-          if not selected:
-              raise SystemExit(f"No tests selected for shard {shard}/{total_shards}")
-
-          Path(".pytest-shard-files").write_text("\n".join(selected) + "\n", encoding="utf-8")
-          print(
-              f"Selected {len(selected)} of {len(files)} test files "
-              f"for shard {shard}/{total_shards}:"
-          )
-          for path in selected:
-              print(f"  {path}")
-          PY
+          # Alphabetical modulo assignment made every newly added test shift
+          # later files into a different shard.  On 2026-08-13 that put
+          # several large suites in one shard and it exceeded the 60-minute
+          # cap. Keep whole files isolated, but spread a stable source-size
+          # estimate across ten shards so every file runs once without that
+          # concentration.
+          python ../../scripts/pytest_shard_plan.py \
+            --test-root tests \
+            --total-shards "$PYTEST_TOTAL_SHARDS" \
+            --shard "$PYTEST_SHARD" \
+            --output .pytest-shard-files
 
       - name: Pytest with coverage shard (P1-001 per-area gates)
         id: pytest
