@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Layer-2 metadata backfill runner — Cloud Run Job invocation of
 # `caseops_api.scripts.extract_authority_metadata`. Chews through the
-# 91K-doc historical backlog of authority_documents whose
-# structured_version IS NULL, calling GPT-5.1 per the cutover in commit
-# 8e8e3eb. The script's own _PRICE_TABLE knows about gpt-5 pricing as
-# of commit 10b0bb2, so the $20/day cap allows ~3,600 docs/day.
+# historical backlog of authority_documents missing structured metadata.
+# Backlog size, provider model, and effective token price are runtime facts;
+# inspect the target count and configured metadata-purpose model before every
+# run instead of relying on a dated estimate in this launcher.
 #
 # Why a Cloud Run Job instead of a screen on the VM:
 # - The VM-side per-bucket Layer-2 path is currently broken for new
@@ -75,7 +75,7 @@ gcloud run jobs $ACTION "${JOB}" \
   --set-secrets="CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_LLM_API_KEY=caseops-openai-api-key:latest,CASEOPS_OPENAI_API_KEY=caseops-openai-api-key:latest,CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
   --set-cloudsql-instances="${SQL_INSTANCE}" \
   --memory=2Gi --cpu=2 \
-  --task-timeout=86400s \
+  --task-timeout=43200s \
   --max-retries=0 --quiet
 
 echo "--- starting execution (no-wait) ---"

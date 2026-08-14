@@ -2,10 +2,11 @@
 """Validate, reconcile, and audit the production recurring-job inventory.
 
 The checked-in JSON file is the sole source for scheduler names, targets,
-cadences, time zones, invoker identity, and release-image policy. The live
-commands intentionally preserve each Cloud Run job's command, environment,
-secrets, resources, and runtime service account; only its release image and
-invoker binding are converged.
+cadences, time zones, desired states, invoker identity, release-image policy,
+and explicitly owned task timeouts. The live commands intentionally preserve
+each Cloud Run job's command, environment, secrets, resources, retries, and
+runtime service account; its release image, inventory-owned task timeout,
+scheduler state, and invoker binding are converged.
 """
 
 from __future__ import annotations
@@ -57,9 +58,12 @@ def validate_inventory(payload: object) -> list[str]:
         "run_job_name",
         "schedule",
         "time_zone",
+        "desired_state",
+        "task_timeout_seconds",
         "image_policy",
         "canary_policy",
     }
+    string_fields = required - {"task_timeout_seconds"}
     seen_schedulers: set[str] = set()
     seen_jobs: set[str] = set()
     for index, job in enumerate(jobs):
@@ -71,7 +75,7 @@ def validate_inventory(payload: object) -> list[str]:
         if missing:
             errors.append(f"{label} missing fields: {', '.join(missing)}")
             continue
-        for field in required:
+        for field in string_fields:
             if not isinstance(job[field], str) or not job[field].strip():
                 errors.append(f"{label}.{field} must be a non-empty string")
         scheduler = job["scheduler_name"]
@@ -86,6 +90,18 @@ def validate_inventory(payload: object) -> list[str]:
             errors.append(f"{label}.image_policy must be release_digest")
         if job["canary_policy"] not in {"manual_safe", "scheduled_execution"}:
             errors.append(f"{label}.canary_policy is invalid")
+        if job["desired_state"] not in {"ENABLED", "PAUSED"}:
+            errors.append(f"{label}.desired_state must be ENABLED or PAUSED")
+        timeout = job["task_timeout_seconds"]
+        if timeout is not None and (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, int)
+            or not 1 <= timeout <= 86_400
+        ):
+            errors.append(
+                f"{label}.task_timeout_seconds must be null or an integer "
+                "between 1 and 86400"
+            )
     legacy = payload.get("legacy_schedulers_to_pause", [])
     if not isinstance(legacy, list) or any(not isinstance(value, str) for value in legacy):
         errors.append("legacy_schedulers_to_pause must be a list of strings")
@@ -163,21 +179,23 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
         run_job = job["run_job_name"]
         scheduler = job["scheduler_name"]
         print(f"converging {scheduler} -> {run_job}", flush=True)
-        run_gcloud(
-            [
-                "run",
-                "jobs",
-                "update",
-                run_job,
-                "--image",
-                image,
-                "--region",
-                region,
-                "--project",
-                project,
-                "--quiet",
-            ]
-        )
+        update_arguments = [
+            "run",
+            "jobs",
+            "update",
+            run_job,
+            "--image",
+            image,
+            "--region",
+            region,
+            "--project",
+            project,
+            "--quiet",
+        ]
+        task_timeout = job["task_timeout_seconds"]
+        if task_timeout is not None:
+            update_arguments.extend(["--task-timeout", f"{task_timeout}s"])
+        run_gcloud(update_arguments)
         run_gcloud(
             [
                 "run",
@@ -228,6 +246,37 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
                 "--quiet",
             ]
         )
+        scheduler_after_update = run_gcloud(
+            [
+                "scheduler",
+                "jobs",
+                "describe",
+                scheduler,
+                "--location",
+                location,
+                "--project",
+                project,
+                "--format=json(state)",
+            ],
+            expect_json=True,
+        )
+        if scheduler_after_update.get("state") != job["desired_state"]:
+            state_action = (
+                "pause" if job["desired_state"] == "PAUSED" else "resume"
+            )
+            run_gcloud(
+                [
+                    "scheduler",
+                    "jobs",
+                    state_action,
+                    scheduler,
+                    "--location",
+                    location,
+                    "--project",
+                    project,
+                    "--quiet",
+                ]
+            )
 
     errors, _summary = inspect_live(
         inventory, project=project, region=region, expected_image=image
@@ -333,18 +382,18 @@ def inspect_live(
                 expect_json=True,
             )
         target = scheduler.get("httpTarget", {})
-        actual_image = (
+        run_spec = (
             run_job.get("spec", {})
             .get("template", {})
             .get("spec", {})
             .get("template", {})
             .get("spec", {})
-            .get("containers", [{}])[0]
-            .get("image", "")
         )
+        actual_image = run_spec.get("containers", [{}])[0].get("image", "")
+        actual_timeout = _duration_seconds(run_spec.get("timeoutSeconds"))
         actual_member = target.get("oauthToken", {}).get("serviceAccountEmail")
         checks = {
-            "state": scheduler.get("state") == "ENABLED",
+            "state": scheduler.get("state") == job["desired_state"],
             "schedule": scheduler.get("schedule") == job["schedule"],
             "time_zone": scheduler.get("timeZone") == job["time_zone"],
             "uri": target.get("uri") == scheduler_uri(project, region, run_job_name),
@@ -356,9 +405,13 @@ def inspect_live(
                 for binding in policy.get("bindings", [])
             ),
         }
+        expected_timeout = job["task_timeout_seconds"]
+        if expected_timeout is not None:
+            checks["task_timeout"] = actual_timeout == expected_timeout
         scheduler_status = scheduler.get("status") or {}
         last_attempt = str(scheduler.get("lastAttemptTime") or "")
-        if audit_attempts:
+        scheduler_attempt_required = job["desired_state"] == "ENABLED"
+        if audit_attempts and scheduler_attempt_required:
             checks["natural_or_canary_attempt"] = bool(last_attempt)
             checks["scheduler_delivery"] = not scheduler_status.get("code")
         for check, passed in checks.items():
@@ -368,10 +421,12 @@ def inspect_live(
             "scheduler": scheduler_name,
             "run_job": run_job_name,
             "state": str(scheduler.get("state", "")),
+            "desired_state": job["desired_state"],
             "schedule": str(scheduler.get("schedule", "")),
             "time_zone": str(scheduler.get("timeZone", "")),
             "identity": str(actual_member or ""),
             "image": str(actual_image),
+            "task_timeout_seconds": str(actual_timeout or ""),
             "configuration": "pass" if all(checks.values()) else "fail",
         }
         if audit_attempts:
@@ -379,13 +434,30 @@ def inspect_live(
                 {
                     "last_attempt": last_attempt,
                     "scheduler_delivery": (
-                        "pass" if not scheduler_status.get("code") else "fail"
+                        (
+                            "pass" if not scheduler_status.get("code") else "fail"
+                        )
+                        if scheduler_attempt_required
+                        else "not_required_paused"
                     ),
                     "latest_execution": summarize_execution(executions),
                 }
             )
         summaries.append(summary)
     return errors, {"jobs": summaries, "result": "pass" if not errors else "fail"}
+
+
+def _duration_seconds(value: object) -> int | None:
+    """Normalize Cloud Run's integer or protobuf-duration JSON rendering."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        match = re.fullmatch(r"(\d+)(?:s)?", value.strip())
+        if match:
+            return int(match.group(1))
+    return None
 
 
 def summarize_execution(executions: object) -> dict[str, str]:

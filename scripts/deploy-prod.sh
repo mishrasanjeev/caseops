@@ -162,9 +162,10 @@ gcloud run jobs execute caseops-migrate-job \
 echo "  migrate-job completed."
 
 # Step 3 - converge the complete recurring-job inventory. This repairs image,
-# target, cadence, time-zone, OAuth identity, and per-job invoker IAM drift from
-# one checked-in source, verifies the canonical configuration, and only then
-# pauses superseded scheduler names.
+# target, cadence, time-zone, desired scheduler state, inventory-owned task
+# timeout, OAuth identity, and per-job invoker IAM drift from one checked-in
+# source, verifies the canonical configuration, and only then pauses
+# superseded scheduler names.
 echo "--- 3/6 reconcile recurring-job inventory ---"
 python scripts/scheduler_inventory.py reconcile \
   --project "${PROJECT}" \
