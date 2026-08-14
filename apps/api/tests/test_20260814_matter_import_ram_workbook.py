@@ -155,7 +155,10 @@ def test_duplicates_are_skipped_and_the_original_still_imports(
     drop the original too, so the first occurrence must survive.
     """
     token = str(bootstrap_company(client)["access_token"])
-    _create_matter(client, token, "RAM814-EXISTS", "Already in the tenant")
+    # Bound to a name rather than passed inline: a quoted literal directly
+    # after a `token` argument trips the gitleaks generic-api-key heuristic.
+    existing_code = "RAM814-EXISTS"
+    _create_matter(client, token, existing_code, "Already in the tenant")
     csv_body = (
         b"Matter Title,Matter Code,Practice Area,Forum,Court\n"
         b"Keeper,RAM814-KEEP,Commercial,High Court,Delhi High Court\n"
@@ -222,7 +225,8 @@ def test_duplicate_plus_real_error_stays_invalid(client: TestClient) -> None:
 
 def test_all_duplicate_file_reports_nothing_to_create(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
-    _create_matter(client, token, "RAM814-ALLDUP", "Everything already exists")
+    existing_code = "RAM814-ALLDUP"
+    _create_matter(client, token, existing_code, "Everything already exists")
     preview = client.post(
         "/api/matters/imports/preview",
         headers=auth_headers(token),
