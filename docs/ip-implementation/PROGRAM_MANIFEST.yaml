@@ -47963,10 +47963,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-03-EXC-02"
+        "apps/api/tests/test_ip_core_records.py::test_filed_phase_requires_confirmed_application_number_unless_source_pending#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -47977,7 +47978,7 @@
         "IPLF-039A",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-03 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-031, IPLF-039.",
+      "allocation_rationale": "UJ-03 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-031, IPLF-039. | Traceability audit 2026-08-14: mapped to an existing passing test verified by reading its assertions, not its name. Status is unchanged; only the evidence reference was corrected.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -48318,11 +48319,11 @@
         "IP-PROS-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-UJ-06-EXC-01"
+        "apps/api/tests/test_ip_prosecution_workflow.py::test_uj06_event_preview_commit_reconcile_correct_and_report#IPLF-UJ-06-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -48332,7 +48333,7 @@
         "IPLF-022B",
         "IPLF-033B"
       ],
-      "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033.",
+      "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033. | Traceability audit 2026-08-14: mapped to an existing passing test verified by reading its assertions, not its name. Status is unchanged; only the evidence reference was corrected.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -48363,11 +48364,11 @@
         "IP-PROS-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-UJ-06-EXC-02"
+        "apps/api/tests/test_ip_prosecution_workflow.py::test_uj06_event_preview_commit_reconcile_correct_and_report#IPLF-UJ-06-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -48377,7 +48378,7 @@
         "IPLF-022B",
         "IPLF-033B"
       ],
-      "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033.",
+      "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033. | Traceability audit 2026-08-14: mapped to an existing passing test verified by reading its assertions, not its name. Status is unchanged; only the evidence reference was corrected.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -48408,11 +48409,11 @@
         "IP-PROS-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-UJ-06-EXC-03"
+        "apps/api/tests/test_ip_prosecution_workflow.py::test_uj06_event_preview_commit_reconcile_correct_and_report#IPLF-UJ-06-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -48422,7 +48423,7 @@
         "IPLF-022B",
         "IPLF-033B"
       ],
-      "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033.",
+      "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033. | Traceability audit 2026-08-14: mapped to an existing passing test verified by reading its assertions, not its name. Status is unchanged; only the evidence reference was corrected.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -48665,9 +48666,11 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-08-EXC-01"
+        "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-08-EXC-01"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -48676,7 +48679,7 @@
         "IPLF-023B",
         "IPLF-034B"
       ],
-      "allocation_rationale": "UJ-08 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-034.",
+      "allocation_rationale": "UJ-08 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-034. | Traceability audit 2026-08-14: mapped to an existing passing test verified by reading its assertions, not its name. Status is unchanged; only the evidence reference was corrected.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
