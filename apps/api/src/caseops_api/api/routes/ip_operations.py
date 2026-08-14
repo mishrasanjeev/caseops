@@ -109,6 +109,7 @@ from caseops_api.schemas.ip_operations import (
     IpWorkspaceReadinessResponse,
 )
 from caseops_api.schemas.ip_portfolio import (
+    IpPortfolioFamilyResponse,
     IpPortfolioFilters,
     IpPortfolioListResponse,
 )
@@ -227,7 +228,10 @@ from caseops_api.services.ip_operations import (
     review_ip_evidence_candidate,
     verify_ip_deadline_incident,
 )
-from caseops_api.services.ip_portfolio import list_ip_portfolio
+from caseops_api.services.ip_portfolio import (
+    list_ip_portfolio,
+    list_ip_portfolio_families,
+)
 from caseops_api.services.ip_records import (
     correct_ip_identifier,
     create_ip_asset,
@@ -1142,6 +1146,27 @@ async def post_ip_import_commit(
     session: DbSession,
 ) -> IpImportCommitResponse:
     return commit_ip_import_job(session, context=context, job_id=job_id, payload=payload)
+
+
+@router.get("/portfolio/families", response_model=IpPortfolioFamilyResponse)
+async def get_ip_portfolio_families(
+    context: IpViewer,
+    session: DbSession,
+    grouping: Annotated[str, Query(pattern="^(mark|client)$")] = "mark",
+    matter_id: Annotated[str | None, Query(max_length=36)] = None,
+    jurisdiction: Annotated[list[str] | None, Query()] = None,
+    filing_phase: Annotated[list[str] | None, Query()] = None,
+    include_inactive: bool = False,
+) -> IpPortfolioFamilyResponse:
+    filters = IpPortfolioFilters(
+        matter_id=matter_id,
+        jurisdiction=jurisdiction or [],
+        filing_phase=filing_phase or [],
+        include_inactive=include_inactive,
+    )
+    return list_ip_portfolio_families(
+        session, context=context, grouping=grouping, filters=filters
+    )
 
 
 @router.get("/dockets", response_model=IpDocketListResponse)

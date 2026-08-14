@@ -108,7 +108,7 @@ Generated; do not edit.
 | IP-PROS-08 | IP-PROS | IPLF-022B, IPLF-033B | 12 | 1 | in_progress | not_run | blocked | false |
 | IP-PROS-09 | IP-PROS | IPLF-022B, IPLF-033B | 12 | 1 | in_progress | not_run | blocked | false |
 | IP-PROS-10 | IP-PROS | IPLF-022B, IPLF-033B | 12 | 1 | in_progress | not_run | blocked | false |
-| IP-PROS-11 | IP-PROS | IPLF-022B, IPLF-033B | 11 | 1 | in_progress | not_run | blocked | false |
+| IP-PROS-11 | IP-PROS | IPLF-022B, IPLF-033A | 1 | 2 | implemented | passed | blocked | false |
 | IP-PROS-12 | IP-PROS | IPLF-022B, IPLF-033B | 12 | 1 | in_progress | not_run | blocked | false |
 | IP-OPP-01 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | not_started | not_run | blocked | false |
 | IP-OPP-02 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | not_started | not_run | blocked | false |

@@ -76,3 +76,41 @@ class IpPortfolioListResponse(BaseModel):
     filters: IpPortfolioFilters
     limit: int
     next_cursor: str | None = None
+
+
+class IpPortfolioFamilyMember(BaseModel):
+    """One jurisdiction/application inside a family, with its own identity."""
+
+    application_id: str
+    docket_id: str
+    asset_id: str | None
+    office: str | None
+    jurisdiction: str | None
+    filing_phase: str
+    lifecycle_version: int
+    primary_identifier: str | None
+    open_deadline_count: int = 0
+    overdue_deadline_count: int = 0
+
+
+class IpPortfolioFamily(BaseModel):
+    """A grouping of related applications.
+
+    Grouping is presentational only. IP-PROS-11 requires each member to keep
+    independent identifiers, events, rules and lifecycle, so a family exposes no
+    shared phase, deadline, or identifier of its own.
+    """
+
+    grouping: str
+    family_key: str
+    label: str
+    member_count: int
+    distinct_jurisdictions: list[str] = Field(default_factory=list)
+    distinct_filing_phases: list[str] = Field(default_factory=list)
+    members: list[IpPortfolioFamilyMember] = Field(default_factory=list)
+
+
+class IpPortfolioFamilyResponse(BaseModel):
+    grouping: str
+    families: list[IpPortfolioFamily] = Field(default_factory=list)
+    ungrouped_member_count: int = 0

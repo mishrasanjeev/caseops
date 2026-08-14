@@ -5022,6 +5022,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/portfolio/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio Families */
+        get: operations["get_ip_portfolio_families_api_ip_portfolio_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/readiness": {
         parameters: {
             query?: never;
@@ -19982,6 +19999,74 @@ export interface components {
             total: number;
             /** Unconfirmed Deadline Records */
             unconfirmed_deadline_records: number;
+        };
+        /**
+         * IpPortfolioFamily
+         * @description A grouping of related applications.
+         *
+         *     Grouping is presentational only. IP-PROS-11 requires each member to keep
+         *     independent identifiers, events, rules and lifecycle, so a family exposes no
+         *     shared phase, deadline, or identifier of its own.
+         */
+        IpPortfolioFamily: {
+            /** Distinct Filing Phases */
+            distinct_filing_phases?: string[];
+            /** Distinct Jurisdictions */
+            distinct_jurisdictions?: string[];
+            /** Family Key */
+            family_key: string;
+            /** Grouping */
+            grouping: string;
+            /** Label */
+            label: string;
+            /** Member Count */
+            member_count: number;
+            /** Members */
+            members?: components["schemas"]["IpPortfolioFamilyMember"][];
+        };
+        /**
+         * IpPortfolioFamilyMember
+         * @description One jurisdiction/application inside a family, with its own identity.
+         */
+        IpPortfolioFamilyMember: {
+            /** Application Id */
+            application_id: string;
+            /** Asset Id */
+            asset_id: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Office */
+            office: string | null;
+            /**
+             * Open Deadline Count
+             * @default 0
+             */
+            open_deadline_count: number;
+            /**
+             * Overdue Deadline Count
+             * @default 0
+             */
+            overdue_deadline_count: number;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+        };
+        /** IpPortfolioFamilyResponse */
+        IpPortfolioFamilyResponse: {
+            /** Families */
+            families?: components["schemas"]["IpPortfolioFamily"][];
+            /** Grouping */
+            grouping: string;
+            /**
+             * Ungrouped Member Count
+             * @default 0
+             */
+            ungrouped_member_count: number;
         };
         /**
          * IpPortfolioFilters
@@ -41251,6 +41336,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpPortfolioListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portfolio_families_api_ip_portfolio_families_get: {
+        parameters: {
+            query?: {
+                filing_phase?: string[] | null;
+                grouping?: string;
+                include_inactive?: boolean;
+                jurisdiction?: string[] | null;
+                matter_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioFamilyResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1486,7 +1486,7 @@
         "IPLF-033A",
         "IPLF-033B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -8651,36 +8651,76 @@
       "source_kind": "derived",
       "scope_source": "IPLF-033",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "No schema change, no migration, no backfill; read-time derivation.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "IP-PROS-11"
+      ],
+      "journey_path_ids": [
+        "UJ-06-NORMAL"
+      ],
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-033 canonical scope: Application workspace and prosecution timeline.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "component": "IPLF-030A portfolio query helpers and the IPLF-024 prosecution event/workspace owners.",
+          "canonical_writer": "None; this is a read-time derivation. Grouping reuses the IPLF-030A scoped query so access stays with visible_ip_dockets_filter. No family table, no second prosecution owner, no second access path.",
+          "compatibility_path": "One additive read-only route.",
+          "retirement_gate": "Nothing deprecated."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-030A"
+      ],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_application_families.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md",
+          "revision": "40bc18ed771d89006c507c85da6e07f3004decc8",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no query-plan evidence at representative volume, no frontend, no E2E, no deployment. Per owner direction the full -k ip_ sweep is batched across slices; this slice ran its own suite and the fast gates only.",
+          "fixtures": "Synthetic single- and cross-company tenants; one mark filed in two jurisdictions; two client matters; a restricted docket with a non-privileged associate; one manual examination-report event. No real client, mark, proprietor or registry data.",
+          "assertions": "A mark family groups two jurisdictions while each member keeps its own application id, office, jurisdiction, filing phase and lifecycle version; the family object exposes no shared filing phase or identifier; advancing one member leaves the sibling's phase and lifecycle version untouched; client families key and label from the Matter rather than a member docket; filters apply to the grouped view and an invalid grouping is rejected; a restricted record contributes no family, member, id or title and cross-tenant queries return nothing; a manual prosecution event previews as proposal-only with no filing claimed, is created, and reads back on the workspace timeline with the four dispositions reported separately. Counts: 5 passed, ruff clean, data-governance map valid, OpenAPI regeneration additive only.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-033A-RELEASE-VERIFICATION",
+          "summary": "Family grouping is verified only on isolated SQLite fixtures with small synthetic data. There is no real-PostgreSQL CI, no query-plan evidence at representative volume, no pagination on the grouped view, no frontend, no E2E, and no deployment. Grouping is derived from asset_id/matter_id with no first-class family entity and no priority relationships between members.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, query-plan and index evidence for the grouped read at representative volume, pagination or a bounded result contract, a family UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
+          "safe_fallback": "The route is read-only and access-filtered by the canonical policy; no client consumes it.",
+          "milestone_impact": "Blocks IPLF-033A release closure; IP-PROS-01..10 and IP-PROS-12 remain open on IPLF-033B.",
+          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-034A."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Decide whether a first-class family entity with priority relationships is required and scope it on IPLF-033B.",
+        "Add pagination or a bounded result contract to the grouped view.",
+        "Add query-plan and index evidence for the grouped read per ARCH-OPS-11.",
+        "Build the family UI with desktop and narrow-mobile evidence."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, no migration, no backfill, no data mutation."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md"
+      ],
+      "allocation_review": "Audit found IP-PROS-01..10 and IP-PROS-12 already delivered by IPLF-024A/B; IP-PROS-11 had no implementation. IPLF-033A claims only IP-PROS-11 plus the UJ-06 normal path it exercises end to end. The remaining IP-PROS requirements stay on IPLF-033B. PRD scope unchanged.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -8719,14 +8759,12 @@
         "IP-PROS-08",
         "IP-PROS-09",
         "IP-PROS-10",
-        "IP-PROS-11",
         "IP-PROS-12"
       ],
       "journey_path_ids": [
         "UJ-06-EXC-01",
         "UJ-06-EXC-02",
-        "UJ-06-EXC-03",
-        "UJ-06-NORMAL"
+        "UJ-06-EXC-03"
       ],
       "ownership": [
         {
@@ -20070,34 +20108,26 @@
         "UJ-53"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/services/ip_lifecycle.py",
-        "apps/api/src/caseops_api/services/ip_records.py",
-        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md"
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-11",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "apps/api/tests/test_ip_application_families.py::test_ip_pros_11_marks_group_without_losing_member_identity"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-022B",
-        "IPLF-033B"
+        "IPLF-033A"
       ],
       "allocation_rationale": "IP-PROS allocation reviewed against PRD requirement family and parent epic scope: IPLF-022, IPLF-033.",
       "not_required_approval": {
@@ -48212,20 +48242,19 @@
         "IP-PROS-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
-        "planned:IPLF-UJ-06-NORMAL"
+        "apps/api/tests/test_ip_application_families.py::test_uj06_normal_record_prosecution_event_and_read_timeline#IPLF-UJ-06-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-022B",
-        "IPLF-033B"
+        "IPLF-033A"
       ],
       "allocation_rationale": "UJ-06 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-022, IPLF-033.",
       "not_required_approval": {

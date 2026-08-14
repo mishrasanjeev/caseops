@@ -27,6 +27,9 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.ip_portfolio import (
     IpPortfolioCounts,
+    IpPortfolioFamily,
+    IpPortfolioFamilyMember,
+    IpPortfolioFamilyResponse,
     IpPortfolioFilters,
     IpPortfolioListResponse,
     IpPortfolioRow,
@@ -118,9 +121,7 @@ def _scoped_query(
     if filters.asset_kind:
         statement = statement.where(IpAsset.asset_kind.in_(_normalize(filters.asset_kind)))
     if filters.docket_status:
-        statement = statement.where(
-            IpDocketRecord.status.in_(_normalize(filters.docket_status))
-        )
+        statement = statement.where(IpDocketRecord.status.in_(_normalize(filters.docket_status)))
     if filters.query:
         like = f"%{filters.query.strip().lower()}%"
         statement = statement.where(
@@ -223,9 +224,7 @@ def list_ip_portfolio(
         visible.append((application, asset, docket))
 
     docket_ids = [docket.id for _a, _s, docket in visible]
-    deadlines = _deadline_counts(
-        session, company_id=context.company.id, docket_ids=docket_ids
-    )
+    deadlines = _deadline_counts(session, company_id=context.company.id, docket_ids=docket_ids)
 
     rows: list[IpPortfolioRow] = []
     for application, asset, docket in visible:
@@ -248,9 +247,7 @@ def list_ip_portfolio(
                 filing_phase=application.filing_phase,
                 is_active=application.is_active,
                 lifecycle_version=application.lifecycle_version,
-                pending_identifier_allocation=(
-                    application.source_pending_identifier_allocation
-                ),
+                pending_identifier_allocation=(application.source_pending_identifier_allocation),
                 record_complete=not reasons,
                 incomplete_reasons=reasons,
                 open_deadline_count=open_count,
@@ -264,15 +261,11 @@ def list_ip_portfolio(
         total=len(rows),
         complete_records=sum(1 for row in rows if row.record_complete),
         incomplete_records=sum(1 for row in rows if not row.record_complete),
-        unconfirmed_deadline_records=sum(
-            1 for row in rows if row.unconfirmed_deadline_count
-        ),
+        unconfirmed_deadline_records=sum(1 for row in rows if row.unconfirmed_deadline_count),
         overdue_records=sum(1 for row in rows if row.overdue_deadline_count),
     )
     next_cursor = (
-        _encode_cursor(rows[-1].updated_at, rows[-1].application_id)
-        if has_more and rows
-        else None
+        _encode_cursor(rows[-1].updated_at, rows[-1].application_id) if has_more and rows else None
     )
     return IpPortfolioListResponse(
         rows=rows,
@@ -283,4 +276,100 @@ def list_ip_portfolio(
     )
 
 
-__all__ = ["list_ip_portfolio"]
+def list_ip_portfolio_families(
+    session: Session,
+    *,
+    context: SessionContext,
+    grouping: str,
+    filters: IpPortfolioFilters,
+) -> IpPortfolioFamilyResponse:
+    """IP-PROS-11 — group related applications without merging their identity.
+
+    Grouping is presentational. Each member keeps its own application id,
+    identifier, office, jurisdiction, filing phase and lifecycle version, and a
+    family deliberately exposes no shared phase, deadline or identifier.
+    """
+
+    if grouping not in {"mark", "client"}:
+        raise HTTPException(status_code=400, detail="grouping must be 'mark' or 'client'.")
+
+    statement = _scoped_query(session, context=context, filters=filters)
+    rows = list(session.execute(statement).all())
+
+    visible: list[tuple] = []
+    for application, asset, docket in rows:
+        if docket.matter_id:
+            matter = session.get(Matter, docket.matter_id)
+            if matter is None:
+                continue
+            try:
+                assert_operational_matter(session, matter=matter)
+            except MatterNotOperationalError:
+                continue
+        visible.append((application, asset, docket))
+
+    deadlines = _deadline_counts(
+        session,
+        company_id=context.company.id,
+        docket_ids=[docket.id for _a, _s, docket in visible],
+    )
+
+    grouped: dict[str, dict] = {}
+    ungrouped = 0
+    for application, asset, docket in visible:
+        if grouping == "mark":
+            key = application.asset_id
+            label = (asset.title if asset else None) or ""
+        else:
+            key = docket.matter_id
+            # Label a client family from the Matter, not from whichever member
+            # happens to be first; a docket title names one filing, not a client.
+            matter = session.get(Matter, key) if key else None
+            label = (getattr(matter, "title", None) or "") if matter else ""
+        if not key:
+            # A record with no mark or no client cannot be grouped; it is
+            # counted rather than forced into a synthetic family.
+            ungrouped += 1
+            continue
+        open_count, _unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
+        bucket = grouped.setdefault(key, {"label": label, "members": []})
+        if not bucket["label"]:
+            bucket["label"] = label
+        bucket["members"].append(
+            IpPortfolioFamilyMember(
+                application_id=application.id,
+                docket_id=docket.id,
+                asset_id=application.asset_id,
+                office=application.office,
+                jurisdiction=application.jurisdiction,
+                filing_phase=application.filing_phase,
+                lifecycle_version=application.lifecycle_version,
+                primary_identifier=docket.primary_identifier,
+                open_deadline_count=open_count,
+                overdue_deadline_count=overdue,
+            )
+        )
+
+    families = [
+        IpPortfolioFamily(
+            grouping=grouping,
+            family_key=key,
+            label=bucket["label"],
+            member_count=len(bucket["members"]),
+            distinct_jurisdictions=sorted(
+                {m.jurisdiction for m in bucket["members"] if m.jurisdiction}
+            ),
+            distinct_filing_phases=sorted({m.filing_phase for m in bucket["members"]}),
+            members=sorted(
+                bucket["members"], key=lambda m: (m.jurisdiction or "", m.application_id)
+            ),
+        )
+        for key, bucket in grouped.items()
+    ]
+    families.sort(key=lambda f: (-f.member_count, f.label, f.family_key))
+    return IpPortfolioFamilyResponse(
+        grouping=grouping, families=families, ungrouped_member_count=ungrouped
+    )
+
+
+__all__ = ["list_ip_portfolio", "list_ip_portfolio_families"]
