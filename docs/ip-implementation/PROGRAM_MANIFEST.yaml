@@ -1423,7 +1423,7 @@
         "IPLF-031A",
         "IPLF-031B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -8324,36 +8324,75 @@
       "source_kind": "derived",
       "scope_source": "IPLF-031",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "No schema change, no migration, no backfill.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "IP-ID-07"
+      ],
+      "journey_path_ids": [
+        "UJ-05-NORMAL",
+        "UJ-05-EXC-01"
+      ],
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-031 canonical scope: Manual application/asset create and duplicate resolution.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "component": "Existing IpIdentifier owner and docket access policy from IPLF-021.",
+          "canonical_writer": "services/ip_records.py remains the identifier writer; commands act on existing reconciliation_status, effective_until, supersedes_identifier_id and correction_reason columns. No reconciliation store, access policy or audit trail is duplicated.",
+          "compatibility_path": "Two additive routes; no existing surface changes.",
+          "retirement_gate": "Nothing deprecated."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_records.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_duplicate_reconciliation.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md",
+          "revision": "e0d8f8bc0cda33f1768bcb49950ee365102ca16a",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no concurrency proof for the with_for_update reconciliation path, no frontend, no E2E, no deployment.",
+          "fixtures": "Synthetic single- and cross-company tenants; two dockets filing the same application number; variants with a second client matter, a restricted counterpart, and a non-privileged associate. No real client, mark, proprietor or registry data.",
+          "assertions": "A colliding identifier is flagged needs_review rather than merged; preview lists only candidates the caller may open and is tenant isolated; a stale decision token is rejected; distinct clears review and records the reason; supersede retires the duplicate with an explicit link while preserving the raw value and clearing is_primary; a resolution cannot be replayed; a different client matter or a privileged mismatch blocks automatic merge with a typed ip_duplicate_merge_blocked problem while leaving distinct available. Counts: 5 passed, ruff clean, OpenAPI regeneration additive only.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-031A-RELEASE-VERIFICATION",
+          "summary": "Reconciliation is verified only on isolated SQLite fixtures. There is no real-PostgreSQL CI, no concurrency proof for the with_for_update path, no reconciliation UI, no E2E, and no deployment. Supersede retires the duplicate identifier but does not merge record content.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-commit CI on real PostgreSQL, concurrent-reconciliation coverage, a reconciliation UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
+          "safe_fallback": "Both routes are additive and access-scoped; no client consumes them yet and no record content is merged.",
+          "milestone_impact": "Blocks IPLF-031A release closure; IP-ID-01..06 and IP-ID-08 remain open on IPLF-031B.",
+          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-032A."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Decide whether a true record merge is required and scope it on IPLF-031B.",
+        "Add real-PostgreSQL concurrent-reconciliation coverage.",
+        "Build the reconciliation UI with desktop and narrow-mobile evidence."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, no migration, no backfill.",
+        "Resolution sets reconciliation_status, and supersede additionally sets effective_until, supersedes_identifier_id and clears is_primary. The raw value is never deleted."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md"
+      ],
+      "allocation_review": "M3 foundation slices shipped with empty coverage, which the validator rejects for an implemented slice. This moves the duplicate-reconciliation subset IPLF-031A implements out of IPLF-031B and leaves the identifier foundation requirements there. PRD scope unchanged.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -8388,15 +8427,12 @@
         "IP-ID-04",
         "IP-ID-05",
         "IP-ID-06",
-        "IP-ID-07",
         "IP-ID-08"
       ],
       "journey_path_ids": [
         "UJ-03-EXC-01",
         "UJ-03-EXC-02",
-        "UJ-03-NORMAL",
-        "UJ-05-EXC-01",
-        "UJ-05-NORMAL"
+        "UJ-03-NORMAL"
       ],
       "ownership": [
         {
@@ -19426,34 +19462,26 @@
         "UJ-05"
       ],
       "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_records.py",
         "apps/api/src/caseops_api/services/ip_records.py",
-        "apps/api/tests/test_ip_record_workflow.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-07",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_normal_detect_and_resolve_duplicate"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-021B",
-        "IPLF-031B"
+        "IPLF-031A"
       ],
       "allocation_rationale": "IP-ID allocation reviewed against PRD requirement family and parent epic scope: IPLF-021, IPLF-031.",
       "not_required_approval": {
@@ -42559,8 +42587,8 @@
         "planned:IPLF-UJ-05-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -48048,15 +48076,17 @@
         "IP-ID-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_normal_detect_and_resolve_duplicate#IPLF-UJ-05-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-031B"
+        "IPLF-031A"
       ],
       "allocation_rationale": "UJ-05 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-031.",
       "not_required_approval": {
@@ -48085,15 +48115,17 @@
         "IP-ID-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-05-EXC-01"
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_exc01_conflicting_client_blocks_automatic_merge#IPLF-UJ-05-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-031B"
+        "IPLF-031A"
       ],
       "allocation_rationale": "UJ-05 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-031.",
       "not_required_approval": {

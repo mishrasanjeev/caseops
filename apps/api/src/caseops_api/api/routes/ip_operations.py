@@ -110,6 +110,9 @@ from caseops_api.schemas.ip_records import (
     IpAssetCreateRequest,
     IpAssetResponse,
     IpCoreRecordResponse,
+    IpDuplicatePreviewResponse,
+    IpDuplicateResolutionRequest,
+    IpDuplicateResolutionResponse,
     IpIdentifierCorrectionCreate,
     IpIdentifierCreate,
     IpIdentifierMutationResponse,
@@ -220,6 +223,8 @@ from caseops_api.services.ip_records import (
     create_ip_proceeding,
     create_trademark_application,
     list_ip_core_records,
+    preview_ip_identifier_duplicates,
+    resolve_ip_identifier_duplicate,
     search_ip_identifiers,
     update_trademark_application_phase,
 )
@@ -1427,6 +1432,44 @@ async def post_ip_identifier_correction(
     return IpIdentifierMutationResponse(
         identifier=IpIdentifierResponse.model_validate(identifier),
         duplicate_candidates=[IpIdentifierResponse.model_validate(row) for row in duplicates],
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/identifiers/{identifier_id}/duplicates",
+    response_model=IpDuplicatePreviewResponse,
+)
+async def get_ip_identifier_duplicates(
+    docket_id: str,
+    identifier_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDuplicatePreviewResponse:
+    return preview_ip_identifier_duplicates(
+        session,
+        context=context,
+        docket_id=docket_id,
+        identifier_id=identifier_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/identifiers/{identifier_id}/reconcile",
+    response_model=IpDuplicateResolutionResponse,
+)
+async def post_ip_identifier_reconciliation(
+    docket_id: str,
+    identifier_id: str,
+    payload: IpDuplicateResolutionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDuplicateResolutionResponse:
+    return resolve_ip_identifier_duplicate(
+        session,
+        context=context,
+        docket_id=docket_id,
+        identifier_id=identifier_id,
+        payload=payload,
     )
 
 

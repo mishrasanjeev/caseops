@@ -294,3 +294,49 @@ class IpWorkspaceConfigurationStatusResponse(BaseModel):
     tests: list[IpWorkspaceTestResultResponse]
     ready_for_manual_docketing: bool
     enablement_blockers: list[str]
+
+
+class IpDuplicateCandidate(BaseModel):
+    """One competing identifier that blocks reconciliation."""
+
+    identifier_id: str
+    docket_id: str
+    application_id: str | None
+    proceeding_id: str | None
+    matter_id: str | None
+    raw_value: str
+    normalized_value: str
+    source: str
+    is_primary: bool
+    reconciliation_status: str
+    docket_title: str
+    docket_status: str
+    docket_restricted: bool
+    docket_is_active: bool
+
+
+class IpDuplicatePreviewResponse(BaseModel):
+    """IP-ID-07 reconciliation preview; never merges anything by itself."""
+
+    identifier_id: str
+    identifier: IpDuplicateCandidate
+    candidates: list[IpDuplicateCandidate]
+    decision_token: str
+    automatic_merge_blocked: bool
+    blocking_reasons: list[str] = Field(default_factory=list)
+    allowed_decisions: list[str] = Field(default_factory=list)
+
+
+class IpDuplicateResolutionRequest(BaseModel):
+    """Explicit operator decision on a flagged duplicate identifier."""
+
+    decision: Literal["distinct", "supersede"]
+    decision_token: str
+    reason: str = Field(min_length=5, max_length=500)
+    superseded_by_identifier_id: str | None = None
+
+
+class IpDuplicateResolutionResponse(BaseModel):
+    identifier: IpIdentifierResponse
+    decision: str
+    resolved_candidate_ids: list[str] = Field(default_factory=list)

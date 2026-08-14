@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
@@ -653,3 +654,243 @@ def search_ip_identifiers(
         if allowed:
             visible.append(row)
     return visible
+
+
+def _visible_identifiers(
+    session: Session,
+    *,
+    context: SessionContext,
+    rows: list[IpIdentifier],
+) -> list[IpIdentifier]:
+    """Drop identifiers whose docket the caller may not open."""
+
+    visible: list[IpIdentifier] = []
+    checked: dict[str, bool] = {}
+    for row in rows:
+        allowed = checked.get(row.docket_id)
+        if allowed is None:
+            try:
+                _docket(session, context, row.docket_id, for_update=False)
+                allowed = True
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                allowed = False
+            checked[row.docket_id] = allowed
+        if allowed:
+            visible.append(row)
+    return visible
+
+
+def _duplicate_candidate(session: Session, row: IpIdentifier):
+    from caseops_api.db.models import IpDocketRecord
+    from caseops_api.schemas.ip_records import IpDuplicateCandidate
+
+    docket = session.get(IpDocketRecord, row.docket_id)
+    return IpDuplicateCandidate(
+        identifier_id=row.id,
+        docket_id=row.docket_id,
+        application_id=row.application_id,
+        proceeding_id=row.proceeding_id,
+        matter_id=docket.matter_id if docket else None,
+        raw_value=row.raw_value,
+        normalized_value=row.normalized_value,
+        source=row.source,
+        is_primary=row.is_primary,
+        reconciliation_status=row.reconciliation_status,
+        docket_title=docket.title if docket else "",
+        docket_status=docket.status if docket else "",
+        docket_restricted=bool(docket.restricted) if docket else False,
+        docket_is_active=bool(docket.is_active) if docket else False,
+    )
+
+
+TERMINAL_DOCKET_STATES = {"closed", "abandoned", "refused", "withdrawn", "registered"}
+
+
+def _merge_blocking_reasons(subject, candidates) -> list[str]:
+    """UJ-05-EXC-01: conditions that forbid an automatic merge.
+
+    A blocked merge is not a failure; it means the decision belongs to a human
+    owner. ``distinct`` stays available and only ``supersede`` is withheld.
+    """
+
+    reasons: list[str] = []
+    all_rows = [subject, *candidates]
+    if any(row.docket_status in TERMINAL_DOCKET_STATES for row in all_rows):
+        reasons.append("conflicting_terminal_state")
+    if len({row.matter_id for row in all_rows}) > 1:
+        reasons.append("different_client_matter")
+    if len({row.docket_restricted for row in all_rows}) > 1:
+        reasons.append("privileged_permission_mismatch")
+    if any(not row.docket_is_active for row in all_rows):
+        reasons.append("inactive_record")
+    return reasons
+
+
+def _decision_token(subject: IpIdentifier, candidates: list[IpIdentifier]) -> str:
+    parts = [subject.id, subject.reconciliation_status]
+    parts.extend(sorted(f"{row.id}:{row.reconciliation_status}" for row in candidates))
+    return sha256("|".join(parts).encode()).hexdigest()
+
+
+def preview_ip_identifier_duplicates(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    identifier_id: str,
+):
+    """IP-ID-07 - show the competing records without merging anything."""
+
+    from caseops_api.schemas.ip_records import IpDuplicatePreviewResponse
+
+    docket = _docket(session, context, docket_id, for_update=False)
+    row = session.scalar(
+        select(IpIdentifier).where(
+            IpIdentifier.id == identifier_id,
+            IpIdentifier.company_id == context.company.id,
+            IpIdentifier.docket_id == docket.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Identifier not found.")
+
+    candidates = _duplicate_identifiers(
+        session,
+        company_id=context.company.id,
+        identifier_kind=row.identifier_kind,
+        office=row.office,
+        jurisdiction=row.jurisdiction,
+        normalized_value=row.normalized_value,
+        exclude_ids={row.id},
+    )
+    # Only competing records the caller may actually open participate in the
+    # decision; a hidden record must not leak through a reconciliation preview.
+    visible = _visible_identifiers(session, context=context, rows=candidates)
+    subject = _duplicate_candidate(session, row)
+    candidate_records = [_duplicate_candidate(session, item) for item in visible]
+    reasons = _merge_blocking_reasons(subject, candidate_records)
+    allowed = ["distinct"] if reasons or not candidate_records else ["distinct", "supersede"]
+    return IpDuplicatePreviewResponse(
+        identifier_id=row.id,
+        identifier=subject,
+        candidates=candidate_records,
+        decision_token=_decision_token(row, visible),
+        automatic_merge_blocked=bool(reasons),
+        blocking_reasons=reasons,
+        allowed_decisions=allowed,
+    )
+
+
+def resolve_ip_identifier_duplicate(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    identifier_id: str,
+    payload,
+):
+    """IP-ID-07 / UJ-05 - resolve a flagged duplicate by explicit decision.
+
+    Nothing is merged silently: the caller restates a current preview token,
+    chooses a decision, and gives a reason. Both outcomes are audited and the
+    prior value is preserved.
+    """
+
+    from caseops_api.schemas.ip_records import (
+        IpDuplicateResolutionResponse,
+        IpIdentifierResponse,
+    )
+
+    docket = _docket(session, context, docket_id, for_update=True)
+    row = session.scalar(
+        select(IpIdentifier)
+        .where(
+            IpIdentifier.id == identifier_id,
+            IpIdentifier.company_id == context.company.id,
+            IpIdentifier.docket_id == docket.id,
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Identifier not found.")
+    if row.effective_until is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A superseded identifier cannot be reconciled.",
+        )
+    if row.reconciliation_status != "needs_review":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only an identifier awaiting review can be reconciled.",
+        )
+
+    preview = preview_ip_identifier_duplicates(
+        session, context=context, docket_id=docket.id, identifier_id=row.id
+    )
+    if payload.decision_token != preview.decision_token:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate set changed; preview again.",
+        )
+    if payload.decision not in preview.allowed_decisions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_duplicate_merge_blocked",
+                "message": (
+                    "This duplicate cannot be merged automatically and requires "
+                    "an explicit owner decision."
+                ),
+                "blocking_reasons": preview.blocking_reasons,
+            },
+        )
+
+    now = datetime.now(UTC)
+    resolved_ids = [item.identifier_id for item in preview.candidates]
+    if payload.decision == "distinct":
+        row.reconciliation_status = "confirmed"
+        row.correction_reason = payload.reason
+    else:
+        target_id = payload.superseded_by_identifier_id
+        if not target_id or target_id not in resolved_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A superseding identifier from the preview is required.",
+            )
+        target = session.get(IpIdentifier, target_id)
+        assert target is not None
+        # The surviving record keeps the identity. This row retires with an
+        # explicit link and reason, so the prior value stays in history.
+        row.effective_until = now
+        row.reconciliation_status = "superseded"
+        row.supersedes_identifier_id = target_id
+        row.correction_reason = payload.reason
+        row.is_primary = False
+        target.reconciliation_status = "confirmed"
+        resolved_ids = [target_id]
+
+    record_from_context(
+        session,
+        context,
+        action="ip.identifier.duplicate_resolved",
+        target_type="ip_identifier",
+        target_id=row.id,
+        ip_docket_id=docket.id,
+        matter_id=docket.matter_id,
+        metadata={
+            "decision": payload.decision,
+            "reason": payload.reason,
+            "decision_token": payload.decision_token,
+            "candidate_ids": resolved_ids,
+            "blocking_reasons": preview.blocking_reasons,
+        },
+    )
+    session.commit()
+    session.refresh(row)
+    return IpDuplicateResolutionResponse(
+        identifier=IpIdentifierResponse.model_validate(row),
+        decision=payload.decision,
+        resolved_candidate_ids=resolved_ids,
+    )

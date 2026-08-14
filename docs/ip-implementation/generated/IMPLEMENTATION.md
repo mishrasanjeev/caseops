@@ -52,8 +52,8 @@ Generated; do not edit.
 | IPLF-029B | derived | IPLF-029 | M2 | ARCH-OPS-01, ARCH-OPS-02, ARCH-OPS-03, ARCH-OPS-04, ARCH-OPS-05, ARCH-OPS-06, ARCH-OPS-07, ARCH-OPS-08, ARCH-OPS-09, ARCH-OPS-10, ARCH-OPS-11, ARCH-OPS-12, ARCH-OPS-13, ARCH-OPS-14, ARCH-OPS-15, ARCH-OPS-16, ARCH-OPS-17, ARCH-OPS-18, ARCH-OPS-19, ARCH-OPS-20, ARCH-OPS-21, ARCH-OPS-22, ARCH-OPS-23, ARCH-OPS-24, ARCH-OPS-25, ARCH-OPS-26 |  | not_started | not_run | blocked | not_required |
 | IPLF-030A | derived | IPLF-030 | M3 | IP-PORT-02, IP-PORT-05, IP-PORT-10 | UJ-04-EXC-02 | implemented | passed | blocked | not_required |
 | IPLF-030B | derived | IPLF-030 | M3 | COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08, IP-PORT-01, IP-PORT-03, IP-PORT-04, IP-PORT-06, IP-PORT-07, IP-PORT-08, IP-PORT-09, IP-PORT-10 | UJ-04-EXC-01, UJ-04-EXC-03, UJ-04-NORMAL | not_started | not_run | blocked | not_required |
-| IPLF-031A | derived | IPLF-031 | M3 |  |  | not_started | not_run | blocked | not_required |
-| IPLF-031B | derived | IPLF-031 | M3 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-07, IP-ID-08 | UJ-03-EXC-01, UJ-03-EXC-02, UJ-03-NORMAL, UJ-05-EXC-01, UJ-05-NORMAL | not_started | not_run | blocked | not_required |
+| IPLF-031A | derived | IPLF-031 | M3 | IP-ID-07 | UJ-05-NORMAL, UJ-05-EXC-01 | implemented | passed | blocked | not_required |
+| IPLF-031B | derived | IPLF-031 | M3 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-08 | UJ-03-EXC-01, UJ-03-EXC-02, UJ-03-NORMAL | not_started | not_run | blocked | not_required |
 | IPLF-032A | derived | IPLF-032 | M3 |  |  | not_started | not_run | blocked | not_required |
 | IPLF-032B | derived | IPLF-032 | M3 |  | UJ-02-EXC-01, UJ-02-EXC-02, UJ-02-EXC-03, UJ-02-EXC-04, UJ-02-NORMAL | not_started | not_run | blocked | not_required |
 | IPLF-033A | derived | IPLF-033 | M3 |  |  | not_started | not_run | blocked | not_required |

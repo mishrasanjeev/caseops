@@ -96,7 +96,7 @@ Generated; do not edit.
 | IP-ID-04 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-05 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-06 | IP-ID | IPLF-021B, IPLF-031B | 12 | 1 | in_progress | not_run | blocked | false |
-| IP-ID-07 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
+| IP-ID-07 | IP-ID | IPLF-021B, IPLF-031A | 1 | 2 | implemented | passed | blocked | false |
 | IP-ID-08 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-PROS-01 | IP-PROS | IPLF-022B, IPLF-033B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-PROS-02 | IP-PROS | IPLF-022B, IPLF-033B | 11 | 1 | in_progress | not_run | blocked | false |

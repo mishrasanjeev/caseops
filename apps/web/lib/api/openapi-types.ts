@@ -4374,6 +4374,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/identifiers/{identifier_id}/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Identifier Duplicates */
+        get: operations["get_ip_identifier_duplicates_api_ip_dockets__docket_id__identifiers__identifier_id__duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/identifiers/{identifier_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Identifier Reconciliation */
+        post: operations["post_ip_identifier_reconciliation_api_ip_dockets__docket_id__identifiers__identifier_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/lifecycle": {
         parameters: {
             query?: never;
@@ -19145,6 +19179,84 @@ export interface components {
             uploaded_by_membership_id: string;
             /** Version */
             version: number;
+        };
+        /**
+         * IpDuplicateCandidate
+         * @description One competing identifier that blocks reconciliation.
+         */
+        IpDuplicateCandidate: {
+            /** Application Id */
+            application_id: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Is Active */
+            docket_is_active: boolean;
+            /** Docket Restricted */
+            docket_restricted: boolean;
+            /** Docket Status */
+            docket_status: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Identifier Id */
+            identifier_id: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Normalized Value */
+            normalized_value: string;
+            /** Proceeding Id */
+            proceeding_id: string | null;
+            /** Raw Value */
+            raw_value: string;
+            /** Reconciliation Status */
+            reconciliation_status: string;
+            /** Source */
+            source: string;
+        };
+        /**
+         * IpDuplicatePreviewResponse
+         * @description IP-ID-07 reconciliation preview; never merges anything by itself.
+         */
+        IpDuplicatePreviewResponse: {
+            /** Allowed Decisions */
+            allowed_decisions?: string[];
+            /** Automatic Merge Blocked */
+            automatic_merge_blocked: boolean;
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /** Candidates */
+            candidates: components["schemas"]["IpDuplicateCandidate"][];
+            /** Decision Token */
+            decision_token: string;
+            identifier: components["schemas"]["IpDuplicateCandidate"];
+            /** Identifier Id */
+            identifier_id: string;
+        };
+        /**
+         * IpDuplicateResolutionRequest
+         * @description Explicit operator decision on a flagged duplicate identifier.
+         */
+        IpDuplicateResolutionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "distinct" | "supersede";
+            /** Decision Token */
+            decision_token: string;
+            /** Reason */
+            reason: string;
+            /** Superseded By Identifier Id */
+            superseded_by_identifier_id?: string | null;
+        };
+        /** IpDuplicateResolutionResponse */
+        IpDuplicateResolutionResponse: {
+            /** Decision */
+            decision: string;
+            identifier: components["schemas"]["IpIdentifierResponse"];
+            /** Resolved Candidate Ids */
+            resolved_candidate_ids?: string[];
         };
         /** IpEthicalWallRecord */
         IpEthicalWallRecord: {
@@ -39667,6 +39779,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpIdentifierMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_identifier_duplicates_api_ip_dockets__docket_id__identifiers__identifier_id__duplicates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                identifier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDuplicatePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_identifier_reconciliation_api_ip_dockets__docket_id__identifiers__identifier_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                identifier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDuplicateResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDuplicateResolutionResponse"];
                 };
             };
             /** @description Validation Error */
