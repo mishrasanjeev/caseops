@@ -11,6 +11,7 @@ const {
   transitionMatterStatusMock,
   updateMatterMock,
   useCapabilityMock,
+  useParamsMock,
   toastSuccess,
   toastError,
 } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const {
   transitionMatterStatusMock: vi.fn(),
   updateMatterMock: vi.fn(),
   useCapabilityMock: vi.fn(),
+  useParamsMock: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }));
@@ -47,7 +49,7 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ id: "m-1" }),
+  useParams: useParamsMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -94,6 +96,8 @@ describe("MatterOverviewPage", () => {
     listConflictChecksMock.mockReset();
     listConflictChecksMock.mockResolvedValue({ matter_id: "m-1", checks: [] });
     useCapabilityMock.mockReset();
+    useParamsMock.mockReset();
+    useParamsMock.mockReturnValue({ id: "m-1" });
     toastSuccess.mockReset();
     toastError.mockReset();
     useCapabilityMock.mockImplementation(() => false);
@@ -140,6 +144,70 @@ describe("MatterOverviewPage", () => {
     useMatterWorkspaceMock.mockReturnValue({ data: null });
     const { container } = render(withClient(<MatterOverviewPage />));
     expect(container.firstChild).toBeNull();
+  });
+
+  it("remounts record-bound conflict review state when the routed matter changes", async () => {
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "conflicts:run",
+    );
+    let currentData = {
+      ...BASE_DATA,
+      matter: {
+        ...BASE_DATA.matter,
+        opposing_party: "First Counterparty",
+      },
+    };
+    useMatterWorkspaceMock.mockImplementation(() => ({ data: currentData }));
+    listConflictChecksMock.mockImplementation((matterId: string) =>
+      Promise.resolve({ matter_id: matterId, checks: [] }),
+    );
+    fetchBenchStrategyMock.mockResolvedValue({
+      matter_id: "m-1",
+      bench_judge_ids: [],
+      total_decisions_indexed: 0,
+      evidence_quality: "insufficient",
+      top_authorities: [],
+      top_statute_sections: [],
+      disclaimer: "Not legal advice.",
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <MatterOverviewPage />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(await screen.findByTestId("conflict-run-open"));
+    expect(screen.getByTestId("conflict-run-opposing")).toHaveValue(
+      "First Counterparty",
+    );
+
+    currentData = {
+      ...BASE_DATA,
+      matter: {
+        ...BASE_DATA.matter,
+        id: "m-2",
+        matter_code: "T-2",
+        opposing_party: "Second Counterparty",
+      },
+    };
+    useParamsMock.mockReturnValue({ id: "m-2" });
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <MatterOverviewPage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(listConflictChecksMock).toHaveBeenCalledWith("m-2"),
+    );
+    expect(screen.queryByTestId("conflict-run-opposing")).toBeNull();
+    await userEvent.click(screen.getByTestId("conflict-run-open"));
+    expect(await screen.findByTestId("conflict-run-opposing")).toHaveValue(
+      "Second Counterparty",
+    );
   });
 
   it("does not treat cancelled hearings as upcoming on the overview", () => {
