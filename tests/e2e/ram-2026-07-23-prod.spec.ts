@@ -595,9 +595,11 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
       "Confirm import (1)",
     );
 
+    // Renamed 2026-08-14: the report now also lists rows skipped as duplicates,
+    // which are excluded from the submission rather than rejected as errors.
     const errorDownloadPromise = page.waitForEvent("download");
     await page
-      .getByRole("button", { name: "Download error report" })
+      .getByRole("button", { name: "Download row report" })
       .click();
     const errorDownload = await errorDownloadPromise;
     expect(errorDownload.suggestedFilename()).toBe(

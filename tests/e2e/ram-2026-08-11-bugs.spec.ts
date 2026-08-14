@@ -535,17 +535,32 @@ test.describe.serial("Ram 2026-08-11 local and deployed regressions", () => {
         errors: string[];
       }>;
     };
-    expect(job.valid_rows).toBe(1);
-    expect(job.invalid_rows).toBe(1);
+    // SUPERSEDED 2026-08-14 (Ram BUG-001/BUG-002). This assertion originally
+    // required "DRT-99" to be rejected, encoding the fail-closed half of rule 5
+    // in docs/BUG_REOPEN_LEARNINGS_2026-08-11_RAM.md. That rule made bulk
+    // import stricter than manual creation, and with 4 DRT entries in the
+    // production catalog for all of India it made a Mumbai DRT matter
+    // unimportable. The effective contract is now: an exact catalog value still
+    // enriches with lineage, and a court outside the catalog keeps the
+    // category's canonical level with the court as free text - identical to
+    // what manual creation stores. See
+    // docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md rules 1-3.
+    expect(job.valid_rows).toBe(2);
+    expect(job.invalid_rows).toBe(0);
     expect(job.rows[0].normalized).toMatchObject({
       forum_level: "tribunal",
       court_name: "DRT-2",
       forum_catalog_entry_id: "drt:delhi:drt-2",
       forum_state: "Delhi",
     });
-    expect(job.rows[1].errors).toContain(
-      "Court is not an active DRAT / DRT catalog selection.",
-    );
+    // The uncatalogued bench is accepted, but must NOT borrow another bench's
+    // lineage - failing open is not permission to guess.
+    expect(job.rows[1].errors).toEqual([]);
+    expect(job.rows[1].normalized).toMatchObject({
+      forum_level: "tribunal",
+      court_name: "DRT-99",
+    });
+    expect(job.rows[1].normalized.forum_catalog_entry_id).toBeUndefined();
 
     const commit = await page.request.post(
       `${API_BASE_URL}/api/matters/imports/${job.id}/commit`,
@@ -554,12 +569,14 @@ test.describe.serial("Ram 2026-08-11 local and deployed regressions", () => {
     await expectStatus(
       commit,
       200,
-      "commit the one valid catalog-backed bulk row",
+      "commit both catalog-backed and free-text bulk rows",
     );
     const committed = (await commit.json()) as { created_matter_ids: string[] };
-    expect(committed.created_matter_ids).toHaveLength(1);
+    expect(committed.created_matter_ids).toHaveLength(2);
+    // Both rows now create a matter, so both must be tracked for cleanup -
+    // this spec also runs against the production tenant.
+    for (const id of committed.created_matter_ids) createdMatterIds.add(id);
     const bulkMatterId = committed.created_matter_ids[0];
-    createdMatterIds.add(bulkMatterId);
     const bulkMatter = await getMatter(page.request, token, bulkMatterId);
     expect(bulkMatter).toMatchObject({
       forum_level: "tribunal",

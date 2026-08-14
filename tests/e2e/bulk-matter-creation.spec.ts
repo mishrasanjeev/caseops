@@ -90,8 +90,10 @@ test.describe.serial("Bulk matter creation", () => {
       "Confirm import (1)",
     );
 
+    // Renamed 2026-08-14: the report now also lists rows skipped as duplicates,
+    // which are excluded from the submission rather than rejected as errors.
     const errorDownload = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Download error report" }).click();
+    await page.getByRole("button", { name: "Download row report" }).click();
     expect((await errorDownload).suggestedFilename()).toMatch(/^matter-import-errors-.+\.csv$/);
 
     await page.getByTestId("matter-import-confirm").click();
