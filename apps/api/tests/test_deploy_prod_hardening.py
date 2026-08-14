@@ -79,10 +79,21 @@ def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> N
     assert '--min "${WEB_MIN_INSTANCES}"' in script
     assert script.count("--min-instances default") == 2
     assert "--to-latest --clear-tags --quiet" in script
-    assert "--min-instances \"${API_MIN_INSTANCES}\"" not in script
-    assert "--min-instances \"${WEB_MIN_INSTANCES}\"" not in script
+    assert '--min-instances "${API_MIN_INSTANCES}"' not in script
+    assert '--min-instances "${WEB_MIN_INSTANCES}"' not in script
     assert "MIGRATION_TASK_TIMEOUT=30m" in script
     assert '--task-timeout "${MIGRATION_TASK_TIMEOUT}"' in script
+
+
+def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+
+    assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" in script
+    assert "LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api" in script
+    assert 'str(metadata.get("generation")) != str(status.get("observedGeneration"))' in script
+    assert "len(status_traffic) != 1" in script
+    assert 'env.get("CASEOPS_RELEASE_SHA") != expected_sha' in script
+    assert 'env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") != "false"' in script
 
 
 def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() -> None:
@@ -194,6 +205,7 @@ def _run_deploy_with_fakes(
     *arguments: str,
     git_status: str = "",
     curl_mode: str = "ok",
+    traffic_mode: str = "ok",
     expected_tag: str = "abcdef1",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
@@ -236,6 +248,37 @@ elif [[ "$*" == *"run jobs describe"* ]]; then
   printf '%s%s\n' \
     'asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:' \
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]]; then
+  FAKE_TRAFFIC_REVISION='caseops-api-test'
+  FAKE_TRAFFIC_LATEST='true'
+  FAKE_OBSERVED_GENERATION='2'
+  FAKE_GOVERNANCE_FLAG='false'
+  if [[ "${FAKE_TRAFFIC_MODE}" == "drift" ]]; then
+    FAKE_TRAFFIC_REVISION='caseops-api-old'
+    FAKE_TRAFFIC_LATEST='false'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "generation-drift" ]]; then
+    FAKE_OBSERVED_GENERATION='1'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "flag-enabled" ]]; then
+    FAKE_GOVERNANCE_FLAG='true'
+  fi
+  printf '%s' \
+    '{"metadata":{"generation":2},' \
+    '"spec":{"traffic":[{"latestRevision":true,"percent":100}],' \
+    '"template":{"spec":{"containers":[{"name":"api","env":[' \
+    '{"name":"CASEOPS_RELEASE_SHA",' \
+    '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
+    '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
+    "${FAKE_GOVERNANCE_FLAG}" '"}' \
+    ']}]}}},' \
+    '"status":{"observedGeneration":' "${FAKE_OBSERVED_GENERATION}" ',' \
+    '"latestCreatedRevisionName":"caseops-api-test",' \
+    '"latestReadyRevisionName":"caseops-api-test","conditions":[' \
+    '{"type":"Ready","status":"True"},' \
+    '{"type":"ConfigurationsReady","status":"True"},' \
+    '{"type":"RoutesReady","status":"True"}],"traffic":[' \
+    '{"revisionName":"' "${FAKE_TRAFFIC_REVISION}" '",' \
+    '"latestRevision":' "${FAKE_TRAFFIC_LATEST}" ',"percent":100}]}}'
+  printf '\n'
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[0].image"* ]]; then
   printf 'registry.invalid/caseops-api:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[1].image"* ]]; then
@@ -283,6 +326,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GIT_STATUS": git_status,
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
+            "FAKE_TRAFFIC_MODE": traffic_mode,
         }
     )
     command = [
@@ -329,6 +373,18 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "DONE abcdef1" in result.stdout
     assert (tmp_path / "gcloud.log").is_file()
+
+
+@pytest.mark.parametrize("traffic_mode", ["drift", "generation-drift", "flag-enabled"])
+def test_deploy_prod_fails_closed_on_api_traffic_or_config_drift(
+    tmp_path: Path,
+    traffic_mode: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, traffic_mode=traffic_mode)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    assert "DONE abcdef1" not in result.stdout
 
 
 @pytest.mark.parametrize(

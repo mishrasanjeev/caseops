@@ -30,7 +30,7 @@ a released capability.
 | `IPLF-026A` | `implemented` | `deployment_verified` | `deployment-evidence-recorded` | 8 | 3 | 0 |
 | `IPLF-026B` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 10 | 3 | 1 |
 | `IPLF-027A` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 9 | 4 | 1 |
-| `IPLF-027B` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 2 | 1 | 1 |
+| `IPLF-027B` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 3 | 1 | 1 |
 | `IPLF-028A` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 5 | 1 | 3 |
 | `IPLF-028B` | `not_started` | `blocked` | `not-started-or-planned` | 10 | 0 | 0 |
 | `IPLF-028C` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 3 | 1 | 2 |

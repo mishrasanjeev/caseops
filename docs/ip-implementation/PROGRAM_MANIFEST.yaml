@@ -6578,11 +6578,13 @@
       ],
       "implementation_refs": [
         "apps/api/src/caseops_api/core/settings.py",
-        "apps/api/src/caseops_api/services/ip_deadline_workflow.py"
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "scripts/deploy-prod.sh"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_rule_governance_quiescence.py",
-        "apps/api/tests/test_ip_deadline_workflow.py"
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/api/tests/test_deploy_prod_hardening.py"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-027B/a0-quiescence-2026-08-14.md"
@@ -6591,9 +6593,9 @@
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-027B/a0-quiescence-2026-08-14.md",
           "revision": "A0 candidate based on 8d9654bbe556ad4fa24caf64578ac9cf55343a0e; immutable candidate/release revision pending exact-head CI",
-          "environment": "Windows 11, CPython 3.13, locked API dependencies, isolated SQLite/API fixtures, and session sentinels; independent CI, real PostgreSQL, deployment, drain, and production evidence remain required",
-          "fixtures": "Synthetic tenants, memberships, rules, calendars, legal deadlines, operational projections, responsibilities, reminders, and no-database-access sentinels; no real client, provider, filing, payment, message, or legal effect",
-          "assertions": "Default-off typed 503 before database/audit access for the three existing rule-governance writers; explicit-on preservation of governance behavior; all five legal-deadline writers operable with governance false; false/true/false settings-cache order; independent calendar boundary; read-only impact/workspace availability; schema-free A0; and an explicit A1 prerequisite for server-side rollout-expiry plus company-entitlement enforcement with unentitled/expired negative tests before A2",
+          "environment": "Windows 11, CPython 3.13, GNU Bash, locked API dependencies, isolated SQLite/API fixtures, session sentinels, and fake Cloud Run release topology; independent CI, real PostgreSQL, deployment, drain, and production evidence remain required",
+          "fixtures": "Synthetic tenants, memberships, rules, calendars, legal deadlines, operational projections, responsibilities, reminders, no-database-access sentinels, and exact/drifted fake service traffic/config payloads; no real client, provider, filing, payment, message, or legal effect",
+          "assertions": "Default-off typed 503 before database/audit access for the three existing rule-governance writers; explicit-on preservation of governance behavior; all five legal-deadline writers operable with governance false; false/true/false settings-cache order; independent calendar boundary; read-only impact/workspace availability; explicit false production configuration plus observed single-latest-traffic verification; schema-free A0; and explicit A1 prerequisites for rollout expiry, company entitlement, qualified reviewer capability, unsupported-kind evaluator fail-closed behavior, effective-range/emergency-disable behavior, and PostgreSQL ownership/concurrency proof before A2",
           "result": "local_partial_passed_release_not_run",
           "recorded_at": "2026-08-14T19:49:32+05:30"
         }
@@ -6602,22 +6604,22 @@
       "blockers": [
         {
           "id": "IPLF-027B-A0-A1-A2-RELEASE-GATE",
-          "summary": "The schema-free A0 guard has only repository-local candidate evidence. No exact-head CI, merge, deployment, explicit legacy-revision termination/observed shutdown, post-cutoff revision-log plus rule/version/policy/audit no-write proof, A1 ownership migration/reconciliation, or A2 controlled resume has occurred.",
+          "summary": "The schema-free A0 guard has only repository-local candidate evidence. No exact-head CI, merge, deployment, explicit writer-capable legacy-revision termination/observed shutdown, post-cutoff revision-log plus rule/version/policy/audit no-write proof, A1 ownership migration/reconciliation, or A2 controlled resume has occurred.",
           "owner": "Engineering, Release/SRE, Security, and the authorized IP rule-governance operator",
-          "evidence_needed": "Publish and independently validate the exact A0 candidate; deploy its exact image with the flag false; remove legacy tags/direct access; explicitly delete every legacy API revision or prove an equivalent old-instance kill/fence; wait for deletion/shutdown completion before establishing the cutoff; then prove zero legacy completions/writes from revision-tagged completion/error logs and rule-set/rule-version/company-policy/governance-audit maximum timestamps. Only then implement and validate A1 with the flag still false. A1 must add server-side rollout-expiry and current-company ip_rule_governance entitlement enforcement and negative tests proving flag-enabled unentitled and expired tenants fail before governance read/mutation/audit access. Only exact deployed evidence for those gates permits an authorized config-only A2 enable and dated production acceptance.",
-          "safe_fallback": "Keep CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false. Impact, workspace, readiness, and the five existing legal-deadline writers remain available; do not run A1 migration while any A0 identity, termination, or no-write evidence is missing, and never enable A2 until A1's server-side entitlement/expiry gates and negative tests have exact deployed proof.",
+          "evidence_needed": "Publish and independently validate exact A0. Capture the writer-cohort/job/database/audit baseline; deploy its exact image with the flag explicitly false; repin manually invokable writer-era jobs without execution; and verify one observed, ready, untagged exact-A0 --to-latest status.traffic entry at 100% before defining T_ROUTE. Pass the A0 production checks, wait at least 301 seconds from route convergence and old-revision retirement, compute old-request completion from timestamp plus latency, inspect stdout/errors, and require an unchanged database/audit fingerprint. Then delete only the exact retired, zero-traffic, untagged writer-capable allowlist while preserving pre-writer history; prove each target NOT_FOUND, empty list intersection, and successful Admin Activity deletion before defining T_FENCE. Wait at least 301 seconds plus log-ingestion slack and require another identical fingerprint with no legacy logs/jobs. Only then implement A1 with the flag false. A1 must enforce server-side rollout expiry and current-company ip_rule_governance entitlement; qualified distinct reviewer capability; fail-closed activation for form/fee until dedicated evaluators exist; effective-range overlap plus complete emergency-disable candidate/auto-confirm/alert/history behavior; and strict PostgreSQL zero-drift ownership plus proposal/overlap/policy/disable concurrency proof. Only exact deployed evidence for all gates permits A2.",
+          "safe_fallback": "Keep CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false. Impact, workspace, readiness, and the five existing legal-deadline writers remain available; do not run A1 migration while any A0 identity, termination, or no-write evidence is missing, and never enable A2 until every A1 runtime, entitlement/expiry, qualified-reviewer, unsupported-kind evaluator, effective-range/emergency-disable, strict PostgreSQL ownership/concurrency, negative-test, and exact-deployed gate has passed.",
           "milestone_impact": "Blocks IPLF-027B, RULE-GOV-01..08 reciprocal closure, UJ-47/UJ-67 completion, and M2 release while preserving the already released IPLF-023B and IPLF-027A evidence.",
           "next_independent_slice": "Complete exact A0 review/CI/release evidence without adding schema or the planned A1 standalone policy-selection endpoint."
         }
       ],
       "next_actions": [
         "Publish the schema-free A0 guard and pass its exact-head CI without claiming A1 or A2 behavior.",
-        "Deploy exact A0 with CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false, remove every legacy revision tag/direct route, explicitly terminate every legacy API revision or prove an equivalent old-instance kill/fence, wait for observed shutdown, establish the cutoff only then, and prove no post-cutoff legacy completion/write using revision-tagged completion/error logs plus rule/version/policy/governance-audit maximum timestamps. Do not use request timeout as a liveness bound.",
-        "Implement A1 additive tenant ownership, compatibility/backfill/reconciliation, locking/concurrency, and standalone policy selection only while the A0 flag remains false; guard the new endpoint from birth and enforce rollout expiry plus current-company ip_rule_governance entitlement server-side.",
-        "Before A2, pass negative service/API tests proving flag-enabled unentitled and expired tenants fail before governance read/mutation/audit access, then obtain exact deployed evidence for those gates. Only then use a config-only A2 revision of the same image for authorized enablement and rerun the dated acceptance suite; turn the flag false before any rollback."
+        "Capture the writer-cohort/job/database/audit baseline, deploy exact A0 with CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false, repin manually invokable writer-era jobs without execution, and verify one observed, ready, untagged exact-A0 --to-latest status.traffic entry at 100% before T_ROUTE. Pass exact A0 production checks; drain at least 301 seconds from route convergence and old-revision retirement; compute old-request completion from timestamp plus latency, inspect stdout/errors, and require an unchanged database/audit fingerprint. Then delete only the exact retired/zero-traffic/untagged writer-capable allowlist while preserving pre-writer history; prove NOT_FOUND, empty list intersection, and successful Admin Activity deletion before T_FENCE; wait at least 301 seconds plus log-ingestion slack and require another identical fingerprint with no legacy logs/jobs. Do not use request timeout as a liveness bound.",
+        "Implement A1 additive tenant ownership, compatibility/backfill/reconciliation, locking/concurrency, and standalone policy selection only while the A0 flag remains false; guard the new endpoint from birth and enforce rollout expiry, current-company ip_rule_governance entitlement, and distinct qualified reviewer capability server-side. Keep unsupported form/fee activation fail-closed until dedicated evaluators exist; require effective-range overlap enforcement and complete emergency-disable new-calculation/auto-confirm/candidate/alert/history behavior; and require strict PostgreSQL zero-drift ownership plus proposal/overlap/policy/disable concurrency proof.",
+        "Before A2, pass negative service/API/PostgreSQL/audit/alert tests proving flag-enabled unentitled, expired, unqualified-reviewer, unsupported-kind, overlapping-range, and disabled-rule paths fail closed and complete the required evidence behavior, then obtain exact deployed evidence for every gate. Only then use a config-only A2 revision of the same image for authorized enablement and rerun the dated acceptance suite. Roll back only to the exact A1 image/configuration with the flag false; never route to a pre-A0/pre-fence image and never downgrade the additive ownership schema after migration/backfill or legal state exists."
       ],
       "data_impact": [
-        "A0 is application-only and adds no migration, table, column, index, constraint, seed, backfill, or data rewrite. With the default-off flag, the three rule-governance services reject before authoritative database or audit access while all five existing legal-deadline writers continue over already selected immutable rules.",
+        "A0 is a schema-free application/release-control change and adds no migration, table, column, index, constraint, seed, backfill, or data rewrite. With the explicit false flag, the three rule-governance services reject before authoritative database or audit access while all five existing legal-deadline writers continue over already selected immutable rules.",
         "A1 data expansion, backfill, reconciliation, and later constraint contraction remain unimplemented and unauthorized by this A0 record."
       ],
       "documentation_impact": [
@@ -6632,9 +6634,15 @@
           "disposition": "updated",
           "owner": "Program control plane",
           "evidence": "IPLF-027B in-progress A0 scope and explicit unresolved release/migration/activation gates without requirement, journey, or deployment completion"
+        },
+        {
+          "artifact": "scripts/deploy-prod.sh and apps/api/tests/test_deploy_prod_hardening.py",
+          "disposition": "updated",
+          "owner": "Release/SRE",
+          "evidence": "Explicit false governance configuration and fail-closed observed-generation, readiness, release-SHA, untagged single-latest-revision 100% traffic verification"
         }
       ],
-      "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-47/UJ-67, and 25. A0 owns only schema-free mutation quiescence over the three existing rule-governance writers. The five legal-deadline writers remain operable over already selected immutable rules and policies. A1 retains tenant ownership/schema/backfill/concurrency, the guarded standalone policy-selection command, and mandatory server-side rollout-expiry plus current-company entitlement enforcement with unentitled/expired negative tests. A2 retains config-only controlled resume and deployed acceptance and is forbidden until those A1 gates have exact deployed proof. Calendar governance, read-only impact/readiness, Matter/shared-work ownership, and risk-response records remain with their existing owners.",
+      "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-47/UJ-67, and 25. A0 owns only schema-free mutation quiescence over the three existing rule-governance writers. The five legal-deadline writers remain operable over already selected immutable rules and policies. A1 retains tenant ownership/schema/backfill/concurrency, the guarded standalone policy-selection command, mandatory server-side rollout-expiry plus current-company entitlement enforcement, qualified reviewer authorization, unsupported-kind evaluator fail-closed behavior, effective-range/emergency-disable behavior, and strict PostgreSQL ownership/concurrency proof. A2 retains config-only controlled resume and deployed acceptance and is forbidden until those A1 gates have exact deployed proof. Calendar governance, read-only impact/readiness, Matter/shared-work ownership, and risk-response records remain with their existing owners.",
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",

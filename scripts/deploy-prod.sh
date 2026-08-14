@@ -196,7 +196,7 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
-  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA}" \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -234,6 +234,81 @@ if [[ "${LIVE_API_TAG}" != "${TAG}" || "${LIVE_WEB_TAG}" != "${TAG}" ]]; then
   echo "STALENESS DETECTED: api=${LIVE_API_TAG} web=${LIVE_WEB_TAG} expected=${TAG}"
   exit 1
 fi
+LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api \
+  --region "${REGION}" \
+  --project "${PROJECT}" \
+  --format=json)
+if ! LIVE_API_REVISION=$(python - "${HEAD_SHA}" "${LIVE_API_SERVICE_JSON}" <<'PY'
+import json
+import sys
+
+expected_sha = sys.argv[1]
+service = json.loads(sys.argv[2])
+metadata = service.get("metadata") or {}
+spec = service.get("spec") or {}
+status = service.get("status") or {}
+errors = []
+
+if str(metadata.get("generation")) != str(status.get("observedGeneration")):
+    errors.append("metadata.generation does not match status.observedGeneration")
+
+conditions = {
+    str(row.get("type")): str(row.get("status"))
+    for row in status.get("conditions") or []
+}
+for condition in ("Ready", "ConfigurationsReady", "RoutesReady"):
+    if conditions.get(condition) != "True":
+        errors.append(f"{condition} is not True")
+
+latest_created = str(status.get("latestCreatedRevisionName") or "")
+latest_ready = str(status.get("latestReadyRevisionName") or "")
+if not latest_ready or latest_created != latest_ready:
+    errors.append("latest created and ready revisions do not match")
+
+spec_traffic = spec.get("traffic") or []
+if len(spec_traffic) != 1:
+    errors.append("spec.traffic must contain exactly one entry")
+else:
+    row = spec_traffic[0]
+    if row.get("latestRevision") is not True or int(row.get("percent") or 0) != 100:
+        errors.append("spec.traffic is not 100% latest")
+    if row.get("tag"):
+        errors.append("spec.traffic still has a tag")
+
+status_traffic = status.get("traffic") or []
+if len(status_traffic) != 1:
+    errors.append("status.traffic must contain exactly one entry")
+else:
+    row = status_traffic[0]
+    if (
+        str(row.get("revisionName") or "") != latest_ready
+        or row.get("latestRevision") is not True
+        or int(row.get("percent") or 0) != 100
+    ):
+        errors.append("status.traffic is not 100% on the exact latest-ready revision")
+    if row.get("tag"):
+        errors.append("status.traffic still has a tag")
+
+containers = ((spec.get("template") or {}).get("spec") or {}).get("containers") or []
+api = next((row for row in containers if row.get("name") == "api"), None)
+if api is None:
+    errors.append("api container is missing")
+else:
+    env = {str(row.get("name")): str(row.get("value")) for row in api.get("env") or []}
+    if env.get("CASEOPS_RELEASE_SHA") != expected_sha:
+        errors.append("CASEOPS_RELEASE_SHA does not match exact HEAD")
+    if env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") != "false":
+        errors.append("CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly false")
+
+if errors:
+    print("; ".join(errors), file=sys.stderr)
+    raise SystemExit(1)
+print(latest_ready)
+PY
+); then
+  echo "TRAFFIC/REVISION DRIFT: caseops-api did not converge to one untagged exact-HEAD latest revision at 100%."
+  exit 1
+fi
 if ! HEALTH=$(curl -fsS --connect-timeout 10 --max-time 30 https://api.caseops.ai/api/health); then
   echo "API health request failed; refusing to certify this deploy."
   exit 1
@@ -243,7 +318,7 @@ if ! python -c 'import json, sys; payload = json.loads(sys.argv[1]); raise Syste
   exit 1
 fi
 echo "  health=${HEALTH}"
-echo "  api=${LIVE_API_TAG} web=${LIVE_WEB_TAG} (matches HEAD ${TAG})"
+echo "  api=${LIVE_API_TAG} revision=${LIVE_API_REVISION} web=${LIVE_WEB_TAG} (matches HEAD ${TAG}; rule governance explicitly false)"
 
 # EG-003 regression guard. The clamav sidecar was wired via
 # scripts/eg003-apply-clamav.sh on 2026-04-25. `gcloud run deploy
