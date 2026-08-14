@@ -94,6 +94,8 @@ def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None
     assert "len(status_traffic) != 1" in script
     assert 'env.get("CASEOPS_RELEASE_SHA") != expected_sha' in script
     assert 'env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") != "false"' in script
+    assert "LIVE_API_REVISION_IMAGE=$(gcloud run revisions describe" in script
+    assert '"${LIVE_API_REVISION_IMAGE}" != "${API_IMMUTABLE_IMAGE}"' in script
 
 
 def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() -> None:
@@ -279,6 +281,16 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"revisionName":"' "${FAKE_TRAFFIC_REVISION}" '",' \
     '"latestRevision":' "${FAKE_TRAFFIC_LATEST}" ',"percent":100}]}}'
   printf '\n'
+elif [[ "$*" == *"run revisions describe"* ]]; then
+  if [[ "${FAKE_TRAFFIC_MODE}" == "image-drift" ]]; then
+    printf '%s%s\n' \
+      'asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:' \
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  else
+    printf '%s%s\n' \
+      'asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:' \
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  fi
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[0].image"* ]]; then
   printf 'registry.invalid/caseops-api:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[1].image"* ]]; then
@@ -375,15 +387,24 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert (tmp_path / "gcloud.log").is_file()
 
 
-@pytest.mark.parametrize("traffic_mode", ["drift", "generation-drift", "flag-enabled"])
+@pytest.mark.parametrize(
+    ("traffic_mode", "expected_message"),
+    [
+        ("drift", "TRAFFIC/REVISION DRIFT"),
+        ("generation-drift", "TRAFFIC/REVISION DRIFT"),
+        ("flag-enabled", "TRAFFIC/REVISION DRIFT"),
+        ("image-drift", "REVISION IMAGE DRIFT"),
+    ],
+)
 def test_deploy_prod_fails_closed_on_api_traffic_or_config_drift(
     tmp_path: Path,
     traffic_mode: str,
+    expected_message: str,
 ) -> None:
     result = _run_deploy_with_fakes(tmp_path, traffic_mode=traffic_mode)
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    assert expected_message in result.stdout
     assert "DONE abcdef1" not in result.stdout
 
 

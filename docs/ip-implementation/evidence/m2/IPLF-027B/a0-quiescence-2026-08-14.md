@@ -90,9 +90,11 @@ The following paths are deliberately excluded:
    `--to-latest --clear-tags` and now fails unless observed generation, ready
    conditions, latest-created/latest-ready identity, exact release SHA,
    explicit false governance flag, and the sole untagged 100% spec/status
-   traffic entries converge. Independently preserve the returned service and
-   revision JSON and prove the immediate predecessor is retired with no
-   traffic or tag. Define `T_ROUTE` only on that first fully converged read.
+   traffic entries converge. It also resolves the serving revision and requires
+   its immutable API image to match the just-built digest. Independently
+   preserve the returned service and revision JSON and prove the immediate
+   predecessor is retired with no traffic or tag. Define `T_ROUTE` only on
+   that first fully converged read.
 3. Before destroying rollback history, run the exact A0 production checks: all
    three governance writers return the typed 503 without a fingerprint change;
    impact/workspace/readiness reads work; all five legal-deadline writers remain
@@ -200,7 +202,8 @@ The candidate currently has repository-local evidence only:
 | `uv --directory apps/api run pytest -q tests/test_ip_rule_governance_quiescence.py` | 9 passed |
 | `uv --directory apps/api run pytest -q tests/test_ip_deadline_workflow.py` | 9 passed; governance setup/transition use explicit true, while all five legal-deadline writers are exercised after switching false |
 | combined focused tests | 18 passed; zero skipped |
-| `uv --directory apps/api run pytest -q tests/test_deploy_prod_hardening.py` | 18 passed; includes exact traffic/config success and fail-closed traffic, generation, and flag drift |
+| `uv --directory apps/api run pytest -q tests/test_deploy_prod_hardening.py` | 19 passed; includes exact traffic/config/image success and fail-closed traffic, generation, flag, and immutable-image drift |
+| combined A0 service/workflow/deploy-hardening suite | 37 passed; zero skipped |
 | focused Ruff | passed |
 | `uv --directory apps/api run ruff format --check src/caseops_api/services/ip_deadline_workflow.py tests/test_ip_rule_governance_quiescence.py tests/test_ip_deadline_workflow.py` | 3 files already formatted |
 | program, ownership, ARCH-OPS, data-class, data-governance registry/map, change-gate, and M2 ownership validators | passed |

@@ -309,6 +309,14 @@ PY
   echo "TRAFFIC/REVISION DRIFT: caseops-api did not converge to one untagged exact-HEAD latest revision at 100%."
   exit 1
 fi
+LIVE_API_REVISION_IMAGE=$(gcloud run revisions describe "${LIVE_API_REVISION}" \
+  --region "${REGION}" \
+  --project "${PROJECT}" \
+  --format='value(spec.containers[0].image)')
+if [[ "${LIVE_API_REVISION_IMAGE}" != "${API_IMMUTABLE_IMAGE}" ]]; then
+  echo "REVISION IMAGE DRIFT: revision=${LIVE_API_REVISION} image=${LIVE_API_REVISION_IMAGE} expected=${API_IMMUTABLE_IMAGE}"
+  exit 1
+fi
 if ! HEALTH=$(curl -fsS --connect-timeout 10 --max-time 30 https://api.caseops.ai/api/health); then
   echo "API health request failed; refusing to certify this deploy."
   exit 1
