@@ -6576,35 +6576,66 @@
       "dependencies": [
         "IPLF-027A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-67-EXC-01",
-        "planned:IPLF-UJ-67-EXC-02",
-        "planned:IPLF-UJ-67-EXC-03",
-        "planned:IPLF-UJ-67-EXC-04",
-        "planned:IPLF-UJ-67-EXC-05",
-        "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/core/settings.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_rule_governance_quiescence.py",
+        "apps/api/tests/test_ip_deadline_workflow.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027B/a0-quiescence-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-027B/a0-quiescence-2026-08-14.md",
+          "revision": "A0 candidate based on 8d9654bbe556ad4fa24caf64578ac9cf55343a0e; immutable candidate/release revision pending exact-head CI",
+          "environment": "Windows 11, CPython 3.13, locked API dependencies, isolated SQLite/API fixtures, and session sentinels; independent CI, real PostgreSQL, deployment, drain, and production evidence remain required",
+          "fixtures": "Synthetic tenants, memberships, rules, calendars, legal deadlines, operational projections, responsibilities, reminders, and no-database-access sentinels; no real client, provider, filing, payment, message, or legal effect",
+          "assertions": "Default-off typed 503 before database/audit access for the three existing rule-governance writers; explicit-on preservation of governance behavior; all five legal-deadline writers operable with governance false; false/true/false settings-cache order; independent calendar boundary; read-only impact/workspace availability; schema-free A0; and an explicit A1 prerequisite for server-side rollout-expiry plus company-entitlement enforcement with unentitled/expired negative tests before A2",
+          "result": "local_partial_passed_release_not_run",
+          "recorded_at": "2026-08-14T19:49:32+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-027B-A0-A1-A2-RELEASE-GATE",
+          "summary": "The schema-free A0 guard has only repository-local candidate evidence. No exact-head CI, merge, deployment, explicit legacy-revision termination/observed shutdown, post-cutoff revision-log plus rule/version/policy/audit no-write proof, A1 ownership migration/reconciliation, or A2 controlled resume has occurred.",
+          "owner": "Engineering, Release/SRE, Security, and the authorized IP rule-governance operator",
+          "evidence_needed": "Publish and independently validate the exact A0 candidate; deploy its exact image with the flag false; remove legacy tags/direct access; explicitly delete every legacy API revision or prove an equivalent old-instance kill/fence; wait for deletion/shutdown completion before establishing the cutoff; then prove zero legacy completions/writes from revision-tagged completion/error logs and rule-set/rule-version/company-policy/governance-audit maximum timestamps. Only then implement and validate A1 with the flag still false. A1 must add server-side rollout-expiry and current-company ip_rule_governance entitlement enforcement and negative tests proving flag-enabled unentitled and expired tenants fail before governance read/mutation/audit access. Only exact deployed evidence for those gates permits an authorized config-only A2 enable and dated production acceptance.",
+          "safe_fallback": "Keep CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false. Impact, workspace, readiness, and the five existing legal-deadline writers remain available; do not run A1 migration while any A0 identity, termination, or no-write evidence is missing, and never enable A2 until A1's server-side entitlement/expiry gates and negative tests have exact deployed proof.",
+          "milestone_impact": "Blocks IPLF-027B, RULE-GOV-01..08 reciprocal closure, UJ-47/UJ-67 completion, and M2 release while preserving the already released IPLF-023B and IPLF-027A evidence.",
+          "next_independent_slice": "Complete exact A0 review/CI/release evidence without adding schema or the planned A1 standalone policy-selection endpoint."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Publish the schema-free A0 guard and pass its exact-head CI without claiming A1 or A2 behavior.",
+        "Deploy exact A0 with CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false, remove every legacy revision tag/direct route, explicitly terminate every legacy API revision or prove an equivalent old-instance kill/fence, wait for observed shutdown, establish the cutoff only then, and prove no post-cutoff legacy completion/write using revision-tagged completion/error logs plus rule/version/policy/governance-audit maximum timestamps. Do not use request timeout as a liveness bound.",
+        "Implement A1 additive tenant ownership, compatibility/backfill/reconciliation, locking/concurrency, and standalone policy selection only while the A0 flag remains false; guard the new endpoint from birth and enforce rollout expiry plus current-company ip_rule_governance entitlement server-side.",
+        "Before A2, pass negative service/API tests proving flag-enabled unentitled and expired tenants fail before governance read/mutation/audit access, then obtain exact deployed evidence for those gates. Only then use a config-only A2 revision of the same image for authorized enablement and rerun the dated acceptance suite; turn the flag false before any rollback."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "A0 is application-only and adds no migration, table, column, index, constraint, seed, backfill, or data rewrite. With the default-off flag, the three rule-governance services reject before authoritative database or audit access while all five existing legal-deadline writers continue over already selected immutable rules.",
+        "A1 data expansion, backfill, reconciliation, and later constraint contraction remain unimplemented and unauthorized by this A0 record."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-027B/a0-quiescence-2026-08-14.md",
+          "disposition": "created",
+          "owner": "IP rule governance and release control plane",
+          "evidence": "Exact three-writer governance inventory, five-writer deadline continuation boundary, typed failure contract, schema-free boundary, and strict A0/A1/A2 drain protocol"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "IPLF-027B in-progress A0 scope and explicit unresolved release/migration/activation gates without requirement, journey, or deployment completion"
+        }
+      ],
+      "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-47/UJ-67, and 25. A0 owns only schema-free mutation quiescence over the three existing rule-governance writers. The five legal-deadline writers remain operable over already selected immutable rules and policies. A1 retains tenant ownership/schema/backfill/concurrency, the guarded standalone policy-selection command, and mandatory server-side rollout-expiry plus current-company entitlement enforcement with unentitled/expired negative tests. A2 retains config-only controlled resume and deployed acceptance and is forbidden until those A1 gates have exact deployed proof. Calendar governance, read-only impact/readiness, Matter/shared-work ownership, and risk-response records remain with their existing owners.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending"
@@ -41943,7 +41974,7 @@
         "planned:IPLF-UJ-67-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -59793,7 +59824,7 @@
         "planned:IPLF-UJ-67-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -59849,7 +59880,7 @@
         "planned:IPLF-UJ-67-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -59905,7 +59936,7 @@
         "planned:IPLF-UJ-67-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -59961,7 +59992,7 @@
         "planned:IPLF-UJ-67-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -60017,7 +60048,7 @@
         "planned:IPLF-UJ-67-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -60073,7 +60104,7 @@
         "planned:IPLF-UJ-67-EXC-05"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",
@@ -60129,7 +60160,7 @@
         "planned:IPLF-UJ-67-EXC-06"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "pending",

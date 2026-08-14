@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     IpDeadline,
     IpDeadlineCoverage,
@@ -23,6 +24,16 @@ from caseops_api.schemas.ip_deadlines import (
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
+
+
+@pytest.fixture(autouse=True)
+def _enable_rule_governance_for_existing_workflow_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the pre-A0 behavior only through an explicit enabled state."""
+
+    monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "true")
+    get_settings.cache_clear()
 
 
 def _member(
@@ -253,8 +264,9 @@ def test_deadline_confirmation_rejects_unsafe_correction_and_reminders(
         IpDeadlineConfirmRequest.model_validate(payload)
 
 
-def test_rule_calendar_deadline_end_to_end_and_immutable_legal_completion(
+def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bootstrap = bootstrap_company(client)
     owner_token = str(bootstrap["access_token"])
@@ -322,6 +334,13 @@ def test_rule_calendar_deadline_end_to_end_and_immutable_legal_completion(
     assert activated_rule.status_code == 200, activated_rule.text
     assert activated_rule.json()["status"] == "active"
     assert activated_rule.json()["fixtures_passed_at"] is not None
+
+    # A0 drains only governance ownership. Already selected immutable rules
+    # must continue to support proposal, confirmation, recalculation,
+    # override, and completion while the governance flag is false.
+    monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "false")
+    get_settings.cache_clear()
+    assert get_settings().ip_rule_governance_enabled is False
 
     proposal = client.post(
         f"/api/ip/dockets/{docket['id']}/deadlines",
