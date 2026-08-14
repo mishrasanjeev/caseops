@@ -144,3 +144,11 @@ for the defect it addressed; its acceptance evidence is not rewritten.
 8. **Prevention rules get phrased as user-visible invariants.** A rule that
    describes validator behaviour cannot be falsified by a workflow test. Write
    the sentence a tester would write, then point at the test that proves it.
+9. **A persistent production QA fixture must be unique on every business
+   identity predicate, not only its primary code.** On the 2026-08-14 rerun,
+   the importer correctly treated the first run's fixed title/client pairs as
+   existing Matters even though its matter codes were fresh. Each production
+   upload now derives both its code and client fixture from the run identifier,
+   while the in-file duplicate scenario deliberately keeps its two rows on the
+   same unique client. This preserves the duplicate assertion without turning
+   a valid earlier run into a false production regression.
