@@ -48849,9 +48849,12 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-09-EXC-01"
+        "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_completed_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01",
+        "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_superseded_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -48860,7 +48863,7 @@
         "IPLF-023B",
         "IPLF-034B"
       ],
-      "allocation_rationale": "UJ-09 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-034.",
+      "allocation_rationale": "UJ-09 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-034. | Traceability audit 2026-08-14 found this path had an implemented owner but no test proving it. A dedicated terminal-state suite now proves completed and superseded legal evidence refuses confirm, override, recalculate and complete.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",

@@ -75,14 +75,20 @@ gaps, not bookkeeping:
 
 | Path | Why rejected |
 |---|---|
-| `UJ-09-EXC-01` completed/waived deadline cannot be overwritten | The completion test asserts completion succeeds and that states include `completed`/`superseded`/`candidate`. It never attempts an overwrite of a completed deadline, so the protective behaviour is **assumed, not proven**. |
+| ~~`UJ-09-EXC-01`~~ **CLOSED 2026-08-14** | Was: the completion test never attempted an overwrite, so the protection was assumed. A dedicated suite `apps/api/tests/test_ip_deadline_terminal_state.py` now proves it. The guarantee **holds**: completed and superseded rows refuse confirm, override, recalculate and complete, and their stored date, version and evidence reference are unchanged after every attempt. |
 | `UJ-03-EXC-01` pre-filing draft without an application number | No test asserts the draft/pre-filing save as a journey outcome. Drafts are created incidentally by other fixtures, which is not path evidence. |
 | 23 paths across `UJ-51`, `UJ-52`, `UJ-55` | Cited test is a broad happy-path integration test with no assertions for the exception behaviour. |
 | Remaining `UJ-50`, `UJ-53`, `UJ-54`, `UJ-57`, `UJ-58`, `UJ-59`, `UJ-61`, `UJ-62`, `UJ-68`, `UJ-20`, `UJ-25` candidates | Not individually verified in this pass. They are **not** assumed mappable. |
 
-`UJ-09-EXC-01` is the one worth acting on soonest: "a completed deadline cannot
-be overwritten" is a data-integrity guarantee on legal evidence, and right now
-nothing proves it holds.
+`UJ-09-EXC-01` was acted on immediately and is now closed. The guarantee holds,
+but it had been shipped unproven — which is the pattern this audit exists to
+surface.
+
+While writing it, the first version of the supersession test contained a silent
+early `return` when the fixture produced no predecessor, so it passed while
+asserting nothing. That is exactly the no-test-shortcut the master prompt
+forbids. It was rewritten to build a real supersession through an override and
+now carries nine assertions.
 
 ## Corrected recommendation
 
