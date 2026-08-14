@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     IpDeadline,
     IpDeadlineCoverage,
     IpDocketEvent,
+    IpDocketRecord,
     IpResponsibilityAssignment,
     IpRuleSet,
     IpRuleVersion,
@@ -587,6 +588,7 @@ def transition_rule_version(
     # that selected this version.  Confirmed legal evidence is never rewritten;
     # dependent candidates surface as a ``rule_disabled`` workspace exception.
     suspended_company_ids: list[str] = []
+    alerted_membership_ids: list[str] = []
     if payload.emergency_disable:
         affected_policies = list(
             session.scalars(
@@ -602,6 +604,9 @@ def transition_rule_version(
                 policy.version += 1
                 policy.updated_by_membership_id = context.membership.id
                 policy.updater_label_snapshot = _actor_label(context)
+        alerted_membership_ids = _alert_rule_disable(
+            session, context=context, row=row, reason=payload.reason
+        )
 
     record_from_context(
         session,
@@ -615,6 +620,7 @@ def transition_rule_version(
             "reason": payload.reason,
             "impact_token": impact.impact_token,
             "auto_confirm_suspended_company_ids": suspended_company_ids,
+            "alerted_membership_ids": alerted_membership_ids,
             "open_deadline_count": impact.open_deadline_count,
             "candidate_deadline_count": impact.candidate_deadline_count,
             "confirmed_deadlines_preserved": True,
@@ -625,6 +631,75 @@ def transition_rule_version(
     rule_set = session.get(IpRuleSet, row.rule_set_id)
     assert rule_set is not None
     return _rule_record(rule_set, row)
+
+
+def _alert_rule_disable(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: IpRuleVersion,
+    reason: str,
+) -> list[str]:
+    """RULE-GOV-07: alert the owners of every record the disabled rule produced.
+
+    This reuses the existing notification dispatcher; it does not create a second
+    delivery owner.  Intents are in-app only and keyed by rule/deadline/member so
+    a repeated disable cannot duplicate a send.
+    """
+
+    affected = list(
+        session.scalars(
+            select(IpDeadline).where(
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.rule_version_id == row.id,
+                IpDeadline.state.in_(["candidate", "provisional", "confirmed", "overdue"]),
+            )
+        ).all()
+    )
+    alerted: list[str] = []
+    for deadline in affected:
+        matter_id = session.scalar(
+            select(IpDocketRecord.matter_id).where(IpDocketRecord.id == deadline.docket_id)
+        )
+        matter = session.get(Matter, matter_id) if matter_id else None
+        assignments = list(
+            session.scalars(
+                select(IpResponsibilityAssignment).where(
+                    IpResponsibilityAssignment.deadline_id == deadline.id,
+                    IpResponsibilityAssignment.effective_until.is_(None),
+                )
+            ).all()
+        )
+        recipient_ids = {item.membership_id for item in assignments if item.membership_id}
+        if not recipient_ids:
+            # Nobody owns the record yet; alert the actor so it is not lost.
+            recipient_ids = {context.membership.id}
+        for membership_id in sorted(recipient_ids):
+            member = session.get(CompanyMembership, membership_id)
+            if member is None or member.company_id != context.company.id:
+                continue
+            intent = enqueue_notification_delivery_intent(
+                session,
+                context=context,
+                recipient_membership=member,
+                channel="in_app",
+                event_type="ip_rule_version_disabled",
+                source_type="ip_rule_version",
+                source_id=f"{row.id}:{deadline.id}:{member.id}",
+                matter=matter,
+                title="Legal rule disabled",
+                body=(
+                    f"The rule version behind '{deadline.title}' was disabled and "
+                    f"auto-confirmation is suspended. Reason: {reason}"
+                ),
+                critical=deadline.is_critical,
+                confidentiality_mode="minimal",
+                schedule_source_type="ip_rule_version",
+                schedule_source_id=row.id,
+            )
+            if intent is not None:
+                alerted.append(member.id)
+    return alerted
 
 
 def _policy_record(

@@ -1034,7 +1034,8 @@
       "slice_ids": [
         "IPLF-027A",
         "IPLF-027B",
-        "IPLF-027C"
+        "IPLF-027C",
+        "IPLF-027D"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -6521,10 +6522,7 @@
         "ARCH-OPS-23",
         "ARCH-OPS-24",
         "ARCH-OPS-25",
-        "ARCH-OPS-26",
-        "RULE-GOV-06",
-        "RULE-GOV-07",
-        "RULE-GOV-08"
+        "ARCH-OPS-26"
       ],
       "journey_path_ids": [
         "UJ-67-EXC-01",
@@ -6568,10 +6566,9 @@
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Implement ARCH-OPS-01..26 foundations: shared idempotency/outbox/consumer effects, lifecycle workflow versions and transition commands, and the audit/domain-event catalogues.",
+        "Implement ARCH-OPS-01..26 foundations with IPLF-019B and IPLF-029B: shared idempotency/outbox/consumer effects, lifecycle workflow versions and transition commands, and the audit/domain-event catalogues.",
         "Implement and test the seven UJ-67 mixed-revision fencing and migration rollback paths.",
-        "Close RULE-GOV-07 by extending the existing notification dispatcher to alert affected tenants on emergency rule disable; do not create a second dispatcher.",
-        "Close RULE-GOV-08 with form/fee rule-kind tests and a rule-kind-neutral route surface."
+        "Add a rule-kind-neutral route alias so /deadline-rules no longer names form and fee kinds."
       ],
       "data_impact": [
         "Pending slice design; no data mutation is authorized by this allocation row."
@@ -6658,6 +6655,78 @@
         "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md"
       ],
       "allocation_review": "Pure decomposition of IPLF-027 rule-governance scope out of IPLF-027B so the delivered RULE-GOV facet carries truthful derived status while ARCH-OPS and UJ-67 remain open on IPLF-027B. PRD scope is unchanged and no requirement text was weakened.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "blocked",
+      "acceptance_status": "pending"
+    },
+    {
+      "id": "IPLF-027D",
+      "title": "Rule reproducibility proof, emergency-disable alerting through the existing notification dispatcher, and fee/form rule-kind lifecycle coverage.",
+      "milestone_id": "M2",
+      "epic_id": "IPLF-027",
+      "source_kind": "derived",
+      "scope_source": "IPLF-027",
+      "primary_behavior": "Rule governance reproducibility, alerting, and non-deadline rule kinds",
+      "migration_boundary": "No schema change, no migration, no backfill.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "RULE-GOV-06",
+        "RULE-GOV-07",
+        "RULE-GOV-08"
+      ],
+      "journey_path_ids": [
+        "UJ-47-NORMAL",
+        "UJ-47-EXC-05"
+      ],
+      "ownership": [
+        {
+          "classification": "EXTEND",
+          "component": "IPLF-023A/023B rule governance and the existing notification dispatcher.",
+          "canonical_writer": "services/ip_deadline_workflow.py remains the rule-governance writer and services/notification_delivery.py remains the only delivery owner; no second dispatcher, responsibility model, or rule table is introduced.",
+          "compatibility_path": "Additive audit metadata and in-app-only intents; no API surface or schema change.",
+          "retirement_gate": "No compatibility path retired; nothing deprecated."
+        }
+      ],
+      "dependencies": [
+        "IPLF-027C"
+      ],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_rule_governance.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md",
+          "revision": "91c826fc9d1616ca8c5da08e6830bd8cf4b984ba",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no deployment, no production verification, no frontend surface, no E2E, and no delivery-worker run.",
+          "fixtures": "Synthetic tenant with separate proposer/reviewer/legal-approver memberships, a deadline rule version with a deterministic calculation fixture, an official working calendar, one confirmed critical IP deadline with two acknowledged owners, and a fee rule version with passing and failing fee fixtures. No real client, provider, filing, fee, payment, external message, or lawyer-approved legal rule or fee schedule.",
+          "assertions": "Confirmed calculation retains engine version, source version, citation, exact inputs and full intermediate trace after its governing rule is retired; emergency disable enqueues in-app intents to exactly the acknowledged owners of affected records and cannot double-send on repeat; fee versions follow the same propose/review/activate model with independent actors; a failed fee fixture blocks activation; and a fee version is rejected as a legal-deadline driver. Counts: 11 passed in the governance suite, ruff clean.",
+          "result": "passed"
+        }
+      ],
+      "approvals": [],
+      "blockers": [],
+      "next_actions": [
+        "Add a dedicated form rule-kind test; form currently shares the fee fixture branch untested.",
+        "Add a rule-kind-neutral route alias; /deadline-rules is misleading for form and fee kinds.",
+        "Prove alerting end to end through a delivery-worker run and in-app UI render.",
+        "Run exact-commit CI and take this through the normal release and deployment gate."
+      ],
+      "data_impact": [
+        "No schema change, no migration, no backfill.",
+        "Emergency disable enqueues in-app NotificationDeliveryIntent rows for owners of affected records; the dispatcher's idempotency key prevents duplicate sends."
+      ],
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
+      ],
+      "allocation_review": "Pure decomposition of IPLF-027 rule-governance scope out of IPLF-027B, closing the three RULE-GOV residual gaps IPLF-027C recorded. PRD scope is unchanged and no requirement text was weakened.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
@@ -24729,44 +24798,24 @@
         "UJ-56",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-RULE-GOV-06",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL",
-        "planned:IPLF-UJ-67-EXC-01",
-        "planned:IPLF-UJ-67-EXC-02",
-        "planned:IPLF-UJ-67-EXC-03",
-        "planned:IPLF-UJ-67-EXC-04",
-        "planned:IPLF-UJ-67-EXC-05",
-        "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov06_confirmed_calculation_stays_reproducible"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-027B"
+        "IPLF-027D"
       ],
       "allocation_rationale": "RULE-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-023, IPLF-027. | IPLF-027C 2026-08-14 residual gap: IPLF-023B stores engine/input/trace evidence; no new reproducibility proof added."
     },
@@ -24782,44 +24831,24 @@
         "UJ-56",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-RULE-GOV-07",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL",
-        "planned:IPLF-UJ-67-EXC-01",
-        "planned:IPLF-UJ-67-EXC-02",
-        "planned:IPLF-UJ-67-EXC-03",
-        "planned:IPLF-UJ-67-EXC-04",
-        "planned:IPLF-UJ-67-EXC-05",
-        "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov07_disable_alerts_record_owners"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-027B"
+        "IPLF-027D"
       ],
       "allocation_rationale": "RULE-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-023, IPLF-027. | IPLF-027C 2026-08-14 residual gap: Emergency disable now suspends tenant auto-confirm and audits affected companies, but affected tenants are still not alerted."
     },
@@ -24835,44 +24864,24 @@
         "UJ-56",
         "UJ-67"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-RULE-GOV-08",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL",
-        "planned:IPLF-UJ-67-EXC-01",
-        "planned:IPLF-UJ-67-EXC-02",
-        "planned:IPLF-UJ-67-EXC-03",
-        "planned:IPLF-UJ-67-EXC-04",
-        "planned:IPLF-UJ-67-EXC-05",
-        "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov08_fee_rules_use_the_same_model_but_a_separate_domain"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-027B"
+        "IPLF-027D"
       ],
       "allocation_rationale": "RULE-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-023, IPLF-027. | IPLF-027C 2026-08-14 residual gap: form/fee rule kinds are schema-accepted but untested and still routed under /deadline-rules."
     },
@@ -50323,10 +50332,12 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_rule_governance.py::test_uj47_normal_propose_test_activate_retire#IPLF-UJ-47-NORMAL"
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_normal_propose_test_activate_retire#IPLF-UJ-47-NORMAL",
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov06_confirmed_calculation_stays_reproducible#IPLF-UJ-47-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
@@ -50334,9 +50345,10 @@
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-027C"
+        "IPLF-027C",
+        "IPLF-027D"
       ],
-      "allocation_rationale": "UJ-47 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-027."
+      "allocation_rationale": "UJ-47 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-027. | IPLF-027D adds RULE-GOV-06 reproducibility and RULE-GOV-07 alerting depth to this path."
     },
     {
       "id": "UJ-47-EXC-01",
@@ -50728,10 +50740,12 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc05_emergency_disable_is_fail_closed#IPLF-UJ-47-EXC-05"
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc05_emergency_disable_is_fail_closed#IPLF-UJ-47-EXC-05",
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov07_disable_alerts_record_owners#IPLF-UJ-47-EXC-05"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
@@ -50739,9 +50753,10 @@
       "acceptance_status": "pending",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-027C"
+        "IPLF-027C",
+        "IPLF-027D"
       ],
-      "allocation_rationale": "UJ-47 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-027."
+      "allocation_rationale": "UJ-47 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-023, IPLF-027. | IPLF-027D adds RULE-GOV-06 reproducibility and RULE-GOV-07 alerting depth to this path."
     },
     {
       "id": "UJ-48-NORMAL",

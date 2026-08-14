@@ -28,8 +28,8 @@ from tests.test_ip_deadline_workflow import (
 )
 
 
-def _governance_actors(client: TestClient) -> tuple[dict, dict, str, str]:
-    """Owner (proposer), legal approver, and an independent fixture reviewer."""
+def _governance_actors(client: TestClient) -> tuple[dict, dict, str, str, str]:
+    """Owner (proposer), legal approver, an independent reviewer, and the owner token."""
 
     bootstrap = bootstrap_company(client)
     owner_token = str(bootstrap["access_token"])
@@ -46,7 +46,7 @@ def _governance_actors(client: TestClient) -> tuple[dict, dict, str, str]:
         name="Rule Fixture Reviewer",
         email="rule-reviewer@asterlegal.in",
     )
-    return owner_headers, auth_headers(legal_token), legal_id, reviewer_id
+    return owner_headers, auth_headers(legal_token), legal_id, reviewer_id, owner_token
 
 
 def _propose(client: TestClient, headers: dict[str, str], **overrides) -> dict:
@@ -76,7 +76,7 @@ def _activate(
 def test_uj47_normal_propose_test_activate_retire(client: TestClient) -> None:
     """IPLF-UJ-47-NORMAL."""
 
-    owner_headers, legal_headers, _legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
 
     rule = _propose(client, owner_headers)
     assert rule["status"] == "candidate"
@@ -118,7 +118,7 @@ def test_uj47_normal_propose_test_activate_retire(client: TestClient) -> None:
 def test_uj47_exc01_proposer_cannot_self_approve(client: TestClient) -> None:
     """IPLF-UJ-47-EXC-01 — RULE-GOV-03 two-qualified-actor rule."""
 
-    owner_headers, legal_headers, legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, legal_id, reviewer_id, owner_token = _governance_actors(client)
     rule = _propose(client, owner_headers)
 
     # The proposer may not supply themselves as the legal approver.
@@ -137,7 +137,7 @@ def test_uj47_exc01_proposer_cannot_self_approve(client: TestClient) -> None:
 def test_uj47_exc02_failed_fixture_blocks_activation(client: TestClient) -> None:
     """IPLF-UJ-47-EXC-02 — RULE-GOV-03 every declared fixture must pass."""
 
-    owner_headers, legal_headers, _legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
 
     payload = _rule_payload()
     # Same rule, but the fixture asserts a date the engine will not produce.
@@ -161,7 +161,7 @@ def test_uj47_exc02_failed_fixture_blocks_activation(client: TestClient) -> None
 def test_uj47_exc03_overlapping_effective_ranges_conflict(client: TestClient) -> None:
     """IPLF-UJ-47-EXC-03 — RULE-GOV-01 effective-range collision is explicit."""
 
-    owner_headers, legal_headers, _legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
 
     first = _propose(client, owner_headers, effective_from="2026-01-01", effective_until=None)
     assert _activate(client, legal_headers, first["id"], reviewer_id).status_code == 200
@@ -326,7 +326,7 @@ def test_uj47_exc04_activation_preserves_confirmed_deadlines(client: TestClient)
 def test_uj47_exc05_emergency_disable_is_fail_closed(client: TestClient) -> None:
     """IPLF-UJ-47-EXC-05 — RULE-GOV-04/07 disable stops auto-confirm."""
 
-    owner_headers, legal_headers, _legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
 
     rule = _propose(client, owner_headers)
     activated = _activate(
@@ -369,10 +369,295 @@ def test_uj47_exc05_emergency_disable_is_fail_closed(client: TestClient) -> None
     assert after[0]["version"] > policies[0]["version"]
 
 
+def test_rulegov07_disable_alerts_record_owners(client: TestClient) -> None:
+    """RULE-GOV-07 — affected record owners are alerted through the shared dispatcher."""
+
+    from sqlalchemy import func, select
+
+    from caseops_api.db.models import NotificationDeliveryIntent
+    from caseops_api.db.session import get_session_factory
+    from tests.test_clients import _mk_matter
+    from tests.test_ip_deadline_workflow import _docket_for_matter, _responsibilities
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    legal_id, legal_token = _member(
+        client, owner_token, name="Rule Legal Approver", email="rule-legal@asterlegal.in"
+    )
+    reviewer_id, _r = _member(
+        client, owner_token, name="Rule Fixture Reviewer", email="rule-reviewer@asterlegal.in"
+    )
+    legal_headers = auth_headers(legal_token)
+    matter = _mk_matter(client, owner_token, "IP-DL-027D")
+    docket = _docket_for_matter(client, owner_headers, matter_id=matter["id"])
+
+    calendar = client.post(
+        "/api/ip/working-calendars", headers=owner_headers, json=_calendar_payload()
+    ).json()
+    client.post(
+        f"/api/ip/working-calendars/{calendar['id']}/activate",
+        headers=legal_headers,
+        json={"reason": "Independent calendar review is complete."},
+    )
+    rule = _propose(client, owner_headers)
+    assert _activate(client, legal_headers, rule["id"], reviewer_id).status_code == 200
+
+    deadline = client.post(
+        f"/api/ip/dockets/{docket['id']}/deadlines",
+        headers=legal_headers,
+        json={
+            "title": "Respond to examination report",
+            "rule_version_id": rule["id"],
+            "calendar_version_id": calendar["id"],
+            "base_date": "2026-08-14",
+            "base_date_certainty": "certain",
+            "is_critical": True,
+        },
+    ).json()
+    assert (
+        client.post(
+            f"/api/ip/deadlines/{deadline['id']}/confirm",
+            headers=legal_headers,
+            json={
+                "expected_version": deadline["version"],
+                "responsibilities": _responsibilities(legal_id, reviewer_id),
+            },
+        ).status_code
+        == 200
+    )
+
+    impact = client.get(
+        f"/api/ip/deadline-rules/{rule['id']}/impact", headers=legal_headers
+    ).json()
+    disabled = client.post(
+        f"/api/ip/deadline-rules/{rule['id']}/transition",
+        headers=legal_headers,
+        json={
+            "impact_token": impact["impact_token"],
+            "reason": "Official source withdrew the notified rule text.",
+            "emergency_disable": True,
+        },
+    )
+    assert disabled.status_code == 200, disabled.text
+
+    with get_session_factory()() as session:
+        intents = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.event_type == "ip_rule_version_disabled"
+                )
+            ).all()
+        )
+    # Both acknowledged owners of the affected legal deadline are alerted.
+    assert {i.recipient_membership_id for i in intents} == {legal_id, reviewer_id}
+    assert all(i.channel == "in_app" for i in intents)
+    assert all(rule["id"] in str(i.source_id) for i in intents)
+
+    # The disable is idempotent: a repeat cannot double-send.
+    repeat = client.post(
+        f"/api/ip/deadline-rules/{rule['id']}/transition",
+        headers=legal_headers,
+        json={
+            "impact_token": impact["impact_token"],
+            "reason": "Repeat of the same emergency disable.",
+            "emergency_disable": True,
+        },
+    )
+    assert repeat.status_code == 409
+    with get_session_factory()() as session:
+        again = int(
+            session.scalar(
+                select(func.count())
+                .select_from(NotificationDeliveryIntent)
+                .where(NotificationDeliveryIntent.event_type == "ip_rule_version_disabled")
+            )
+            or 0
+        )
+    assert again == len(intents)
+
+
+def test_rulegov06_confirmed_calculation_stays_reproducible(client: TestClient) -> None:
+    """RULE-GOV-06 — stored engine/inputs/trace survive later rule changes."""
+
+    from tests.test_clients import _mk_matter
+    from tests.test_ip_deadline_workflow import _docket_for_matter, _responsibilities
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    legal_id, legal_token = _member(
+        client, owner_token, name="Rule Legal Approver", email="rule-legal@asterlegal.in"
+    )
+    reviewer_id, _r = _member(
+        client, owner_token, name="Rule Fixture Reviewer", email="rule-reviewer@asterlegal.in"
+    )
+    legal_headers = auth_headers(legal_token)
+    matter = _mk_matter(client, owner_token, "IP-DL-027D2")
+    docket = _docket_for_matter(client, owner_headers, matter_id=matter["id"])
+    calendar = client.post(
+        "/api/ip/working-calendars", headers=owner_headers, json=_calendar_payload()
+    ).json()
+    client.post(
+        f"/api/ip/working-calendars/{calendar['id']}/activate",
+        headers=legal_headers,
+        json={"reason": "Independent calendar review is complete."},
+    )
+    rule = _propose(client, owner_headers)
+    assert _activate(client, legal_headers, rule["id"], reviewer_id).status_code == 200
+    deadline = client.post(
+        f"/api/ip/dockets/{docket['id']}/deadlines",
+        headers=legal_headers,
+        json={
+            "title": "Respond to examination report",
+            "rule_version_id": rule["id"],
+            "calendar_version_id": calendar["id"],
+            "base_date": "2026-08-14",
+            "base_date_certainty": "certain",
+            "is_critical": True,
+        },
+    ).json()
+    confirmed = client.post(
+        f"/api/ip/deadlines/{deadline['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": deadline["version"],
+            "responsibilities": _responsibilities(legal_id, reviewer_id),
+        },
+    ).json()
+    before = {
+        "result_on": confirmed["result_on"],
+        "engine_version": confirmed["engine_version"],
+        "source_version": confirmed["source_version"],
+        "rule_citation": confirmed["rule_citation"],
+        "inputs": confirmed["calculation_inputs"],
+        "trace": confirmed["calculation_trace"],
+    }
+    assert before["trace"], "the calculation trace must be persisted"
+
+    # Retire the rule the calculation was made under.
+    impact = client.get(
+        f"/api/ip/deadline-rules/{rule['id']}/impact", headers=legal_headers
+    ).json()
+    assert (
+        client.post(
+            f"/api/ip/deadline-rules/{rule['id']}/transition",
+            headers=legal_headers,
+            json={
+                "impact_token": impact["impact_token"],
+                "reason": "Superseded by a later official amendment.",
+                "emergency_disable": False,
+            },
+        ).status_code
+        == 200
+    )
+
+    after = next(
+        item
+        for item in client.get(
+            f"/api/ip/dockets/{docket['id']}/deadline-workspace", headers=legal_headers
+        ).json()["deadlines"]
+        if item["id"] == deadline["id"]
+    )
+    assert after["result_on"] == before["result_on"]
+    assert after["engine_version"] == before["engine_version"]
+    assert after["source_version"] == before["source_version"]
+    assert after["rule_citation"] == before["rule_citation"]
+    assert after["calculation_inputs"] == before["inputs"]
+    assert after["calculation_trace"] == before["trace"]
+
+
+def _fee_payload() -> dict:
+    return {
+        "key": "in-tm-renewal-fee-v1",
+        "rule_kind": "fee",
+        "jurisdiction": "IN",
+        "office": "IP India",
+        "right_kind": "trademark",
+        "proceeding_kind": "application",
+        "role": "applicant",
+        "stage": "renewal",
+        "source_record_id": "tm-fee-schedule-2026",
+        "source_hash": "c" * 64,
+        "source_reference": "https://official.example/ip-india/tm-fees",
+        "effective_from": "2026-01-01",
+        "effective_until": None,
+        "engine_compatibility": "caseops-ip-fee-v1",
+        "definition": {"official_fee_inr": 9000, "basis": "per_class_per_renewal"},
+        "fixtures": [
+            {
+                "id": "one-class-renewal",
+                "fixture_kind": "positive",
+                "expected_outcome": 9000,
+                "observed_outcome": 9000,
+                "evidence_reference": "fixture:official-fee-schedule-2026",
+            }
+        ],
+    }
+
+
+def test_rulegov08_fee_rules_use_the_same_model_but_a_separate_domain(
+    client: TestClient,
+) -> None:
+    """RULE-GOV-08 — fee versions share the lifecycle, not the deadline domain."""
+
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
+
+    fee = client.post("/api/ip/deadline-rules", headers=owner_headers, json=_fee_payload())
+    assert fee.status_code == 201, fee.text
+    fee_body = fee.json()
+    assert fee_body["rule_kind"] == "fee"
+    assert fee_body["status"] == "candidate"
+
+    # Same propose/review/activate model, including two-actor independence.
+    assert _activate(client, owner_headers, fee_body["id"], reviewer_id).status_code == 409
+    activated = _activate(client, legal_headers, fee_body["id"], reviewer_id)
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == "active"
+    assert activated.json()["fixtures_passed_at"] is not None
+
+    # A failed fee fixture blocks activation the same way a deadline fixture does.
+    bad = _fee_payload()
+    bad["key"] = "in-tm-renewal-fee-v2"
+    bad["fixtures"][0]["observed_outcome"] = 1
+    bad_rule = client.post("/api/ip/deadline-rules", headers=owner_headers, json=bad).json()
+    blocked = _activate(client, legal_headers, bad_rule["id"], reviewer_id)
+    assert blocked.status_code == 409
+    assert "fixture" in blocked.json()["detail"].lower()
+
+    # Separate version domain: a fee rule can never drive a legal deadline.
+    from tests.test_clients import _mk_matter
+    from tests.test_ip_deadline_workflow import _docket_for_matter
+
+    calendar = client.post(
+        "/api/ip/working-calendars", headers=owner_headers, json=_calendar_payload()
+    ).json()
+    client.post(
+        f"/api/ip/working-calendars/{calendar['id']}/activate",
+        headers=legal_headers,
+        json={"reason": "Independent calendar review is complete."},
+    )
+    matter = _mk_matter(client, owner_token, "IP-FEE-DOMAIN")
+    docket = _docket_for_matter(client, owner_headers, matter_id=matter["id"])
+    misuse = client.post(
+        f"/api/ip/dockets/{docket['id']}/deadlines",
+        headers=legal_headers,
+        json={
+            "title": "Fee rule must not calculate a legal deadline",
+            "rule_version_id": fee_body["id"],
+            "calendar_version_id": calendar["id"],
+            "base_date": "2026-08-14",
+            "base_date_certainty": "certain",
+        },
+    )
+    assert misuse.status_code == 409
+    assert "not a deadline rule" in misuse.json()["detail"].lower()
+
+
 def test_company_policy_cannot_select_unapproved_rule(client: TestClient) -> None:
     """RULE-GOV-04 — a tenant cannot make a draft or disabled version authoritative."""
 
-    owner_headers, legal_headers, _legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
 
     candidate = _propose(client, owner_headers)
     draft_selection = client.put(
@@ -419,7 +704,7 @@ def test_company_policy_cannot_select_unapproved_rule(client: TestClient) -> Non
 def test_rule_policy_selection_is_tenant_isolated(client: TestClient) -> None:
     """RULE-GOV-04 tenant isolation — another company cannot select this rule."""
 
-    owner_headers, legal_headers, _legal_id, reviewer_id = _governance_actors(client)
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
     rule = _propose(client, owner_headers)
     assert _activate(client, legal_headers, rule["id"], reviewer_id).status_code == 200
 
