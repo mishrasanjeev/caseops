@@ -29,6 +29,8 @@ from caseops_api.schemas.ip_access import (
     RecordAccessReconciliationReport,
 )
 from caseops_api.schemas.ip_deadlines import (
+    IpCompanyRulePolicyRecord,
+    IpCompanyRuleSelectionRequest,
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
     IpDeadlineImpactResponse,
@@ -147,12 +149,14 @@ from caseops_api.services.ip_deadline_workflow import (
     confirm_deadline,
     deadline_impact,
     deadline_workspace,
+    list_company_rule_policies,
     override_deadline,
     propose_calendar_version,
     propose_deadline,
     propose_rule_version,
     recalculate_deadline,
     rule_impact,
+    select_company_rule_version,
     transition_rule_version,
 )
 from caseops_api.services.ip_document_workflow import (
@@ -807,6 +811,29 @@ async def post_ip_deadline_rule_transition(
         rule_version_id=rule_version_id,
         payload=payload,
     )
+
+
+@router.get(
+    "/rule-policies",
+    response_model=list[IpCompanyRulePolicyRecord],
+)
+async def get_ip_rule_policies(
+    context: IpRuleProposer,
+    session: DbSession,
+) -> list[IpCompanyRulePolicyRecord]:
+    return list_company_rule_policies(session, context=context)
+
+
+@router.put(
+    "/rule-policies",
+    response_model=IpCompanyRulePolicyRecord,
+)
+async def put_ip_rule_policy(
+    payload: IpCompanyRuleSelectionRequest,
+    context: IpRuleActivator,
+    session: DbSession,
+) -> IpCompanyRulePolicyRecord:
+    return select_company_rule_version(session, context=context, payload=payload)
 
 
 @router.post(

@@ -32,6 +32,8 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
 )
 from caseops_api.schemas.ip_deadlines import (
+    IpCompanyRulePolicyRecord,
+    IpCompanyRuleSelectionRequest,
     IpDeadlineCalculationRequest,
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
@@ -310,6 +312,47 @@ def propose_rule_version(
     return _rule_record(rule_set, row)
 
 
+def _ranges_overlap(
+    left_from: date,
+    left_until: date | None,
+    right_from: date,
+    right_until: date | None,
+) -> bool:
+    """Half-open-free inclusive overlap; ``None`` means open ended."""
+
+    if left_until is not None and right_from > left_until:
+        return False
+    if right_until is not None and left_from > right_until:
+        return False
+    return True
+
+
+def _overlapping_active_versions(
+    session: Session,
+    *,
+    row: IpRuleVersion,
+) -> list[IpRuleVersion]:
+    """Active sibling versions whose effective range collides with ``row``."""
+
+    siblings = session.scalars(
+        select(IpRuleVersion).where(
+            IpRuleVersion.rule_set_id == row.rule_set_id,
+            IpRuleVersion.status == "active",
+            IpRuleVersion.id != row.id,
+        )
+    ).all()
+    return [
+        sibling
+        for sibling in siblings
+        if _ranges_overlap(
+            row.effective_from,
+            row.effective_until,
+            sibling.effective_from,
+            sibling.effective_until,
+        )
+    ]
+
+
 def _rule_fixture_results(row: IpRuleVersion, rule_set: IpRuleSet) -> tuple[list[str], list[str]]:
     fixture_ids: list[str] = []
     passed_ids: list[str] = []
@@ -344,11 +387,20 @@ def rule_impact(
     if row is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
     _assert_rule_governance_access(session, context=context, row=row)
+
+    # RULE-GOV-05: the preview must describe what acting on this version will
+    # affect.  Activating a candidate supersedes the active versions whose
+    # effective range it collides with, so their open records are in scope.
+    # Retiring or disabling an already-active version affects only itself.
+    scoped_ids = [row.id]
+    if row.status == "candidate":
+        scoped_ids.extend(item.id for item in _overlapping_active_versions(session, row=row))
+
     policy_count = int(
         session.scalar(
             select(func.count())
             .select_from(CompanyIpRulePolicy)
-            .where(CompanyIpRulePolicy.active_rule_version_id == row.id)
+            .where(CompanyIpRulePolicy.active_rule_version_id.in_(scoped_ids))
         )
         or 0
     )
@@ -357,7 +409,7 @@ def rule_impact(
             select(func.count())
             .select_from(IpDeadline)
             .where(
-                IpDeadline.rule_version_id == row.id,
+                IpDeadline.rule_version_id.in_(scoped_ids),
                 IpDeadline.state.in_(["confirmed", "overdue"]),
             )
         )
@@ -368,14 +420,23 @@ def rule_impact(
             select(func.count())
             .select_from(IpDeadline)
             .where(
-                IpDeadline.rule_version_id == row.id,
+                IpDeadline.rule_version_id.in_(scoped_ids),
                 IpDeadline.state.in_(["candidate", "provisional"]),
             )
         )
         or 0
     )
     token = sha256(
-        f"{row.id}|{row.status}|{policy_count}|{open_count}|{candidate_count}".encode()
+        "|".join(
+            [
+                row.id,
+                row.status,
+                ",".join(sorted(scoped_ids)),
+                str(policy_count),
+                str(open_count),
+                str(candidate_count),
+            ]
+        ).encode()
     ).hexdigest()
     return IpRuleImpactResponse(
         rule_version_id=row.id,
@@ -415,6 +476,19 @@ def activate_rule_version(
         fixture_ids=fixture_ids,
         passed_fixture_ids=passed_ids,
     )
+    overlapping = _overlapping_active_versions(session, row=row)
+    if overlapping and not payload.supersede_overlapping:
+        collided = ", ".join(
+            str(item.version) for item in sorted(overlapping, key=lambda x: x.version)
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Effective range overlaps active version(s) {collided}; "
+                "confirm supersession or correct the effective range."
+            ),
+        )
+
     impact = rule_impact(session, context=context, rule_version_id=row.id)
     if (impact.company_policy_count or impact.open_deadline_count) and not (
         payload.impact_acknowledged and len(payload.impact_reason.strip()) >= 5
@@ -423,18 +497,13 @@ def activate_rule_version(
             status_code=409,
             detail="Rule impact must be reviewed before activation.",
         )
+    if (
+        impact.company_policy_count or impact.open_deadline_count
+    ) and payload.impact_token != impact.impact_token:
+        raise HTTPException(status_code=409, detail="Rule impact changed; preview again.")
 
     now = _now()
-    prior_active = list(
-        session.scalars(
-            select(IpRuleVersion).where(
-                IpRuleVersion.rule_set_id == row.rule_set_id,
-                IpRuleVersion.status == "active",
-                IpRuleVersion.id != row.id,
-            )
-        ).all()
-    )
-    for prior in prior_active:
+    for prior in overlapping:
         prior.status = "retired"
     row.status = "active"
     row.reviewed_by_membership_id = reviewer.id
@@ -484,6 +553,8 @@ def activate_rule_version(
             "fixture_ids": fixture_ids,
             "impact_token": impact.impact_token,
             "auto_confirm_eligible": payload.auto_confirm_eligible,
+            "superseded_version_ids": [item.id for item in overlapping],
+            "confirmed_deadlines_preserved": True,
         },
     )
     session.commit()
@@ -511,6 +582,27 @@ def transition_rule_version(
         raise HTTPException(status_code=409, detail="Rule version is not active or approved.")
     row.status = "disabled" if payload.emergency_disable else "retired"
     row.disabled_at = _now() if payload.emergency_disable else None
+
+    # RULE-GOV-07: disabling must stop future auto-confirmation for every tenant
+    # that selected this version.  Confirmed legal evidence is never rewritten;
+    # dependent candidates surface as a ``rule_disabled`` workspace exception.
+    suspended_company_ids: list[str] = []
+    if payload.emergency_disable:
+        affected_policies = list(
+            session.scalars(
+                select(CompanyIpRulePolicy)
+                .where(CompanyIpRulePolicy.active_rule_version_id == row.id)
+                .with_for_update()
+            ).all()
+        )
+        for policy in affected_policies:
+            suspended_company_ids.append(policy.company_id)
+            if policy.auto_confirm_eligible:
+                policy.auto_confirm_eligible = False
+                policy.version += 1
+                policy.updated_by_membership_id = context.membership.id
+                policy.updater_label_snapshot = _actor_label(context)
+
     record_from_context(
         session,
         context,
@@ -519,13 +611,142 @@ def transition_rule_version(
         ),
         target_type="ip_rule_version",
         target_id=row.id,
-        metadata={"reason": payload.reason, "impact_token": impact.impact_token},
+        metadata={
+            "reason": payload.reason,
+            "impact_token": impact.impact_token,
+            "auto_confirm_suspended_company_ids": suspended_company_ids,
+            "open_deadline_count": impact.open_deadline_count,
+            "candidate_deadline_count": impact.candidate_deadline_count,
+            "confirmed_deadlines_preserved": True,
+        },
     )
     session.commit()
     session.refresh(row)
     rule_set = session.get(IpRuleSet, row.rule_set_id)
     assert rule_set is not None
     return _rule_record(rule_set, row)
+
+
+def _policy_record(
+    policy: CompanyIpRulePolicy,
+    rule_set: IpRuleSet,
+    version: IpRuleVersion,
+) -> IpCompanyRulePolicyRecord:
+    return IpCompanyRulePolicyRecord(
+        id=policy.id,
+        rule_set_id=rule_set.id,
+        rule_set_key=rule_set.key,
+        rule_kind=rule_set.rule_kind,
+        active_rule_version_id=version.id,
+        active_rule_version=version.version,
+        active_rule_status=version.status,
+        auto_confirm_eligible=policy.auto_confirm_eligible,
+        auto_confirm_suspended_reason=(
+            "rule_disabled"
+            if version.status == "disabled"
+            else ("rule_retired" if version.status == "retired" else None)
+        ),
+        internal_target_policy=policy.internal_target_policy_json,
+        version=policy.version,
+        updater_label_snapshot=policy.updater_label_snapshot,
+        updated_at=policy.updated_at,
+    )
+
+
+def select_company_rule_version(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpCompanyRuleSelectionRequest,
+) -> IpCompanyRulePolicyRecord:
+    """RULE-GOV-04: select an approved platform rule version for this company.
+
+    A tenant policy can only point at a version the platform already activated;
+    it can never make a candidate, retired, or disabled version authoritative.
+    """
+
+    version = session.get(IpRuleVersion, payload.rule_version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Rule version not found.")
+    _assert_rule_governance_access(session, context=context, row=version)
+    if version.status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail="Only an active approved rule version can be selected by a company.",
+        )
+    rule_set = session.get(IpRuleSet, version.rule_set_id)
+    assert rule_set is not None
+
+    policy = session.scalar(
+        select(CompanyIpRulePolicy)
+        .where(
+            CompanyIpRulePolicy.company_id == context.company.id,
+            CompanyIpRulePolicy.rule_set_id == version.rule_set_id,
+        )
+        .with_for_update()
+    )
+    if policy is None:
+        if payload.expected_policy_version is not None:
+            raise HTTPException(status_code=409, detail="Company policy no longer matches.")
+        policy = CompanyIpRulePolicy(
+            company_id=context.company.id,
+            rule_set_id=version.rule_set_id,
+            active_rule_version_id=version.id,
+            auto_confirm_eligible=payload.auto_confirm_eligible,
+            internal_target_policy_json=payload.internal_target_policy,
+            version=1,
+            updated_by_membership_id=context.membership.id,
+            updater_label_snapshot=_actor_label(context),
+        )
+        session.add(policy)
+    else:
+        if (
+            payload.expected_policy_version is not None
+            and payload.expected_policy_version != policy.version
+        ):
+            raise HTTPException(status_code=409, detail="Company policy no longer matches.")
+        policy.active_rule_version_id = version.id
+        policy.auto_confirm_eligible = payload.auto_confirm_eligible
+        policy.internal_target_policy_json = payload.internal_target_policy
+        policy.version += 1
+        policy.updated_by_membership_id = context.membership.id
+        policy.updater_label_snapshot = _actor_label(context)
+
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="ip.rule_policy.selected",
+        target_type="company_ip_rule_policy",
+        target_id=policy.id,
+        metadata={
+            "rule_set_id": rule_set.id,
+            "rule_version_id": version.id,
+            "rule_version": version.version,
+            "auto_confirm_eligible": policy.auto_confirm_eligible,
+            "policy_version": policy.version,
+        },
+    )
+    session.commit()
+    session.refresh(policy)
+    return _policy_record(policy, rule_set, version)
+
+
+def list_company_rule_policies(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> list[IpCompanyRulePolicyRecord]:
+    rows = list(
+        session.execute(
+            select(CompanyIpRulePolicy, IpRuleSet, IpRuleVersion)
+            .join(IpRuleSet, IpRuleSet.id == CompanyIpRulePolicy.rule_set_id)
+            .join(IpRuleVersion, IpRuleVersion.id == CompanyIpRulePolicy.active_rule_version_id)
+            .where(CompanyIpRulePolicy.company_id == context.company.id)
+            .order_by(IpRuleSet.key)
+        ).all()
+    )
+    return [_policy_record(policy, rule_set, version) for policy, rule_set, version in rows]
 
 
 def propose_calendar_version(
@@ -1526,11 +1747,13 @@ __all__ = [
     "confirm_deadline",
     "deadline_impact",
     "deadline_workspace",
+    "list_company_rule_policies",
     "override_deadline",
     "propose_calendar_version",
     "propose_deadline",
     "propose_rule_version",
     "recalculate_deadline",
     "rule_impact",
+    "select_company_rule_version",
     "transition_rule_version",
 ]

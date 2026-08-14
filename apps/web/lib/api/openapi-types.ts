@@ -4937,6 +4937,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/rule-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Rule Policies */
+        get: operations["get_ip_rule_policies_api_ip_rule_policies_get"];
+        /** Put Ip Rule Policy */
+        put: operations["put_ip_rule_policy_api_ip_rule_policies_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/shared-work/foundation-contract": {
         parameters: {
             query?: never;
@@ -17714,6 +17732,65 @@ export interface components {
             /** Satisfied */
             satisfied: boolean;
         };
+        /** IpCompanyRulePolicyRecord */
+        IpCompanyRulePolicyRecord: {
+            /**
+             * Active Rule Status
+             * @enum {string}
+             */
+            active_rule_status: "candidate" | "approved" | "active" | "retired" | "disabled";
+            /** Active Rule Version */
+            active_rule_version: number;
+            /** Active Rule Version Id */
+            active_rule_version_id: string;
+            /** Auto Confirm Eligible */
+            auto_confirm_eligible: boolean;
+            /** Auto Confirm Suspended Reason */
+            auto_confirm_suspended_reason?: string | null;
+            /** Id */
+            id: string;
+            /** Internal Target Policy */
+            internal_target_policy: {
+                [key: string]: unknown;
+            };
+            /**
+             * Rule Kind
+             * @enum {string}
+             */
+            rule_kind: "deadline" | "form" | "fee";
+            /** Rule Set Id */
+            rule_set_id: string;
+            /** Rule Set Key */
+            rule_set_key: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updater Label Snapshot */
+            updater_label_snapshot: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * IpCompanyRuleSelectionRequest
+         * @description Tenant selection of an already-approved platform rule version.
+         */
+        IpCompanyRuleSelectionRequest: {
+            /**
+             * Auto Confirm Eligible
+             * @default false
+             */
+            auto_confirm_eligible: boolean;
+            /** Expected Policy Version */
+            expected_policy_version?: number | null;
+            /** Internal Target Policy */
+            internal_target_policy?: {
+                [key: string]: unknown;
+            };
+            /** Rule Version Id */
+            rule_version_id: string;
+        };
         /** IpCoreRecordResponse */
         IpCoreRecordResponse: {
             /** Applications */
@@ -19771,6 +19848,8 @@ export interface components {
              * @default
              */
             impact_reason: string;
+            /** Impact Token */
+            impact_token?: string | null;
             /** Internal Target Policy */
             internal_target_policy?: {
                 [key: string]: unknown;
@@ -19782,6 +19861,11 @@ export interface components {
              * @default true
              */
             select_for_company: boolean;
+            /**
+             * Supersede Overlapping
+             * @default false
+             */
+            supersede_overlapping: boolean;
         };
         /** IpRuleFixture */
         IpRuleFixture: {
@@ -40549,6 +40633,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketControlReport"];
+                };
+            };
+        };
+    };
+    get_ip_rule_policies_api_ip_rule_policies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCompanyRulePolicyRecord"][];
+                };
+            };
+        };
+    };
+    put_ip_rule_policy_api_ip_rule_policies_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCompanyRuleSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCompanyRulePolicyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -265,14 +265,14 @@ Generated; do not edit.
 | IP-ACCESS-06 | IP-ACCESS | IPLF-026B, IPLF-066B, IPLF-073B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-ACCESS-07 | IP-ACCESS | IPLF-026B, IPLF-066B, IPLF-073B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-ACCESS-08 | IP-ACCESS | IPLF-026B, IPLF-066B, IPLF-073B | 20 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-01 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-02 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-03 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-04 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-05 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-06 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-07 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
-| RULE-GOV-08 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 0 | in_progress | not_run | blocked | false |
+| RULE-GOV-01 | RULE-GOV | IPLF-023B, IPLF-027C | 1 | 1 | implemented | passed | blocked | false |
+| RULE-GOV-02 | RULE-GOV | IPLF-023B, IPLF-027C | 1 | 1 | implemented | passed | blocked | false |
+| RULE-GOV-03 | RULE-GOV | IPLF-023B, IPLF-027C | 1 | 1 | implemented | passed | blocked | false |
+| RULE-GOV-04 | RULE-GOV | IPLF-023B, IPLF-027C | 1 | 1 | implemented | passed | blocked | false |
+| RULE-GOV-05 | RULE-GOV | IPLF-023B, IPLF-027C | 1 | 1 | implemented | passed | blocked | false |
+| RULE-GOV-06 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 1 | in_progress | not_run | blocked | false |
+| RULE-GOV-07 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 1 | in_progress | not_run | blocked | false |
+| RULE-GOV-08 | RULE-GOV | IPLF-023B, IPLF-027B | 24 | 1 | in_progress | not_run | blocked | false |
 | IP-OPS-01 | IP-OPS | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-OPS-02 | IP-OPS | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-OPS-03 | IP-OPS | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |

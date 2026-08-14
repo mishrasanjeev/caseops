@@ -206,6 +206,8 @@ class IpRuleActivationRequest(BaseModel):
     reviewer_membership_id: str
     impact_acknowledged: bool = False
     impact_reason: str = Field(default="", max_length=1000)
+    impact_token: str | None = None
+    supersede_overlapping: bool = False
     select_for_company: bool = True
     auto_confirm_eligible: bool = False
     internal_target_policy: dict[str, Any] = Field(default_factory=dict)
@@ -224,6 +226,31 @@ class IpRuleImpactResponse(BaseModel):
     open_deadline_count: int
     candidate_deadline_count: int
     confirmed_deadlines_preserved: bool = True
+
+
+class IpCompanyRuleSelectionRequest(BaseModel):
+    """Tenant selection of an already-approved platform rule version."""
+
+    rule_version_id: str
+    auto_confirm_eligible: bool = False
+    internal_target_policy: dict[str, Any] = Field(default_factory=dict)
+    expected_policy_version: int | None = None
+
+
+class IpCompanyRulePolicyRecord(BaseModel):
+    id: str
+    rule_set_id: str
+    rule_set_key: str
+    rule_kind: RuleKind
+    active_rule_version_id: str
+    active_rule_version: int
+    active_rule_status: RuleStatus
+    auto_confirm_eligible: bool
+    auto_confirm_suspended_reason: str | None = None
+    internal_target_policy: dict[str, Any]
+    version: int
+    updater_label_snapshot: str
+    updated_at: datetime
 
 
 class LegalCalendarVersionProposalRequest(BaseModel):
