@@ -40,6 +40,9 @@ from caseops_api.schemas.ip_deadlines import (
     IpDeadlineRecalculateRequest,
     IpDeadlineRecord,
     IpDeadlineWorkspaceResponse,
+    IpNotificationPreviewRequest,
+    IpNotificationPreviewResponse,
+    IpNotificationStatusResponse,
     IpRuleActivationRequest,
     IpRuleImpactResponse,
     IpRuleTransitionRequest,
@@ -164,9 +167,11 @@ from caseops_api.services.ip_deadline_workflow import (
     confirm_deadline,
     deadline_dependencies,
     deadline_impact,
+    deadline_notification_status,
     deadline_workspace,
     list_company_rule_policies,
     override_deadline,
+    preview_deadline_notifications,
     propose_calendar_version,
     propose_deadline,
     propose_rule_version,
@@ -931,6 +936,33 @@ async def get_ip_deadline_dependencies(
     session: DbSession,
 ) -> IpDeadlineDependencyResponse:
     return deadline_dependencies(session, context=context, deadline_id=deadline_id)
+
+
+@router.post(
+    "/deadlines/{deadline_id}/notification-preview",
+    response_model=IpNotificationPreviewResponse,
+)
+async def post_ip_deadline_notification_preview(
+    deadline_id: str,
+    payload: IpNotificationPreviewRequest,
+    context: IpViewer,
+    session: DbSession,
+) -> IpNotificationPreviewResponse:
+    return preview_deadline_notifications(
+        session, context=context, deadline_id=deadline_id, payload=payload
+    )
+
+
+@router.get(
+    "/deadlines/{deadline_id}/notifications",
+    response_model=IpNotificationStatusResponse,
+)
+async def get_ip_deadline_notifications(
+    deadline_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpNotificationStatusResponse:
+    return deadline_notification_status(session, context=context, deadline_id=deadline_id)
 
 
 @router.post("/deadlines/{deadline_id}/confirm", response_model=IpDeadlineRecord)

@@ -3964,6 +3964,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadlines/{deadline_id}/notification-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Notification Preview */
+        post: operations["post_ip_deadline_notification_preview_api_ip_deadlines__deadline_id__notification_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Notifications */
+        get: operations["get_ip_deadline_notifications_api_ip_deadlines__deadline_id__notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadlines/{deadline_id}/override": {
         parameters: {
             query?: never;
@@ -19952,6 +19986,124 @@ export interface components {
             link_kind: string;
             /** Notice Id */
             notice_id: string;
+        };
+        /**
+         * IpNotificationPlanEntry
+         * @description One reminder intent that confirmation would create.
+         */
+        IpNotificationPlanEntry: {
+            /** Channel */
+            channel: string;
+            /** Critical */
+            critical: boolean;
+            /** Event Type */
+            event_type: string;
+            /** Offset Days */
+            offset_days: number;
+            /** Recipient Label */
+            recipient_label: string;
+            /** Recipient Membership Id */
+            recipient_membership_id: string;
+            /** Role */
+            role: string;
+            /**
+             * Scheduled For
+             * Format: date-time
+             */
+            scheduled_for: string;
+            /** Withheld Reason */
+            withheld_reason?: string | null;
+            /** Would Deliver */
+            would_deliver: boolean;
+        };
+        /**
+         * IpNotificationPreviewRequest
+         * @description Same shape as the confirmation payload, minus anything that writes.
+         */
+        IpNotificationPreviewRequest: {
+            /** Reminder Offsets Days */
+            reminder_offsets_days?: number[];
+            /** Responsibilities */
+            responsibilities: components["schemas"]["IpResponsibilityInput"][];
+        };
+        /**
+         * IpNotificationPreviewResponse
+         * @description NOTIF preview: the delivery plan before any intent exists.
+         *
+         *     ``external_delivery_enabled`` is always ``False``: this slice plans in-app
+         *     intents only and no external channel is dispatched.
+         */
+        IpNotificationPreviewResponse: {
+            /** Deadline Id */
+            deadline_id: string;
+            /**
+             * External Delivery Enabled
+             * @default false
+             * @constant
+             */
+            external_delivery_enabled: false;
+            /**
+             * Plan Is Proposal Only
+             * @default true
+             * @constant
+             */
+            plan_is_proposal_only: true;
+            /** Planned */
+            planned?: components["schemas"]["IpNotificationPlanEntry"][];
+            /** Result On */
+            result_on: string | null;
+            /**
+             * Withheld Count
+             * @default 0
+             */
+            withheld_count: number;
+        };
+        /** IpNotificationStatusEntry */
+        IpNotificationStatusEntry: {
+            /** Attempts */
+            attempts: number;
+            /** Channel */
+            channel: string;
+            /** Critical */
+            critical: boolean;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Intent Id */
+            intent_id: string;
+            /** Recipient Membership Id */
+            recipient_membership_id: string | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Status */
+            status: string;
+            /** Superseded By Intent Id */
+            superseded_by_intent_id?: string | null;
+            /** Suppression Reason */
+            suppression_reason?: string | null;
+        };
+        /** IpNotificationStatusResponse */
+        IpNotificationStatusResponse: {
+            /** Deadline Id */
+            deadline_id: string;
+            /**
+             * Delivered Count
+             * @default 0
+             */
+            delivered_count: number;
+            /** Intents */
+            intents?: components["schemas"]["IpNotificationStatusEntry"][];
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /**
+             * Suppressed Count
+             * @default 0
+             */
+            suppressed_count: number;
         };
         /** IpOperationalDeadlineCreateRequest */
         IpOperationalDeadlineCreateRequest: {
@@ -39248,6 +39400,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDeadlineImpactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_notification_preview_api_ip_deadlines__deadline_id__notification_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpNotificationPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpNotificationPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_deadline_notifications_api_ip_deadlines__deadline_id__notifications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpNotificationStatusResponse"];
                 };
             };
             /** @description Validation Error */

@@ -48,6 +48,11 @@ from caseops_api.schemas.ip_deadlines import (
     IpDeadlineRecord,
     IpDeadlineRuleDefinition,
     IpDeadlineWorkspaceResponse,
+    IpNotificationPlanEntry,
+    IpNotificationPreviewRequest,
+    IpNotificationPreviewResponse,
+    IpNotificationStatusEntry,
+    IpNotificationStatusResponse,
     IpResponsibilityInput,
     IpRuleActivationRequest,
     IpRuleImpactResponse,
@@ -72,6 +77,7 @@ from caseops_api.services.ip_deadlines import (
 from caseops_api.services.ip_operations import _docket_or_404
 from caseops_api.services.matter_access import can_access
 from caseops_api.services.notification_delivery import (
+    _recipient_context,
     cancel_pending_notification_intents,
     enqueue_notification_delivery_intent,
 )
@@ -1969,6 +1975,167 @@ def deadline_dependencies(
     )
 
 
+def preview_deadline_notifications(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+    payload: IpNotificationPreviewRequest,
+) -> IpNotificationPreviewResponse:
+    """NOTIF preview - show the reminder plan without creating any intent.
+
+    The schedule mirrors ``confirm_deadline`` exactly (09:00 in the deadline's
+    timezone, ``offset`` days before the result date) so the preview cannot
+    drift from what confirmation would actually enqueue. Recipient eligibility
+    is re-derived here rather than assumed, so a member who has lost access
+    shows as withheld before anyone relies on the reminder.
+    """
+
+    row = session.scalar(
+        select(IpDeadline).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline not found.")
+    docket = _docket_or_404(session, context=context, docket_id=row.docket_id)
+
+    matter = session.get(Matter, docket.matter_id) if docket.matter_id else None
+    zone = ZoneInfo(row.timezone)
+    offsets = sorted({int(value) for value in payload.reminder_offsets_days if value >= 0})
+
+    planned: list[IpNotificationPlanEntry] = []
+    withheld = 0
+    for item in payload.responsibilities:
+        member = session.scalar(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.id == item.membership_id,
+                CompanyMembership.company_id == context.company.id,
+            )
+        )
+        label = ""
+        withheld_reason: str | None = None
+        if member is None:
+            withheld_reason = "membership_not_found"
+        else:
+            label = member.user.full_name or member.user.email
+            if not member.is_active or not member.user.is_active:
+                withheld_reason = "membership_inactive"
+            elif not item.accepted:
+                withheld_reason = "responsibility_not_acknowledged"
+            elif matter is not None and not can_access(
+                session,
+                context=_recipient_context(actor_context=context, membership=member),
+                matter=matter,
+            ):
+                # UJ-10-EXC-03: a permission change is visible before dispatch.
+                withheld_reason = "recipient_lost_access"
+
+        for offset in offsets:
+            if row.result_on is None:
+                continue
+            scheduled = datetime.combine(
+                row.result_on - timedelta(days=offset), time(hour=9), tzinfo=zone
+            ).astimezone(UTC)
+            planned.append(
+                IpNotificationPlanEntry(
+                    recipient_membership_id=item.membership_id,
+                    recipient_label=label,
+                    role=item.role,
+                    channel="in_app",
+                    event_type="ip_deadline_reminder",
+                    offset_days=offset,
+                    scheduled_for=scheduled,
+                    critical=row.is_critical,
+                    would_deliver=withheld_reason is None,
+                    withheld_reason=withheld_reason,
+                )
+            )
+            if withheld_reason is not None:
+                withheld += 1
+
+    planned.sort(key=lambda entry: (entry.scheduled_for, entry.recipient_membership_id))
+    return IpNotificationPreviewResponse(
+        deadline_id=row.id,
+        result_on=row.result_on,
+        planned=planned,
+        withheld_count=withheld,
+    )
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    """Normalize a persisted timestamp to aware UTC.
+
+    ``DateTime(timezone=True)`` round-trips naive on SQLite, so without this the
+    status surface would emit a different shape from the preview for the same
+    instant. The API contract should not leak backend timezone behaviour.
+    """
+
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def deadline_notification_status(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+) -> IpNotificationStatusResponse:
+    """NOTIF status - the intents that exist for this deadline and their state."""
+
+    row = session.scalar(
+        select(IpDeadline).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline not found.")
+    _docket_or_404(session, context=context, docket_id=row.docket_id)
+
+    intents = list(
+        session.scalars(
+            select(NotificationDeliveryIntent)
+            .where(
+                NotificationDeliveryIntent.company_id == context.company.id,
+                NotificationDeliveryIntent.schedule_source_type == "ip_deadline",
+                NotificationDeliveryIntent.schedule_source_id == row.id,
+            )
+            .order_by(
+                NotificationDeliveryIntent.scheduled_for,
+                NotificationDeliveryIntent.id,
+            )
+        ).all()
+    )
+    entries = [
+        IpNotificationStatusEntry(
+            intent_id=intent.id,
+            recipient_membership_id=intent.recipient_membership_id,
+            channel=intent.channel,
+            event_type=intent.event_type,
+            status=intent.status,
+            scheduled_for=_utc(intent.scheduled_for),
+            delivered_at=_utc(intent.delivered_at),
+            attempts=intent.attempts,
+            critical=bool(intent.critical),
+            suppression_reason=intent.suppression_reason,
+            superseded_by_intent_id=intent.superseded_by_intent_id,
+        )
+        for intent in intents
+    ]
+    return IpNotificationStatusResponse(
+        deadline_id=row.id,
+        intents=entries,
+        pending_count=sum(1 for e in entries if e.status in {"pending", "queued", "scheduled"}),
+        delivered_count=sum(1 for e in entries if e.delivered_at is not None),
+        suppressed_count=sum(1 for e in entries if e.suppression_reason),
+    )
+
+
 __all__ = [
     "activate_calendar_version",
     "activate_rule_version",
@@ -1976,9 +2143,11 @@ __all__ = [
     "confirm_deadline",
     "deadline_impact",
     "deadline_dependencies",
+    "deadline_notification_status",
     "deadline_workspace",
     "list_company_rule_policies",
     "override_deadline",
+    "preview_deadline_notifications",
     "propose_calendar_version",
     "propose_deadline",
     "propose_rule_version",

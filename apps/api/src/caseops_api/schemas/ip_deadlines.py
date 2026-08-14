@@ -493,3 +493,62 @@ class IpDeadlineDependencyResponse(BaseModel):
     calculation_trace: list[dict[str, Any]] = Field(default_factory=list)
     unavailable_inputs: list[str] = Field(default_factory=list)
     superseded_chain: list[str] = Field(default_factory=list)
+
+
+class IpNotificationPlanEntry(BaseModel):
+    """One reminder intent that confirmation would create."""
+
+    recipient_membership_id: str
+    recipient_label: str
+    role: str
+    channel: str
+    event_type: str
+    offset_days: int
+    scheduled_for: datetime
+    critical: bool
+    would_deliver: bool
+    withheld_reason: str | None = None
+
+
+class IpNotificationPreviewRequest(BaseModel):
+    """Same shape as the confirmation payload, minus anything that writes."""
+
+    responsibilities: list[IpResponsibilityInput] = Field(min_length=1)
+    reminder_offsets_days: list[int] = Field(default_factory=list)
+
+
+class IpNotificationPreviewResponse(BaseModel):
+    """NOTIF preview: the delivery plan before any intent exists.
+
+    ``external_delivery_enabled`` is always ``False``: this slice plans in-app
+    intents only and no external channel is dispatched.
+    """
+
+    deadline_id: str
+    result_on: date | None
+    planned: list[IpNotificationPlanEntry] = Field(default_factory=list)
+    withheld_count: int = 0
+    external_delivery_enabled: Literal[False] = False
+    plan_is_proposal_only: Literal[True] = True
+
+
+class IpNotificationStatusEntry(BaseModel):
+    intent_id: str
+    recipient_membership_id: str | None
+    channel: str
+    event_type: str
+    status: str
+    scheduled_for: datetime | None
+    delivered_at: datetime | None
+    attempts: int
+    critical: bool
+    suppression_reason: str | None = None
+    superseded_by_intent_id: str | None = None
+
+
+class IpNotificationStatusResponse(BaseModel):
+    deadline_id: str
+    intents: list[IpNotificationStatusEntry] = Field(default_factory=list)
+    pending_count: int = 0
+    delivered_count: int = 0
+    suppressed_count: int = 0

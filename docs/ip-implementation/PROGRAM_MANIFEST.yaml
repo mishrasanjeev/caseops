@@ -1601,7 +1601,7 @@
         "IPLF-035A",
         "IPLF-035B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -9007,36 +9007,77 @@
       "source_kind": "derived",
       "scope_source": "IPLF-035",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "migration_boundary": "No schema change, no migration, no backfill.",
+      "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance.",
+      "requirement_ids": [
+        "NOTIF-01"
+      ],
+      "journey_path_ids": [
+        "UJ-10-NORMAL",
+        "UJ-10-EXC-03"
+      ],
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-035 canonical scope: On the M2 shared hearing/next-hearing/calendar/reminder owner, ship IP create/reschedule/provenance UX and notification-intent preview/status; no IP hearing table, suggestion history or dispatcher.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "component": "IPLF-025 shared reminder owners and the notification_delivery dispatcher.",
+          "canonical_writer": "notification_delivery.py remains the single delivery owner. The preview enqueues nothing and creates no second dispatch path; it reuses that module's _recipient_context so the access decision is the same code the dispatcher runs. Status reads existing notification_delivery_intents by the established schedule_source lineage.",
+          "compatibility_path": "Two additive routes; no existing notification surface changes.",
+          "retirement_gate": "Nothing deprecated."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-025B"
+      ],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_deadline_notifications.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md",
+          "revision": "c36e2d1cd5aae2b6f3330ce4a7adad48e484bc8b",
+          "recorded_at": "2026-08-14T00:00:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked dependencies, isolated SQLite fixtures via scripts/verify-backend.sh. No real-PostgreSQL CI, no delivery-worker run, no in-app render, no frontend, no E2E, no deployment. Per owner direction the full sweep is batched across slices.",
+          "fixtures": "Synthetic single- and cross-company tenants; an activated calendar and rule version with independent proposer, reviewer and legal approver; one confirmed critical deadline with two owners; an unacknowledged backup; a nonexistent membership. No real client, recipient or external provider.",
+          "assertions": "The preview lists two acknowledged owners across two offsets as in-app and deliverable, is proved to create zero intents, and after confirmation the created intents' scheduled times are the same set the plan promised; an unacknowledged owner and a nonexistent membership are reported with typed withheld reasons rather than dropped; offsets are de-duplicated and sorted with negatives discarded and every reminder scheduled strictly before the result date; no offsets yields no plan rather than an implicit default; cross-tenant preview and status both return 404. external_delivery_enabled is a literal False. Counts: 4 passed, ruff clean, OpenAPI regeneration additive only.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-035A-RELEASE-VERIFICATION",
+          "summary": "The preview does not check suppression or user notification preferences, so an access-eligible recipient who has muted this event type shows as would_deliver true and may still receive nothing. Hearing scheduling and reschedule supersession (UJ-10-EXC-01/02) and all of UJ-62 external calendar sync are untouched. Verified only on SQLite with no delivery-worker run, no in-app render, no frontend, no E2E and no deployment.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Suppression and notification-preference evaluation in the preview, hearing schedule/reschedule coverage, exact-commit CI on real PostgreSQL, a delivery-worker run proving the planned intents reach recipients, a preview UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
+          "safe_fallback": "Both routes are read-only and access-scoped; the preview enqueues nothing and no external channel is enabled.",
+          "milestone_impact": "Blocks IPLF-035A release closure; all CAL-OPS and NOTIF requirements remain open on IPLF-035B.",
+          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-036A."
+        }
+      ],
       "next_actions": [
-        "Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."
+        "Evaluate suppression and notification preferences in the preview so the plan matches reality.",
+        "Cover hearing scheduling and reschedule supersession for UJ-10-EXC-01/02.",
+        "Scope UJ-62 external calendar sync, including the date-only timezone rule.",
+        "Prove the plan end to end with a delivery-worker run and in-app render."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, no migration, no backfill. The preview creates no notification intent; status is read-only."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+      ],
+      "allocation_review": "Audit found the shared hearing/calendar/reminder owners and the delivery dispatcher already delivered by IPLF-025A/025B. The missing facet was the notification-intent preview: the reminder plan was only visible after confirmation had already committed it. IPLF-035A claims the two UJ-10 paths it proves end to end; all CAL-OPS and NOTIF requirements stay on IPLF-035B. PRD scope unchanged.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -9107,8 +9148,6 @@
       "journey_path_ids": [
         "UJ-10-EXC-01",
         "UJ-10-EXC-02",
-        "UJ-10-EXC-03",
-        "UJ-10-NORMAL",
         "UJ-62-EXC-01",
         "UJ-62-EXC-02",
         "UJ-62-EXC-03",
@@ -17052,9 +17091,12 @@
         "planned:IPLF-UJ-62-EXC-03",
         "planned:IPLF-UJ-62-EXC-04",
         "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "planned:IPLF-UJ-62-NORMAL",
+        "apps/api/tests/test_ip_deadline_notifications.py"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+      ],
       "blockers": [],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -17062,9 +17104,10 @@
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-007C",
-        "IPLF-035B"
+        "IPLF-035B",
+        "IPLF-035A"
       ],
-      "allocation_rationale": "NOTIF allocation reviewed against PRD requirement family and parent epic scope: IPLF-007, IPLF-035.",
+      "allocation_rationale": "NOTIF allocation reviewed against PRD requirement family and parent epic scope: IPLF-007, IPLF-035. | IPLF-035A 2026-08-14: notification-intent preview and status delivered; suppression and preference evaluation remain open so this stays co-owned.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -48885,16 +48928,18 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-10-NORMAL"
+        "apps/api/tests/test_ip_deadline_notifications.py::test_uj10_normal_preview_then_confirm_matches_the_plan#IPLF-UJ-10-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-025B",
-        "IPLF-035B"
+        "IPLF-035A"
       ],
       "allocation_rationale": "UJ-10 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-025, IPLF-035.",
       "not_required_approval": {
@@ -49089,16 +49134,18 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-10-EXC-03"
+        "apps/api/tests/test_ip_deadline_notifications.py::test_uj10_exc03_unacknowledged_owner_is_withheld_in_the_plan#IPLF-UJ-10-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-025B",
-        "IPLF-035B"
+        "IPLF-035A"
       ],
       "allocation_rationale": "UJ-10 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-025, IPLF-035.",
       "not_required_approval": {
