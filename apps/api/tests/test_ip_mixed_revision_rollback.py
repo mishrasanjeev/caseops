@@ -188,16 +188,20 @@ def test_uj67_normal_old_and_new_revisions_coexist(client: TestClient) -> None:
         assert len({r.id for r in rows}) == 2
         assert all(r.state == DomainOutboxState.QUEUED for r in rows)
 
-    # A worker on the new revision drains the old revision's event.
+    # One worker drains a single event. Both events were enqueued at the same
+    # instant, so which one a limit=1 claim wins is an arbitrary tie-break; the
+    # journey only requires that draining one leaves the other intact. Assert
+    # against the event actually claimed rather than assuming an ordering.
     with get_session_factory()() as session:
         claim, _effects = _drain_one(
             session,
             company_id=company_id,
             lease_owner="worker-new-1",
-            effect_key="projection:docket-fixture-1:v2",
+            effect_key="projection:docket-fixture-1",
         )
         complete_outbox_event(session, claim=claim, now=NOW)
         session.commit()
+        drained_event_id = claim.event_id
 
     with get_session_factory()() as session:
         effects = list(
@@ -209,14 +213,25 @@ def test_uj67_normal_old_and_new_revisions_coexist(client: TestClient) -> None:
         )
         assert len(effects) == len(LIFECYCLE_CONSUMERS)
         assert all(e.state == DomainConsumerEffectState.COMPLETED for e in effects)
+
+        drained = session.scalars(
+            select(DomainOutboxEvent).where(DomainOutboxEvent.id == drained_event_id)
+        ).one()
+        assert drained.state == DomainOutboxState.SUCCEEDED
+
         # The other revision's event is untouched and still due.
         remaining = session.scalars(
             select(DomainOutboxEvent).where(
                 DomainOutboxEvent.company_id == company_id,
-                DomainOutboxEvent.aggregate_version == 3,
+                DomainOutboxEvent.id != drained_event_id,
             )
         ).one()
         assert remaining.state == DomainOutboxState.QUEUED
+        assert remaining.producer_revision != drained.producer_revision
+        assert {drained.producer_revision, remaining.producer_revision} == {
+            OLD_REVISION,
+            NEW_REVISION,
+        }
 
 
 def test_uj67_exc02_mixed_version_contract_fails_closed(client: TestClient) -> None:
