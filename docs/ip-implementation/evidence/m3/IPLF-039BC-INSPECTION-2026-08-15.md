@@ -119,6 +119,31 @@ unimplemented; it does **not** by itself establish that the absence is currently
 exploitable. Exposure has to be traced separately, and I did not do that before
 calling all three client-facing.
 
+## Second correction — UJ-62 was under-assessed
+
+Building increment 4 established that **UJ-62 is roughly 5 of 6 implemented, not
+1 of 6 partial** as this document originally recorded.
+
+The error was method, not judgement: the search was scoped to
+`ip_operations.py`, where `CalendarEventSync` is indeed created as a bare
+pointer. The projection work lives in the shared `calendar_sync.py` owner that
+the IP path delegates to, and it was never read.
+
+| Path | Originally recorded | Verified |
+|---|---|---|
+| `UJ-62-NORMAL` | partial, "a PENDING projection row" | **implemented** — `UniqueConstraint(connection, source_type, source_id)` makes resync idempotent, `provider_event_id` retains the stable external id, and the row points at its source rather than copying the legal date |
+| `UJ-62-EXC-01` | absent, "no outage or rate-limit retry" | **implemented** — `attempts`, `max_attempts`, `next_attempt_at`, `dead_letter_reason` and `retry_scheduled`/`failed`/`dead_letter` statuses |
+| `UJ-62-EXC-02` | absent, "no revocation handling" | **implemented** — `revoke_connection` sets `CalendarConnectionStatus.REVOKED` and audits it; sync rows are not deleted, so history survives |
+| `UJ-62-EXC-03` | absent | **absent, confirmed** — no drift detection for an externally edited or deleted event |
+| `UJ-62-EXC-04` | absent, "no ethical-wall redaction" | **implemented, and more strongly than required** — `_ip_source_payload` is content-free by construction: the title is `"CaseOps IP - {category}"` and never the docket title, identifier, forum or notes |
+| `UJ-62-EXC-05` | absent, "no date-only rule" | **implemented** — `occurs_on` is a `date`; Google receives `{"date": ...}` with no timezone, Outlook `isAllDay: true` over a one-day span |
+
+This is the **second** severity misjudgement in this audit, and both share a
+cause: I assessed a behaviour by reading the IP module without tracing to the
+shared owner it delegates to. The earlier correction concerned exposure; this
+one concerns implementation. An audit of a delegating module must follow the
+delegation before it concludes anything is absent.
+
 ## Confidence and limits
 
 - This is **inspection, not verification**. Nothing here was proven by a test,
