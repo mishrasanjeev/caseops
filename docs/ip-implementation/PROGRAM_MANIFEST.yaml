@@ -9888,6 +9888,7 @@
       "dependencies": [],
       "implementation_refs": [
         "apps/api/alembic/versions/20260815_0001_ip_docket_control_reviews.py",
+        "apps/api/alembic/versions/20260815_0002_ip_coverage_replacement_decision.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/schemas/ip_operations.py",
@@ -9904,11 +9905,8 @@
         "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "apps/api/tests/test_ip_control_review_signoff.py",
         "apps/api/tests/test_ip_daily_docket.py",
-        "planned:IPLF-UJ-57-NORMAL",
-        "planned:IPLF-UJ-57-EXC-03",
-        "planned:IPLF-UJ-57-EXC-04",
-        "planned:IPLF-UJ-57-EXC-05",
-        "planned:IPLF-UJ-57-EXC-06",
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py",
+        "apps/api/tests/test_ip_coverage_reassignment_access.py",
         "planned:IPLF-UJ-62-NORMAL",
         "planned:IPLF-UJ-62-EXC-01",
         "planned:IPLF-UJ-62-EXC-02",
@@ -9925,17 +9923,17 @@
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "Rebuild increments 1 and 2 deliver the signed-off control review and the daily docket. UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry and original-actor attribution are unbuilt; UJ-62 external calendar projection remains a bare pointer with no times, retry, revocation handling, redaction or date-only rule; and CAL-OPS-09's saved team queues and bulk acknowledgement are not built.",
+          "summary": "Rebuild increments 1-3 deliver the signed-off control review, the daily docket and the reassignment workflow. UJ-62 external calendar projection remains a bare pointer with no times, retry, revocation handling, redaction or date-only rule; CAL-OPS-09's saved team queues and bulk acknowledgement are unbuilt; and the pre-existing bulk-reassign route still transfers immediately, so it must be reconciled with the new propose/accept semantics before release.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
           "evidence_needed": "Increments 2 and 3 covering UJ-50 and UJ-57, and a UJ-62 projection that carries times together with the date-only rule, each with per-path tests.",
           "safe_fallback": "The control review is additive and read-derived; the unbuilt areas keep their existing behaviour and the latent calendar gap is pinned by test_ip_latent_exposure_guards.py.",
           "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "IPLF-039C rebuild increment 3: UJ-57 reassignment workflow."
+          "next_independent_slice": "IPLF-039C rebuild increment 4: UJ-62 external calendar projection."
         }
       ],
       "next_actions": [
-        "Increment 3: UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry, and original-actor attribution.",
         "Increment 4: UJ-62 external calendar projection carrying stable external ids and times, with the date-only timezone rule implemented at the same moment.",
+        "Reconcile bulk-reassign with the propose/accept semantics so there is one transfer path, not two.",
         "Add saved team queues and bulk acknowledgement to complete the CAL-OPS-09 daily-docket half."
       ],
       "data_impact": [],
@@ -9947,7 +9945,7 @@
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039C",
       "primary_behavior": "Activate the M2 working-calendar/responsibility foundation through coverage acceptance, leave/deactivation reassignment, external calendar projection and reproducible daily docket control report; do not rebuild the records in M3.",
-      "migration_boundary": "Additive expand 20260815_0001 adding ip_docket_control_reviews with bounded PostgreSQL lock_timeout; empty rollback; no backfill.",
+      "migration_boundary": "Additive expands 20260815_0001 and 20260815_0002 with bounded PostgreSQL lock_timeout and SQLite batch mode; empty rollback; no backfill. Existing coverage rows default to replacement_decision='none', preserving current ownership exactly.",
       "release_boundary": "Independent exact-commit CI and dated deployed acceptance.",
       "evidence_metadata": [
         {
@@ -63099,10 +63097,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-NORMAL"
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_normal_preview_propose_then_accept#IPLF-UJ-57-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63208,10 +63207,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-01"
+        "apps/api/tests/test_ip_coverage_reassignment_access.py::test_uj57_exc01_single_reassignment_refuses_a_replacement_without_access#IPLF-UJ-57-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63317,10 +63317,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-02"
+        "apps/api/tests/test_ip_coverage_reassignment_access.py::test_uj57_exc02_ethical_wall_blocks_bulk_transfer_in_full#IPLF-UJ-57-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63426,10 +63427,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-03"
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc03_assignee_rejects_and_work_returns_to_the_owner#IPLF-UJ-57-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63535,10 +63537,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-04"
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc04_concurrent_change_after_preview_is_refused#IPLF-UJ-57-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63644,10 +63647,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-05"
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc05_emergency_coverage_is_time_boxed_with_escalation#IPLF-UJ-57-EXC-05"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63753,10 +63757,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-06"
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc06_completed_work_stays_attributed_to_the_original_actor#IPLF-UJ-57-EXC-06"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",

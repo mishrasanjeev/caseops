@@ -99,6 +99,10 @@ from caseops_api.schemas.ip_operations import (
     IpCostReconciliationReport,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
+    IpCoverageReassignPreviewRequest,
+    IpCoverageReassignPreviewResponse,
+    IpCoverageReassignProposeRequest,
+    IpCoverageReplacementDecisionRequest,
     IpDailyDocketResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
@@ -232,12 +236,15 @@ from caseops_api.services.ip_operations import (
     complete_ip_related_right_obligation,
     create_ip_control_review,
     create_ip_docket,
+    decide_ip_coverage_replacement,
     discover_ip_evidence_candidates,
     get_ip_control_review,
     get_ip_docket,
     ip_daily_docket,
     ip_docket_control_report,
     list_ip_dockets,
+    preview_ip_coverage_reassignment,
+    propose_ip_coverage_reassignment,
     reassign_ip_deadline_coverage,
     reconcile_ip_cost_items,
     record_ip_control_review_export,
@@ -1222,6 +1229,45 @@ async def get_ip_portfolio_families(
     )
     return list_ip_portfolio_families(
         session, context=context, grouping=grouping, filters=filters
+    )
+
+
+@router.post(
+    "/deadline-coverages/reassign-preview",
+    response_model=IpCoverageReassignPreviewResponse,
+)
+async def post_ip_coverage_reassign_preview(
+    payload: IpCoverageReassignPreviewRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageReassignPreviewResponse:
+    return preview_ip_coverage_reassignment(session, context=context, payload=payload)
+
+
+@router.post(
+    "/deadline-coverages/reassign-propose",
+    response_model=IpCoverageReassignPreviewResponse,
+)
+async def post_ip_coverage_reassign_propose(
+    payload: IpCoverageReassignProposeRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageReassignPreviewResponse:
+    return propose_ip_coverage_reassignment(session, context=context, payload=payload)
+
+
+@router.post(
+    "/deadline-coverages/{coverage_id}/replacement-decision",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_coverage_replacement_decision(
+    coverage_id: str,
+    payload: IpCoverageReplacementDecisionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return decide_ip_coverage_replacement(
+        session, context=context, coverage_id=coverage_id, payload=payload
     )
 
 

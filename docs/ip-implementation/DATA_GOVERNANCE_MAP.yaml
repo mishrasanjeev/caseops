@@ -9211,6 +9211,16 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "emergency_escalation_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "emergency_until": {
+          "category_id": "domain_attribute",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
@@ -9221,10 +9231,30 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "pending_replacement_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "reassignment_version": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "INTEGER",
           "nullable": false
+        },
+        "replacement_decided_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "replacement_decision": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "replacement_decision_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(2000)",
+          "nullable": true
         },
         "responsible_membership_id": {
           "category_id": "tenant_or_access_identifier",
@@ -22666,12 +22696,12 @@
       }
     }
   ],
-  "schema_fingerprint": "684eb6732f98be9b1597f7f5a4d31e4b20435370b14dcd2fd97921df160b59f2",
+  "schema_fingerprint": "4d6ee5bd8c6d176fdd77db439c7f124bd8ae353cab8ae3eeb4cd1884884c423c",
   "index_inventory": {
-    "orm_index_count": 1139,
-    "orm_index_fingerprint": "cc2ed74161f5abb1a7bacf46de341bffc1624f146d78caa0dfd6a3c18e8a93ca",
-    "migration_index_count": 498,
-    "migration_index_fingerprint": "a19362dfe1ce0b0d5c3772142c109a9d9c7e743be22ae4be3eff6e40afcd767b",
+    "orm_index_count": 1141,
+    "orm_index_fingerprint": "c1ca745a681eafa1cc6921733741194e0b55253da3004ab393da7e76effd93e0",
+    "migration_index_count": 500,
+    "migration_index_fingerprint": "ff1e63f8c961a3b240b9bdf117c43e979c3efb076009ff5039f67ae357a6615c",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

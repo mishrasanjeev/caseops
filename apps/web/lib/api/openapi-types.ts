@@ -3896,6 +3896,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadline-coverages/{coverage_id}/replacement-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Replacement Decision */
+        post: operations["post_ip_coverage_replacement_decision_api_ip_deadline_coverages__coverage_id__replacement_decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadline-coverages/bulk-reassign": {
         parameters: {
             query?: never;
@@ -3907,6 +3924,40 @@ export interface paths {
         put?: never;
         /** Post Ip Deadline Coverage Bulk Reassignment */
         post: operations["post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/reassign-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Reassign Preview */
+        post: operations["post_ip_coverage_reassign_preview_api_ip_deadline_coverages_reassign_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/reassign-propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Reassign Propose */
+        post: operations["post_ip_coverage_reassign_propose_api_ip_deadline_coverages_reassign_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -18289,6 +18340,58 @@ export interface components {
             /** Responsible Count */
             responsible_count: number;
         };
+        /** IpCoverageReassignPreviewRequest */
+        IpCoverageReassignPreviewRequest: {
+            /** From Membership Id */
+            from_membership_id: string;
+            /** To Membership Id */
+            to_membership_id: string;
+        };
+        /**
+         * IpCoverageReassignPreviewResponse
+         * @description Atomic snapshot of a proposed transfer (CAL-OPS-08).
+         */
+        IpCoverageReassignPreviewResponse: {
+            /** Affected Coverage Ids */
+            affected_coverage_ids?: string[];
+            /** Affected Docket Ids */
+            affected_docket_ids?: string[];
+            /** Blocked Docket Ids */
+            blocked_docket_ids?: string[];
+            /** From Membership Id */
+            from_membership_id: string;
+            /** Preview Token */
+            preview_token: string;
+            /** To Membership Id */
+            to_membership_id: string;
+            /** Transfer Allowed */
+            transfer_allowed: boolean;
+        };
+        /** IpCoverageReassignProposeRequest */
+        IpCoverageReassignProposeRequest: {
+            /** Emergency Escalation Membership Id */
+            emergency_escalation_membership_id?: string | null;
+            /** Emergency Until */
+            emergency_until?: string | null;
+            /** From Membership Id */
+            from_membership_id: string;
+            /** Preview Token */
+            preview_token: string;
+            /** Reason */
+            reason: string;
+            /** To Membership Id */
+            to_membership_id: string;
+        };
+        /** IpCoverageReplacementDecisionRequest */
+        IpCoverageReplacementDecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /** Reason */
+            reason: string;
+        };
         /**
          * IpDailyDocketEscalation
          * @description A critical item that must not be lost (CAL-OPS-13).
@@ -18488,12 +18591,27 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Emergency Escalation Membership Id */
+            emergency_escalation_membership_id?: string | null;
+            /** Emergency Until */
+            emergency_until?: string | null;
             /** Id */
             id: string;
             /** Matter Deadline Id */
             matter_deadline_id: string;
+            /** Pending Replacement Membership Id */
+            pending_replacement_membership_id?: string | null;
             /** Reassignment Version */
             reassignment_version: number;
+            /** Replacement Decided At */
+            replacement_decided_at?: string | null;
+            /**
+             * Replacement Decision
+             * @default none
+             */
+            replacement_decision: string;
+            /** Replacement Decision Reason */
+            replacement_decision_reason?: string | null;
             /** Responsible Membership Id */
             responsible_membership_id: string;
             /**
@@ -39522,6 +39640,41 @@ export interface operations {
             };
         };
     };
+    post_ip_coverage_replacement_decision_api_ip_deadline_coverages__coverage_id__replacement_decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                coverage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageReplacementDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post: {
         parameters: {
             query?: never;
@@ -39542,6 +39695,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpCoverageBulkReassignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_reassign_preview_api_ip_deadline_coverages_reassign_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageReassignPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageReassignPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_reassign_propose_api_ip_deadline_coverages_reassign_propose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageReassignProposeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageReassignPreviewResponse"];
                 };
             };
             /** @description Validation Error */

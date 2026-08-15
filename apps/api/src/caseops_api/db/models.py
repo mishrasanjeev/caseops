@@ -15103,6 +15103,18 @@ class IpEvidenceCandidate(Base):
 class IpDeadlineCoverage(Base):
     __tablename__ = "ip_deadline_coverages"
     __table_args__ = (
+        CheckConstraint(
+            "replacement_decision IN ('none', 'pending', 'accepted', 'rejected')",
+            name="ck_ip_coverage_replacement_decision",
+        ),
+        CheckConstraint(
+            "replacement_decision <> 'pending' OR pending_replacement_membership_id IS NOT NULL",
+            name="ck_ip_coverage_pending_has_subject",
+        ),
+        CheckConstraint(
+            "emergency_until IS NULL OR emergency_escalation_membership_id IS NOT NULL",
+            name="ck_ip_coverage_emergency_is_time_boxed",
+        ),
         ForeignKeyConstraint(
             ["docket_id", "company_id"],
             ["ip_docket_records.id", "ip_docket_records.company_id"],
@@ -15127,6 +15139,25 @@ class IpDeadlineCoverage(Base):
         String(24), nullable=False, default="pending"
     )
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # CAL-OPS-08: a transfer is proposed, then accepted or rejected. Ownership
+    # does not move until it is accepted, or until time-boxed emergency cover
+    # is approved.
+    pending_replacement_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    replacement_decision: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="none"
+    )
+    replacement_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    replacement_decision_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    emergency_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    emergency_escalation_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     reassignment_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False

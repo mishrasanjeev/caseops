@@ -49,6 +49,10 @@ from caseops_api.schemas.ip_operations import (
     IpCostReconciliationRow,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
+    IpCoverageReassignPreviewRequest,
+    IpCoverageReassignPreviewResponse,
+    IpCoverageReassignProposeRequest,
+    IpCoverageReplacementDecisionRequest,
     IpDailyDocketEscalation,
     IpDailyDocketQueue,
     IpDailyDocketResponse,
@@ -2030,3 +2034,270 @@ def ip_daily_docket(
         queues=queues,
         escalations=escalations,
     )
+
+def _aware_utc(value):
+    """Normalize a possibly-naive timestamp for comparison."""
+
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _coverage_preview_token(rows: list[IpDeadlineCoverage]) -> str:
+    """An atomic snapshot of the coverage set being transferred (CAL-OPS-08).
+
+    Any concurrent change to any affected row alters the token, so a transfer
+    built on a stale preview is refused rather than partially applied.
+    """
+
+    parts = sorted(
+        f"{row.id}:{row.reassignment_version}:{row.responsible_membership_id}"
+        f":{row.backup_membership_id or ''}:{row.replacement_decision}"
+        for row in rows
+    )
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def _coverages_for_member(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership_id: str,
+    for_update: bool = False,
+) -> list[IpDeadlineCoverage]:
+    statement = (
+        select(IpDeadlineCoverage)
+        .where(
+            IpDeadlineCoverage.company_id == context.company.id,
+            or_(
+                IpDeadlineCoverage.responsible_membership_id == membership_id,
+                IpDeadlineCoverage.backup_membership_id == membership_id,
+            ),
+        )
+        .order_by(IpDeadlineCoverage.id)
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    return list(session.scalars(statement).all())
+
+
+def preview_ip_coverage_reassignment(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpCoverageReassignPreviewRequest,
+) -> IpCoverageReassignPreviewResponse:
+    """UJ-57-NORMAL — the atomic preview CAL-OPS-08 requires before a transfer."""
+
+    if payload.from_membership_id == payload.to_membership_id:
+        raise HTTPException(status_code=422, detail="Coverage replacement must be different.")
+    _membership_or_404(session, context, payload.from_membership_id)
+    replacement = _membership_or_404(session, context, payload.to_membership_id)
+
+    rows = _coverages_for_member(
+        session, context=context, membership_id=payload.from_membership_id
+    )
+    dockets = list(
+        session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id.in_({row.docket_id for row in rows} or {""}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).all()
+    )
+    # The access decision is part of the preview, not a surprise at commit.
+    blocked = [
+        docket.id
+        for docket in dockets
+        if not can_access_ip_docket(
+            session,
+            context=SessionContext(
+                company=context.company, user=replacement.user, membership=replacement
+            ),
+            docket=docket,
+        )
+    ]
+    return IpCoverageReassignPreviewResponse(
+        from_membership_id=payload.from_membership_id,
+        to_membership_id=payload.to_membership_id,
+        preview_token=_coverage_preview_token(rows),
+        affected_coverage_ids=[row.id for row in rows],
+        affected_docket_ids=sorted({row.docket_id for row in rows}),
+        blocked_docket_ids=sorted(blocked),
+        transfer_allowed=not blocked,
+    )
+
+
+def propose_ip_coverage_reassignment(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpCoverageReassignProposeRequest,
+) -> IpCoverageReassignPreviewResponse:
+    """Propose a transfer; ownership does not move until it is accepted.
+
+    CAL-OPS-08 requires an accepted replacement or approved emergency coverage,
+    so a proposal marks each row ``pending`` and leaves the current owner in
+    place. Emergency cover transfers immediately but is time-boxed and must name
+    an escalation owner.
+    """
+
+    if payload.from_membership_id == payload.to_membership_id:
+        raise HTTPException(status_code=422, detail="Coverage replacement must be different.")
+    _membership_or_404(session, context, payload.from_membership_id)
+    replacement = _membership_or_404(session, context, payload.to_membership_id)
+
+    rows = _coverages_for_member(
+        session, context=context, membership_id=payload.from_membership_id, for_update=True
+    )
+    # UJ-57-EXC-04: the preview must still describe reality.
+    if _coverage_preview_token(rows) != payload.preview_token:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_preview_stale",
+                "message": "Affected work changed after the preview; preview again.",
+            },
+        )
+
+    dockets = list(
+        session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id.in_({row.docket_id for row in rows} or {""}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).all()
+    )
+    _assert_replacement_can_cover(
+        session, context=context, replacement=replacement, dockets=dockets
+    )
+
+    emergency_until = payload.emergency_until
+    if emergency_until is not None:
+        if payload.emergency_escalation_membership_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Emergency coverage requires an escalation owner.",
+            )
+        escalation = _membership_or_404(
+            session, context, payload.emergency_escalation_membership_id
+        )
+        if _aware_utc(emergency_until) <= _now():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Emergency coverage must expire in the future.",
+            )
+    else:
+        escalation = None
+
+    now = _now()
+    for row in rows:
+        row.pending_replacement_membership_id = replacement.id
+        row.replacement_decision_reason = payload.reason
+        if emergency_until is not None:
+            # UJ-57-EXC-05: emergency cover moves ownership now, but only until
+            # it expires, and it always names who it escalates to.
+            row.responsible_membership_id = replacement.id
+            row.replacement_decision = "accepted"
+            row.replacement_decided_at = now
+            row.emergency_until = emergency_until
+            row.emergency_escalation_membership_id = escalation.id if escalation else None
+            row.coverage_status = "emergency"
+        else:
+            row.replacement_decision = "pending"
+            row.replacement_decided_at = None
+            row.coverage_status = "transfer_pending"
+        row.reassignment_version += 1
+        row.updated_at = now
+
+    record_from_context(
+        session,
+        context,
+        action="ip_deadline_coverage.transfer_proposed",
+        target_type="company_membership",
+        target_id=payload.from_membership_id,
+        metadata={
+            "to_membership_id": replacement.id,
+            "coverage_ids": [row.id for row in rows],
+            "emergency": emergency_until is not None,
+            "reason": payload.reason,
+        },
+    )
+    session.commit()
+    refreshed = _coverages_for_member(
+        session, context=context, membership_id=payload.from_membership_id
+    )
+    return IpCoverageReassignPreviewResponse(
+        from_membership_id=payload.from_membership_id,
+        to_membership_id=replacement.id,
+        preview_token=_coverage_preview_token(refreshed),
+        affected_coverage_ids=[row.id for row in rows],
+        affected_docket_ids=sorted({row.docket_id for row in rows}),
+        blocked_docket_ids=[],
+        transfer_allowed=True,
+    )
+
+
+def decide_ip_coverage_replacement(
+    session: Session,
+    *,
+    context: SessionContext,
+    coverage_id: str,
+    payload: IpCoverageReplacementDecisionRequest,
+) -> IpDocketRecordResponse:
+    """UJ-57-NORMAL / UJ-57-EXC-03 — the named replacement accepts or rejects."""
+
+    row = session.scalar(
+        select(IpDeadlineCoverage)
+        .where(
+            IpDeadlineCoverage.id == coverage_id,
+            IpDeadlineCoverage.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    docket = _docket_or_404(session, context=context, docket_id=row.docket_id, for_update=True)
+    if row.replacement_decision != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No replacement decision is pending for this coverage.",
+        )
+    if row.pending_replacement_membership_id != context.membership.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the named replacement may decide this transfer.",
+        )
+
+    now = _now()
+    previous_owner = row.responsible_membership_id
+    if payload.decision == "accepted":
+        row.responsible_membership_id = context.membership.id
+        if row.backup_membership_id == context.membership.id:
+            row.backup_membership_id = None
+        row.coverage_status = "accepted"
+        row.accepted_at = now
+    else:
+        # UJ-57-EXC-03: a rejection returns the work, it never leaves it unowned.
+        row.coverage_status = "accepted" if row.accepted_at else "pending"
+    row.replacement_decision = payload.decision
+    row.replacement_decided_at = now
+    row.replacement_decision_reason = payload.reason
+    row.pending_replacement_membership_id = None
+    row.reassignment_version += 1
+    row.updated_at = now
+
+    record_from_context(
+        session,
+        context,
+        action=f"ip_deadline_coverage.transfer_{payload.decision}",
+        target_type="ip_deadline_coverage",
+        target_id=row.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={
+            "previous_responsible_membership_id": previous_owner,
+            "responsible_membership_id": row.responsible_membership_id,
+            "reason": payload.reason,
+        },
+    )
+    session.commit()
+    return _serialize_docket(session, docket)

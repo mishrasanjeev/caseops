@@ -183,6 +183,12 @@ class IpDeadlineCoverageRecord(BaseModel):
     responsible_membership_id: str
     backup_membership_id: str | None
     coverage_status: str
+    pending_replacement_membership_id: str | None = None
+    replacement_decision: str = "none"
+    replacement_decided_at: datetime | None = None
+    replacement_decision_reason: str | None = None
+    emergency_until: datetime | None = None
+    emergency_escalation_membership_id: str | None = None
     calendar_projection_status: str
     accepted_at: datetime | None
     reassignment_version: int
@@ -497,3 +503,34 @@ class IpDailyDocketResponse(BaseModel):
     counts_are_complete: bool = True
     queues: list[IpDailyDocketQueue] = Field(default_factory=list)
     escalations: list[IpDailyDocketEscalation] = Field(default_factory=list)
+
+
+class IpCoverageReassignPreviewRequest(BaseModel):
+    from_membership_id: str
+    to_membership_id: str
+
+
+class IpCoverageReassignPreviewResponse(BaseModel):
+    """Atomic snapshot of a proposed transfer (CAL-OPS-08)."""
+
+    from_membership_id: str
+    to_membership_id: str
+    preview_token: str
+    affected_coverage_ids: list[str] = Field(default_factory=list)
+    affected_docket_ids: list[str] = Field(default_factory=list)
+    blocked_docket_ids: list[str] = Field(default_factory=list)
+    transfer_allowed: bool
+
+
+class IpCoverageReassignProposeRequest(BaseModel):
+    from_membership_id: str
+    to_membership_id: str
+    preview_token: str
+    reason: str = Field(min_length=5, max_length=2000)
+    emergency_until: datetime | None = None
+    emergency_escalation_membership_id: str | None = None
+
+
+class IpCoverageReplacementDecisionRequest(BaseModel):
+    decision: Literal["accepted", "rejected"]
+    reason: str = Field(min_length=5, max_length=2000)
