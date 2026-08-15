@@ -9801,11 +9801,14 @@
         "tests/e2e/ram-2026-08-01-bugs.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039BC-INSPECTION-2026-08-15.md"
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [],
+      "next_actions": [
+        "Inspection audit 2026-08-15: about 7 of 16 owned paths need implementation before a per-path test is possible. Confirm the low-confidence verdicts, then build the missing behaviour."
+      ],
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
@@ -9828,7 +9831,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 9 of 16 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. Gaps concentrate on privileged correspondence reaching portal or AI, malformed/encrypted attachment handling, notice-audience inference and convenience-file immutability.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -9917,11 +9920,14 @@
         "tests/e2e/ram-2026-08-01-bugs.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039BC-INSPECTION-2026-08-15.md"
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [],
+      "next_actions": [
+        "Inspection audit 2026-08-15: about 18 of 22 owned paths need implementation before a per-path test is possible. Confirm the low-confidence verdicts, then build the missing behaviour."
+      ],
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
@@ -9944,7 +9950,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. Largely unbuilt: no sign-off, export, escalation, backup policy, stale-provider concept, capability check, ethical wall, preview token, expiry, redaction or date-only timezone rule exists in this path.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
