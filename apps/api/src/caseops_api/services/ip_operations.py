@@ -53,6 +53,8 @@ from caseops_api.schemas.ip_operations import (
     IpCoverageReassignPreviewResponse,
     IpCoverageReassignProposeRequest,
     IpCoverageReplacementDecisionRequest,
+    IpCoverageTransferAwaiting,
+    IpCoverageTransfersAwaitingResponse,
     IpDailyDocketEscalation,
     IpDailyDocketQueue,
     IpDailyDocketResponse,
@@ -1728,6 +1730,7 @@ def ip_docket_control_report(session: Session, *, context: SessionContext) -> Ip
 
 
 __all__ = [
+    "list_ip_coverage_transfers_awaiting",
     "add_ip_cost_item",
     "add_ip_deadline_coverage",
     "add_ip_deadline_incident",
@@ -2184,6 +2187,116 @@ def _coverages_for_member(
     return list(session.scalars(statement).all())
 
 
+def list_ip_coverage_transfers_awaiting(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> IpCoverageTransfersAwaitingResponse:
+    """Coverage transfers waiting on the calling member (CAL-OPS-08).
+
+    A proposal is addressed to one person, so it is listed for that person
+    rather than found by opening each docket. Access is re-checked at read
+    time: a grant can be withdrawn after a transfer is proposed, and a record
+    the reader may no longer open must not surface here.
+    """
+
+    rows = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                IpDeadlineCoverage.pending_replacement_membership_id == context.membership.id,
+                IpDeadlineCoverage.replacement_decision == "pending",
+            )
+            .order_by(IpDeadlineCoverage.id)
+        ).all()
+    )
+    if not rows:
+        return IpCoverageTransfersAwaitingResponse()
+
+    dockets = {
+        docket.id: docket
+        for docket in session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id.in_({row.docket_id for row in rows}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).all()
+    }
+    deadlines = {
+        deadline.id: deadline
+        for deadline in session.scalars(
+            select(MatterDeadline).where(
+                MatterDeadline.id.in_({row.matter_deadline_id for row in rows} or {""})
+            )
+        ).all()
+    }
+    critical_ids = {
+        value
+        for value in session.scalars(
+            select(IpDeadline.matter_deadline_id).where(
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.is_critical.is_(True),
+                IpDeadline.matter_deadline_id.is_not(None),
+            )
+        ).all()
+        if value
+    }
+
+    members = {
+        member.id: member
+        for member in session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(CompanyMembership.company_id == context.company.id)
+        ).all()
+    }
+
+    def _label(membership_id: str | None) -> str | None:
+        if membership_id is None:
+            return None
+        member = members.get(membership_id)
+        if member is None:
+            return membership_id
+        return member.user.full_name or member.user.email
+
+    today = _now().date()
+    transfers: list[IpCoverageTransferAwaiting] = []
+    for row in rows:
+        docket = dockets.get(row.docket_id)
+        if docket is None or not can_access_ip_docket(session, context=context, docket=docket):
+            continue
+        deadline = deadlines.get(row.matter_deadline_id)
+        due_on = getattr(deadline, "due_on", None)
+        transfers.append(
+            IpCoverageTransferAwaiting(
+                coverage_id=row.id,
+                docket_id=docket.id,
+                docket_title=docket.title,
+                docket_identifier=docket.primary_identifier,
+                deadline_title=getattr(deadline, "title", None),
+                due_on=due_on,
+                days_until_due=(due_on - today).days if due_on else None,
+                critical=row.matter_deadline_id in critical_ids,
+                # The work has already moved when the responsible member is the
+                # reader; that only happens on an immediate transfer.
+                transfer_kind=(
+                    "immediate"
+                    if row.responsible_membership_id == context.membership.id
+                    else "proposed"
+                ),
+                responsible_membership_id=row.responsible_membership_id,
+                responsible_label=_label(row.responsible_membership_id)
+                or row.responsible_membership_id,
+                escalation_membership_id=row.emergency_escalation_membership_id,
+                escalation_label=_label(row.emergency_escalation_membership_id),
+                reason=row.replacement_decision_reason,
+                reassignment_version=row.reassignment_version,
+            )
+        )
+    return IpCoverageTransfersAwaitingResponse(transfers=transfers)
+
+
 def preview_ip_coverage_reassignment(
     session: Session,
     *,
@@ -2409,7 +2522,10 @@ def decide_ip_coverage_replacement(
         row.coverage_status = "accepted" if row.accepted_at else "pending"
     row.replacement_decision = payload.decision
     row.replacement_decided_at = now
-    row.replacement_decision_reason = payload.reason
+    if payload.reason is not None:
+        # The field also carries the proposer's reason; an acceptance given
+        # without a note must not erase why the transfer was asked for.
+        row.replacement_decision_reason = payload.reason
     row.pending_replacement_membership_id = None
     row.reassignment_version += 1
     row.updated_at = now

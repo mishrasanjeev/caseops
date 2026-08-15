@@ -520,6 +520,39 @@ class IpDailyDocketResponse(BaseModel):
     escalations: list[IpDailyDocketEscalation] = Field(default_factory=list)
 
 
+class IpCoverageTransferAwaiting(BaseModel):
+    """One coverage transfer awaiting the calling member's decision.
+
+    Carries what a lawyer needs in order to answer "can I hold this date?" —
+    which record, which deadline, when it falls, who asked and why — so the
+    decision does not require opening each docket in turn.
+    """
+
+    coverage_id: str
+    docket_id: str
+    docket_title: str
+    docket_identifier: str | None = None
+    deadline_title: str | None = None
+    due_on: date | None = None
+    days_until_due: int | None = None
+    critical: bool = False
+    # `proposed`: responsibility has not moved and stays with `responsible_...`
+    # until this is accepted. `immediate`: it already moved because the outgoing
+    # person could not be waited on, and declining escalates rather than
+    # returning it.
+    transfer_kind: Literal["proposed", "immediate"]
+    responsible_membership_id: str
+    responsible_label: str
+    escalation_membership_id: str | None = None
+    escalation_label: str | None = None
+    reason: str | None = None
+    reassignment_version: int
+
+
+class IpCoverageTransfersAwaitingResponse(BaseModel):
+    transfers: list[IpCoverageTransferAwaiting] = Field(default_factory=list)
+
+
 class IpCoverageReassignPreviewRequest(BaseModel):
     from_membership_id: str
     to_membership_id: str
@@ -548,4 +581,13 @@ class IpCoverageReassignProposeRequest(BaseModel):
 
 class IpCoverageReplacementDecisionRequest(BaseModel):
     decision: Literal["accepted", "rejected"]
-    reason: str = Field(min_length=5, max_length=2000)
+    # Accepting needs no justification — the act itself is the record, and
+    # forcing prose to click accept produces "ok" in an audit trail. Declining
+    # sends work back or escalates it, so it must be explained.
+    reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _require_reason_when_declining(self) -> IpCoverageReplacementDecisionRequest:
+        if self.decision == "rejected" and len((self.reason or "").strip()) < 5:
+            raise ValueError("Declining a transfer requires a reason.")
+        return self

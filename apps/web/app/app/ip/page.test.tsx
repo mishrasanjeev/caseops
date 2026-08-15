@@ -28,6 +28,8 @@ const {
   listTeamsMock,
   previewIpAccessChangeMock,
   applyIpAccessChangeMock,
+  fetchIpCoverageTransfersAwaitingMeMock,
+  decideIpCoverageTransferMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
@@ -54,6 +56,8 @@ const {
   listTeamsMock: vi.fn(),
   previewIpAccessChangeMock: vi.fn(),
   applyIpAccessChangeMock: vi.fn(),
+  fetchIpCoverageTransfersAwaitingMeMock: vi.fn(),
+  decideIpCoverageTransferMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -113,6 +117,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   listTeams: listTeamsMock,
   previewIpAccessChange: previewIpAccessChangeMock,
   applyIpAccessChange: applyIpAccessChangeMock,
+  fetchIpCoverageTransfersAwaitingMe: fetchIpCoverageTransfersAwaitingMeMock,
+  decideIpCoverageTransfer: decideIpCoverageTransferMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -159,6 +165,10 @@ describe("IpDocketPage", () => {
     listTeamsMock.mockReset();
     previewIpAccessChangeMock.mockReset();
     applyIpAccessChangeMock.mockReset();
+    fetchIpCoverageTransfersAwaitingMeMock.mockReset();
+    decideIpCoverageTransferMock.mockReset();
+    fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [] });
+    decideIpCoverageTransferMock.mockResolvedValue({});
     enableIpWorkspaceMock.mockReset();
     runIpWorkspaceTestMock.mockReset();
     saveIpWorkspaceConfigurationMock.mockReset();
@@ -591,5 +601,110 @@ describe("IpDocketPage", () => {
     expect(apply).toBeEnabled();
     fireEvent.click(apply);
     await waitFor(() => expect(transitionIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
+  });
+
+  const AWAITING_DOCKET = {
+    id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
+    title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: false,
+    is_active: true, lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null,
+    lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
+    lifecycle_evidence_ref: null, successor_docket_id: null,
+    current_version: 1, created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
+    current_particulars: { form_key: "TM-A", form_version: "2026.1", readiness_status: "ready", classes_json: [] },
+    notice_links: [], deadline_incidents: [], title_interests: [], cost_items: [],
+    related_right_obligations: [], evidence_candidates: [], deadline_coverages: [],
+  };
+
+  const PROPOSED_TRANSFER = {
+    coverage_id: "coverage-9", docket_id: "ip-1", docket_title: "ACME WORDMARK",
+    docket_identifier: "TM 4412330", deadline_title: "Opposition reply",
+    due_on: "2026-10-12", days_until_due: 58, critical: true,
+    transfer_kind: "proposed" as const, responsible_membership_id: "member-2",
+    responsible_label: "Priya Raghavan", escalation_membership_id: null,
+    escalation_label: null, reason: "Covering the Delhi hearing block.",
+    reassignment_version: 3,
+  };
+
+  it("does not render the decision band when nothing is awaiting the member", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByText("Portfolio")).toBeVisible();
+    // An always-present empty band trains people to ignore the space.
+    expect(screen.queryByTestId("ip-coverage-decisions")).toBeNull();
+  });
+
+  it("lets the named replacement accept a proposed transfer without writing prose", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [PROPOSED_TRANSFER] });
+
+    render(withClient(<IpDocketPage />));
+
+    const band = await screen.findByTestId("ip-coverage-decisions");
+    // Enough to answer "can I hold this date?" without opening the record.
+    expect(within(band).getByText("ACME WORDMARK")).toBeVisible();
+    expect(within(band).getByText("TM 4412330")).toBeVisible();
+    expect(within(band).getByText(/Opposition reply/)).toHaveTextContent("in 58 days");
+    expect(within(band).getByText("Critical")).toBeVisible();
+    // The consequence of not acting is stated, not implied.
+    expect(within(band).getByText(/Priya Raghavan remains responsible until you accept/)).toBeVisible();
+    expect(within(band).getByText(/Covering the Delhi hearing block/)).toBeVisible();
+
+    fireEvent.click(within(band).getByRole("button", { name: "Accept responsibility" }));
+    await waitFor(() => expect(decideIpCoverageTransferMock).toHaveBeenCalledTimes(1));
+    expect(decideIpCoverageTransferMock).toHaveBeenCalledWith("coverage-9", {
+      decision: "accepted",
+      reason: undefined,
+    });
+  });
+
+  it("requires a written reason before a decline is sent", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [PROPOSED_TRANSFER] });
+
+    render(withClient(<IpDocketPage />));
+
+    const band = await screen.findByTestId("ip-coverage-decisions");
+    fireEvent.click(within(band).getByRole("button", { name: "Decline" }));
+
+    const confirm = within(band).getByRole("button", { name: "Confirm decline" });
+    expect(confirm).toBeDisabled();
+    expect(decideIpCoverageTransferMock).not.toHaveBeenCalled();
+
+    fireEvent.change(within(band).getByLabelText("Why are you declining?"), {
+      target: { value: "I am in trial that fortnight." },
+    });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(decideIpCoverageTransferMock).toHaveBeenCalledTimes(1));
+    expect(decideIpCoverageTransferMock).toHaveBeenCalledWith("coverage-9", {
+      decision: "rejected",
+      reason: "I am in trial that fortnight.",
+    });
+  });
+
+  it("tells a member holding an immediate transfer where declining sends it", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({
+      transfers: [{
+        ...PROPOSED_TRANSFER,
+        transfer_kind: "immediate" as const,
+        responsible_membership_id: "membership-1",
+        responsible_label: "You",
+        escalation_membership_id: "member-3",
+        escalation_label: "Anand Rao",
+      }],
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    const band = await screen.findByTestId("ip-coverage-decisions");
+    // Declining an immediate transfer escalates; saying "remains responsible
+    // until you accept" here would be false.
+    expect(
+      within(band).getByText(/You already hold this deadline\. Declining moves it to Anand Rao\./),
+    ).toBeVisible();
   });
 });

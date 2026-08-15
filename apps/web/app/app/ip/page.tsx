@@ -15,11 +15,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
+import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   addIpCostItem,
   addIpRelatedRightObligation,
@@ -33,9 +35,11 @@ import {
   confirmIpLegalDeadline,
   createIpDocket,
   createIpSharedHearing,
+  decideIpCoverageTransfer,
   discoverIpEvidence,
   enableIpWorkspace,
   fetchIpCoreRecords,
+  fetchIpCoverageTransfersAwaitingMe,
   fetchIpDeadlineImpact,
   fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
@@ -208,6 +212,8 @@ export default function IpDocketPage() {
           description="Create a trademark record to validate filing particulars and begin the evidence-backed docket."
         />
       ) : (
+        <div className="flex min-w-0 flex-col gap-5">
+        <CoverageDecisionsCard onChanged={refresh} />
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)]">
           <Card className="min-w-0">
             <CardHeader><CardTitle as="h2">Portfolio</CardTitle></CardHeader>
@@ -247,6 +253,7 @@ export default function IpDocketPage() {
             />
           ) : null}
         </div>
+        </div>
       )}
     </div>
   );
@@ -263,6 +270,184 @@ const READINESS_REASON: Record<IpFeatureReadiness["reason"], string> = {
   tenant_disabled: "Tenant enablement has not passed",
   readiness_test_failed: "The latest required readiness test has not passed",
 };
+
+const DUE_FORMAT = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+function duePhrase(dueOn: string | null, daysUntilDue: number | null) {
+  if (!dueOn) return "No due date recorded";
+  const on = DUE_FORMAT.format(new Date(`${dueOn}T00:00:00`));
+  if (daysUntilDue === null) return `Due ${on}`;
+  if (daysUntilDue < 0) return `Due ${on} · ${Math.abs(daysUntilDue)} days overdue`;
+  if (daysUntilDue === 0) return `Due ${on} · today`;
+  return `Due ${on} · in ${daysUntilDue} ${daysUntilDue === 1 ? "day" : "days"}`;
+}
+
+/**
+ * Coverage transfers waiting on the signed-in member (CAL-OPS-08).
+ *
+ * Rendered above the portfolio because a pending decision blocks someone
+ * else's work, and it is omitted entirely when there is nothing to decide —
+ * a permanently empty band would train people to ignore the space.
+ */
+function CoverageDecisionsCard({ onChanged }: { onChanged: () => Promise<void> }) {
+  const [decliningId, setDecliningId] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const awaiting = useQuery({
+    queryKey: ["ip-coverage-awaiting-me"],
+    queryFn: fetchIpCoverageTransfersAwaitingMe,
+  });
+
+  const decide = useMutation({
+    mutationFn: (input: {
+      coverageId: string;
+      decision: "accepted" | "rejected";
+      reason?: string;
+    }) => decideIpCoverageTransfer(input.coverageId, {
+      decision: input.decision,
+      reason: input.reason,
+    }),
+    onSuccess: async (_result, input) => {
+      toast.success(
+        input.decision === "accepted"
+          ? "You are now responsible for this deadline."
+          : "Declined. The deadline stays with a named owner.",
+      );
+      setDecliningId(null);
+      setDeclineReason("");
+      await awaiting.refetch();
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record your decision.")),
+  });
+
+  const transfers = useMemo(() => {
+    const rows = awaiting.data?.transfers ?? [];
+    // Soonest first: the decision that can still be acted on matters most.
+    return [...rows].sort((a, b) => {
+      if (a.due_on === b.due_on) return a.docket_title.localeCompare(b.docket_title);
+      if (!a.due_on) return 1;
+      if (!b.due_on) return -1;
+      return a.due_on < b.due_on ? -1 : 1;
+    });
+  }, [awaiting.data]);
+
+  if (!transfers.length) return null;
+
+  return (
+    <Card className="min-w-0" data-testid="ip-coverage-decisions">
+      <CardHeader>
+        <CardTitle as="h2">Coverage awaiting your decision</CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        {transfers.map((row) => {
+          const isDeclining = decliningId === row.coverage_id;
+          const reasonId = `decline-reason-${row.coverage_id}`;
+          return (
+            <div
+              key={row.coverage_id}
+              className="min-w-0 rounded-lg border border-[var(--color-line)] bg-white p-4"
+              data-testid={`ip-coverage-decision-${row.coverage_id}`}
+            >
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="min-w-0 break-words font-semibold">{row.docket_title}</span>
+                {row.docket_identifier ? (
+                  <span className="font-mono text-xs text-[var(--color-mute)] tabular-nums">
+                    {row.docket_identifier}
+                  </span>
+                ) : null}
+                {row.critical ? <Badge tone="warning">Critical</Badge> : null}
+              </div>
+
+              <p className="mt-1 text-sm tabular-nums text-[var(--color-ink-2)]">
+                {row.deadline_title ? `${row.deadline_title} · ` : ""}
+                {duePhrase(row.due_on, row.days_until_due)}
+              </p>
+
+              <p className="mt-2 max-w-[70ch] text-sm text-[var(--color-mute)]">
+                {row.transfer_kind === "immediate"
+                  ? `You already hold this deadline. Declining moves it to ${
+                      row.escalation_label ?? "the escalation owner"
+                    }.`
+                  : `${row.responsible_label} remains responsible until you accept.`}
+              </p>
+
+              {row.reason ? (
+                <p className="mt-1 max-w-[70ch] text-sm text-[var(--color-mute)]">
+                  Reason given: {row.reason}
+                </p>
+              ) : null}
+
+              {isDeclining ? (
+                <div className="mt-3 flex min-w-0 flex-col gap-2">
+                  <Label htmlFor={reasonId}>Why are you declining?</Label>
+                  <Textarea
+                    id={reasonId}
+                    value={declineReason}
+                    onChange={(event) => setDeclineReason(event.target.value)}
+                    placeholder="This is recorded against the deadline."
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={declineReason.trim().length < 5 || decide.isPending}
+                      onClick={() =>
+                        decide.mutate({
+                          coverageId: row.coverage_id,
+                          decision: "rejected",
+                          reason: declineReason.trim(),
+                        })
+                      }
+                    >
+                      Confirm decline
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setDecliningId(null);
+                        setDeclineReason("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={decide.isPending}
+                    onClick={() =>
+                      decide.mutate({ coverageId: row.coverage_id, decision: "accepted" })
+                    }
+                  >
+                    Accept responsibility
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={decide.isPending}
+                    onClick={() => {
+                      setDecliningId(row.coverage_id);
+                      setDeclineReason("");
+                    }}
+                  >
+                    Decline
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
 
 function IpReadinessGate({
   features,

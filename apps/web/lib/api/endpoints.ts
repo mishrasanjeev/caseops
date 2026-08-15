@@ -9513,6 +9513,43 @@ export async function reviewIpEvidenceCandidate(input: {
   );
 }
 
+export type IpCoverageTransferAwaiting = {
+  coverage_id: string;
+  docket_id: string;
+  docket_title: string;
+  docket_identifier: string | null;
+  deadline_title: string | null;
+  due_on: string | null;
+  days_until_due: number | null;
+  critical: boolean;
+  transfer_kind: "proposed" | "immediate";
+  responsible_membership_id: string;
+  responsible_label: string;
+  escalation_membership_id: string | null;
+  escalation_label: string | null;
+  reason: string | null;
+  reassignment_version: number;
+};
+
+export async function fetchIpCoverageTransfersAwaitingMe(): Promise<{
+  transfers: IpCoverageTransferAwaiting[];
+}> {
+  return apiRequest("/api/ip/deadline-coverages/awaiting-me");
+}
+
+export async function decideIpCoverageTransfer(
+  coverageId: string,
+  input: { decision: "accepted" | "rejected"; reason?: string },
+): Promise<unknown> {
+  return apiRequest(`/api/ip/deadline-coverages/${coverageId}/replacement-decision`, {
+    method: "POST",
+    body: {
+      decision: input.decision,
+      ...(input.reason ? { reason: input.reason } : {}),
+    },
+  });
+}
+
 export async function bulkReassignIpCoverage(input: {
   fromMembershipId: string;
   toMembershipId: string;

@@ -103,6 +103,7 @@ from caseops_api.schemas.ip_operations import (
     IpCoverageReassignPreviewResponse,
     IpCoverageReassignProposeRequest,
     IpCoverageReplacementDecisionRequest,
+    IpCoverageTransfersAwaitingResponse,
     IpDailyDocketResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
@@ -242,6 +243,7 @@ from caseops_api.services.ip_operations import (
     get_ip_docket,
     ip_daily_docket,
     ip_docket_control_report,
+    list_ip_coverage_transfers_awaiting,
     list_ip_dockets,
     preview_ip_coverage_reassignment,
     propose_ip_coverage_reassignment,
@@ -1230,6 +1232,17 @@ async def get_ip_portfolio_families(
     return list_ip_portfolio_families(
         session, context=context, grouping=grouping, filters=filters
     )
+
+
+@router.get(
+    "/deadline-coverages/awaiting-me",
+    response_model=IpCoverageTransfersAwaitingResponse,
+)
+async def get_ip_coverage_transfers_awaiting(
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageTransfersAwaitingResponse:
+    return list_ip_coverage_transfers_awaiting(session, context=context)
 
 
 @router.post(

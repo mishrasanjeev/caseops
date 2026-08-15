@@ -301,3 +301,205 @@ def test_uj57_recon05_only_the_decision_path_may_record_an_acceptance() -> None:
         "accepted_at may only be written where a named person actually decided: "
         f"{offenders}"
     )
+
+
+def test_uj57_recon06_a_proposal_is_listed_for_the_person_it_is_addressed_to(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-57-RECON-06 — the replacement can find the decision to make.
+
+    A proposal is addressed to one person. Without a read path they would have
+    to open every docket in the portfolio to discover that they had been
+    offered anything.
+    """
+
+    owner_headers, owner_id, successor_id, successor_headers, _esc, matter = _setup(client)
+    docket_id, coverage = _docket_with_coverage(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Recon Awaiting Mark",
+        responsible=owner_id,
+    )
+    client.post(
+        f"/api/ip/dockets/{docket_id}/deadline-coverages/{coverage['id']}/reassign",
+        headers=owner_headers,
+        json={
+            "expected_responsible_membership_id": owner_id,
+            "responsible_membership_id": successor_id,
+            "reason": "Please cover this while I am in hearings.",
+        },
+    )
+
+    awaiting = client.get("/api/ip/deadline-coverages/awaiting-me", headers=successor_headers)
+    assert awaiting.status_code == 200, awaiting.text
+    transfers = awaiting.json()["transfers"]
+    assert len(transfers) == 1
+    row = transfers[0]
+    assert row["coverage_id"] == coverage["id"]
+    assert row["docket_id"] == docket_id
+    assert row["docket_title"] == "Recon Awaiting Mark"
+    # Enough to answer "can I hold this date?" without opening the record.
+    assert row["due_on"] is not None
+    assert row["days_until_due"] == 60
+    assert row["transfer_kind"] == "proposed"
+    assert row["responsible_membership_id"] == owner_id
+    assert row["reason"] == "Please cover this while I am in hearings."
+
+    # It is not anybody else's decision to make.
+    assert client.get(
+        "/api/ip/deadline-coverages/awaiting-me", headers=owner_headers
+    ).json()["transfers"] == []
+
+    # Once decided it is no longer outstanding.
+    client.post(
+        f"/api/ip/deadline-coverages/{coverage['id']}/replacement-decision",
+        headers=successor_headers,
+        json={"decision": "accepted", "reason": "Taking it on."},
+    )
+    settled = client.get("/api/ip/deadline-coverages/awaiting-me", headers=successor_headers)
+    assert settled.json()["transfers"] == []
+
+
+def test_uj57_recon06_an_immediate_transfer_is_labelled_as_already_held(
+    client: TestClient,
+) -> None:
+    """The two kinds carry different consequences, so they are distinguished.
+
+    A proposal asks "will you take this?". An immediate transfer says "you hold
+    this already — confirm, or it escalates." Presenting them identically would
+    mislead the reader about what declining does.
+    """
+
+    (
+        owner_headers,
+        owner_id,
+        successor_id,
+        successor_headers,
+        escalation_id,
+        matter,
+    ) = _setup(client)
+    _docket_with_coverage(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Recon Held Mark",
+        responsible=owner_id,
+    )
+    moved = client.post(
+        "/api/ip/deadline-coverages/bulk-reassign",
+        headers=owner_headers,
+        json={
+            "from_membership_id": owner_id,
+            "to_membership_id": successor_id,
+            "reason": "Departure cover.",
+            "transfer_mode": "immediate",
+            "escalation_membership_id": escalation_id,
+        },
+    )
+    assert moved.status_code == 200, moved.text
+
+    transfers = client.get(
+        "/api/ip/deadline-coverages/awaiting-me", headers=successor_headers
+    ).json()["transfers"]
+    assert len(transfers) == 1
+    assert transfers[0]["transfer_kind"] == "immediate"
+    assert transfers[0]["responsible_membership_id"] == successor_id
+    assert transfers[0]["escalation_membership_id"] == escalation_id
+
+
+def test_uj57_recon07_a_withdrawn_grant_removes_the_transfer_from_view(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-57-RECON-07 — access is re-checked when the list is read.
+
+    The propose path refuses a replacement who cannot open the record, but a
+    grant can be withdrawn afterwards. A pending decision must not become a
+    standing disclosure of a record the reader may no longer see.
+    """
+
+    from caseops_api.db.models import IpDocketRecord
+    from caseops_api.db.session import get_session_factory
+
+    owner_headers, owner_id, successor_id, successor_headers, _esc, matter = _setup(client)
+    docket_id, coverage = _docket_with_coverage(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Recon Withdrawn Mark",
+        responsible=owner_id,
+    )
+    client.post(
+        f"/api/ip/dockets/{docket_id}/deadline-coverages/{coverage['id']}/reassign",
+        headers=owner_headers,
+        json={
+            "expected_responsible_membership_id": owner_id,
+            "responsible_membership_id": successor_id,
+            "reason": "Offered before the wall went up.",
+        },
+    )
+    assert len(
+        client.get("/api/ip/deadline-coverages/awaiting-me", headers=successor_headers).json()[
+            "transfers"
+        ]
+    ) == 1
+
+    factory = get_session_factory()
+    with factory() as session:
+        docket = session.get(IpDocketRecord, docket_id)
+        assert docket is not None
+        docket.restricted = True
+        session.commit()
+
+    hidden = client.get("/api/ip/deadline-coverages/awaiting-me", headers=successor_headers)
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["transfers"] == []
+    # The record's title is not disclosed by the refusal either.
+    assert "Recon Withdrawn Mark" not in hidden.text
+
+
+def test_uj57_recon08_accepting_needs_no_prose_but_declining_does(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-57-RECON-08 — the audit trail should not fill up with "ok".
+
+    Accepting is self-evidencing: who acted and when is already recorded.
+    Declining sends work back or escalates it, so it must be explained. The
+    acceptance must also not erase why the transfer was asked for.
+    """
+
+    owner_headers, owner_id, successor_id, successor_headers, _esc, matter = _setup(client)
+    docket_id, coverage = _docket_with_coverage(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Recon Reason Mark",
+        responsible=owner_id,
+    )
+    client.post(
+        f"/api/ip/dockets/{docket_id}/deadline-coverages/{coverage['id']}/reassign",
+        headers=owner_headers,
+        json={
+            "expected_responsible_membership_id": owner_id,
+            "responsible_membership_id": successor_id,
+            "reason": "Covering the Delhi hearing block.",
+        },
+    )
+
+    refused = client.post(
+        f"/api/ip/deadline-coverages/{coverage['id']}/replacement-decision",
+        headers=successor_headers,
+        json={"decision": "rejected"},
+    )
+    assert refused.status_code == 422, refused.text
+
+    accepted = client.post(
+        f"/api/ip/deadline-coverages/{coverage['id']}/replacement-decision",
+        headers=successor_headers,
+        json={"decision": "accepted"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    row = accepted.json()["deadline_coverages"][0]
+    assert row["responsible_membership_id"] == successor_id
+    # Why the transfer was asked for survives an acceptance given without a note.
+    assert row["replacement_decision_reason"] == "Covering the Delhi hearing block."
