@@ -9,8 +9,10 @@ report a missing input as unavailable rather than omitting it.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
+from caseops_api.core.settings import get_settings
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -20,6 +22,24 @@ from tests.test_ip_deadline_workflow import (
     _responsibilities,
     _rule_payload,
 )
+
+
+@pytest.fixture(autouse=True)
+def _enable_rule_governance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests propose and activate deadline rules.
+
+    IPLF-027B's A0 rollout drain made rule-governance mutations default-off, so
+    the endpoints answer 503 ``ip_rule_governance_quiesced`` unless a caller
+    opts in. These tests exercise the governance workflow itself, so they state
+    the enabled precondition explicitly rather than relying on a default.
+
+    This mirrors the fixture in ``test_ip_deadline_workflow.py``. An autouse
+    fixture does not travel with an imported helper, which is why importing
+    that module's helpers was not enough.
+    """
+
+    monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "true")
+    get_settings.cache_clear()
 
 
 def _setup(client: TestClient):
