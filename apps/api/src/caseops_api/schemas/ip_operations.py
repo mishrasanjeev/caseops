@@ -460,3 +460,40 @@ class IpControlReviewRecord(BaseModel):
     signed_off_at: datetime | None = None
     version: int
     report: IpDocketControlReport
+
+
+class IpDailyDocketQueue(BaseModel):
+    """Workload and capacity for one responsible member (CAL-OPS-09)."""
+
+    membership_id: str
+    label: str
+    active: bool
+    capacity_state: Literal["available", "unavailable"]
+    assigned_count: int | None = None
+    critical_count: int | None = None
+    unacknowledged_count: int | None = None
+
+
+class IpDailyDocketEscalation(BaseModel):
+    """A critical item that must not be lost (CAL-OPS-13)."""
+
+    coverage_id: str
+    docket_id: str
+    reason: Literal["owner_inactive", "unacknowledged_critical", "unowned"]
+    critical: bool
+    escalate_to_membership_id: str | None = None
+
+
+class IpDailyDocketResponse(BaseModel):
+    """The daily docket a manager triages.
+
+    When a source is stale the affected counts are ``null`` rather than ``0``:
+    unknown work must never render as no work (UJ-50-EXC-03).
+    """
+
+    generated_at: datetime
+    filters: dict[str, Any] = Field(default_factory=dict)
+    stale_sources: list[str] = Field(default_factory=list)
+    counts_are_complete: bool = True
+    queues: list[IpDailyDocketQueue] = Field(default_factory=list)
+    escalations: list[IpDailyDocketEscalation] = Field(default_factory=list)

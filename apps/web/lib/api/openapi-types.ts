@@ -3879,6 +3879,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/daily-docket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Daily Docket */
+        get: operations["get_ip_daily_docket_api_ip_daily_docket_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadline-coverages/bulk-reassign": {
         parameters: {
             query?: never;
@@ -18271,6 +18288,77 @@ export interface components {
             reassigned_count: number;
             /** Responsible Count */
             responsible_count: number;
+        };
+        /**
+         * IpDailyDocketEscalation
+         * @description A critical item that must not be lost (CAL-OPS-13).
+         */
+        IpDailyDocketEscalation: {
+            /** Coverage Id */
+            coverage_id: string;
+            /** Critical */
+            critical: boolean;
+            /** Docket Id */
+            docket_id: string;
+            /** Escalate To Membership Id */
+            escalate_to_membership_id?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "owner_inactive" | "unacknowledged_critical" | "unowned";
+        };
+        /**
+         * IpDailyDocketQueue
+         * @description Workload and capacity for one responsible member (CAL-OPS-09).
+         */
+        IpDailyDocketQueue: {
+            /** Active */
+            active: boolean;
+            /** Assigned Count */
+            assigned_count?: number | null;
+            /**
+             * Capacity State
+             * @enum {string}
+             */
+            capacity_state: "available" | "unavailable";
+            /** Critical Count */
+            critical_count?: number | null;
+            /** Label */
+            label: string;
+            /** Membership Id */
+            membership_id: string;
+            /** Unacknowledged Count */
+            unacknowledged_count?: number | null;
+        };
+        /**
+         * IpDailyDocketResponse
+         * @description The daily docket a manager triages.
+         *
+         *     When a source is stale the affected counts are ``null`` rather than ``0``:
+         *     unknown work must never render as no work (UJ-50-EXC-03).
+         */
+        IpDailyDocketResponse: {
+            /**
+             * Counts Are Complete
+             * @default true
+             */
+            counts_are_complete: boolean;
+            /** Escalations */
+            escalations?: components["schemas"]["IpDailyDocketEscalation"][];
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Queues */
+            queues?: components["schemas"]["IpDailyDocketQueue"][];
+            /** Stale Sources */
+            stale_sources?: string[];
         };
         /** IpDeadlineCalculationRequest */
         IpDeadlineCalculationRequest: {
@@ -39389,6 +39477,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_daily_docket_api_ip_daily_docket_get: {
+        parameters: {
+            query?: {
+                stale_source?: string[] | null;
+                team?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDailyDocketResponse"];
                 };
             };
             /** @description Validation Error */

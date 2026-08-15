@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.db.models import (
     CalendarConnectionStatus,
@@ -20,6 +20,7 @@ from caseops_api.db.models import (
     CompanyNoticeMatterLink,
     DriveFileCandidate,
     IpCostItem,
+    IpDeadline,
     IpDeadlineCoverage,
     IpDeadlineIncident,
     IpDocketControlReview,
@@ -48,6 +49,9 @@ from caseops_api.schemas.ip_operations import (
     IpCostReconciliationRow,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
+    IpDailyDocketEscalation,
+    IpDailyDocketQueue,
+    IpDailyDocketResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
     IpDeadlineCoverageRecord,
@@ -1899,3 +1903,130 @@ def sign_off_ip_control_review(
     session.commit()
     session.refresh(row)
     return _review_record(row, ip_docket_control_report(session, context=context))
+
+
+def ip_daily_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    filters: dict | None = None,
+    stale_sources: list[str] | None = None,
+) -> IpDailyDocketResponse:
+    """The daily docket a docketing manager triages (UJ-50).
+
+    Read-derived from the access-filtered docket listing, so restricted work
+    contributes neither a queue entry nor a count (UJ-50-EXC-01).
+
+    Three rules carry the journey's acceptance — that a manager can identify
+    every critical item without side spreadsheets or hidden logs:
+
+    * an inactive owner escalates to the named backup, or is reported ``unowned``
+      when there is none (UJ-50-EXC-02);
+    * an unacknowledged critical item escalates rather than sitting quietly
+      (UJ-50-EXC-04);
+    * when a source is stale the affected counts are ``None``, never ``0``, so
+      unknown work is never rendered as no work (UJ-50-EXC-03).
+    """
+
+    stale = sorted({s.strip() for s in (stale_sources or []) if s.strip()})
+    counts_complete = not stale
+    listing = list_ip_dockets(session, context=context)
+
+    memberships = {
+        row.id: row
+        for row in session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(CompanyMembership.company_id == context.company.id)
+        ).all()
+    }
+
+    # Criticality lives on the legal deadline, joined through the operational
+    # deadline the coverage projects to.
+    critical_matter_deadline_ids = {
+        row
+        for row in session.scalars(
+            select(IpDeadline.matter_deadline_id).where(
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.is_critical.is_(True),
+                IpDeadline.matter_deadline_id.is_not(None),
+            )
+        ).all()
+        if row
+    }
+
+    assigned: dict[str, int] = {}
+    critical: dict[str, int] = {}
+    unacknowledged: dict[str, int] = {}
+    escalations: list[IpDailyDocketEscalation] = []
+
+    for docket in listing.dockets:
+        for coverage in docket.deadline_coverages:
+            owner_id = coverage.responsible_membership_id
+            is_critical = coverage.matter_deadline_id in critical_matter_deadline_ids
+            assigned[owner_id] = assigned.get(owner_id, 0) + 1
+            if is_critical:
+                critical[owner_id] = critical.get(owner_id, 0) + 1
+
+            owner = memberships.get(owner_id)
+            owner_active = bool(owner and owner.is_active and owner.user.is_active)
+            acknowledged = coverage.coverage_status == "accepted" and coverage.accepted_at
+
+            if not acknowledged:
+                unacknowledged[owner_id] = unacknowledged.get(owner_id, 0) + 1
+
+            if not owner_active:
+                backup = memberships.get(coverage.backup_membership_id or "")
+                backup_ok = bool(backup and backup.is_active and backup.user.is_active)
+                escalations.append(
+                    IpDailyDocketEscalation(
+                        coverage_id=coverage.id,
+                        docket_id=docket.id,
+                        reason="owner_inactive" if backup_ok else "unowned",
+                        critical=is_critical,
+                        escalate_to_membership_id=backup.id if backup_ok else None,
+                    )
+                )
+            elif is_critical and not acknowledged:
+                backup = memberships.get(coverage.backup_membership_id or "")
+                backup_ok = bool(backup and backup.is_active and backup.user.is_active)
+                escalations.append(
+                    IpDailyDocketEscalation(
+                        coverage_id=coverage.id,
+                        docket_id=docket.id,
+                        reason="unacknowledged_critical",
+                        critical=True,
+                        escalate_to_membership_id=backup.id if backup_ok else None,
+                    )
+                )
+
+    queues: list[IpDailyDocketQueue] = []
+    for membership_id in sorted(assigned):
+        member = memberships.get(membership_id)
+        active = bool(member and member.is_active and member.user.is_active)
+        queues.append(
+            IpDailyDocketQueue(
+                membership_id=membership_id,
+                label=(
+                    (member.user.full_name or member.user.email) if member else membership_id
+                ),
+                active=active,
+                capacity_state="available" if active else "unavailable",
+                # Unknown work must not render as no work.
+                assigned_count=assigned[membership_id] if counts_complete else None,
+                critical_count=critical.get(membership_id, 0) if counts_complete else None,
+                unacknowledged_count=(
+                    unacknowledged.get(membership_id, 0) if counts_complete else None
+                ),
+            )
+        )
+
+    escalations.sort(key=lambda item: (not item.critical, item.reason, item.coverage_id))
+    return IpDailyDocketResponse(
+        generated_at=_now(),
+        filters=dict(filters or {}),
+        stale_sources=stale,
+        counts_are_complete=counts_complete,
+        queues=queues,
+        escalations=escalations,
+    )

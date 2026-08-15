@@ -9903,10 +9903,7 @@
         "apps/api/tests/test_legalworkspace_offboarding.py::test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sessions",
         "tests/e2e/ram-2026-08-01-bugs.spec.ts",
         "apps/api/tests/test_ip_control_review_signoff.py",
-        "planned:IPLF-UJ-50-NORMAL",
-        "planned:IPLF-UJ-50-EXC-02",
-        "planned:IPLF-UJ-50-EXC-03",
-        "planned:IPLF-UJ-50-EXC-04",
+        "apps/api/tests/test_ip_daily_docket.py",
         "planned:IPLF-UJ-57-NORMAL",
         "planned:IPLF-UJ-57-EXC-03",
         "planned:IPLF-UJ-57-EXC-04",
@@ -9928,18 +9925,18 @@
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "Rebuild increment 1 delivers the signed-off control review only. UJ-50 saved team queues, capacity indicators, absent-user backup policy and re-escalation are unbuilt; UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry and original-actor attribution are unbuilt; and UJ-62 external calendar projection remains a bare pointer with no times, retry, revocation handling, redaction or date-only rule.",
+          "summary": "Rebuild increments 1 and 2 deliver the signed-off control review and the daily docket. UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry and original-actor attribution are unbuilt; UJ-62 external calendar projection remains a bare pointer with no times, retry, revocation handling, redaction or date-only rule; and CAL-OPS-09's saved team queues and bulk acknowledgement are not built.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
           "evidence_needed": "Increments 2 and 3 covering UJ-50 and UJ-57, and a UJ-62 projection that carries times together with the date-only rule, each with per-path tests.",
           "safe_fallback": "The control review is additive and read-derived; the unbuilt areas keep their existing behaviour and the latent calendar gap is pinned by test_ip_latent_exposure_guards.py.",
           "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "IPLF-039C rebuild increment 2: UJ-50 daily docket queues, capacity and escalation."
+          "next_independent_slice": "IPLF-039C rebuild increment 3: UJ-57 reassignment workflow."
         }
       ],
       "next_actions": [
-        "Increment 2: UJ-50 saved team queues, workload/capacity indicators, absent-user backup policy and re-escalation of unacknowledged critical items.",
         "Increment 3: UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry, and original-actor attribution.",
-        "Increment 4: UJ-62 external calendar projection carrying stable external ids and times, with the date-only timezone rule implemented at the same moment."
+        "Increment 4: UJ-62 external calendar projection carrying stable external ids and times, with the date-only timezone rule implemented at the same moment.",
+        "Add saved team queues and bulk acknowledgement to complete the CAL-OPS-09 daily-docket half."
       ],
       "data_impact": [],
       "documentation_impact": [],
@@ -58639,10 +58636,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-50-NORMAL"
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_normal_triage_daily_docket_and_workload#IPLF-UJ-50-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -58748,7 +58746,7 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts#IPLF-UJ-50-EXC-01"
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc01_restricted_work_contributes_no_leaked_counts#IPLF-UJ-50-EXC-01"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
@@ -58858,10 +58856,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-50-EXC-02"
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc02_absent_or_disabled_owner_triggers_backup_policy#IPLF-UJ-50-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -58967,10 +58966,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-50-EXC-03"
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc03_stale_provider_data_is_not_shown_as_no_work#IPLF-UJ-50-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -59076,10 +59076,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-50-EXC-04"
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc04_unacknowledged_critical_item_re_escalates#IPLF-UJ-50-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",

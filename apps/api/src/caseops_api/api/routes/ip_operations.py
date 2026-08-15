@@ -99,6 +99,7 @@ from caseops_api.schemas.ip_operations import (
     IpCostReconciliationReport,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
+    IpDailyDocketResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
     IpDeadlineIncidentCreateRequest,
@@ -234,6 +235,7 @@ from caseops_api.services.ip_operations import (
     discover_ip_evidence_candidates,
     get_ip_control_review,
     get_ip_docket,
+    ip_daily_docket,
     ip_docket_control_report,
     list_ip_dockets,
     reassign_ip_deadline_coverage,
@@ -1220,6 +1222,21 @@ async def get_ip_portfolio_families(
     )
     return list_ip_portfolio_families(
         session, context=context, grouping=grouping, filters=filters
+    )
+
+
+@router.get("/daily-docket", response_model=IpDailyDocketResponse)
+async def get_ip_daily_docket(
+    context: IpViewer,
+    session: DbSession,
+    team: Annotated[str | None, Query(max_length=120)] = None,
+    stale_source: Annotated[list[str] | None, Query()] = None,
+) -> IpDailyDocketResponse:
+    return ip_daily_docket(
+        session,
+        context=context,
+        filters={"team": team} if team else {},
+        stale_sources=stale_source or [],
     )
 
 

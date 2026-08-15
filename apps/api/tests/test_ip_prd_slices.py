@@ -390,6 +390,12 @@ def test_ip_remaining_operations_end_to_end(
     )
     assert coverage.status_code == 200, coverage.text
     coverage_row = coverage.json()["deadline_coverages"][0]
+    before_bulk = {
+        row["id"]: row
+        for row in client.get(f"/api/ip/dockets/{docket_id}", headers=headers).json()[
+            "deadline_coverages"
+        ]
+    }
     bulk = client.post(
         "/api/ip/deadline-coverages/bulk-reassign",
         headers=headers,
@@ -400,18 +406,28 @@ def test_ip_remaining_operations_end_to_end(
             "expected_versions": {coverage_row["id"]: coverage_row["reassignment_version"]},
         },
     )
-    assert bulk.status_code == 200, bulk.text
-    assert bulk.json() == {
-        "reassigned_count": 1,
-        "responsible_count": 1,
-        "backup_count": 0,
-        "coverage_ids": [coverage_row["id"]],
-    }
+    # UJ-57-EXC-01/02 (2026-08-15): this docket is `restricted: True` and the
+    # replacement was inserted with no access grant, so the transfer is now
+    # refused. This assertion previously expected 200, which encoded the defect
+    # that bulk reassignment could hand a restricted record to a walled-off
+    # member. The success path is covered by
+    # `test_ip_coverage_reassignment_access.py::
+    # test_uj57_bulk_transfer_succeeds_when_the_replacement_has_access`.
+    assert bulk.status_code == 409, bulk.text
+    assert bulk.json()["code"] == "ip_coverage_replacement_lacks_access"
+    assert bulk.json()["blocked_docket_ids"] == [docket_id]
+
+    # Fail closed: the original owner still holds the coverage.
     refreshed_docket = client.get(f"/api/ip/dockets/{docket_id}", headers=headers)
     assert refreshed_docket.status_code == 200
-    refreshed_coverage = refreshed_docket.json()["deadline_coverages"][0]
-    assert refreshed_coverage["responsible_membership_id"] == replacement_id
-    assert refreshed_coverage["backup_membership_id"] is None
+    after_bulk = {
+        row["id"]: row for row in refreshed_docket.json()["deadline_coverages"]
+    }
+    # Nothing moved: every coverage row is exactly as it was before the refusal.
+    assert after_bulk == before_bulk
+    assert all(
+        row["responsible_membership_id"] != replacement_id for row in after_bulk.values()
+    )
 
     shared_hash = "a" * 64
     with get_session_factory()() as session:
@@ -561,8 +577,18 @@ def test_ip_remaining_operations_end_to_end(
     with get_session_factory()() as session:
         persisted_coverage = session.get(IpDeadlineCoverage, coverage_row["id"])
         assert persisted_coverage is not None
-        assert persisted_coverage.responsible_membership_id == replacement_id
-        assert persisted_coverage.reassignment_version == 2
+        # UJ-57-EXC-01/02 (2026-08-15): the bulk transfer above was refused
+        # because this docket is restricted and the replacement holds no grant,
+        # so the coverage is durably unchanged in the database too.
+        assert persisted_coverage.responsible_membership_id != replacement_id
+        assert (
+            persisted_coverage.responsible_membership_id
+            == before_bulk[coverage_row["id"]]["responsible_membership_id"]
+        )
+        assert (
+            persisted_coverage.reassignment_version
+            == before_bulk[coverage_row["id"]]["reassignment_version"]
+        )
 
 
 def test_matter_disposal_archives_ip_docket_without_reopening_resurrection(
