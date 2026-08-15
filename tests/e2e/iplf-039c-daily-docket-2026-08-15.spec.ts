@@ -9,6 +9,8 @@
  *    and its bytes are read back and checked.
  *  * acknowledging in the UI actually moves the manager's count, across two
  *    independent API reads rather than one component's local state.
+ *  * a mandatory exception blocks sign-off, while an independently generated
+ *    clean review can be signed and carries its signature.
  *
  * Stable manifest test IDs:
  *
@@ -95,26 +97,11 @@ async function bootstrap(api: APIRequestContext) {
   return { ...body, slug, email };
 }
 
-async function signIn(page: Page, slug: string, email: string): Promise<void> {
-  await page.goto("/sign-in");
-  await page.locator("#company-slug").fill(slug);
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(PASSWORD);
-  await page.getByRole("button", { name: /^Sign in$/ }).click();
-  await page.waitForURL(/\/app(?:[/?]|$)/);
-}
-
-test("IPLF-039C acknowledges, exports and signs off the daily docket", async ({ page }) => {
-  test.setTimeout(180_000);
-  // Exercise the complete grouped-control surface at a phone width.  A DOM
-  // assertion alone cannot prove that the action buttons remain visible or
-  // that the nested grids shrink instead of widening the page.
-  await page.setViewportSize({ width: 375, height: 812 });
-  const api = await request.newContext();
-  const tenant = await bootstrap(api);
-  const ownerHeaders = { Authorization: `Bearer ${tenant.access_token as string}` };
-  const suffix = Date.now();
-
+async function enableIpWorkspace(
+  api: APIRequestContext,
+  tenant: { access_token: string; membership: { id: string } },
+): Promise<{ Authorization: string }> {
+  const ownerHeaders = { Authorization: `Bearer ${tenant.access_token}` };
   const configured = await api.put(`${apiBaseUrl}/api/ip/workspace/configuration`, {
     headers: ownerHeaders,
     data: {
@@ -145,6 +132,30 @@ test("IPLF-039C acknowledges, exports and signs off the daily docket", async ({ 
     },
   });
   expect(enabled.status(), await enabled.text()).toBe(200);
+  return ownerHeaders;
+}
+
+async function signIn(page: Page, slug: string, email: string): Promise<void> {
+  await page.goto("/sign-in");
+  await page.locator("#company-slug").fill(slug);
+  await page.locator("#email").fill(email);
+  await page.locator("#password").fill(PASSWORD);
+  await page.getByRole("button", { name: /^Sign in$/ }).click();
+  await page.waitForURL(/\/app(?:[/?]|$)/);
+}
+
+test("IPLF-039C acknowledges and exports, but cannot sign an exception-bearing docket", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  // Exercise the complete grouped-control surface at a phone width.  A DOM
+  // assertion alone cannot prove that the action buttons remain visible or
+  // that the nested grids shrink instead of widening the page.
+  await page.setViewportSize({ width: 375, height: 812 });
+  const api = await request.newContext();
+  const tenant = await bootstrap(api);
+  const ownerHeaders = await enableIpWorkspace(api, tenant);
+  const suffix = Date.now();
 
   const matter = await api.post(`${apiBaseUrl}/api/matters/`, {
     headers: ownerHeaders,
@@ -266,10 +277,40 @@ test("IPLF-039C acknowledges, exports and signs off the daily docket", async ({ 
   // A printout must not disclose what the firm is working on.
   expect(manifest).not.toContain("DOCKETCONTROL");
 
-  // IPLF-CAL-OPS-13-E2E-01 — the review is signed and carries its signature.
-  await review.getByLabel("What are you attesting to?").fill(
-    "Reviewed every exception on today's docket.",
+  // Acknowledgment does not erase the separate projection exception. The
+  // generated artefact must remain visibly fail-closed.
+  await expect(review.getByTestId("ip-docket-review-exceptions")).toContainText(
+    "Not projected to a calendar",
   );
+  await expect(review.getByTestId("ip-docket-review-blocked")).toHaveText(
+    "Resolve every mandatory exception and generate a clean review before signing.",
+  );
+  await expect(review.getByLabel("What are you attesting to?")).toHaveCount(0);
+  await expect(review.getByRole("button", { name: "Sign off" })).toHaveCount(0);
+});
+
+test("IPLF-039C signs off an independently generated clean daily docket review", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 375, height: 812 });
+  const api = await request.newContext();
+  const tenant = await bootstrap(api);
+  await enableIpWorkspace(api, tenant);
+
+  await signIn(page, tenant.slug as string, tenant.email as string);
+  await page.goto("/app/ip/docket");
+
+  const review = page.getByTestId("ip-docket-control-review");
+  await review.getByRole("button", { name: "Generate control review" }).click();
+  await expect(review.getByText("Manifest SHA-256")).toBeVisible();
+  await expect(review.getByTestId("ip-docket-review-exceptions")).toHaveCount(0);
+  await expect(review.getByTestId("ip-docket-review-blocked")).toHaveCount(0);
+
+  // IPLF-CAL-OPS-13-E2E-01 — the clean review is signed and carries its signature.
+  await review
+    .getByLabel("What are you attesting to?")
+    .fill("Reviewed today's clean daily docket.");
   await review.getByRole("button", { name: "Sign off" }).click();
   await expect(review.getByTestId("ip-docket-review-signed")).toContainText("Daily Docket Owner");
   // A signed review cannot be re-exported, so the control is gone.
