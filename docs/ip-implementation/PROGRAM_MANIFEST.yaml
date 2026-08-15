@@ -9887,57 +9887,70 @@
       ],
       "dependencies": [],
       "implementation_refs": [
-        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/alembic/versions/20260815_0001_ip_docket_control_reviews.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
         "apps/api/src/caseops_api/services/employees.py",
-        "apps/web/app/app/ip/page.tsx"
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/openapi-types.ts",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prd_slices.py",
         "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
         "apps/api/tests/test_legalworkspace_offboarding.py::test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sessions",
-        "planned:IPLF-UJ-50-EXC-01",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
+        "apps/api/tests/test_ip_control_review_signoff.py",
+        "planned:IPLF-UJ-50-NORMAL",
         "planned:IPLF-UJ-50-EXC-02",
         "planned:IPLF-UJ-50-EXC-03",
         "planned:IPLF-UJ-50-EXC-04",
-        "planned:IPLF-UJ-50-NORMAL",
-        "planned:IPLF-UJ-57-EXC-01",
-        "planned:IPLF-UJ-57-EXC-02",
+        "planned:IPLF-UJ-57-NORMAL",
         "planned:IPLF-UJ-57-EXC-03",
         "planned:IPLF-UJ-57-EXC-04",
         "planned:IPLF-UJ-57-EXC-05",
         "planned:IPLF-UJ-57-EXC-06",
-        "planned:IPLF-UJ-57-NORMAL",
-        "planned:IPLF-UJ-59-EXC-01",
-        "planned:IPLF-UJ-59-EXC-02",
-        "planned:IPLF-UJ-59-EXC-03",
-        "planned:IPLF-UJ-59-NORMAL",
+        "planned:IPLF-UJ-62-NORMAL",
         "planned:IPLF-UJ-62-EXC-01",
         "planned:IPLF-UJ-62-EXC-02",
         "planned:IPLF-UJ-62-EXC-03",
         "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+        "planned:IPLF-UJ-62-EXC-05"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039BC-INSPECTION-2026-08-15.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039BC-INSPECTION-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-039C-REBUILD-INCOMPLETE",
+          "summary": "Rebuild increment 1 delivers the signed-off control review only. UJ-50 saved team queues, capacity indicators, absent-user backup policy and re-escalation are unbuilt; UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry and original-actor attribution are unbuilt; and UJ-62 external calendar projection remains a bare pointer with no times, retry, revocation handling, redaction or date-only rule.",
+          "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
+          "evidence_needed": "Increments 2 and 3 covering UJ-50 and UJ-57, and a UJ-62 projection that carries times together with the date-only rule, each with per-path tests.",
+          "safe_fallback": "The control review is additive and read-derived; the unbuilt areas keep their existing behaviour and the latent calendar gap is pinned by test_ip_latent_exposure_guards.py.",
+          "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
+          "next_independent_slice": "IPLF-039C rebuild increment 2: UJ-50 daily docket queues, capacity and escalation."
+        }
+      ],
       "next_actions": [
-        "Inspection audit 2026-08-15: about 18 of 22 owned paths need implementation before a per-path test is possible. Confirm the low-confidence verdicts, then build the missing behaviour."
+        "Increment 2: UJ-50 saved team queues, workload/capacity indicators, absent-user backup policy and re-escalation of unacknowledged critical items.",
+        "Increment 3: UJ-57 assignee rejection, preview-token concurrency, emergency coverage with expiry, and original-actor attribution.",
+        "Increment 4: UJ-62 external calendar projection carrying stable external ids and times, with the date-only timezone rule implemented at the same moment."
       ],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "implemented",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039C",
       "primary_behavior": "Activate the M2 working-calendar/responsibility foundation through coverage acceptance, leave/deactivation reassignment, external calendar projection and reproducible daily docket control report; do not rebuild the records in M3.",
-      "migration_boundary": "No schema change unless named by release evidence; preserve the PRD expand/backfill/verify/switch contract.",
+      "migration_boundary": "Additive expand 20260815_0001 adding ip_docket_control_reviews with bounded PostgreSQL lock_timeout; empty rollback; no backfill.",
       "release_boundary": "Independent exact-commit CI and dated deployed acceptance.",
       "evidence_metadata": [
         {
@@ -58735,10 +58748,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-50-EXC-01"
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts#IPLF-UJ-50-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64515,10 +64529,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-59-NORMAL"
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_normal_produce_and_sign_off_a_control_review#IPLF-UJ-59-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64635,10 +64650,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-59-EXC-01"
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off#IPLF-UJ-59-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64755,10 +64771,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-59-EXC-02"
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts#IPLF-UJ-59-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64875,10 +64892,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-59-EXC-03"
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc03_export_failure_does_not_mark_review_complete#IPLF-UJ-59-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",

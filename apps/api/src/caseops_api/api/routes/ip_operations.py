@@ -91,6 +91,10 @@ from caseops_api.schemas.ip_lifecycle import (
     IpProsecutionWorkspaceResponse,
 )
 from caseops_api.schemas.ip_operations import (
+    IpControlReviewCreateRequest,
+    IpControlReviewExportRequest,
+    IpControlReviewRecord,
+    IpControlReviewSignOffRequest,
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
     IpCoverageBulkReassignRequest,
@@ -225,14 +229,18 @@ from caseops_api.services.ip_operations import (
     append_ip_docket_version,
     bulk_reassign_ip_deadline_coverages,
     complete_ip_related_right_obligation,
+    create_ip_control_review,
     create_ip_docket,
     discover_ip_evidence_candidates,
+    get_ip_control_review,
     get_ip_docket,
     ip_docket_control_report,
     list_ip_dockets,
     reassign_ip_deadline_coverage,
     reconcile_ip_cost_items,
+    record_ip_control_review_export,
     review_ip_evidence_candidate,
+    sign_off_ip_control_review,
     verify_ip_deadline_incident,
 )
 from caseops_api.services.ip_portfolio import (
@@ -1212,6 +1220,52 @@ async def get_ip_portfolio_families(
     )
     return list_ip_portfolio_families(
         session, context=context, grouping=grouping, filters=filters
+    )
+
+
+@router.post(
+    "/control-reviews",
+    response_model=IpControlReviewRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_control_review(
+    payload: IpControlReviewCreateRequest,
+    context: IpViewer,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return create_ip_control_review(session, context=context, payload=payload)
+
+
+@router.get("/control-reviews/{review_id}", response_model=IpControlReviewRecord)
+async def get_ip_control_review_detail(
+    review_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return get_ip_control_review(session, context=context, review_id=review_id)
+
+
+@router.post("/control-reviews/{review_id}/export", response_model=IpControlReviewRecord)
+async def post_ip_control_review_export(
+    review_id: str,
+    payload: IpControlReviewExportRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return record_ip_control_review_export(
+        session, context=context, review_id=review_id, payload=payload
+    )
+
+
+@router.post("/control-reviews/{review_id}/sign-off", response_model=IpControlReviewRecord)
+async def post_ip_control_review_sign_off(
+    review_id: str,
+    payload: IpControlReviewSignOffRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return sign_off_ip_control_review(
+        session, context=context, review_id=review_id, payload=payload
     )
 
 

@@ -9522,6 +9522,105 @@
       }
     },
     {
+      "id": "ip_docket_control_reviews",
+      "table_name": "ip_docket_control_reviews",
+      "purpose": "Repository SQL persistence class `ip_docket_control_reviews`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "completeness_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "export_error_redacted": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "export_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "filters_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "freshness_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "generated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "incompleteness_reasons_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "mandatory_exception_ids_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "manifest_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "signed_off_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "signed_off_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "signer_label_snapshot": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_docket_events",
       "table_name": "ip_docket_events",
       "purpose": "Repository SQL persistence class `ip_docket_events`; its exact column inventory is intentionally versioned below.",
@@ -22567,12 +22666,12 @@
       }
     }
   ],
-  "schema_fingerprint": "1fca05f0cb74bdc049bd0e8d1bf98fcb1b6f3daaa5b8d7060a6e523ebacc05e5",
+  "schema_fingerprint": "684eb6732f98be9b1597f7f5a4d31e4b20435370b14dcd2fd97921df160b59f2",
   "index_inventory": {
-    "orm_index_count": 1135,
-    "orm_index_fingerprint": "d8529538ce9ff84bcdb918687e255be5b1dd4bc409bfd142d071c74a98db0cfb",
-    "migration_index_count": 494,
-    "migration_index_fingerprint": "058d226320d12a3972020293b14ba91917dba2744e016c34a56723e0147cffae",
+    "orm_index_count": 1139,
+    "orm_index_fingerprint": "cc2ed74161f5abb1a7bacf46de341bffc1624f146d78caa0dfd6a3c18e8a93ca",
+    "migration_index_count": 498,
+    "migration_index_fingerprint": "a19362dfe1ce0b0d5c3772142c109a9d9c7e743be22ae4be3eff6e40afcd767b",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

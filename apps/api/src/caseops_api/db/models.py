@@ -16316,3 +16316,71 @@ class IpImportRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class IpDocketControlReview(Base):
+    """A daily docket control report that can be signed off (CAL-OPS-09).
+
+    The report itself is a projection. This row is the durable review evidence:
+    what filters produced it, how fresh its sources were, which mandatory
+    exceptions it carried, and who signed it off. Check constraints refuse a
+    sign-off on an incomplete or export-failed review so the database enforces
+    the same rule as the service.
+    """
+
+    __tablename__ = "ip_docket_control_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "completeness_status IN ('complete', 'incomplete')",
+            name="ck_ip_control_review_completeness",
+        ),
+        CheckConstraint(
+            "export_status IN ('not_requested', 'generated', 'failed')",
+            name="ck_ip_control_review_export_status",
+        ),
+        CheckConstraint(
+            "signed_off_at IS NULL OR "
+            "(completeness_status = 'complete' AND export_status <> 'failed')",
+            name="ck_ip_control_review_signoff_requires_clean",
+        ),
+        CheckConstraint(
+            "signed_off_at IS NULL OR signed_off_by_membership_id IS NOT NULL",
+            name="ck_ip_control_review_signoff_has_signer",
+        ),
+        Index("ix_ip_docket_control_reviews_company_generated", "company_id", "generated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    filters_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    freshness_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    completeness_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="complete"
+    )
+    incompleteness_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    mandatory_exception_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    export_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="not_requested"
+    )
+    export_error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signed_off_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    signer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signed_off_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )

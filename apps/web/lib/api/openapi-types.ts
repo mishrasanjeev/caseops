@@ -3811,6 +3811,74 @@ export interface paths {
         patch: operations["patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch"];
         trace?: never;
     };
+    "/api/ip/control-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review */
+        post: operations["post_ip_control_review_api_ip_control_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Control Review Detail */
+        get: operations["get_ip_control_review_detail_api_ip_control_reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review Export */
+        post: operations["post_ip_control_review_export_api_ip_control_reviews__review_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}/sign-off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review Sign Off */
+        post: operations["post_ip_control_review_sign_off_api_ip_control_reviews__review_id__sign_off_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadline-coverages/bulk-reassign": {
         parameters: {
             query?: never;
@@ -17977,6 +18045,92 @@ export interface components {
             };
             /** Rule Version Id */
             rule_version_id: string;
+        };
+        /**
+         * IpControlExceptionRecord
+         * @description A critical exception that a filter or dismissal cannot hide (CAL-OPS-13).
+         */
+        IpControlExceptionRecord: {
+            /**
+             * Critical
+             * @default true
+             */
+            critical: boolean;
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "uncovered" | "inactive_owner" | "unprojected_calendar" | "open_incident";
+        };
+        /**
+         * IpControlReviewCreateRequest
+         * @description Filters and observed source freshness for one control review.
+         */
+        IpControlReviewCreateRequest: {
+            /** Failed Queries */
+            failed_queries?: string[];
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** Stale Sources */
+            stale_sources?: string[];
+        };
+        /** IpControlReviewExportRequest */
+        IpControlReviewExportRequest: {
+            /** Error Redacted */
+            error_redacted?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "generated" | "failed";
+        };
+        /** IpControlReviewRecord */
+        IpControlReviewRecord: {
+            /** Completeness Status */
+            completeness_status: string;
+            /** Export Error Redacted */
+            export_error_redacted?: string | null;
+            /** Export Status */
+            export_status: string;
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /** Freshness */
+            freshness: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Id */
+            id: string;
+            /** Incompleteness Reasons */
+            incompleteness_reasons?: string[];
+            /** Mandatory Exceptions */
+            mandatory_exceptions?: components["schemas"]["IpControlExceptionRecord"][];
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            report: components["schemas"]["IpDocketControlReport"];
+            /** Signed Off At */
+            signed_off_at?: string | null;
+            /** Signer Label Snapshot */
+            signer_label_snapshot?: string | null;
+            /** Version */
+            version: number;
+        };
+        /** IpControlReviewSignOffRequest */
+        IpControlReviewSignOffRequest: {
+            /** Attestation */
+            attestation: string;
+            /** Expected Version */
+            expected_version: number;
         };
         /** IpCoreRecordResponse */
         IpCoreRecordResponse: {
@@ -39101,6 +39255,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrademarkApplicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_api_ip_control_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_control_review_detail_api_ip_control_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_export_api_ip_control_reviews__review_id__export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_sign_off_api_ip_control_reviews__review_id__sign_off_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewSignOffRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
                 };
             };
             /** @description Validation Error */

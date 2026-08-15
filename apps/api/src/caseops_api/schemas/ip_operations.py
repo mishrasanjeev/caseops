@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -417,3 +417,46 @@ __all__ = [
     for name in globals()
     if name.startswith("Ip") or name.startswith("Trademark") or name == "FilingManifestItem"
 ]
+
+
+class IpControlExceptionRecord(BaseModel):
+    """A critical exception that a filter or dismissal cannot hide (CAL-OPS-13)."""
+
+    docket_id: str
+    kind: Literal["uncovered", "inactive_owner", "unprojected_calendar", "open_incident"]
+    critical: bool = True
+
+
+class IpControlReviewCreateRequest(BaseModel):
+    """Filters and observed source freshness for one control review."""
+
+    filters: dict[str, Any] = Field(default_factory=dict)
+    stale_sources: list[str] = Field(default_factory=list, max_length=40)
+    failed_queries: list[str] = Field(default_factory=list, max_length=40)
+
+
+class IpControlReviewExportRequest(BaseModel):
+    outcome: Literal["generated", "failed"]
+    error_redacted: str | None = Field(default=None, max_length=500)
+
+
+class IpControlReviewSignOffRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    attestation: str = Field(min_length=5, max_length=2000)
+
+
+class IpControlReviewRecord(BaseModel):
+    id: str
+    generated_at: datetime
+    filters: dict[str, Any]
+    freshness: dict[str, Any]
+    completeness_status: str
+    incompleteness_reasons: list[str] = Field(default_factory=list)
+    mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
+    manifest_sha256: str
+    export_status: str
+    export_error_redacted: str | None = None
+    signer_label_snapshot: str | None = None
+    signed_off_at: datetime | None = None
+    version: int
+    report: IpDocketControlReport

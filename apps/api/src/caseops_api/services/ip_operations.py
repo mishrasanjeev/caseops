@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     IpCostItem,
     IpDeadlineCoverage,
     IpDeadlineIncident,
+    IpDocketControlReview,
     IpDocketRecord,
     IpEvidenceCandidate,
     IpRelatedRightObligation,
@@ -36,6 +37,11 @@ from caseops_api.db.models import (
     UserCalendarConnection,
 )
 from caseops_api.schemas.ip_operations import (
+    IpControlExceptionRecord,
+    IpControlReviewCreateRequest,
+    IpControlReviewExportRequest,
+    IpControlReviewRecord,
+    IpControlReviewSignOffRequest,
     IpCostItemCreateRequest,
     IpCostItemRecord,
     IpCostReconciliationReport,
@@ -1628,3 +1634,268 @@ __all__ = [
     "review_ip_evidence_candidate",
     "verify_ip_deadline_incident",
 ]
+
+
+def _control_exceptions(
+    session: Session,
+    *,
+    context: SessionContext,
+    listing: IpDocketListResponse,
+) -> list[IpControlExceptionRecord]:
+    """CAL-OPS-13 exception queue, derived from access-filtered records only.
+
+    A restricted record the caller cannot open never reaches ``listing``, so it
+    contributes neither an exception nor a count.
+    """
+
+    membership_active = {
+        row.id: row.is_active
+        for row in session.scalars(
+            select(CompanyMembership).where(CompanyMembership.company_id == context.company.id)
+        ).all()
+    }
+    found: list[IpControlExceptionRecord] = []
+    for docket in listing.dockets:
+        if docket.matter_id is not None and not docket.deadline_coverages:
+            found.append(
+                IpControlExceptionRecord(docket_id=docket.id, kind="uncovered")
+            )
+        for coverage in docket.deadline_coverages:
+            if not membership_active.get(coverage.responsible_membership_id, False):
+                found.append(
+                    IpControlExceptionRecord(docket_id=docket.id, kind="inactive_owner")
+                )
+            if coverage.calendar_projection_status != "projected":
+                found.append(
+                    IpControlExceptionRecord(
+                        docket_id=docket.id, kind="unprojected_calendar"
+                    )
+                )
+        for incident in docket.deadline_incidents:
+            if incident.status != "verified":
+                found.append(
+                    IpControlExceptionRecord(docket_id=docket.id, kind="open_incident")
+                )
+    return found
+
+
+def _review_record(
+    row: IpDocketControlReview,
+    report: IpDocketControlReport,
+) -> IpControlReviewRecord:
+    return IpControlReviewRecord(
+        id=row.id,
+        generated_at=row.generated_at,
+        filters=dict(row.filters_json or {}),
+        freshness=dict(row.freshness_json or {}),
+        completeness_status=row.completeness_status,
+        incompleteness_reasons=list(row.incompleteness_reasons_json or []),
+        mandatory_exceptions=[
+            IpControlExceptionRecord(**item) for item in (row.mandatory_exception_ids_json or [])
+        ],
+        manifest_sha256=row.manifest_sha256,
+        export_status=row.export_status,
+        export_error_redacted=row.export_error_redacted,
+        signer_label_snapshot=row.signer_label_snapshot,
+        signed_off_at=row.signed_off_at,
+        version=row.version,
+        report=report,
+    )
+
+
+def create_ip_control_review(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpControlReviewCreateRequest,
+) -> IpControlReviewRecord:
+    """Produce a daily docket control review that can later be signed off.
+
+    Freshness and completeness are recorded up front: a stale source or a failed
+    query makes the review ``incomplete``, and an incomplete review can never be
+    signed off (UJ-59-EXC-01). Mandatory exceptions are captured from the
+    access-filtered listing and stored on the review, so no later filter or bulk
+    dismissal can hide them (CAL-OPS-13).
+    """
+
+    report = ip_docket_control_report(session, context=context)
+    listing = list_ip_dockets(session, context=context)
+    exceptions = _control_exceptions(session, context=context, listing=listing)
+
+    reasons: list[str] = []
+    for source in sorted({s.strip() for s in payload.stale_sources if s.strip()}):
+        reasons.append(f"stale_source:{source}")
+    for query in sorted({q.strip() for q in payload.failed_queries if q.strip()}):
+        reasons.append(f"failed_query:{query}")
+
+    now = _now()
+    manifest = hashlib.sha256(
+        json.dumps(
+            {
+                "generated_at": now.isoformat(),
+                "filters": payload.filters,
+                "docket_count": report.docket_count,
+                "exceptions": [item.model_dump(mode="json") for item in exceptions],
+                "incompleteness": reasons,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    row = IpDocketControlReview(
+        company_id=context.company.id,
+        generated_at=now,
+        filters_json=payload.filters,
+        freshness_json={
+            "stale_sources": sorted({s.strip() for s in payload.stale_sources if s.strip()}),
+            "failed_queries": sorted({q.strip() for q in payload.failed_queries if q.strip()}),
+            "observed_at": now.isoformat(),
+        },
+        completeness_status="incomplete" if reasons else "complete",
+        incompleteness_reasons_json=reasons,
+        mandatory_exception_ids_json=[item.model_dump(mode="json") for item in exceptions],
+        manifest_sha256=manifest,
+        export_status="not_requested",
+        version=1,
+        created_by_membership_id=context.membership.id,
+    )
+    session.add(row)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="ip.control_review.generated",
+        target_type="ip_docket_control_review",
+        target_id=row.id,
+        metadata={
+            "completeness_status": row.completeness_status,
+            "incompleteness_reasons": reasons,
+            "mandatory_exception_count": len(exceptions),
+            "manifest_sha256": manifest,
+        },
+    )
+    session.commit()
+    session.refresh(row)
+    return _review_record(row, report)
+
+
+def _review_or_404(
+    session: Session,
+    *,
+    context: SessionContext,
+    review_id: str,
+    for_update: bool = False,
+) -> IpDocketControlReview:
+    statement = select(IpDocketControlReview).where(
+        IpDocketControlReview.id == review_id,
+        IpDocketControlReview.company_id == context.company.id,
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    row = session.scalar(statement)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Control review not found.")
+    return row
+
+
+def get_ip_control_review(
+    session: Session,
+    *,
+    context: SessionContext,
+    review_id: str,
+) -> IpControlReviewRecord:
+    row = _review_or_404(session, context=context, review_id=review_id)
+    return _review_record(row, ip_docket_control_report(session, context=context))
+
+
+def record_ip_control_review_export(
+    session: Session,
+    *,
+    context: SessionContext,
+    review_id: str,
+    payload: IpControlReviewExportRequest,
+) -> IpControlReviewRecord:
+    """UJ-59-EXC-03 — a failed export must not leave the review signable."""
+
+    row = _review_or_404(session, context=context, review_id=review_id, for_update=True)
+    if row.signed_off_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A signed-off control review cannot be re-exported.",
+        )
+    row.export_status = payload.outcome
+    row.export_error_redacted = (
+        payload.error_redacted if payload.outcome == "failed" else None
+    )
+    row.version += 1
+    record_from_context(
+        session,
+        context,
+        action="ip.control_review.export_recorded",
+        target_type="ip_docket_control_review",
+        target_id=row.id,
+        metadata={"outcome": payload.outcome},
+    )
+    session.commit()
+    session.refresh(row)
+    return _review_record(row, ip_docket_control_report(session, context=context))
+
+
+def sign_off_ip_control_review(
+    session: Session,
+    *,
+    context: SessionContext,
+    review_id: str,
+    payload: IpControlReviewSignOffRequest,
+) -> IpControlReviewRecord:
+    """CAL-OPS-09 sign-off, refused unless the review is genuinely clean."""
+
+    row = _review_or_404(session, context=context, review_id=review_id, for_update=True)
+    if row.version != payload.expected_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Control review changed; reload before signing off.",
+        )
+    if row.signed_off_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Control review is already signed off.",
+        )
+    if row.completeness_status != "complete":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_control_review_incomplete",
+                "message": "An incomplete control review cannot be signed off.",
+                "incompleteness_reasons": list(row.incompleteness_reasons_json or []),
+            },
+        )
+    if row.export_status == "failed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_control_review_export_failed",
+                "message": "Export generation failed; the review cannot be marked complete.",
+            },
+        )
+
+    row.signed_off_by_membership_id = context.membership.id
+    row.signer_label_snapshot = context.user.full_name or context.user.email
+    row.signed_off_at = _now()
+    row.version += 1
+    record_from_context(
+        session,
+        context,
+        action="ip.control_review.signed_off",
+        target_type="ip_docket_control_review",
+        target_id=row.id,
+        metadata={
+            "attestation": payload.attestation,
+            "manifest_sha256": row.manifest_sha256,
+            "mandatory_exception_count": len(row.mandatory_exception_ids_json or []),
+        },
+    )
+    session.commit()
+    session.refresh(row)
+    return _review_record(row, ip_docket_control_report(session, context=context))
