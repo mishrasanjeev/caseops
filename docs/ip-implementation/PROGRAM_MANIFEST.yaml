@@ -9677,25 +9677,33 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prd_slices.py",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-54-EXC-01",
-        "planned:IPLF-UJ-54-EXC-02",
-        "planned:IPLF-UJ-54-EXC-03",
-        "planned:IPLF-UJ-54-EXC-04",
-        "planned:IPLF-UJ-54-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "approvals": [],
-      "blockers": [],
-      "next_actions": [],
+      "blockers": [
+        {
+          "id": "IPLF-039A-APPROVAL-DEFECT",
+          "summary": "create_ip_docket auto-finalizes the first particulars version, so any docket created with clean particulars -- including every bulk-imported record -- carries an approved filing manifest with no authorized reviewer, contrary to TM-DATA-14. There is also no manifest hash, fee or signatory package.",
+          "owner": "Engineering with the product and legal owners for the approval contract",
+          "evidence_needed": "An explicit approval command carrying reviewer identity, an immutable manifest hash, and the fee/signatory package, with tests proving an unreviewed record cannot reach filing_ready.",
+          "safe_fallback": "Treat imported and newly created particulars as unapproved regardless of the stored finalized_at until the approval contract exists.",
+          "milestone_impact": "Blocks TM-DATA-13 and TM-DATA-14 and IPLF-039A release closure; per-path journey evidence for UJ-03 and UJ-54 is unaffected.",
+          "next_independent_slice": "Continue per-path evidence with IPLF-039D (UJ-58, 6 paths)."
+        }
+      ],
+      "next_actions": [
+        "Fix TM-DATA-14: create_ip_docket auto-finalizes the first particulars version, so a record is approved with no authorized reviewer. Approval must be a distinct act with a reviewer identity.",
+        "Add the filing manifest hash, fee and signatory package required by TM-DATA-14.",
+        "Re-verify on real PostgreSQL CI and restore release_status only with fresh deployment evidence."
+      ],
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
@@ -47828,10 +47836,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-03-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_normal_create_trademark_application_manually#IPLF-UJ-03-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -47946,10 +47955,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-03-EXC-01"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc01_pre_filing_draft_saves_without_an_application_number#IPLF-UJ-03-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -48064,11 +48074,12 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_core_records.py::test_filed_phase_requires_confirmed_application_number_unless_source_pending#IPLF-UJ-03-EXC-02"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc02_filed_phase_requires_explicit_identifier_allocation#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -61478,10 +61489,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-54-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_normal_capture_and_approve_complete_filing_particulars#IPLF-UJ-54-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -61587,10 +61599,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-54-EXC-01"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc01_unsupported_mark_or_form_type_blocks_filing_ready#IPLF-UJ-54-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -61696,10 +61709,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-54-EXC-02"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc02_missing_priority_evidence_is_an_explicit_exception#IPLF-UJ-54-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -61805,10 +61819,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-54-EXC-03"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc03_change_after_approval_supersedes_and_requires_reapproval#IPLF-UJ-54-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -61914,10 +61929,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-54-EXC-04"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc04_imported_data_never_silently_fills_a_declaration#IPLF-UJ-54-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
