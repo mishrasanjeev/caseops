@@ -10162,24 +10162,38 @@
       "test_refs": [
         "apps/api/tests/test_ip_prd_slices.py",
         "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
+        "apps/api/tests/test_ip_039f_cost_linkage.py",
         "planned:IPLF-UJ-52-EXC-01",
         "planned:IPLF-UJ-52-EXC-02",
-        "planned:IPLF-UJ-52-EXC-03",
         "planned:IPLF-UJ-52-EXC-04",
-        "planned:IPLF-UJ-52-EXC-05",
-        "planned:IPLF-UJ-52-EXC-06",
-        "planned:IPLF-UJ-52-NORMAL",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+        "planned:IPLF-UJ-52-EXC-05"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "approvals": [],
-      "blockers": [],
-      "next_actions": [],
+      "blockers": [
+        {
+          "id": "IPLF-039F-UNIMPLEMENTED-AND-CONTRADICTED-PATHS",
+          "summary": "Four of the seven UJ-52 paths are not implemented and one is contradicted by the code. add_ip_cost_item refuses every cost when the docket has no Matter, but UJ-52-EXC-01 requires nonbillable legal-cost capture to remain possible, so an incurred official fee is lost rather than deferred. There is no exchange rate, rate source or conversion timestamp field; no estimate category distinguishing a provider estimate from an actual expense; and no rate-confidentiality or permissioning concept.",
+          "owner": "Engineering with the finance and product owners for the cost contract",
+          "evidence_needed": "Nonbillable cost capture without a Matter, an FX record preserving original amount/rate/source/time, an estimate-versus-actual distinction, and permissioned confidential rates, each with per-path tests.",
+          "safe_fallback": "Costs remain evidence-linked records with matter_billing as the single accounting owner; no second payment lifecycle exists and none is created by this slice.",
+          "milestone_impact": "Blocks IPLF-039F implementation and release closure; ARCH-OPS-18 and ARCH-OPS-26 remain open.",
+          "next_independent_slice": "Continue per-path evidence with IPLF-039B (UJ-51 and UJ-55, 16 paths)."
+        }
+      ],
+      "next_actions": [
+        "Permit nonbillable legal-cost capture on a docket with no billing Matter (UJ-52-EXC-01).",
+        "Record exchange rate, source and conversion time alongside the original amount (UJ-52-EXC-02).",
+        "Distinguish a provider-estimated cost from an actual expense (UJ-52-EXC-04).",
+        "Permission confidential rates (UJ-52-EXC-05)."
+      ],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "implemented",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -60130,10 +60144,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-52-NORMAL"
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_normal_record_legal_cost_and_reconcile_against_billing#IPLF-UJ-52-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -60242,7 +60257,8 @@
         "planned:IPLF-UJ-52-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -60252,7 +60268,7 @@
         "IPLF-039F",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: the implementation contradicts this path. add_ip_cost_item refuses every cost when the docket has no Matter, but this path requires nonbillable legal-cost capture to remain possible.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -60351,7 +60367,8 @@
         "planned:IPLF-UJ-52-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -60361,7 +60378,7 @@
         "IPLF-039F",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is unimplemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -60457,10 +60474,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-52-EXC-03"
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc03_a_filing_payment_is_not_a_client_payment#IPLF-UJ-52-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -60569,7 +60587,8 @@
         "planned:IPLF-UJ-52-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -60579,7 +60598,7 @@
         "IPLF-039F",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is unimplemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -60678,7 +60697,8 @@
         "planned:IPLF-UJ-52-EXC-05"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -60688,7 +60708,7 @@
         "IPLF-039F",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-52 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is unimplemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -60784,10 +60804,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-52-EXC-06"
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc06_a_broken_billing_link_surfaces_instead_of_matching#IPLF-UJ-52-EXC-06"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
