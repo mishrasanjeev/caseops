@@ -31,12 +31,14 @@ EXPECTED_TENANT_FOREIGN_KEYS = {
         ["created_by_membership_id", "company_id"],
         "company_memberships",
         ["id", "company_id"],
+        {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
     ),
     "fk_ip_import_row_created_docket_company": (
         "ip_import_rows",
         ["created_docket_id", "company_id"],
         "ip_docket_records",
         ["id", "company_id"],
+        {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
     ),
 }
 
@@ -54,6 +56,22 @@ def _head(database_url: str) -> str:
             return str(connection.scalar(text("SELECT version_num FROM alembic_version")))
     finally:
         engine.dispose()
+
+
+def _sqlite_constraint_clause(connection, table: str, constraint_name: str) -> str:
+    ddl = connection.scalar(
+        text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = :table"
+        ),
+        {"table": table},
+    )
+    assert ddl is not None
+    normalized = " ".join(str(ddl).replace('"', "").upper().split())
+    marker = f"CONSTRAINT {constraint_name.upper()} "
+    start = normalized.index(marker)
+    end = normalized.find(" CONSTRAINT ", start + len(marker))
+    return normalized[start:] if end == -1 else normalized[start:end]
 
 
 def test_ip_bulk_import_expand_is_additive_and_rollback_is_clean(
@@ -108,9 +126,13 @@ def test_ip_bulk_import_expand_is_additive_and_rollback_is_clean(
     }
     assert foreign_keys.keys() >= EXPECTED_TENANT_FOREIGN_KEYS.keys()
     for name, expected in EXPECTED_TENANT_FOREIGN_KEYS.items():
-        assert foreign_keys[name] == expected
+        assert foreign_keys[name] == expected[:-1]
 
     with engine.connect() as connection:
+        for name, expected in EXPECTED_TENANT_FOREIGN_KEYS.items():
+            clause = _sqlite_constraint_clause(connection, expected[0], name)
+            assert "MATCH SIMPLE" in clause
+            assert "DEFERRABLE INITIALLY DEFERRED" in clause
         assert connection.scalar(text("SELECT count(*) FROM bulk_import_jobs")) == 0
         assert connection.scalar(text("SELECT count(*) FROM ip_import_rows")) == 0
         # The legacy Matter import owner is untouched by the expand.

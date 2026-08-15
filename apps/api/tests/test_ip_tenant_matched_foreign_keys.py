@@ -23,39 +23,93 @@ from tests.test_auth_company import bootstrap_company
 
 EXPECTED_MODEL_CONSTRAINTS = {
     BulkImportJob: {
-        "fk_bulk_import_job_creator_company": ["created_by_membership_id", "company_id"]
+        "fk_bulk_import_job_creator_company": (
+            ["created_by_membership_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        )
     },
     IpImportRow: {
-        "fk_ip_import_row_created_docket_company": ["created_docket_id", "company_id"]
+        "fk_ip_import_row_created_docket_company": (
+            ["created_docket_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        )
     },
     IpDocketControlReview: {
-        "fk_ip_control_review_signer_company": [
-            "signed_off_by_membership_id",
-            "company_id",
-        ],
-        "fk_ip_control_review_creator_company": ["created_by_membership_id", "company_id"],
+        "fk_ip_control_review_signer_company": (
+            ["signed_off_by_membership_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        ),
+        "fk_ip_control_review_creator_company": (
+            ["created_by_membership_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        ),
     },
     IpDeadlineCoverage: {
-        "fk_ip_coverage_pending_replacement_company": [
-            "pending_replacement_membership_id",
-            "company_id",
-        ],
-        "fk_ip_coverage_emergency_escalation_company": [
-            "emergency_escalation_membership_id",
-            "company_id",
-        ],
+        "fk_ip_coverage_pending_replacement_company": (
+            ["pending_replacement_membership_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        ),
+        "fk_ip_coverage_emergency_escalation_company": (
+            ["emergency_escalation_membership_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        ),
     },
     IpDocketQueue: {
-        "fk_ip_docket_queue_team_company": ["team_id", "company_id"],
-        "fk_ip_docket_queue_owner_company": ["owner_membership_id", "company_id"],
-        "fk_ip_docket_queue_creator_company": ["created_by_membership_id", "company_id"],
+        "fk_ip_docket_queue_team_company": (
+            ["team_id", "company_id"],
+            "CASCADE",
+            None,
+            None,
+            None,
+        ),
+        "fk_ip_docket_queue_owner_company": (
+            ["owner_membership_id", "company_id"],
+            "CASCADE",
+            None,
+            None,
+            None,
+        ),
+        "fk_ip_docket_queue_creator_company": (
+            ["created_by_membership_id", "company_id"],
+            None,
+            True,
+            "DEFERRED",
+            "SIMPLE",
+        ),
     },
     IpIdentifier: {
-        "fk_ip_identifier_supersedes_company": ["supersedes_identifier_id", "company_id"],
-        "fk_ip_identifier_superseded_by_company": [
-            "superseded_by_identifier_id",
-            "company_id",
-        ],
+        "fk_ip_identifier_supersedes_company": (
+            ["supersedes_identifier_id", "company_id"],
+            "RESTRICT",
+            None,
+            None,
+            None,
+        ),
+        "fk_ip_identifier_superseded_by_company": (
+            ["superseded_by_identifier_id", "company_id"],
+            "RESTRICT",
+            None,
+            None,
+            None,
+        ),
     },
 }
 
@@ -88,12 +142,18 @@ def _assert_cross_tenant_rejected(statement: str, parameters: dict[str, object])
 def test_orm_declares_every_new_tenant_matched_foreign_key() -> None:
     for model, expected_by_name in EXPECTED_MODEL_CONSTRAINTS.items():
         actual_by_name = {
-            constraint.name: list(constraint.column_keys)
+            constraint.name: (
+                list(constraint.column_keys),
+                constraint.ondelete,
+                constraint.deferrable,
+                constraint.initially,
+                constraint.match,
+            )
             for constraint in model.__table__.foreign_key_constraints
             if constraint.name
         }
-        for name, columns in expected_by_name.items():
-            assert actual_by_name[name] == columns
+        for name, expected in expected_by_name.items():
+            assert actual_by_name[name] == expected
 
 
 def test_new_ip_operational_foreign_keys_reject_existing_cross_tenant_targets(
@@ -183,11 +243,16 @@ def test_paired_tenant_constraints_preserve_set_null_and_cascade_actions(
 ) -> None:
     tenant = bootstrap_company(client)
     company_id = str(tenant["company"]["id"])
+    durable_owner_id = str(tenant["membership"]["id"])
     now = datetime.now(UTC)
     user_id = str(uuid4())
     membership_id = str(uuid4())
     import_id = str(uuid4())
     queue_id = str(uuid4())
+    attributed_queue_id = str(uuid4())
+    control_review_id = str(uuid4())
+    team_id = str(uuid4())
+    team_queue_id = str(uuid4())
     engine = get_engine()
 
     with engine.begin() as connection:
@@ -213,6 +278,70 @@ def test_paired_tenant_constraints_preserve_set_null_and_cascade_actions(
                 "id": membership_id,
                 "company": company_id,
                 "user": user_id,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ip_docket_queues "
+                "(id, company_id, name, filters_json, owner_membership_id, "
+                " created_by_membership_id, created_at, updated_at) "
+                "VALUES (:id, :company, 'Attributed queue', '{}', :owner, "
+                " :creator, :now, :now)"
+            ),
+            {
+                "id": attributed_queue_id,
+                "company": company_id,
+                "owner": durable_owner_id,
+                "creator": membership_id,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ip_docket_control_reviews "
+                "(id, company_id, generated_at, filters_json, freshness_json, "
+                " incompleteness_reasons_json, mandatory_exception_ids_json, "
+                " query_version, report_snapshot_json, manifest_sha256, "
+                " signed_off_by_membership_id, created_by_membership_id, "
+                " created_at, updated_at) "
+                "VALUES (:id, :company, :now, '{}', '{}', '[]', '[]', "
+                " 'daily-docket-v1', '{}', :sha, :membership, :membership, :now, :now)"
+            ),
+            {
+                "id": control_review_id,
+                "company": company_id,
+                "sha": "d" * 64,
+                "membership": membership_id,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO teams "
+                "(id, company_id, name, slug, kind, is_active, created_at, updated_at) "
+                "VALUES (:id, :company, 'Ephemeral Team', :slug, 'team', 1, :now, :now)"
+            ),
+            {
+                "id": team_id,
+                "company": company_id,
+                "slug": f"ephemeral-team-{team_id[:8]}",
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ip_docket_queues "
+                "(id, company_id, name, filters_json, team_id, "
+                " created_by_membership_id, created_at, updated_at) "
+                "VALUES (:id, :company, 'Ephemeral team queue', '{}', :team, "
+                " :creator, :now, :now)"
+            ),
+            {
+                "id": team_queue_id,
+                "company": company_id,
+                "team": team_id,
+                "creator": membership_id,
                 "now": now,
             },
         )
@@ -259,10 +388,32 @@ def test_paired_tenant_constraints_preserve_set_null_and_cascade_actions(
             {"id": import_id},
         ).one()
         assert import_row == (company_id, None)
+        assert connection.execute(
+            text(
+                "SELECT company_id, created_by_membership_id "
+                "FROM ip_docket_queues WHERE id = :id"
+            ),
+            {"id": attributed_queue_id},
+        ).one() == (company_id, None)
+        assert connection.execute(
+            text(
+                "SELECT company_id, signed_off_by_membership_id, "
+                "created_by_membership_id FROM ip_docket_control_reviews WHERE id = :id"
+            ),
+            {"id": control_review_id},
+        ).one() == (company_id, None, None)
         assert (
             connection.scalar(
                 text("SELECT count(*) FROM ip_docket_queues WHERE id = :id"),
                 {"id": queue_id},
+            )
+            == 0
+        )
+        connection.execute(text("DELETE FROM teams WHERE id = :id"), {"id": team_id})
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM ip_docket_queues WHERE id = :id"),
+                {"id": team_queue_id},
             )
             == 0
         )

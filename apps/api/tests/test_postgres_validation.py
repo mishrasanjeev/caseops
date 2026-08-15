@@ -2237,6 +2237,26 @@ def test_new_ip_foreign_keys_are_tenant_matched_and_preserve_delete_actions(pg_e
             ),
         },
     }
+    # pg_constraint action codes: a=NO ACTION, c=CASCADE, r=RESTRICT;
+    # confmatchtype s=MATCH SIMPLE. Deferred NO ACTION companions allow the
+    # original single-column SET NULL FK to null only its nullable ID.
+    deferred_set_null_companions = {
+        "fk_bulk_import_job_creator_company",
+        "fk_ip_import_row_created_docket_company",
+        "fk_ip_control_review_signer_company",
+        "fk_ip_control_review_creator_company",
+        "fk_ip_coverage_pending_replacement_company",
+        "fk_ip_coverage_emergency_escalation_company",
+        "fk_ip_docket_queue_creator_company",
+    }
+    cascade_companions = {
+        "fk_ip_docket_queue_team_company",
+        "fk_ip_docket_queue_owner_company",
+    }
+    restrict_constraints = {
+        "fk_ip_identifier_supersedes_company",
+        "fk_ip_identifier_superseded_by_company",
+    }
     schema = inspect(pg_engine)
     for table, expected_by_name in expected.items():
         actual_by_name = {
@@ -2250,6 +2270,32 @@ def test_new_ip_foreign_keys_are_tenant_matched_and_preserve_delete_actions(pg_e
         }
         for name, shape in expected_by_name.items():
             assert actual_by_name[name] == shape
+
+    with pg_engine.connect() as connection:
+        for name in deferred_set_null_companions:
+            assert connection.execute(
+                text(
+                    "SELECT confdeltype, condeferrable, condeferred, confmatchtype "
+                    "FROM pg_constraint WHERE conname = :name"
+                ),
+                {"name": name},
+            ).one() == ("a", True, True, "s")
+        for name in cascade_companions:
+            assert connection.execute(
+                text(
+                    "SELECT confdeltype, condeferrable, condeferred, confmatchtype "
+                    "FROM pg_constraint WHERE conname = :name"
+                ),
+                {"name": name},
+            ).one() == ("c", False, False, "s")
+        for name in restrict_constraints:
+            assert connection.execute(
+                text(
+                    "SELECT confdeltype, condeferrable, condeferred, confmatchtype "
+                    "FROM pg_constraint WHERE conname = :name"
+                ),
+                {"name": name},
+            ).one() == ("r", False, False, "s")
 
     with pg_engine.begin() as connection:
         session = Session(bind=connection)

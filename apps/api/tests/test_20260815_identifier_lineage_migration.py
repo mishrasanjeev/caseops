@@ -88,6 +88,7 @@ def test_identifier_lineage_migration_is_additive_tenant_safe_and_reversible(
         ]
         assert backward_foreign_key["referred_table"] == TABLE
         assert backward_foreign_key["referred_columns"] == ["id", "company_id"]
+        assert backward_foreign_key["options"].get("ondelete") == "RESTRICT"
         assert CHECK in {
             item["name"]
             for item in schema.get_check_constraints(TABLE)

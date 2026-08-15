@@ -84,20 +84,27 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-        # Keep the single-column FKs above for their SET NULL action. These
-        # paired constraints enforce tenant equality; after SET NULL their
-        # nullable membership component makes the composite constraint pass.
+        # Keep the single-column FKs above for their SET NULL action. The
+        # tenant companions are deferred MATCH SIMPLE constraints: PostgreSQL
+        # can first null only the nullable membership ID, never company_id,
+        # and the final composite state then passes because one key is NULL.
         batch.create_foreign_key(
             "fk_ip_coverage_pending_replacement_company",
             "company_memberships",
             ["pending_replacement_membership_id", "company_id"],
             ["id", "company_id"],
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
         )
         batch.create_foreign_key(
             "fk_ip_coverage_emergency_escalation_company",
             "company_memberships",
             ["emergency_escalation_membership_id", "company_id"],
             ["id", "company_id"],
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
         )
         batch.create_check_constraint(
             "ck_ip_coverage_replacement_decision",

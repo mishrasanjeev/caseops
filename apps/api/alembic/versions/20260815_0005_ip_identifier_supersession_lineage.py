@@ -50,6 +50,7 @@ def upgrade() -> None:
             TABLE,
             ["supersedes_identifier_id", "company_id"],
             ["id", "company_id"],
+            ondelete="RESTRICT",
         )
         batch.create_foreign_key(
             "fk_ip_identifier_superseded_by_company",

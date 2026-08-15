@@ -73,16 +73,21 @@ def upgrade() -> None:
             ["team_id", "company_id"],
             ["teams.id", "teams.company_id"],
             name="fk_ip_docket_queue_team_company",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["owner_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
             name="fk_ip_docket_queue_owner_company",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["created_by_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
             name="fk_ip_docket_queue_creator_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         sa.UniqueConstraint("company_id", "name", name="uq_ip_docket_queue_company_name"),
         # A queue that belongs to nobody cannot be governed or cleaned up.

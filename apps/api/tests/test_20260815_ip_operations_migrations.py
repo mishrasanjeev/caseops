@@ -32,11 +32,13 @@ EXPECTED_TENANT_FOREIGN_KEYS = {
             ["signed_off_by_membership_id", "company_id"],
             "company_memberships",
             ["id", "company_id"],
+            {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
         ),
         "fk_ip_control_review_creator_company": (
             ["created_by_membership_id", "company_id"],
             "company_memberships",
             ["id", "company_id"],
+            {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
         ),
     },
     "ip_deadline_coverages": {
@@ -44,11 +46,13 @@ EXPECTED_TENANT_FOREIGN_KEYS = {
             ["pending_replacement_membership_id", "company_id"],
             "company_memberships",
             ["id", "company_id"],
+            {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
         ),
         "fk_ip_coverage_emergency_escalation_company": (
             ["emergency_escalation_membership_id", "company_id"],
             "company_memberships",
             ["id", "company_id"],
+            {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
         ),
     },
     "ip_docket_queues": {
@@ -56,16 +60,19 @@ EXPECTED_TENANT_FOREIGN_KEYS = {
             ["team_id", "company_id"],
             "teams",
             ["id", "company_id"],
+            {"ondelete": "CASCADE"},
         ),
         "fk_ip_docket_queue_owner_company": (
             ["owner_membership_id", "company_id"],
             "company_memberships",
             ["id", "company_id"],
+            {"ondelete": "CASCADE"},
         ),
         "fk_ip_docket_queue_creator_company": (
             ["created_by_membership_id", "company_id"],
             "company_memberships",
             ["id", "company_id"],
+            {"match": "SIMPLE", "deferrable": True, "initially": "DEFERRED"},
         ),
     },
 }
@@ -88,6 +95,22 @@ def _head(database_url: str) -> str:
 
 def _column_names(inspector, table: str) -> set[str]:
     return {column["name"] for column in inspector.get_columns(table)}
+
+
+def _sqlite_constraint_clause(connection, table: str, constraint_name: str) -> str:
+    ddl = connection.scalar(
+        text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = :table"
+        ),
+        {"table": table},
+    )
+    assert ddl is not None
+    normalized = " ".join(str(ddl).replace('"', "").upper().split())
+    marker = f"CONSTRAINT {constraint_name.upper()} "
+    start = normalized.index(marker)
+    end = normalized.find(" CONSTRAINT ", start + len(marker))
+    return normalized[start:] if end == -1 else normalized[start:end]
 
 
 def test_ip_operations_migrations_upgrade_downgrade_and_reupgrade(
@@ -137,7 +160,21 @@ def test_ip_operations_migrations_upgrade_downgrade_and_reupgrade(
                 if foreign_key.get("name")
             }
             for name, expected in expected_by_name.items():
-                assert actual_by_name[name] == expected
+                assert actual_by_name[name] == expected[:-1]
+
+        with engine.connect() as connection:
+            for table, expected_by_name in EXPECTED_TENANT_FOREIGN_KEYS.items():
+                for name, expected in expected_by_name.items():
+                    clause = _sqlite_constraint_clause(connection, table, name)
+                    options = expected[-1]
+                    if match := options.get("match"):
+                        assert f"MATCH {match}" in clause
+                    if ondelete := options.get("ondelete"):
+                        assert f"ON DELETE {ondelete}" in clause
+                    if options.get("deferrable"):
+                        assert "DEFERRABLE" in clause
+                    if initially := options.get("initially"):
+                        assert f"INITIALLY {initially}" in clause
         assert _head(database_url) == MIGRATION_HEAD
     finally:
         engine.dispose()

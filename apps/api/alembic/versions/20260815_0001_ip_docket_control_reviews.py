@@ -76,6 +76,9 @@ def upgrade() -> None:
             ["signed_off_by_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
             name="fk_ip_control_review_signer_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         sa.ForeignKeyConstraint(
             ["created_by_membership_id"], ["company_memberships.id"], ondelete="SET NULL"
@@ -84,6 +87,9 @@ def upgrade() -> None:
             ["created_by_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
             name="fk_ip_control_review_creator_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint(
