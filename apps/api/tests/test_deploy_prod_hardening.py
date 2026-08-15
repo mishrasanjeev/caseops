@@ -625,7 +625,7 @@ elif [[ "$*" == *"run jobs execute caseops-ip-rule-governance-fingerprint-a0"* ]
   printf '%s\n' '{"metadata":{"name":"caseops-ip-rule-governance-fingerprint-a0-test"}}'
 elif [[ "$*" == *"run jobs executions describe"* && \
   "$*" == *"caseops-ip-rule-governance-fingerprint-a0-test"* ]]; then
-  if [[ "${FAKE_A0_MODE}" == "pending-structured" && \
+  if [[ "${FAKE_A0_MODE}" == pending-structured* && \
     ! -f "${FAKE_EXECUTION_POLLED}" ]]; then
     touch "${FAKE_EXECUTION_POLLED}"
     printf '%s\n' "${FAKE_PENDING_EXECUTION_JSON}"
@@ -633,8 +633,11 @@ elif [[ "$*" == *"run jobs executions describe"* && \
     printf '%s\n' "${FAKE_EXECUTION_JSON}"
   fi
 elif [[ "$*" == *"logging read"* && "$*" == *"stdout"* ]]; then
-  if [[ "${FAKE_A0_MODE}" == "pending-structured" ]]; then
+  if [[ "${FAKE_A0_MODE}" == "pending-structured-timeout" ]]; then
     exit 124
+  elif [[ "${FAKE_A0_MODE}" == "pending-structured-empty" ]]; then
+    printf '%s\n' '[]'
+    exit 0
   fi
   printf '%s\n' "${FAKE_FINGERPRINT_LOG_JSON}"
 elif [[ "$*" == *"logging read"* && "$*" == *"stderr"* ]]; then
@@ -709,6 +712,16 @@ fi
 set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
 if [[ "$*" == *"logging.googleapis.com/v2/entries:list"* ]]; then
+  request_found=false
+  for argument in "$@"; do
+    candidate="${argument#@}"
+    if [[ "${candidate}" != "${argument}" && -f "${candidate}" ]] && \
+      grep -q '"resourceNames"' "${candidate}"; then
+      request_found=true
+      grep -q '"orderBy":"timestamp desc"' "${candidate}"
+    fi
+  done
+  [[ "${request_found}" == "true" ]]
   printf '%s\n' "${FAKE_FINGERPRINT_REST_JSON}"
   exit 0
 fi
@@ -746,9 +759,13 @@ exec "${FAKE_REAL_PYTHON}" "$@"
     fingerprint_log_json = json.dumps(
         [
             {
-                ("jsonPayload" if a0_mode == "pending-structured" else "textPayload"): (
+                (
+                    "jsonPayload"
+                    if (a0_mode or "").startswith("pending-structured")
+                    else "textPayload"
+                ): (
                     json.loads(fingerprint_json)
-                    if a0_mode == "pending-structured"
+                    if (a0_mode or "").startswith("pending-structured")
                     else fingerprint_json
                 )
             }
@@ -961,13 +978,18 @@ def test_a0_deploy_captures_final_pre_route_baseline_in_fail_closed_order(
     assert sum("run jobs executions list" in call for call in calls) == 1
 
 
+@pytest.mark.parametrize(
+    "a0_mode",
+    ["pending-structured-empty", "pending-structured-timeout"],
+)
 def test_a0_fingerprint_waits_for_terminal_status_and_reads_structured_log(
     tmp_path: Path,
+    a0_mode: str,
 ) -> None:
     result = _run_deploy_with_fakes(
         tmp_path,
         "abcdef1",
-        a0_mode="pending-structured",
+        a0_mode=a0_mode,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -980,7 +1002,10 @@ def test_a0_fingerprint_waits_for_terminal_status_and_reads_structured_log(
         if "run jobs executions describe caseops-ip-rule-governance-fingerprint-a0-test" in call
     ]
     assert len(execution_describes) == 2
-    assert any("logging read" in call and "--format=json" in call for call in calls)
+    assert any(
+        "logging read" in call and "--order desc" in call and "--format=json" in call
+        for call in calls
+    )
     assert any("auth print-access-token" in call for call in calls)
     assert any("logging.googleapis.com/v2/entries:list" in call for call in calls)
 
