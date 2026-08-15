@@ -7,9 +7,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
 - SQL tables: `260`
-- SQL columns: `4006`
+- SQL columns: `4009`
 - ORM indexes: `1146`
-- Alembic/raw index declarations: `505`
+- Alembic/raw index declarations: `506`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -71,7 +71,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `billing_usage_rollups` | `billing_provider_evidence` | 11 | `registry_fail_closed` |
 | `bulk_import_jobs` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `calendar_event_candidates` | `tenant_operational_record` | 25 | `registry_fail_closed` |
-| `calendar_event_syncs` | `tenant_operational_record` | 20 | `registry_fail_closed` |
+| `calendar_event_syncs` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `case_tracking_support_matrix` | `platform_operational_reference` | 20 | `registry_fail_closed` |
 | `cause_list_exports` | `tenant_operational_record` | 12 | `registry_fail_closed` |
 | `clients` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |

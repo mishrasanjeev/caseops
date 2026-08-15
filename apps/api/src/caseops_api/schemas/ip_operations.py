@@ -583,6 +583,26 @@ class IpCoverageBulkAcknowledgeResponse(BaseModel):
     outcomes: list[IpCoverageAcknowledgeOutcome] = Field(default_factory=list)
 
 
+class IpCalendarDriftRecord(BaseModel):
+    """A projected calendar event that no longer matches CaseOps (UJ-62-EXC-03)."""
+
+    sync_id: str
+    connection_id: str
+    membership_id: str | None = None
+    source_type: str
+    source_id: str
+    ip_docket_id: str | None = None
+    # `unknown` is a real outcome: the provider could not be read, so the
+    # projection is unverified rather than confirmed correct.
+    drift_status: Literal["moved", "missing", "unknown"]
+    detail: str
+
+
+class IpCalendarDriftResponse(BaseModel):
+    checked_at: datetime
+    findings: list[IpCalendarDriftRecord] = Field(default_factory=list)
+
+
 class IpAssignedCoverageRecord(BaseModel):
     """One deadline the calling member is responsible for (CAL-OPS-09).
 

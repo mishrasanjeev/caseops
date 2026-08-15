@@ -14,6 +14,7 @@ const {
   signOffIpControlReviewMock,
   recordIpControlReviewExportMock,
   downloadControlReviewManifestMock,
+  checkIpCalendarDriftMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchIpDailyDocketMock: vi.fn(),
@@ -26,6 +27,7 @@ const {
   signOffIpControlReviewMock: vi.fn(),
   recordIpControlReviewExportMock: vi.fn(),
   downloadControlReviewManifestMock: vi.fn(),
+  checkIpCalendarDriftMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -39,6 +41,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   createIpControlReview: createIpControlReviewMock,
   signOffIpControlReview: signOffIpControlReviewMock,
   recordIpControlReviewExport: recordIpControlReviewExportMock,
+  checkIpCalendarDrift: checkIpCalendarDriftMock,
 }));
 
 vi.mock("@/lib/ip/control-review-manifest", () => ({
@@ -126,6 +129,11 @@ describe("IpDailyDocketPage", () => {
     signOffIpControlReviewMock.mockReset();
     recordIpControlReviewExportMock.mockReset();
     downloadControlReviewManifestMock.mockReset();
+    checkIpCalendarDriftMock.mockReset();
+    checkIpCalendarDriftMock.mockResolvedValue({
+      checked_at: "2026-08-15T08:00:00Z",
+      findings: [],
+    });
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchIpDailyDocketMock.mockResolvedValue(FRESH_DOCKET);
@@ -390,6 +398,7 @@ describe("IpDailyDocketPage", () => {
     expect(await screen.findByTestId("ip-docket-capacity")).toBeVisible();
     expect(screen.queryByTestId("ip-docket-acknowledge")).toBeNull();
     expect(screen.queryByTestId("ip-docket-queues")).toBeNull();
+    expect(screen.queryByTestId("ip-docket-drift")).toBeNull();
 
     // The review can be generated with ip:read, but not signed without approve.
     const card = screen.getByTestId("ip-docket-control-review");
@@ -474,5 +483,60 @@ describe("IpDailyDocketPage", () => {
     // rather than present and failing.
     expect(await within(card).findByTestId("ip-docket-review-signed")).toBeVisible();
     expect(within(card).queryByTestId("ip-docket-review-export")).toBeNull();
+  });
+
+  it("reports a drifted calendar copy, and never rewrites it silently", async () => {
+    // UJ-62-EXC-03: the copy sits in someone's own calendar, so a change is
+    // surfaced rather than repaired behind their back.
+    checkIpCalendarDriftMock.mockResolvedValue({
+      checked_at: "2026-08-15T08:00:00Z",
+      findings: [
+        {
+          sync_id: "sync-1",
+          connection_id: "conn-1",
+          membership_id: "member-1",
+          source_type: "matter_deadline",
+          source_id: "deadline-1",
+          ip_docket_id: "ip-1",
+          drift_status: "moved",
+          detail: "The event was moved away from the CaseOps date.",
+        },
+        {
+          sync_id: "sync-2",
+          connection_id: "conn-2",
+          membership_id: "member-2",
+          source_type: "matter_deadline",
+          source_id: "deadline-2",
+          ip_docket_id: "ip-2",
+          drift_status: "unknown",
+          detail: "The calendar connection could not be read.",
+        },
+      ],
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-drift");
+    fireEvent.click(within(card).getByRole("button", { name: "Check calendar copies" }));
+
+    const findings = await within(card).findByTestId("ip-docket-drift-findings");
+    expect(within(findings).getByText("Moved away from the CaseOps date")).toBeVisible();
+    // "unknown" is its own outcome, never folded in with the healthy ones.
+    expect(within(findings).getByText("Could not be checked")).toBeVisible();
+    expect(within(findings).getByText("Unverified")).toBeVisible();
+    expect(
+      within(card).getByText(/could not be read, so it is unverified rather than confirmed/),
+    ).toBeVisible();
+  });
+
+  it("says plainly when every copy still matches", async () => {
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-drift");
+    fireEvent.click(within(card).getByRole("button", { name: "Check calendar copies" }));
+
+    expect(await within(card).findByTestId("ip-docket-drift-clean")).toHaveTextContent(
+      "Every projected event matched when checked",
+    );
   });
 });

@@ -9643,6 +9643,26 @@ export async function deleteIpDocketQueue(queueId: string): Promise<void> {
   await apiRequest(`/api/ip/docket-queues/${queueId}`, { method: "DELETE" });
 }
 
+export type IpCalendarDriftFinding = {
+  sync_id: string;
+  connection_id: string;
+  membership_id: string | null;
+  source_type: string;
+  source_id: string;
+  ip_docket_id: string | null;
+  // "unknown" is a real outcome: the provider could not be read, so the
+  // projection is unverified rather than confirmed correct.
+  drift_status: "moved" | "missing" | "unknown";
+  detail: string;
+};
+
+export async function checkIpCalendarDrift(): Promise<{
+  checked_at: string;
+  findings: IpCalendarDriftFinding[];
+}> {
+  return apiRequest("/api/ip/calendar-projections/drift-check", { method: "POST" });
+}
+
 export type IpControlException = {
   docket_id: string;
   kind: "uncovered" | "inactive_owner" | "unprojected_calendar" | "open_incident";

@@ -2903,6 +2903,10 @@ class CalendarEventSync(Base):
             name="ck_calendar_event_sync_ip_lifecycle_terminal_state",
         ),
         CheckConstraint(
+            "drift_status IN ('unchecked', 'matches', 'moved', 'missing', 'unknown')",
+            name="ck_calendar_event_sync_drift_status",
+        ),
+        CheckConstraint(
             "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
             "neutralized_ip_docket_id IS NULL) OR "
             "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
@@ -2944,6 +2948,17 @@ class CalendarEventSync(Base):
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dead_letter_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # UJ-62-EXC-03: whether the projected copy still matches the CaseOps source.
+    # `unknown` exists on purpose — when the provider cannot be read we must not
+    # report `matches`, because unverified is not verified.
+    drift_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unchecked", server_default="unchecked"
+    )
+    drift_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Content-free: a reason, never a title or a date from the record.
+    drift_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

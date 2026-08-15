@@ -61,6 +61,7 @@ from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import (
     assert_access,
+    can_access_ip_docket,
     visible_matters_filter,
 )
 from caseops_api.services.matter_operational_guard import matter_is_operational
@@ -190,6 +191,23 @@ class OutlookProvider(Protocol):
         token_payload: dict[str, Any],
         provider_event_id: str,
     ) -> None:
+        raise NotImplementedError
+
+    def fetch_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        provider_event_id: str,
+    ) -> dict[str, Any] | None:
+        """Read back a projected event so drift can be detected (UJ-62-EXC-03).
+
+        Returns ``None`` when the event no longer exists, otherwise a dict with
+        at least ``start_date`` (an ISO date string or ``None``) and
+        ``cancelled``. Raising ``CalendarProviderError`` is the correct answer
+        when the provider cannot be read: an unreadable provider is recorded as
+        `unknown`, never as a match.
+        """
+
         raise NotImplementedError
 
 
@@ -411,6 +429,43 @@ class MicrosoftGraphOutlookProvider:
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Microsoft Graph calendar delete failed.") from exc
 
+    def fetch_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        provider_event_id: str,
+    ) -> dict[str, Any] | None:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Microsoft Graph HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Outlook token is unavailable.")
+        try:
+            response = httpx.get(
+                "https://graph.microsoft.com/v1.0/me/events/"
+                f"{quote(provider_event_id, safe='')}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"$select": "id,isAllDay,isCancelled,start"},
+                timeout=15,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Microsoft Graph calendar read failed.") from exc
+        start = body.get("start") or {}
+        raw = str(start.get("dateTime") or "")
+        return {
+            "id": body.get("id"),
+            # All-day events carry a date; take only the date half so no
+            # timezone arithmetic can move the obligation across a day.
+            "start_date": raw[:10] or None,
+            "cancelled": bool(body.get("isCancelled")),
+        }
+
 
 class GoogleCalendarProvider:
     """Google Calendar adapter for CaseOps-to-Google hearing sync.
@@ -622,6 +677,42 @@ class GoogleCalendarProvider:
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Google Calendar delete failed.") from exc
+
+    def fetch_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        provider_event_id: str,
+    ) -> dict[str, Any] | None:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Google Calendar HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Google Calendar token is unavailable.")
+        try:
+            response = httpx.get(
+                "https://www.googleapis.com/calendar/v3/calendars/primary/"
+                f"events/{quote(provider_event_id, safe='')}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=15,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Google Calendar read failed.") from exc
+        start = body.get("start") or {}
+        # An all-day event carries `date`; a moved-to-timed event carries
+        # `dateTime`, and only its date half is compared.
+        raw = str(start.get("date") or start.get("dateTime") or "")
+        return {
+            "id": body.get("id"),
+            "start_date": raw[:10] or None,
+            "cancelled": str(body.get("status") or "") == "cancelled",
+        }
 
 
 _outlook_provider_override: OutlookProvider | None = None
@@ -3300,6 +3391,12 @@ def _sync_source_to_provider(
     sync.last_synced_at = now
     sync.next_attempt_at = None
     sync.dead_letter_reason = None
+    # Re-projecting is the repair, so any recorded drift is now stale rather
+    # than resolved: it is cleared to `unchecked` and must be re-checked to be
+    # claimed as matching (UJ-62-EXC-03).
+    sync.drift_status = "unchecked"
+    sync.drift_checked_at = None
+    sync.drift_detail = None
     connection.last_sync_at = now
     session.add_all([sync, connection])
     record_from_context(
@@ -4089,3 +4186,195 @@ __all__ = [
     "test_outlook_tenant_configuration",
     "update_outlook_tenant_configuration",
 ]
+
+
+@dataclass(frozen=True)
+class CalendarDriftFinding:
+    """One projected event compared against the CaseOps source (UJ-62-EXC-03)."""
+
+    sync_id: str
+    connection_id: str
+    membership_id: str | None
+    source_type: str
+    source_id: str
+    ip_docket_id: str | None
+    drift_status: str
+    detail: str
+
+
+def _drift_provider_reader(
+    session: Session,
+    *,
+    context: SessionContext,
+    connection: UserCalendarConnection,
+):
+    """Return a callable that reads one event back, or ``None`` if it cannot."""
+
+    if connection.status != CalendarConnectionStatus.CONNECTED:
+        return None
+    try:
+        provider = _provider_for(connection.provider)
+    except Exception:  # pragma: no cover - defensive: unknown provider string
+        return None
+    reader = getattr(provider, "fetch_event", None)
+    if reader is None or not getattr(provider, "configured", False):
+        # A provider that cannot be read yields `unknown`, never `matches`.
+        return None
+    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    if not token_payload:
+        return None
+
+    def _read(provider_event_id: str) -> dict[str, Any] | None:
+        return reader(token_payload=token_payload, provider_event_id=provider_event_id)
+
+    return _read
+
+
+def check_ip_calendar_projection_drift(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> list[CalendarDriftFinding]:
+    """Detect projected IP events edited or deleted in the provider (UJ-62-EXC-03).
+
+    The external calendar is a copy; CaseOps holds the obligation. Nothing
+    detected a copy being changed out of band, so a lawyer's calendar could
+    quietly disagree with the date they are accountable for.
+
+    This **detects and records**; it does not silently rewrite someone's own
+    calendar. A drifted row is surfaced so the change is deliberate, and a
+    successful re-sync clears the finding.
+
+    An unreadable provider records `unknown`. Reporting `matches` for something
+    that was never read would be the same falsehood as counting unknown work as
+    no work.
+    """
+
+    rows = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                CalendarEventSync.source_type.in_(
+                    [
+                        CalendarSyncSourceType.MATTER_HEARING.value,
+                        CalendarSyncSourceType.MATTER_TASK.value,
+                        CalendarSyncSourceType.MATTER_DEADLINE.value,
+                    ]
+                ),
+                CalendarEventSync.sync_status == CalendarEventSyncStatus.SYNCED,
+                CalendarEventSync.provider_event_id.is_not(None),
+            )
+            .order_by(CalendarEventSync.id)
+        ).all()
+    )
+    if not rows:
+        return []
+
+    connections = {
+        connection.id: connection
+        for connection in session.scalars(
+            select(UserCalendarConnection).where(
+                UserCalendarConnection.id.in_({row.calendar_connection_id for row in rows}),
+                UserCalendarConnection.company_id == context.company.id,
+            )
+        ).all()
+    }
+    readers: dict[str, Any] = {}
+    now = _current_time()
+    findings: list[CalendarDriftFinding] = []
+
+    for row in rows:
+        connection = connections.get(row.calendar_connection_id)
+        if connection is None:
+            continue
+        # Only IP-linked sources are in scope for this slice; a non-IP row
+        # returns None here and is left untouched.
+        try:
+            payload = _ip_source_payload_for(
+                session,
+                context=context,
+                source_type=row.source_type,
+                source_id=row.source_id,
+            )
+        except HTTPException:
+            # The caller cannot open this record. One such row must not abort
+            # the whole check for someone with partial access — it is simply
+            # not theirs to check, and the record's owner will check it.
+            continue
+        if payload is None:
+            continue
+        # A drift finding names a record. A caller who cannot open that record
+        # must not learn of it here, so the row is checked but not reported.
+        docket = payload.ip_docket
+        reportable = docket is not None and can_access_ip_docket(
+            session, context=context, docket=docket
+        )
+
+        if connection.id not in readers:
+            readers[connection.id] = _drift_provider_reader(
+                session, context=context, connection=connection
+            )
+        reader = readers[connection.id]
+
+        if reader is None:
+            status_value = "unknown"
+            detail = "The calendar connection could not be read."
+        else:
+            try:
+                event = reader(str(row.provider_event_id))
+            except CalendarProviderError as exc:
+                status_value = "unknown"
+                detail = _safe_error(exc)
+            except Exception:  # pragma: no cover - provider adapters are varied
+                status_value = "unknown"
+                detail = "The calendar provider could not be read."
+            else:
+                if event is None or event.get("cancelled"):
+                    status_value = "missing"
+                    detail = "The event is no longer on the calendar."
+                else:
+                    expected = payload.occurs_on.isoformat()
+                    actual = str(event.get("start_date") or "")
+                    if actual and actual != expected:
+                        status_value = "moved"
+                        # Content-free: states that it moved, not to when — the
+                        # authoritative date lives in CaseOps.
+                        detail = "The event was moved away from the CaseOps date."
+                    elif not actual:
+                        status_value = "unknown"
+                        detail = "The event carries no readable date."
+                    else:
+                        status_value = "matches"
+                        detail = "The event matches the CaseOps date."
+
+        row.drift_status = status_value
+        row.drift_checked_at = now
+        row.drift_detail = detail
+        row.updated_at = now
+
+        if status_value in {"moved", "missing", "unknown"} and reportable:
+            findings.append(
+                CalendarDriftFinding(
+                    sync_id=row.id,
+                    connection_id=connection.id,
+                    membership_id=connection.membership_id,
+                    source_type=row.source_type,
+                    source_id=row.source_id,
+                    ip_docket_id=getattr(payload.ip_docket, "id", None),
+                    drift_status=status_value,
+                    detail=detail,
+                )
+            )
+            record_from_context(
+                session,
+                context,
+                action="calendar_event_sync.drift_detected",
+                target_type="calendar_event_sync",
+                target_id=row.id,
+                ip_docket_id=getattr(payload.ip_docket, "id", None),
+                metadata={"drift_status": status_value, "source_type": row.source_type},
+            )
+
+    session.commit()
+    return findings

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import (
@@ -92,6 +93,8 @@ from caseops_api.schemas.ip_lifecycle import (
 )
 from caseops_api.schemas.ip_operations import (
     IpAssignedCoverageListResponse,
+    IpCalendarDriftRecord,
+    IpCalendarDriftResponse,
     IpControlReviewCreateRequest,
     IpControlReviewExportRequest,
     IpControlReviewRecord,
@@ -1281,6 +1284,23 @@ async def post_ip_coverage_bulk_acknowledge(
     session: DbSession,
 ) -> IpCoverageBulkAcknowledgeResponse:
     return bulk_acknowledge_ip_coverage(session, context=context, payload=payload)
+
+
+@router.post(
+    "/calendar-projections/drift-check",
+    response_model=IpCalendarDriftResponse,
+)
+async def post_ip_calendar_drift_check(
+    context: IpWriter,
+    session: DbSession,
+) -> IpCalendarDriftResponse:
+    from caseops_api.services.calendar_sync import check_ip_calendar_projection_drift
+
+    findings = check_ip_calendar_projection_drift(session, context=context)
+    return IpCalendarDriftResponse(
+        checked_at=datetime.now(UTC),
+        findings=[IpCalendarDriftRecord(**vars(finding)) for finding in findings],
+    )
 
 
 @router.get(

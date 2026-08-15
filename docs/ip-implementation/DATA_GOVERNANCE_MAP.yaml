@@ -4645,6 +4645,21 @@
           "sql_type": "VARCHAR(120)",
           "nullable": true
         },
+        "drift_checked_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "drift_detail": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(200)",
+          "nullable": true
+        },
+        "drift_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
         "durable_last_attempt_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
@@ -22755,12 +22770,12 @@
       }
     }
   ],
-  "schema_fingerprint": "460767b7485951706000383933328f0ce173b546bf38f11c041a5a315447f462",
+  "schema_fingerprint": "e4498c123f7f1e96486998ffa341fbd547c9db668bd7ebd1b2c70aac09f0e1ad",
   "index_inventory": {
     "orm_index_count": 1146,
     "orm_index_fingerprint": "63bfb7f8fc26bd7f5f9bd70d4b4a92d2e7448d5ac51e42280dfa585c3b7238aa",
-    "migration_index_count": 505,
-    "migration_index_fingerprint": "910ab9625c1f08bc2dd2d56e603ac7a1ef8e712662a8fe90ef1a0b1b19a8c04c",
+    "migration_index_count": 506,
+    "migration_index_fingerprint": "98b7e9742ddf73096f187eef31c4343ea11d8b1e956babbb6c6555337cbe2f07",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

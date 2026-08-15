@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   bulkAcknowledgeIpCoverage,
+  checkIpCalendarDrift,
   createIpControlReview,
   deleteIpDocketQueue,
   fetchIpAssignedCoverage,
@@ -141,6 +142,8 @@ export default function IpDailyDocketPage() {
       </div>
 
       {canWrite ? <AcknowledgementCard onChanged={() => docket.refetch()} /> : null}
+
+      {canWrite ? <CalendarDriftCard /> : null}
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
         {canWrite ? (
@@ -538,6 +541,105 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
               ))}
             </ul>
           </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+const DRIFT_LABEL: Record<string, string> = {
+  moved: "Moved away from the CaseOps date",
+  missing: "No longer on the calendar",
+  unknown: "Could not be checked",
+};
+
+/**
+ * External calendar drift (UJ-62-EXC-03).
+ *
+ * The projection is a copy; CaseOps holds the obligation. A copy edited or
+ * deleted in the provider is reported rather than silently rewritten — it is
+ * someone's own calendar — so the repair is a deliberate act.
+ *
+ * `unknown` is shown as its own outcome, never folded in with "fine": a
+ * projection that could not be read is unverified, not verified.
+ */
+function CalendarDriftCard() {
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [findings, setFindings] = useState<
+    { sync_id: string; drift_status: string; detail: string }[] | null
+  >(null);
+
+  const check = useMutation({
+    mutationFn: checkIpCalendarDrift,
+    onSuccess: (result) => {
+      setCheckedAt(result.checked_at);
+      setFindings(result.findings);
+      toast.success(
+        result.findings.length
+          ? `${result.findings.length} projected event${result.findings.length === 1 ? "" : "s"} no longer match CaseOps.`
+          : "Every projected event still matches CaseOps.",
+      );
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not check the calendars.")),
+  });
+
+  const unknown = (findings ?? []).filter((row) => row.drift_status === "unknown").length;
+
+  return (
+    <Card className="min-w-0" data-testid="ip-docket-drift">
+      <CardHeader>
+        <CardTitle as="h2">External calendar copies</CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
+          Deadlines are copied to connected calendars. If a copy is moved or deleted there, the
+          calendar stops agreeing with the deadline CaseOps holds. Copies are reported here rather
+          than silently rewritten, because they sit in someone&rsquo;s own calendar.
+        </p>
+
+        <div>
+          <Button size="sm" disabled={check.isPending} onClick={() => check.mutate()}>
+            Check calendar copies
+          </Button>
+        </div>
+
+        {findings !== null ? (
+          findings.length === 0 ? (
+            <p className="text-sm tabular-nums text-[var(--color-ink-2)]" data-testid="ip-docket-drift-clean">
+              Every projected event matched when checked
+              {checkedAt ? ` at ${STAMP.format(new Date(checkedAt))}` : ""}.
+            </p>
+          ) : (
+            <>
+              {unknown ? (
+                <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
+                  {unknown} could not be read, so {unknown === 1 ? "it is" : "they are"} unverified
+                  rather than confirmed correct.
+                </p>
+              ) : null}
+              <ul className="flex min-w-0 flex-col gap-2" data-testid="ip-docket-drift-findings">
+                {findings.map((row) => (
+                  <li
+                    key={row.sync_id}
+                    className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm"
+                    data-testid={`ip-docket-drift-${row.sync_id}`}
+                  >
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">
+                        {DRIFT_LABEL[row.drift_status] ?? row.drift_status}
+                      </span>
+                      {row.drift_status === "unknown" ? (
+                        <Badge tone="neutral">Unverified</Badge>
+                      ) : (
+                        <Badge tone="warning">Out of step</Badge>
+                      )}
+                    </span>
+                    <span className="mt-1 block text-[var(--color-mute)]">{row.detail}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )
         ) : null}
       </CardContent>
     </Card>
