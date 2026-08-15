@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from caseops_api.core.settings import get_settings
+from caseops_api.db.models import IpDeadline, MatterDeadline, NotificationDeliveryIntent
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -233,6 +236,126 @@ def test_cal_ops_06_override_and_recalculation_chain_are_explained(
     # The original calculation is still readable and keeps its own date.
     original = _dependencies(client, owner_headers, deadline["id"]).json()
     assert original["result_on"] == deadline["result_on"]
+
+
+def test_recalculated_candidate_confirmation_atomically_retires_full_ancestor_chain(
+    client: TestClient,
+) -> None:
+    """A three-hop candidate chain can produce only one live legal deadline."""
+
+    (
+        owner_headers,
+        legal_headers,
+        legal_id,
+        reviewer_id,
+        docket,
+        _rule,
+        _calendar,
+        original,
+    ) = _setup(client)
+
+    recalculated = client.post(
+        f"/api/ip/deadlines/{original['id']}/recalculate",
+        headers=legal_headers,
+        json={
+            "expected_version": original["version"],
+            "base_date": "2026-08-15",
+            "base_date_certainty": "certain",
+            "reason": "A later official receipt date was verified.",
+            "evidence_reference": "attachment:official-receipt-later-date",
+        },
+    )
+    assert recalculated.status_code == 200, recalculated.text
+    intermediate = recalculated.json()
+    assert intermediate["state"] == "candidate"
+    assert intermediate["supersedes_deadline_id"] == original["id"]
+
+    recalculated_again = client.post(
+        f"/api/ip/deadlines/{intermediate['id']}/recalculate",
+        headers=legal_headers,
+        json={
+            "expected_version": intermediate["version"],
+            "base_date": "2026-08-16",
+            "base_date_certainty": "certain",
+            "reason": "The certified registry copy supplied the final receipt date.",
+            "evidence_reference": "attachment:certified-registry-copy",
+        },
+    )
+    assert recalculated_again.status_code == 200, recalculated_again.text
+    successor = recalculated_again.json()
+    assert successor["state"] == "candidate"
+    assert successor["supersedes_deadline_id"] == intermediate["id"]
+
+    confirmed = client.post(
+        f"/api/ip/deadlines/{successor['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": successor["version"],
+            "responsibilities": _responsibilities(legal_id, reviewer_id),
+            "reminder_offsets_days": [1, 0],
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["state"] == "confirmed"
+
+    # Neither stale ancestor can subsequently be confirmed into a second live
+    # legal date or a duplicate operational/calendar projection.
+    for stale in (original, intermediate):
+        stale_confirmation = client.post(
+            f"/api/ip/deadlines/{stale['id']}/confirm",
+            headers=legal_headers,
+            json={
+                "expected_version": stale["version"],
+                "responsibilities": _responsibilities(legal_id, reviewer_id),
+            },
+        )
+        assert stale_confirmation.status_code == 409, stale_confirmation.text
+
+    workspace = client.get(
+        f"/api/ip/dockets/{docket['id']}/deadline-workspace",
+        headers=owner_headers,
+    )
+    assert workspace.status_code == 200, workspace.text
+    states = {row["id"]: row["state"] for row in workspace.json()["deadlines"]}
+    assert states[original["id"]] == "superseded"
+    assert states[intermediate["id"]] == "superseded"
+    assert states[successor["id"]] == "confirmed"
+    assert list(states.values()).count("confirmed") == 1
+
+    with get_session_factory()() as session:
+        legal_rows = list(
+            session.scalars(
+                select(IpDeadline).where(IpDeadline.docket_id == docket["id"])
+            ).all()
+        )
+        assert {row.id: row.state for row in legal_rows} == {
+            original["id"]: "superseded",
+            intermediate["id"]: "superseded",
+            successor["id"]: "confirmed",
+        }
+        projections = list(
+            session.scalars(
+                select(MatterDeadline).where(
+                    MatterDeadline.source_ref_type == "ip_deadline",
+                    MatterDeadline.source_ref_id.in_(
+                        [original["id"], intermediate["id"], successor["id"]]
+                    ),
+                )
+            ).all()
+        )
+        assert [row.source_ref_id for row in projections] == [successor["id"]]
+        reminders = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.schedule_source_type == "ip_deadline",
+                    NotificationDeliveryIntent.schedule_source_id.in_(
+                        [original["id"], intermediate["id"], successor["id"]]
+                    ),
+                )
+            ).all()
+        )
+        assert reminders
+        assert {row.schedule_source_id for row in reminders} == {successor["id"]}
 
 
 def test_dependencies_are_access_scoped_and_tenant_isolated(

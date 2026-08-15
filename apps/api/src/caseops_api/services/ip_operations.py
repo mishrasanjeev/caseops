@@ -48,6 +48,7 @@ from caseops_api.schemas.ip_operations import (
     IpControlReviewExportRequest,
     IpControlReviewRecord,
     IpControlReviewSignOffRequest,
+    IpControlReviewSnapshot,
     IpCostItemCreateRequest,
     IpCostItemRecord,
     IpCostReconciliationReport,
@@ -110,6 +111,19 @@ from caseops_api.services.session_context import SessionContext
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+CONTROL_REVIEW_QUERY_VERSION = "ip-docket-control-v1"
+CONTROL_REVIEW_SNAPSHOT_SCHEMA_VERSION = 1
+CONTROL_REVIEW_RESTRICTED_COUNT_POLICY = "omit_without_count"
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _sha256_json(value: object) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
 def _readiness_errors(payload: TrademarkParticularPayload) -> list[str]:
@@ -285,22 +299,27 @@ def create_ip_docket(
     *,
     context: SessionContext,
     payload: IpDocketCreateRequest,
+    docket_id: str | None = None,
+    source_provenance: tuple[str, str] | None = None,
 ) -> IpDocketRecordResponse:
     _matter_for_docket(session, context=context, matter_id=payload.matter_id)
     errors = _readiness_errors(payload.particulars)
-    docket = IpDocketRecord(
-        company_id=context.company.id,
-        matter_id=payload.matter_id,
-        record_type="trademark",
-        title=payload.title.strip(),
-        primary_identifier=(
+    docket_values = {
+        "company_id": context.company.id,
+        "matter_id": payload.matter_id,
+        "record_type": "trademark",
+        "title": payload.title.strip(),
+        "primary_identifier": (
             payload.primary_identifier.strip().upper() if payload.primary_identifier else None
         ),
-        status="draft" if errors else "ready",
-        restricted=payload.restricted,
-        current_version=1,
-        created_by_membership_id=context.membership.id,
-    )
+        "status": "draft" if errors else "ready",
+        "restricted": payload.restricted,
+        "current_version": 1,
+        "created_by_membership_id": context.membership.id,
+    }
+    if docket_id is not None:
+        docket_values["id"] = docket_id
+    docket = IpDocketRecord(**docket_values)
     session.add(docket)
     try:
         session.flush()
@@ -335,6 +354,18 @@ def create_ip_docket(
         ip_docket_id=docket.id,
         metadata={"record_type": "trademark", "readiness_status": version.readiness_status},
     )
+    if source_provenance is not None:
+        source_type, source_id = source_provenance
+        record_from_context(
+            session,
+            context,
+            action="ip_docket.source_materialized",
+            target_type=source_type,
+            target_id=source_id,
+            matter_id=docket.matter_id,
+            ip_docket_id=docket.id,
+            metadata={"docket_id": docket.id},
+        )
     session.commit()
     session.refresh(docket)
     return _serialize_docket(session, docket)
@@ -1167,6 +1198,11 @@ def bulk_reassign_ip_deadline_coverages(
             .with_for_update()
         ).all()
     )
+    _assert_distinct_backup_replacement(
+        rows,
+        source_membership_id=source.id,
+        replacement_membership_id=replacement.id,
+    )
     affected_dockets = list(
         session.scalars(
             select(IpDocketRecord).where(
@@ -1702,8 +1738,13 @@ def reconcile_ip_cost_items(
     )
 
 
-def ip_docket_control_report(session: Session, *, context: SessionContext) -> IpDocketControlReport:
-    listing = list_ip_dockets(session, context=context)
+def _ip_docket_control_report_from_listing(
+    session: Session,
+    *,
+    context: SessionContext,
+    listing: IpDocketListResponse,
+    generated_at: datetime,
+) -> IpDocketControlReport:
     totals: dict[str, int] = {}
     for docket in listing.dockets:
         for item in docket.cost_items:
@@ -1715,7 +1756,7 @@ def ip_docket_control_report(session: Session, *, context: SessionContext) -> Ip
         ).all()
     }
     return IpDocketControlReport(
-        generated_at=_now(),
+        generated_at=generated_at,
         docket_count=listing.count,
         ready_count=sum(row.status == "ready" for row in listing.dockets),
         uncovered_deadline_count=sum(
@@ -1737,6 +1778,16 @@ def ip_docket_control_report(session: Session, *, context: SessionContext) -> Ip
             for coverage in row.deadline_coverages
         ),
         total_cost_minor_by_currency=totals,
+    )
+
+
+def ip_docket_control_report(session: Session, *, context: SessionContext) -> IpDocketControlReport:
+    listing = list_ip_dockets(session, context=context)
+    return _ip_docket_control_report_from_listing(
+        session,
+        context=context,
+        listing=listing,
+        generated_at=_now(),
     )
 
 
@@ -1811,27 +1862,104 @@ def _control_exceptions(
     return found
 
 
-def _review_record(
-    row: IpDocketControlReview,
-    report: IpDocketControlReport,
-) -> IpControlReviewRecord:
+def _apply_control_review_filters(
+    session: Session,
+    *,
+    context: SessionContext,
+    listing: IpDocketListResponse,
+    filters: dict[str, object],
+) -> IpDocketListResponse:
+    """Apply the complete v1 filter contract to an access-scoped population."""
+
+    included_ids = {row.id for row in listing.dockets}
+    excluded_ids = set(filters.get("exclude_docket_ids", []))
+    if unknown_ids := sorted(excluded_ids - included_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "ip_control_review_filter_invalid",
+                "message": (
+                    "exclude_docket_ids must reference records in the caller's "
+                    "full access-scoped docket population."
+                ),
+                "invalid_count": len(unknown_ids),
+            },
+        )
+
+    team_value = filters.get("team")
+    team_matter_ids: set[str] | None = None
+    if team_value is not None:
+        team = session.scalar(
+            select(Team).where(
+                Team.company_id == context.company.id,
+                Team.is_active.is_(True),
+                or_(Team.id == team_value, Team.slug == team_value),
+            )
+        )
+        if team is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "code": "ip_control_review_filter_invalid",
+                    "message": "team must identify an active team in this workspace.",
+                },
+            )
+        team_matter_ids = set(
+            session.scalars(
+                select(Matter.id).where(
+                    Matter.company_id == context.company.id,
+                    Matter.team_id == team.id,
+                )
+            ).all()
+        )
+
+    filtered = [
+        row
+        for row in listing.dockets
+        if row.id not in excluded_ids
+        and (team_matter_ids is None or row.matter_id in team_matter_ids)
+    ]
+    return IpDocketListResponse(dockets=filtered, count=len(filtered))
+
+
+def _stored_control_review_snapshot(row: IpDocketControlReview) -> IpControlReviewSnapshot:
+    payload = dict(row.report_snapshot_json or {})
+    if (
+        not payload
+        or row.snapshot_schema_version != CONTROL_REVIEW_SNAPSHOT_SCHEMA_VERSION
+        or payload.get("schema_version") != row.snapshot_schema_version
+        or payload.get("query_version") != row.query_version
+        or _sha256_json(payload) != row.manifest_sha256
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "ip_control_review_snapshot_integrity_failed",
+                "message": "Stored control-review evidence failed its integrity check.",
+            },
+        )
+    return IpControlReviewSnapshot.model_validate(payload)
+
+
+def _review_record(row: IpDocketControlReview) -> IpControlReviewRecord:
+    snapshot = _stored_control_review_snapshot(row)
     return IpControlReviewRecord(
         id=row.id,
-        generated_at=row.generated_at,
-        filters=dict(row.filters_json or {}),
-        freshness=dict(row.freshness_json or {}),
+        generated_at=snapshot.generated_at,
+        filters=snapshot.filters,
+        freshness=snapshot.freshness,
         completeness_status=row.completeness_status,
-        incompleteness_reasons=list(row.incompleteness_reasons_json or []),
-        mandatory_exceptions=[
-            IpControlExceptionRecord(**item) for item in (row.mandatory_exception_ids_json or [])
-        ],
+        incompleteness_reasons=snapshot.incompleteness_reasons,
+        mandatory_exceptions=snapshot.mandatory_exceptions,
+        query_version=row.query_version,
         manifest_sha256=row.manifest_sha256,
         export_status=row.export_status,
         export_error_redacted=row.export_error_redacted,
         signer_label_snapshot=row.signer_label_snapshot,
         signed_off_at=row.signed_off_at,
         version=row.version,
-        report=report,
+        report=snapshot.report,
+        snapshot=snapshot,
     )
 
 
@@ -1850,43 +1978,82 @@ def create_ip_control_review(
     dismissal can hide them (CAL-OPS-13).
     """
 
-    report = ip_docket_control_report(session, context=context)
-    listing = list_ip_dockets(session, context=context)
-    exceptions = _control_exceptions(session, context=context, listing=listing)
-
     reasons: list[str] = []
     for source in sorted({s.strip() for s in payload.stale_sources if s.strip()}):
         reasons.append(f"stale_source:{source}")
     for query in sorted({q.strip() for q in payload.failed_queries if q.strip()}):
         reasons.append(f"failed_query:{query}")
 
+    filters = payload.filters.model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude_defaults=True,
+    )
     now = _now()
-    manifest = hashlib.sha256(
-        json.dumps(
-            {
-                "generated_at": now.isoformat(),
-                "filters": payload.filters,
-                "docket_count": report.docket_count,
-                "exceptions": [item.model_dump(mode="json") for item in exceptions],
-                "incompleteness": reasons,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+    freshness = {
+        "stale_sources": sorted(
+            {s.strip() for s in payload.stale_sources if s.strip()}
+        ),
+        "failed_queries": sorted(
+            {q.strip() for q in payload.failed_queries if q.strip()}
+        ),
+        "observed_at": now.isoformat(),
+    }
+    full_listing = list_ip_dockets(session, context=context)
+    exceptions = _control_exceptions(
+        session,
+        context=context,
+        listing=full_listing,
+    )
+    listing = _apply_control_review_filters(
+        session,
+        context=context,
+        listing=full_listing,
+        filters=filters,
+    )
+    report = _ip_docket_control_report_from_listing(
+        session,
+        context=context,
+        listing=listing,
+        generated_at=now,
+    )
+    snapshot = IpControlReviewSnapshot(
+        schema_version=CONTROL_REVIEW_SNAPSHOT_SCHEMA_VERSION,
+        query_version=CONTROL_REVIEW_QUERY_VERSION,
+        generated_at=now,
+        timezone=context.company.timezone,
+        filters=filters,
+        freshness=freshness,
+        hidden_restricted_count_policy=CONTROL_REVIEW_RESTRICTED_COUNT_POLICY,
+        included_records=sorted(
+            (
+                {
+                    "docket_id": docket.id,
+                    "current_version": docket.current_version,
+                    "sha256": _sha256_json(docket.model_dump(mode="json")),
+                }
+                for docket in listing.dockets
+            ),
+            key=lambda item: item["docket_id"],
+        ),
+        report=report,
+        mandatory_exceptions=exceptions,
+        incompleteness_reasons=reasons,
+    )
+    snapshot_json = snapshot.model_dump(mode="json")
+    manifest = _sha256_json(snapshot_json)
 
     row = IpDocketControlReview(
         company_id=context.company.id,
         generated_at=now,
-        filters_json=payload.filters,
-        freshness_json={
-            "stale_sources": sorted({s.strip() for s in payload.stale_sources if s.strip()}),
-            "failed_queries": sorted({q.strip() for q in payload.failed_queries if q.strip()}),
-            "observed_at": now.isoformat(),
-        },
+        filters_json=filters,
+        freshness_json=freshness,
         completeness_status="incomplete" if reasons else "complete",
         incompleteness_reasons_json=reasons,
         mandatory_exception_ids_json=[item.model_dump(mode="json") for item in exceptions],
+        query_version=CONTROL_REVIEW_QUERY_VERSION,
+        snapshot_schema_version=CONTROL_REVIEW_SNAPSHOT_SCHEMA_VERSION,
+        report_snapshot_json=snapshot_json,
         manifest_sha256=manifest,
         export_status="not_requested",
         version=1,
@@ -1909,7 +2076,7 @@ def create_ip_control_review(
     )
     session.commit()
     session.refresh(row)
-    return _review_record(row, report)
+    return _review_record(row)
 
 
 def _review_or_404(
@@ -1938,7 +2105,7 @@ def get_ip_control_review(
     review_id: str,
 ) -> IpControlReviewRecord:
     row = _review_or_404(session, context=context, review_id=review_id)
-    return _review_record(row, ip_docket_control_report(session, context=context))
+    return _review_record(row)
 
 
 def record_ip_control_review_export(
@@ -1951,6 +2118,7 @@ def record_ip_control_review_export(
     """UJ-59-EXC-03 — a failed export must not leave the review signable."""
 
     row = _review_or_404(session, context=context, review_id=review_id, for_update=True)
+    _stored_control_review_snapshot(row)
     if row.signed_off_at is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1971,7 +2139,7 @@ def record_ip_control_review_export(
     )
     session.commit()
     session.refresh(row)
-    return _review_record(row, ip_docket_control_report(session, context=context))
+    return _review_record(row)
 
 
 def sign_off_ip_control_review(
@@ -1984,6 +2152,7 @@ def sign_off_ip_control_review(
     """CAL-OPS-09 sign-off, refused unless the review is genuinely clean."""
 
     row = _review_or_404(session, context=context, review_id=review_id, for_update=True)
+    snapshot = _stored_control_review_snapshot(row)
     if row.version != payload.expected_version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -2011,6 +2180,18 @@ def sign_off_ip_control_review(
                 "message": "Export generation failed; the review cannot be marked complete.",
             },
         )
+    if snapshot.mandatory_exceptions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_control_review_exceptions_unresolved",
+                "message": (
+                    "Mandatory exceptions require explicit resolution evidence "
+                    "before sign-off."
+                ),
+                "mandatory_exception_count": len(snapshot.mandatory_exceptions),
+            },
+        )
 
     row.signed_off_by_membership_id = context.membership.id
     row.signer_label_snapshot = context.user.full_name or context.user.email
@@ -2030,7 +2211,7 @@ def sign_off_ip_control_review(
     )
     session.commit()
     session.refresh(row)
-    return _review_record(row, ip_docket_control_report(session, context=context))
+    return _review_record(row)
 
 
 def ip_daily_docket(
@@ -2058,7 +2239,13 @@ def ip_daily_docket(
 
     stale = sorted({s.strip() for s in (stale_sources or []) if s.strip()})
     counts_complete = not stale
-    listing = list_ip_dockets(session, context=context)
+    applied_filters = dict(filters or {})
+    listing = _apply_control_review_filters(
+        session,
+        context=context,
+        listing=list_ip_dockets(session, context=context),
+        filters=applied_filters,
+    )
 
     memberships = {
         row.id: row
@@ -2152,7 +2339,7 @@ def ip_daily_docket(
     escalations.sort(key=lambda item: (not item.critical, item.reason, item.coverage_id))
     return IpDailyDocketResponse(
         generated_at=_now(),
-        filters=dict(filters or {}),
+        filters=applied_filters,
         stale_sources=stale,
         counts_are_complete=counts_complete,
         queues=queues,
@@ -2165,7 +2352,79 @@ def _aware_utc(value):
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-def _coverage_preview_token(rows: list[IpDeadlineCoverage]) -> str:
+def _coverage_roles(
+    row: IpDeadlineCoverage,
+    *,
+    membership_id: str,
+) -> list[str]:
+    """Return the exact roles ``membership_id`` holds on one coverage row."""
+
+    roles: list[str] = []
+    if row.responsible_membership_id == membership_id:
+        roles.append("responsible")
+    if row.backup_membership_id == membership_id:
+        roles.append("backup")
+    return roles
+
+
+def _backup_replacement_conflicts(
+    rows: list[IpDeadlineCoverage],
+    *,
+    source_membership_id: str,
+    replacement_membership_id: str,
+) -> list[IpDeadlineCoverage]:
+    """Rows where replacing a departing backup with the primary removes backup cover."""
+
+    return [
+        row
+        for row in rows
+        if row.backup_membership_id == source_membership_id
+        and row.responsible_membership_id == replacement_membership_id
+    ]
+
+
+def _assert_distinct_backup_replacement(
+    rows: list[IpDeadlineCoverage],
+    *,
+    source_membership_id: str,
+    replacement_membership_id: str,
+) -> None:
+    conflicts = _backup_replacement_conflicts(
+        rows,
+        source_membership_id=source_membership_id,
+        replacement_membership_id=replacement_membership_id,
+    )
+    if conflicts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_distinct_backup_required",
+                "message": (
+                    "The proposed replacement already owns affected deadlines; "
+                    "choose a distinct backup so coverage is not removed."
+                ),
+                "blocked_coverage_ids": [row.id for row in conflicts],
+                "blocked_docket_ids": sorted({row.docket_id for row in conflicts}),
+            },
+        )
+
+
+def _coverage_preview_roles(
+    rows: list[IpDeadlineCoverage],
+    *,
+    membership_id: str,
+) -> dict[str, list[str]]:
+    return {
+        row.id: _coverage_roles(row, membership_id=membership_id)
+        for row in rows
+    }
+
+
+def _coverage_preview_token(
+    rows: list[IpDeadlineCoverage],
+    *,
+    membership_id: str,
+) -> str:
     """An atomic snapshot of the coverage set being transferred (CAL-OPS-08).
 
     Any concurrent change to any affected row alters the token, so a transfer
@@ -2174,7 +2433,8 @@ def _coverage_preview_token(rows: list[IpDeadlineCoverage]) -> str:
 
     parts = sorted(
         f"{row.id}:{row.reassignment_version}:{row.responsible_membership_id}"
-        f":{row.backup_membership_id or ''}:{row.replacement_decision}"
+        f":{row.backup_membership_id or ''}:{row.replacement_decision}:"
+        f"{','.join(_coverage_roles(row, membership_id=membership_id))}"
         for row in rows
     )
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
@@ -2730,13 +2990,24 @@ def preview_ip_coverage_reassignment(
             docket=docket,
         )
     ]
+    backup_conflicts = _backup_replacement_conflicts(
+        rows,
+        source_membership_id=payload.from_membership_id,
+        replacement_membership_id=replacement.id,
+    )
+    blocked.extend(row.docket_id for row in backup_conflicts)
     return IpCoverageReassignPreviewResponse(
         from_membership_id=payload.from_membership_id,
         to_membership_id=payload.to_membership_id,
-        preview_token=_coverage_preview_token(rows),
+        preview_token=_coverage_preview_token(
+            rows, membership_id=payload.from_membership_id
+        ),
         affected_coverage_ids=[row.id for row in rows],
+        affected_roles=_coverage_preview_roles(
+            rows, membership_id=payload.from_membership_id
+        ),
         affected_docket_ids=sorted({row.docket_id for row in rows}),
-        blocked_docket_ids=sorted(blocked),
+        blocked_docket_ids=sorted(set(blocked)),
         transfer_allowed=not blocked,
     )
 
@@ -2764,7 +3035,10 @@ def propose_ip_coverage_reassignment(
         session, context=context, membership_id=payload.from_membership_id, for_update=True
     )
     # UJ-57-EXC-04: the preview must still describe reality.
-    if _coverage_preview_token(rows) != payload.preview_token:
+    if (
+        _coverage_preview_token(rows, membership_id=payload.from_membership_id)
+        != payload.preview_token
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -2783,6 +3057,11 @@ def propose_ip_coverage_reassignment(
     )
     _assert_replacement_can_cover(
         session, context=context, replacement=replacement, dockets=dockets
+    )
+    _assert_distinct_backup_replacement(
+        rows,
+        source_membership_id=payload.from_membership_id,
+        replacement_membership_id=replacement.id,
     )
 
     emergency_until = payload.emergency_until
@@ -2803,23 +3082,40 @@ def propose_ip_coverage_reassignment(
     else:
         escalation = None
 
+    affected_roles = _coverage_preview_roles(
+        rows, membership_id=payload.from_membership_id
+    )
     now = _now()
     for row in rows:
-        row.pending_replacement_membership_id = replacement.id
-        row.replacement_decision_reason = payload.reason
-        if emergency_until is not None:
-            # UJ-57-EXC-05: emergency cover moves ownership now, but only until
-            # it expires, and it always names who it escalates to.
-            row.responsible_membership_id = replacement.id
-            row.replacement_decision = "accepted"
-            row.replacement_decided_at = now
-            row.emergency_until = emergency_until
-            row.emergency_escalation_membership_id = escalation.id if escalation else None
-            row.coverage_status = "emergency"
-        else:
-            row.replacement_decision = "pending"
-            row.replacement_decided_at = None
-            row.coverage_status = "transfer_pending"
+        roles = affected_roles[row.id]
+
+        # Backup naming is an administrative assignment, not a transfer of
+        # primary accountability. A backup-only row must retain its existing
+        # responsible owner and must never create a responsibility decision.
+        if "backup" in roles:
+            row.backup_membership_id = replacement.id
+
+        if "responsible" in roles:
+            row.pending_replacement_membership_id = replacement.id
+            row.replacement_decision_reason = payload.reason
+            if emergency_until is not None:
+                # UJ-57-EXC-05: emergency cover moves ownership now, but only until
+                # it expires, and it always names who it escalates to.
+                row.responsible_membership_id = replacement.id
+                row.replacement_decision = "accepted"
+                row.replacement_decided_at = now
+                row.emergency_until = emergency_until
+                row.emergency_escalation_membership_id = (
+                    escalation.id if escalation else None
+                )
+                row.coverage_status = "emergency"
+            else:
+                row.replacement_decision = "pending"
+                row.replacement_decided_at = None
+                row.coverage_status = "transfer_pending"
+
+        if row.backup_membership_id == row.responsible_membership_id:
+            row.backup_membership_id = None
         row.reassignment_version += 1
         row.updated_at = now
 
@@ -2832,6 +3128,7 @@ def propose_ip_coverage_reassignment(
         metadata={
             "to_membership_id": replacement.id,
             "coverage_ids": [row.id for row in rows],
+            "coverage_roles": affected_roles,
             "emergency": emergency_until is not None,
             "reason": payload.reason,
         },
@@ -2843,8 +3140,11 @@ def propose_ip_coverage_reassignment(
     return IpCoverageReassignPreviewResponse(
         from_membership_id=payload.from_membership_id,
         to_membership_id=replacement.id,
-        preview_token=_coverage_preview_token(refreshed),
+        preview_token=_coverage_preview_token(
+            refreshed, membership_id=payload.from_membership_id
+        ),
         affected_coverage_ids=[row.id for row in rows],
+        affected_roles=affected_roles,
         affected_docket_ids=sorted({row.docket_id for row in rows}),
         blocked_docket_ids=[],
         transfer_allowed=True,

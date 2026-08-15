@@ -42,6 +42,7 @@ def _member(
     *,
     name: str,
     email: str,
+    company_slug: str = "aster-legal",
 ) -> tuple[str, str]:
     created = client.post(
         "/api/companies/current/users",
@@ -59,7 +60,7 @@ def _member(
         json={
             "email": email,
             "password": "DeadlineAdmin123!",
-            "company_slug": "aster-legal",
+            "company_slug": company_slug,
         },
     )
     assert login.status_code == 200, login.text

@@ -110,6 +110,7 @@ class IpIdentifierResponse(BaseModel):
     is_primary: bool
     reconciliation_status: str
     supersedes_identifier_id: str | None
+    superseded_by_identifier_id: str | None
     correction_reason: str | None
     created_at: datetime
 

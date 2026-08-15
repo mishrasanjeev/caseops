@@ -111,6 +111,22 @@ def _setup(client: TestClient):
         client, owner_token, name="Docket Backup", email="docket-backup@asterlegal.in"
     )
     matter = _mk_matter(client, owner_token, "IP-039C-UJ50")
+    team = client.post(
+        "/api/teams/",
+        headers=owner_headers,
+        json={"name": "Trademarks", "slug": "trademarks", "kind": "team"},
+    )
+    assert team.status_code == 201, team.text
+    assigned = client.patch(
+        f"/api/matters/{matter['id']}",
+        headers=owner_headers,
+        json={
+            "team_id": team.json()["id"],
+            "expected_updated_at": matter["updated_at"],
+        },
+    )
+    assert assigned.status_code == 200, assigned.text
+    matter = assigned.json()
     return owner_headers, owner_id, primary_id, backup_id, matter
 
 

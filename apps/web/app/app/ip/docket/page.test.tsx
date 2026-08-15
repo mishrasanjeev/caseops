@@ -350,6 +350,23 @@ describe("IpDailyDocketPage", () => {
     );
   });
 
+  it("refuses sign-off while a complete review still has mandatory exceptions", async () => {
+    createIpControlReviewMock.mockResolvedValue({
+      ...REVIEW,
+      mandatory_exceptions: [{ docket_id: "ip-9", kind: "uncovered", critical: true }],
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+
+    expect(await within(card).findByTestId("ip-docket-review-blocked")).toHaveTextContent(
+      "Resolve every mandatory exception and generate a clean review before signing.",
+    );
+    expect(within(card).queryByRole("button", { name: "Sign off" })).toBeNull();
+  });
+
   it("saves the current filters as a reusable queue", async () => {
     saveIpDocketQueueMock.mockResolvedValue({
       id: "queue-1",
@@ -400,13 +417,16 @@ describe("IpDailyDocketPage", () => {
     expect(screen.queryByTestId("ip-docket-queues")).toBeNull();
     expect(screen.queryByTestId("ip-docket-drift")).toBeNull();
 
-    // The review can be generated with ip:read, but not signed without approve.
+    // Generating a review persists an immutable record and audit event, so it
+    // is a write just like recording its export.
     const card = screen.getByTestId("ip-docket-control-review");
-    createIpControlReviewMock.mockResolvedValue(REVIEW);
-    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+    expect(within(card).queryByRole("button", { name: "Generate control review" })).toBeNull();
     expect(
-      await within(card).findByText("Your role cannot sign off a control review."),
+      within(card).getByText(
+        "Your role can view the docket but cannot create a control-review record.",
+      ),
     ).toBeVisible();
+    expect(createIpControlReviewMock).not.toHaveBeenCalled();
     expect(within(card).queryByRole("button", { name: "Sign off" })).toBeNull();
     // Recording an export is a write too, so that control is absent as well.
     expect(within(card).queryByTestId("ip-docket-review-export")).toBeNull();

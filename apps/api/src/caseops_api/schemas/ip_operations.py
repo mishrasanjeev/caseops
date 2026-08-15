@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -448,10 +449,57 @@ class IpControlExceptionRecord(BaseModel):
     critical: bool = True
 
 
+class IpControlReviewIncludedRecord(BaseModel):
+    """One access-filtered docket row frozen into a control-review manifest."""
+
+    docket_id: str
+    current_version: int = Field(ge=1)
+    sha256: str = Field(min_length=64, max_length=64)
+
+
+class IpControlReviewSnapshot(BaseModel):
+    """Canonical, hash-bound input and output of one control-report query."""
+
+    schema_version: Literal[1] = 1
+    query_version: str
+    generated_at: datetime
+    timezone: str
+    filters: dict[str, Any]
+    freshness: dict[str, Any]
+    hidden_restricted_count_policy: Literal["omit_without_count"]
+    included_records: list[IpControlReviewIncludedRecord] = Field(default_factory=list)
+    report: IpDocketControlReport
+    mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
+    incompleteness_reasons: list[str] = Field(default_factory=list)
+
+
+class IpControlReviewFilters(BaseModel):
+    """The complete, versioned filter vocabulary for a control review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Team is an exact company-scoped team ID or slug, never a fuzzy label.
+    team: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$",
+    )
+    exclude_docket_ids: list[UUID] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def reject_duplicate_exclusions(self) -> IpControlReviewFilters:
+        if len(self.exclude_docket_ids) != len(set(self.exclude_docket_ids)):
+            raise ValueError("exclude_docket_ids must not contain duplicates")
+        return self
+
+
 class IpControlReviewCreateRequest(BaseModel):
     """Filters and observed source freshness for one control review."""
 
-    filters: dict[str, Any] = Field(default_factory=dict)
+    model_config = ConfigDict(extra="forbid")
+
+    filters: IpControlReviewFilters = Field(default_factory=IpControlReviewFilters)
     stale_sources: list[str] = Field(default_factory=list, max_length=40)
     failed_queries: list[str] = Field(default_factory=list, max_length=40)
 
@@ -474,6 +522,7 @@ class IpControlReviewRecord(BaseModel):
     completeness_status: str
     incompleteness_reasons: list[str] = Field(default_factory=list)
     mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
+    query_version: str
     manifest_sha256: str
     export_status: str
     export_error_redacted: str | None = None
@@ -481,6 +530,7 @@ class IpControlReviewRecord(BaseModel):
     signed_off_at: datetime | None = None
     version: int
     report: IpDocketControlReport
+    snapshot: IpControlReviewSnapshot
 
 
 class IpDailyDocketQueue(BaseModel):
@@ -673,6 +723,9 @@ class IpCoverageReassignPreviewResponse(BaseModel):
     to_membership_id: str
     preview_token: str
     affected_coverage_ids: list[str] = Field(default_factory=list)
+    affected_roles: dict[str, list[Literal["responsible", "backup"]]] = Field(
+        default_factory=dict
+    )
     affected_docket_ids: list[str] = Field(default_factory=list)
     blocked_docket_ids: list[str] = Field(default_factory=list)
     transfer_allowed: bool

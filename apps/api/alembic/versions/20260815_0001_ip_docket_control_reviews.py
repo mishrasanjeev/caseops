@@ -14,7 +14,12 @@ mandatory exception list reference IP records by identifier and describe the
 state of a firm's docket on a given day, so the review is disclosive of
 workload even though it stores no record titles. It is tenant-scoped through
 ``company_id`` under the fail-closed ``registry_fail_closed`` handler; a signed
-review is immutable evidence and has no approved runtime deletion path.
+review is immutable evidence and has no approved runtime deletion path. The
+canonical snapshot retains the query/schema versions, timezone, hidden-count
+policy, included accessible record IDs/hashes, report output and exceptions;
+``manifest_sha256`` binds those bytes so later docket changes cannot rewrite
+what was signed. Signer and creator references are company-matched at the
+database boundary while their existing attribution-loss behavior is retained.
 """
 
 from __future__ import annotations
@@ -46,6 +51,11 @@ def upgrade() -> None:
         ),
         sa.Column("incompleteness_reasons_json", sa.JSON(), nullable=False),
         sa.Column("mandatory_exception_ids_json", sa.JSON(), nullable=False),
+        sa.Column("query_version", sa.String(length=64), nullable=False),
+        sa.Column(
+            "snapshot_schema_version", sa.Integer(), nullable=False, server_default="1"
+        ),
+        sa.Column("report_snapshot_json", sa.JSON(), nullable=False),
         sa.Column("manifest_sha256", sa.String(length=64), nullable=False),
         sa.Column(
             "export_status", sa.String(length=16), nullable=False, server_default="not_requested"
@@ -63,7 +73,17 @@ def upgrade() -> None:
             ["signed_off_by_membership_id"], ["company_memberships.id"], ondelete="SET NULL"
         ),
         sa.ForeignKeyConstraint(
+            ["signed_off_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_review_signer_company",
+        ),
+        sa.ForeignKeyConstraint(
             ["created_by_membership_id"], ["company_memberships.id"], ondelete="SET NULL"
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_review_creator_company",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint(

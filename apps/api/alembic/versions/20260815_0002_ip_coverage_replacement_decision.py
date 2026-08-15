@@ -21,6 +21,8 @@ The new columns extend the existing ``ip_deadline_coverages``
 ``emergency_until`` are ``domain_attribute``. The reason field is free text
 supplied by a member about a colleague's coverage, so it inherits the table's
 existing tenant scoping and fail-closed disposition unchanged.
+Both new membership references are also paired with ``company_id`` so a
+replacement or emergency escalation target cannot cross a tenant boundary.
 """
 
 from __future__ import annotations
@@ -82,6 +84,21 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
+        # Keep the single-column FKs above for their SET NULL action. These
+        # paired constraints enforce tenant equality; after SET NULL their
+        # nullable membership component makes the composite constraint pass.
+        batch.create_foreign_key(
+            "fk_ip_coverage_pending_replacement_company",
+            "company_memberships",
+            ["pending_replacement_membership_id", "company_id"],
+            ["id", "company_id"],
+        )
+        batch.create_foreign_key(
+            "fk_ip_coverage_emergency_escalation_company",
+            "company_memberships",
+            ["emergency_escalation_membership_id", "company_id"],
+            ["id", "company_id"],
+        )
         batch.create_check_constraint(
             "ck_ip_coverage_replacement_decision",
             "replacement_decision IN ('none', 'pending', 'accepted', 'rejected')",
@@ -121,6 +138,12 @@ def downgrade() -> None:
         batch.drop_constraint("ck_ip_coverage_emergency_is_time_boxed", type_="check")
         batch.drop_constraint("ck_ip_coverage_pending_has_subject", type_="check")
         batch.drop_constraint("ck_ip_coverage_replacement_decision", type_="check")
+        batch.drop_constraint(
+            "fk_ip_coverage_emergency_escalation_company", type_="foreignkey"
+        )
+        batch.drop_constraint(
+            "fk_ip_coverage_pending_replacement_company", type_="foreignkey"
+        )
         batch.drop_constraint("fk_ip_coverage_emergency_escalation", type_="foreignkey")
         batch.drop_constraint("fk_ip_coverage_pending_replacement", type_="foreignkey")
         batch.drop_column("emergency_escalation_membership_id")

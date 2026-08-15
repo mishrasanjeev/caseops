@@ -14448,6 +14448,17 @@ class IpIdentifier(Base):
             name="fk_ip_identifier_proceeding_company",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["supersedes_identifier_id", "company_id"],
+            ["ip_identifiers.id", "ip_identifiers.company_id"],
+            name="fk_ip_identifier_supersedes_company",
+        ),
+        ForeignKeyConstraint(
+            ["superseded_by_identifier_id", "company_id"],
+            ["ip_identifiers.id", "ip_identifiers.company_id"],
+            name="fk_ip_identifier_superseded_by_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "(application_id IS NOT NULL AND proceeding_id IS NULL) OR "
             "(application_id IS NULL AND proceeding_id IS NOT NULL)",
@@ -14456,6 +14467,10 @@ class IpIdentifier(Base):
         CheckConstraint(
             "effective_until IS NULL OR effective_until >= effective_from",
             name="ck_ip_identifier_effective_range",
+        ),
+        CheckConstraint(
+            "superseded_by_identifier_id IS NULL OR superseded_by_identifier_id <> id",
+            name="ck_ip_identifier_superseded_by_not_self",
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_identifier_id_company"),
         Index(
@@ -14486,6 +14501,12 @@ class IpIdentifier(Base):
     )
     supersedes_identifier_id: Mapped[str | None] = mapped_column(
         ForeignKey("ip_identifiers.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    # Direction matters: ``supersedes_identifier_id`` belongs on a new
+    # correction and points backward. This field belongs on the retired row
+    # and points forward to the surviving identifier selected by reconciliation.
+    superseded_by_identifier_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
     )
     correction_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -15135,6 +15156,16 @@ class IpDeadlineCoverage(Base):
             ["ip_docket_records.id", "ip_docket_records.company_id"],
             name="fk_ip_deadline_coverage_docket_company",
             ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["pending_replacement_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_coverage_pending_replacement_company",
+        ),
+        ForeignKeyConstraint(
+            ["emergency_escalation_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_coverage_emergency_escalation_company",
         ),
         UniqueConstraint("docket_id", "matter_deadline_id", name="uq_ip_deadline_coverage"),
     )
@@ -16271,6 +16302,11 @@ class BulkImportJob(Base):
 
     __tablename__ = "bulk_import_jobs"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_bulk_import_job_creator_company",
+        ),
         UniqueConstraint("id", "company_id", name="uq_bulk_import_job_company"),
         UniqueConstraint(
             "company_id", "domain", "idempotency_key", name="uq_bulk_import_job_idempotency"
@@ -16328,6 +16364,11 @@ class IpImportRow(Base):
             name="fk_ip_import_row_job_company",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["created_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_import_row_created_docket_company",
+        ),
         UniqueConstraint("job_id", "row_number", name="uq_ip_import_row_number"),
         CheckConstraint("row_number > 0", name="ck_ip_import_row_number_positive"),
         CheckConstraint(
@@ -16367,15 +16408,25 @@ class IpImportRow(Base):
 class IpDocketControlReview(Base):
     """A daily docket control report that can be signed off (CAL-OPS-09).
 
-    The report itself is a projection. This row is the durable review evidence:
-    what filters produced it, how fresh its sources were, which mandatory
-    exceptions it carried, and who signed it off. Check constraints refuse a
-    sign-off on an incomplete or export-failed review so the database enforces
-    the same rule as the service.
+    The report is materialized as a hash-bound canonical snapshot: query/schema
+    versions, timezone and hidden-count policy, included record IDs/hashes,
+    freshness, exceptions and aggregate output all remain exactly as reviewed.
+    Check constraints refuse a sign-off on an incomplete or export-failed
+    review so the database enforces the same rule as the service.
     """
 
     __tablename__ = "ip_docket_control_reviews"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["signed_off_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_review_signer_company",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_review_creator_company",
+        ),
         CheckConstraint(
             "completeness_status IN ('complete', 'incomplete')",
             name="ck_ip_control_review_completeness",
@@ -16408,6 +16459,9 @@ class IpDocketControlReview(Base):
     )
     incompleteness_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     mandatory_exception_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    query_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    report_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     export_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="not_requested"
@@ -16443,6 +16497,21 @@ class IpDocketQueue(Base):
 
     __tablename__ = "ip_docket_queues"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["team_id", "company_id"],
+            ["teams.id", "teams.company_id"],
+            name="fk_ip_docket_queue_team_company",
+        ),
+        ForeignKeyConstraint(
+            ["owner_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_queue_owner_company",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_queue_creator_company",
+        ),
         UniqueConstraint("company_id", "name", name="uq_ip_docket_queue_company_name"),
         CheckConstraint(
             "team_id IS NOT NULL OR owner_membership_id IS NOT NULL",
@@ -16462,7 +16531,7 @@ class IpDocketQueue(Base):
         ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True
     )
     owner_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("company_memberships.id", ondelete="CASCADE"), nullable=True, index=True
     )
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True

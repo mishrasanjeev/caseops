@@ -11,13 +11,18 @@ Stable manifest test IDs:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Event, Lock
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from caseops_api.db.models import BulkImportJob, IpDocketRecord
+from caseops_api.db.models import AuditEvent, BulkImportJob, IpDocketRecord, IpImportRow
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import ip_imports
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 
@@ -235,6 +240,205 @@ def test_uj02_exc03_repeated_commit_returns_original_result(
     conflicting = _commit(client, headers, job_id, "irrelevant", key="another-key-0002")
     assert conflicting.status_code == 409
     assert "already been committed" in conflicting.json()["detail"].lower()
+
+
+def test_uj02_exc03_recovers_crash_after_docket_commit_before_row_outcome(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A same-key retry adopts the atomically proven docket instead of duplicating it."""
+
+    headers, _token = _actor(client)
+    body = _stage(client, headers, [_row(1)]).json()
+    job_id = body["job"]["id"]
+    preview_token = body["job"]["preview_token"]
+    row_id = body["rows"][0]["id"]
+    real_create = ip_imports.create_ip_docket
+    created_ids: list[str] = []
+
+    class SimulatedWorkerCrash(RuntimeError):
+        pass
+
+    def commit_then_crash(*args, **kwargs):
+        docket = real_create(*args, **kwargs)
+        created_ids.append(docket.id)
+        # The canonical writer has committed the docket and its provenance,
+        # but the staging-row outcome has not yet been written.
+        raise SimulatedWorkerCrash("worker exited after canonical commit")
+
+    monkeypatch.setattr(ip_imports, "create_ip_docket", commit_then_crash)
+    with pytest.raises(SimulatedWorkerCrash):
+        _commit(
+            client,
+            headers,
+            job_id,
+            preview_token,
+            "crash-recovery-import-key",
+        )
+
+    assert len(created_ids) == 1
+    with get_session_factory()() as session:
+        job = session.get(BulkImportJob, job_id)
+        row = session.get(IpImportRow, row_id)
+        assert job is not None and job.status == "staged"
+        assert row is not None and row.commit_status == "pending"
+        assert row.created_docket_id is None
+        assert session.get(IpDocketRecord, created_ids[0]) is not None
+        provenance = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == ip_imports.IMPORT_MATERIALIZATION_ACTION,
+                AuditEvent.target_type == "ip_import_row",
+                AuditEvent.target_id == row_id,
+                AuditEvent.ip_docket_id == created_ids[0],
+            )
+        )
+        assert provenance is not None
+
+    monkeypatch.setattr(ip_imports, "create_ip_docket", real_create)
+    recovered = _commit(
+        client,
+        headers,
+        job_id,
+        "consumed-by-claim",
+        "crash-recovery-import-key",
+    )
+    assert recovered.status_code == 200, recovered.text
+    result = recovered.json()
+    assert result["job"]["status"] == "committed"
+    assert result["rows"][0]["commit_status"] == "committed"
+    assert result["rows"][0]["created_docket_id"] == created_ids[0]
+    assert client.get("/api/ip/dockets", headers=headers).json()["count"] == 1
+
+
+def test_uj02_exc03_concurrent_same_job_commit_materializes_each_row_once(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The job lock spans canonical writer commits, not only the first row."""
+
+    headers, _token = _actor(client)
+    body = _stage(client, headers, [_row(1)]).json()
+    job_id = body["job"]["id"]
+    preview_token = body["job"]["preview_token"]
+
+    first_writer_entered = Event()
+    release_first_writer = Event()
+    second_writer_entered = Event()
+    call_guard = Lock()
+    writer_calls = 0
+    real_create = ip_imports.create_ip_docket
+
+    def controlled_create(*args, **kwargs):
+        nonlocal writer_calls
+        with call_guard:
+            writer_calls += 1
+            call_number = writer_calls
+        if call_number == 1:
+            first_writer_entered.set()
+            assert release_first_writer.wait(timeout=5)
+        else:
+            second_writer_entered.set()
+        return real_create(*args, **kwargs)
+
+    monkeypatch.setattr(ip_imports, "create_ip_docket", controlled_create)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(
+            _commit,
+            client,
+            headers,
+            job_id,
+            preview_token,
+            "concurrent-import-key",
+        )
+        assert first_writer_entered.wait(timeout=5)
+        second = pool.submit(
+            _commit,
+            client,
+            headers,
+            job_id,
+            preview_token,
+            "concurrent-import-key",
+        )
+        try:
+            # Without the cross-transaction job lock, the second request gets
+            # past the released FOR UPDATE lock and calls the writer here.
+            assert not second_writer_entered.wait(timeout=0.25)
+        finally:
+            release_first_writer.set()
+
+        responses = [first.result(timeout=10), second.result(timeout=10)]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert sorted(response.json()["replayed"] for response in responses) == [False, True]
+    assert writer_calls == 1
+    assert client.get("/api/ip/dockets", headers=headers).json()["count"] == 1
+
+
+def test_uj02_exc03_idempotency_key_cannot_materialize_a_second_job(
+    client: TestClient,
+) -> None:
+    """Tenant/domain idempotency owns one job, not merely one final UPDATE."""
+
+    headers, _token = _actor(client)
+    first = _stage(client, headers, [_row(1)]).json()
+    second = _stage(client, headers, [_row(2)]).json()
+
+    key = "tenant-wide-import-key"
+    committed = _commit(
+        client,
+        headers,
+        first["job"]["id"],
+        first["job"]["preview_token"],
+        key,
+    )
+    assert committed.status_code == 200, committed.text
+
+    refused = _commit(
+        client,
+        headers,
+        second["job"]["id"],
+        second["job"]["preview_token"],
+        key,
+    )
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "ip_import_idempotency_key_reused"
+    assert client.get("/api/ip/dockets", headers=headers).json()["count"] == 1
+
+
+@pytest.mark.postgres
+def test_import_commit_lock_spans_transactions_on_postgres(pg_engine) -> None:
+    """A real PostgreSQL advisory lock excludes a second request connection."""
+
+    first_entered = Event()
+    release_first = Event()
+    second_entered = Event()
+    resource = "test:ip-import:postgres-race"
+
+    def hold_first() -> None:
+        with Session(pg_engine) as session:
+            with ip_imports._import_commit_locks(session, resource):
+                first_entered.set()
+                assert release_first.wait(timeout=5)
+
+    def acquire_second() -> None:
+        assert first_entered.wait(timeout=5)
+        with Session(pg_engine) as session:
+            with ip_imports._import_commit_locks(session, resource):
+                second_entered.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(hold_first)
+        second = pool.submit(acquire_second)
+        assert first_entered.wait(timeout=5)
+        try:
+            assert not second_entered.wait(timeout=0.25)
+        finally:
+            release_first.set()
+        first.result(timeout=10)
+        second.result(timeout=10)
+
+    assert second_entered.is_set()
 
 
 def test_uj02_exc04_cross_tenant_reference_is_rejected_without_disclosure(

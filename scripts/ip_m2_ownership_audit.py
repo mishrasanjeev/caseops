@@ -178,6 +178,17 @@ def validate(
             errors.extend(_active_slice_errors(row))
         elif status == "not_started":
             errors.extend(_ownership_errors(slice_id, row.get("ownership")))
+            if any(
+                _as_list(row.get(field))
+                for field in (
+                    "implementation_refs",
+                    "evidence_refs",
+                    "evidence_metadata",
+                )
+            ):
+                errors.append(
+                    f"{slice_id}: not_started slice carries implementation or evidence records"
+                )
         else:
             errors.append(f"{slice_id}: unknown implementation_status {status!r}")
     if check_generated_view and not errors:

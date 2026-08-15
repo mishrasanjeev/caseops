@@ -367,14 +367,27 @@ def _overlapping_active_versions(
     session: Session,
     *,
     row: IpRuleVersion,
+    company_id: str,
 ) -> list[IpRuleVersion]:
-    """Active sibling versions whose effective range collides with ``row``."""
+    """Tenant-owned active siblings whose effective range collides with ``row``.
+
+    ``IpRuleSet`` is a shared legal-scope identity, while each version is owned
+    by the company of its proposer.  Joining that ownership here is essential:
+    otherwise a tenant activating its own version can retire another tenant's
+    active version merely because both use the same platform rule key.
+    """
 
     siblings = session.scalars(
-        select(IpRuleVersion).where(
+        select(IpRuleVersion)
+        .join(
+            CompanyMembership,
+            CompanyMembership.id == IpRuleVersion.proposed_by_membership_id,
+        )
+        .where(
             IpRuleVersion.rule_set_id == row.rule_set_id,
             IpRuleVersion.status == "active",
             IpRuleVersion.id != row.id,
+            CompanyMembership.company_id == company_id,
         )
     ).all()
     return [
@@ -430,13 +443,23 @@ def rule_impact(
     # Retiring or disabling an already-active version affects only itself.
     scoped_ids = [row.id]
     if row.status == "candidate":
-        scoped_ids.extend(item.id for item in _overlapping_active_versions(session, row=row))
+        scoped_ids.extend(
+            item.id
+            for item in _overlapping_active_versions(
+                session,
+                row=row,
+                company_id=context.company.id,
+            )
+        )
 
     policy_count = int(
         session.scalar(
             select(func.count())
             .select_from(CompanyIpRulePolicy)
-            .where(CompanyIpRulePolicy.active_rule_version_id.in_(scoped_ids))
+            .where(
+                CompanyIpRulePolicy.company_id == context.company.id,
+                CompanyIpRulePolicy.active_rule_version_id.in_(scoped_ids),
+            )
         )
         or 0
     )
@@ -445,6 +468,7 @@ def rule_impact(
             select(func.count())
             .select_from(IpDeadline)
             .where(
+                IpDeadline.company_id == context.company.id,
                 IpDeadline.rule_version_id.in_(scoped_ids),
                 IpDeadline.state.in_(["confirmed", "overdue"]),
             )
@@ -456,6 +480,7 @@ def rule_impact(
             select(func.count())
             .select_from(IpDeadline)
             .where(
+                IpDeadline.company_id == context.company.id,
                 IpDeadline.rule_version_id.in_(scoped_ids),
                 IpDeadline.state.in_(["candidate", "provisional"]),
             )
@@ -513,7 +538,11 @@ def activate_rule_version(
         fixture_ids=fixture_ids,
         passed_fixture_ids=passed_ids,
     )
-    overlapping = _overlapping_active_versions(session, row=row)
+    overlapping = _overlapping_active_versions(
+        session,
+        row=row,
+        company_id=context.company.id,
+    )
     if overlapping and not payload.supersede_overlapping:
         collided = ", ".join(
             str(item.version) for item in sorted(overlapping, key=lambda x: x.version)
@@ -630,7 +659,10 @@ def transition_rule_version(
         affected_policies = list(
             session.scalars(
                 select(CompanyIpRulePolicy)
-                .where(CompanyIpRulePolicy.active_rule_version_id == row.id)
+                .where(
+                    CompanyIpRulePolicy.company_id == context.company.id,
+                    CompanyIpRulePolicy.active_rule_version_id == row.id,
+                )
                 .with_for_update()
             ).all()
         )
@@ -1454,6 +1486,37 @@ def _confirm_row(
     row.confirmed_at = now
 
 
+def _lock_deadline_ancestor_chain(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: IpDeadline,
+) -> list[IpDeadline]:
+    """Lock every predecessor so confirmation cuts over the whole live chain."""
+
+    ancestors: list[IpDeadline] = []
+    seen = {row.id}
+    ancestor_id = row.supersedes_deadline_id
+    while ancestor_id is not None:
+        if ancestor_id in seen:
+            raise HTTPException(status_code=409, detail="Deadline predecessor chain is cyclic.")
+        seen.add(ancestor_id)
+        ancestor = session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == ancestor_id,
+                IpDeadline.company_id == context.company.id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if ancestor is None:
+            raise HTTPException(status_code=409, detail="Superseded deadline is unavailable.")
+        ancestors.append(ancestor)
+        ancestor_id = ancestor.supersedes_deadline_id
+    return ancestors
+
+
 def confirm_deadline(
     session: Session,
     *,
@@ -1472,20 +1535,48 @@ def confirm_deadline(
     rule = session.get(IpRuleVersion, row.rule_version_id)
     if rule is None or rule.status != "active":
         raise HTTPException(status_code=409, detail="The governing rule is not active.")
-    if row.supersedes_deadline_id:
-        prior = session.scalar(
-            select(IpDeadline).where(IpDeadline.id == row.supersedes_deadline_id).with_for_update()
-        )
-        if prior and prior.state in {"confirmed", "overdue"}:
-            impact = deadline_impact(session, context=context, deadline_id=prior.id)
+    ancestors = _lock_deadline_ancestor_chain(session, context=context, row=row)
+    live_states = {"candidate", "provisional", "confirmed", "overdue"}
+    if ancestors:
+        if ancestors[0].state not in live_states:
+            raise HTTPException(
+                status_code=409,
+                detail="The predecessor is no longer current; recalculate again.",
+            )
+
+        effect_ancestors = [
+            ancestor for ancestor in ancestors if ancestor.state in {"confirmed", "overdue"}
+        ]
+        if len(effect_ancestors) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Multiple active predecessors require reconciliation before confirmation.",
+            )
+        if effect_ancestors:
+            impact = deadline_impact(
+                session,
+                context=context,
+                deadline_id=effect_ancestors[0].id,
+            )
             if payload.impact_token != impact.impact_token:
                 raise HTTPException(
                     status_code=409,
                     detail="Deadline impact changed; preview again.",
                 )
-            _cancel_deadline_impacts(session, context=context, row=prior)
-            prior.state = "superseded"
-            prior.version += 1
+            _cancel_deadline_impacts(
+                session,
+                context=context,
+                row=effect_ancestors[0],
+            )
+
+        # Recalculation creates a successor without destroying its source
+        # evidence. Confirmation is the atomic cut-over point for the complete
+        # chain, including older candidates that an intermediate recalculation
+        # never retired.
+        for ancestor in ancestors:
+            if ancestor.state in live_states:
+                ancestor.state = "superseded"
+                ancestor.version += 1
     if payload.corrected_result_on and payload.corrected_result_on != row.result_on:
         corrected = _copy_deadline(
             row,

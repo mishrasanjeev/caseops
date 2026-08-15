@@ -1296,6 +1296,30 @@ async def post_ip_calendar_drift_check(
 ) -> IpCalendarDriftResponse:
     from caseops_api.services.calendar_sync import check_ip_calendar_projection_drift
 
+    decision = next(
+        item
+        for item in ip_workspace_readiness(
+            session,
+            context=context,
+            settings=get_settings(),
+        )
+        if item.feature_id == "manual_docketing"
+    )
+    if not decision.available:
+        # Authorization, entitlement and rollout are independent. `IpWriter`
+        # proves authorization; this server-side check prevents a direct API
+        # caller from bypassing a disabled, unentitled or expired rollout and
+        # triggering provider reads or drift-state writes.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ip_manual_docketing_unavailable",
+                "feature_id": decision.feature_id,
+                "reason": decision.reason,
+                "rollout_flag": decision.rollout_flag,
+            },
+        )
+
     findings = check_ip_calendar_projection_drift(session, context=context)
     return IpCalendarDriftResponse(
         checked_at=datetime.now(UTC),
@@ -1389,7 +1413,7 @@ async def get_ip_daily_docket(
 )
 async def post_ip_control_review(
     payload: IpControlReviewCreateRequest,
-    context: IpViewer,
+    context: IpWriter,
     session: DbSession,
 ) -> IpControlReviewRecord:
     return create_ip_control_review(session, context=context, payload=payload)

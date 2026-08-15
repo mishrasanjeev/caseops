@@ -9669,6 +9669,35 @@ export type IpControlException = {
   critical: boolean;
 };
 
+export type IpDocketControlReport = {
+  generated_at: string;
+  docket_count: number;
+  ready_count: number;
+  uncovered_deadline_count: number;
+  open_incident_count: number;
+  unprojected_calendar_count: number;
+  inactive_coverage_count: number;
+  total_cost_minor_by_currency: Record<string, number>;
+};
+
+export type IpControlReviewSnapshot = {
+  schema_version: 1;
+  query_version: string;
+  generated_at: string;
+  timezone: string;
+  filters: Record<string, unknown>;
+  freshness: Record<string, unknown>;
+  hidden_restricted_count_policy: "omit_without_count";
+  included_records: Array<{
+    docket_id: string;
+    current_version: number;
+    sha256: string;
+  }>;
+  report: IpDocketControlReport;
+  mandatory_exceptions: IpControlException[];
+  incompleteness_reasons: string[];
+};
+
 export type IpControlReview = {
   id: string;
   generated_at: string;
@@ -9677,22 +9706,15 @@ export type IpControlReview = {
   completeness_status: string;
   incompleteness_reasons: string[];
   mandatory_exceptions: IpControlException[];
+  query_version: string;
   manifest_sha256: string;
   export_status: string;
   export_error_redacted: string | null;
   signer_label_snapshot: string | null;
   signed_off_at: string | null;
   version: number;
-  report: {
-    generated_at: string;
-    docket_count: number;
-    ready_count: number;
-    uncovered_deadline_count: number;
-    open_incident_count: number;
-    unprojected_calendar_count: number;
-    inactive_coverage_count: number;
-    total_cost_minor_by_currency: Record<string, number>;
-  };
+  report: IpDocketControlReport;
+  snapshot: IpControlReviewSnapshot;
 };
 
 export async function createIpControlReview(input: {

@@ -14,6 +14,7 @@ const REVIEW: IpControlReview = {
     { docket_id: "ip-9", kind: "uncovered", critical: true },
     { docket_id: "ip-4", kind: "open_incident", critical: true },
   ],
+  query_version: "ip-docket-control-v1",
   manifest_sha256: "b".repeat(64),
   export_status: "not_requested",
   export_error_redacted: null,
@@ -30,6 +31,33 @@ const REVIEW: IpControlReview = {
     inactive_coverage_count: 1,
     total_cost_minor_by_currency: {},
   },
+  snapshot: {
+    schema_version: 1,
+    query_version: "ip-docket-control-v1",
+    generated_at: "2026-08-15T06:31:00Z",
+    timezone: "Asia/Kolkata",
+    filters: { team: "tm-bench" },
+    freshness: { stale_sources: ["matter_deadlines"], failed_queries: [] },
+    hidden_restricted_count_policy: "omit_without_count",
+    included_records: [
+      { docket_id: "ip-9", current_version: 3, sha256: "c".repeat(64) },
+    ],
+    report: {
+      generated_at: "2026-08-15T06:31:00Z",
+      docket_count: 18,
+      ready_count: 15,
+      uncovered_deadline_count: 1,
+      open_incident_count: 1,
+      unprojected_calendar_count: 2,
+      inactive_coverage_count: 1,
+      total_cost_minor_by_currency: {},
+    },
+    mandatory_exceptions: [
+      { docket_id: "ip-9", kind: "uncovered", critical: true },
+      { docket_id: "ip-4", kind: "open_incident", critical: true },
+    ],
+    incompleteness_reasons: ["matter_deadlines is stale"],
+  },
 };
 
 describe("buildControlReviewManifest", () => {
@@ -43,6 +71,8 @@ describe("buildControlReviewManifest", () => {
     expect(html).toContain("matter_deadlines is stale");
     // The hash is what lets a filed copy be checked against the stored review.
     expect(html).toContain("b".repeat(64));
+    expect(html).toContain("ip-docket-control-v1");
+    expect(html).toContain("Asia/Kolkata");
   });
 
   it("lists every mandatory exception", () => {
@@ -52,6 +82,15 @@ describe("buildControlReviewManifest", () => {
     expect(html).toContain("Deadline has no coverage");
     expect(html).toContain("Open incident");
     expect(html).toContain("ip-9");
+  });
+
+  it("lists the immutable included-record versions and hashes", () => {
+    const html = buildControlReviewManifest(REVIEW);
+
+    expect(html).toContain("Included records (1)");
+    expect(html).toContain("record ip-9");
+    expect(html).toContain("version 3");
+    expect(html).toContain("c".repeat(64));
   });
 
   it("says so plainly when nothing was excepted", () => {

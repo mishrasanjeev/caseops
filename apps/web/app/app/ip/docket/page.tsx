@@ -836,6 +836,8 @@ function ControlReviewCard({
     ? null
     : review.completeness_status !== "complete"
       ? "This review is incomplete, so it cannot be signed."
+      : review.mandatory_exceptions.length > 0
+        ? "Resolve every mandatory exception and generate a clean review before signing."
       : review.export_status === "failed"
         ? "The last export failed, so this review cannot be signed. Export it again."
         : null;
@@ -853,11 +855,17 @@ function ControlReviewCard({
               captures the generation time, the filters used, and which sources were stale, so what
               is signed is exactly what was produced.
             </p>
-            <div>
-              <Button size="sm" disabled={generate.isPending} onClick={() => generate.mutate()}>
-                Generate control review
-              </Button>
-            </div>
+            {canWrite ? (
+              <div>
+                <Button size="sm" disabled={generate.isPending} onClick={() => generate.mutate()}>
+                  Generate control review
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--color-mute)]">
+                Your role can view the docket but cannot create a control-review record.
+              </p>
+            )}
           </>
         ) : (
           <>
@@ -910,8 +918,8 @@ function ControlReviewCard({
                   ))}
                 </ul>
                 <p className="mt-1 max-w-[70ch] text-sm text-[var(--color-mute)]">
-                  Exceptions are recorded at generation and cannot be filtered away or cleared by
-                  signing.
+                  Exceptions are recorded at generation and cannot be filtered away. Resolve them,
+                  then generate a clean review before signing.
                 </p>
               </div>
             ) : null}

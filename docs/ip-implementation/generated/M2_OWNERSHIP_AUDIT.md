@@ -30,13 +30,13 @@ a released capability.
 | `IPLF-026A` | `implemented` | `deployment_verified` | `deployment-evidence-recorded` | 8 | 3 | 0 |
 | `IPLF-026B` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 10 | 3 | 1 |
 | `IPLF-027A` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 9 | 4 | 1 |
-| `IPLF-027B` | `not_started` | `blocked` | `not-started-or-planned` | 8 | 2 | 1 |
+| `IPLF-027B` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 8 | 2 | 1 |
 | `IPLF-027C` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 1 | 1 | 1 |
 | `IPLF-027D` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 1 | 1 | 1 |
 | `IPLF-027E` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 1 | 1 | 1 |
 | `IPLF-028A` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 5 | 1 | 3 |
 | `IPLF-028B` | `not_started` | `blocked` | `not-started-or-planned` | 10 | 0 | 0 |
-| `IPLF-028C` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 3 | 1 | 2 |
+| `IPLF-028C` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 3 | 1 | 2 |
 | `IPLF-029A` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 2 | 1 | 1 |
 | `IPLF-029B` | `not_started` | `blocked` | `not-started-or-planned` | 0 | 0 | 0 |
 

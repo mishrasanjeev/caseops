@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import IpIdentifier
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -217,9 +219,24 @@ def test_uj05_normal_supersede_preserves_prior_value(client: TestClient) -> None
     assert retired["reconciliation_status"] == "superseded"
     assert retired["effective_until"] is not None
     assert retired["raw_value"] == "TM 1234567"
-    assert retired["supersedes_identifier_id"] == original["identifier"]["id"]
+    assert retired["superseded_by_identifier_id"] == original["identifier"]["id"]
+    # ``supersedes_identifier_id`` points backward from a newly-created
+    # correction. A retired duplicate points forward and must not invert that
+    # existing history contract.
+    assert retired["supersedes_identifier_id"] is None
     assert retired["is_primary"] is False
     assert retired["correction_reason"] == "Duplicate of the original filing."
+
+    # The response is backed by durable lineage, and the surviving end of the
+    # chain remains current rather than acquiring a reverse/self link.
+    with get_session_factory()() as session:
+        retired_row = session.get(IpIdentifier, identifier["id"])
+        survivor = session.get(IpIdentifier, original["identifier"]["id"])
+        assert retired_row is not None and survivor is not None
+        assert retired_row.superseded_by_identifier_id == survivor.id
+        assert retired_row.supersedes_identifier_id is None
+        assert survivor.effective_until is None
+        assert survivor.superseded_by_identifier_id is None
 
 
 def test_uj05_exc01_conflicting_client_blocks_automatic_merge(

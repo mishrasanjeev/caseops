@@ -15,6 +15,8 @@ Stable manifest test IDs:
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
@@ -63,7 +65,43 @@ def _coverage(client, headers, docket_id, *, matter_id, responsible):
         },
     )
     assert r.status_code == 200, r.text
-    return r.json()
+    return r.json()["deadline_coverages"][-1]
+
+
+def _mark_coverage_projected(coverage_id: str) -> None:
+    from caseops_api.db.models import IpDeadlineCoverage
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        coverage = session.get(IpDeadlineCoverage, coverage_id)
+        assert coverage is not None
+        coverage.calendar_projection_status = "projected"
+        session.commit()
+
+
+def _team(client: TestClient, headers: dict[str, str], *, name: str, slug: str) -> dict:
+    response = client.post(
+        "/api/teams/",
+        headers=headers,
+        json={"name": name, "slug": slug, "kind": "team"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _assign_matter_team(
+    client: TestClient,
+    headers: dict[str, str],
+    matter: dict,
+    team_id: str,
+) -> dict:
+    response = client.patch(
+        f"/api/matters/{matter['id']}",
+        headers=headers,
+        json={"team_id": team_id, "expected_updated_at": matter["updated_at"]},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 def _review(client, headers, **kw):
@@ -96,8 +134,17 @@ def test_uj59_normal_produce_and_sign_off_a_control_review(client: TestClient) -
     """IPLF-UJ-59-NORMAL — a clean review is produced, then signed off."""
 
     owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    team = _team(client, owner_headers, name="Trademarks", slug="trademarks")
+    matter = _assign_matter_team(client, owner_headers, matter, team["id"])
     docket = _docket(client, owner_headers, matter_id=matter["id"], title="Control Mark")
-    _coverage(client, owner_headers, docket["id"], matter_id=matter["id"], responsible=owner_id)
+    coverage = _coverage(
+        client,
+        owner_headers,
+        docket["id"],
+        matter_id=matter["id"],
+        responsible=owner_id,
+    )
+    _mark_coverage_projected(coverage["id"])
 
     created = _review(client, owner_headers, filters={"team": "trademarks"})
     assert created.status_code == 201, created.text
@@ -114,6 +161,18 @@ def test_uj59_normal_produce_and_sign_off_a_control_review(client: TestClient) -
     assert review["export_status"] == "not_requested"
     assert review["signed_off_at"] is None
     assert review["report"]["docket_count"] == 1
+    snapshot = review["snapshot"]
+    assert review["query_version"] == "ip-docket-control-v1"
+    assert snapshot["schema_version"] == 1
+    assert snapshot["query_version"] == review["query_version"]
+    assert snapshot["timezone"] == "Asia/Calcutta"
+    assert snapshot["hidden_restricted_count_policy"] == "omit_without_count"
+    assert snapshot["report"] == review["report"]
+    assert snapshot["mandatory_exceptions"] == review["mandatory_exceptions"]
+    assert [row["docket_id"] for row in snapshot["included_records"]] == [docket["id"]]
+    assert all(len(row["sha256"]) == 64 for row in snapshot["included_records"])
+    canonical = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == review["manifest_sha256"]
 
     signed = _sign_off(client, owner_headers, review["id"], review["version"])
     assert signed.status_code == 200, signed.text
@@ -130,6 +189,105 @@ def test_uj59_normal_produce_and_sign_off_a_control_review(client: TestClient) -
     assert "already signed off" in again.json()["detail"].lower()
     stale = _sign_off(client, owner_headers, review["id"], review["version"])
     assert stale.status_code == 409
+
+
+def test_uj59_signed_snapshot_does_not_change_when_the_live_docket_changes(
+    client: TestClient,
+) -> None:
+    """Later records produce a delta/new review, never rewrite signed evidence."""
+
+    owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    first = _docket(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Frozen Control Mark",
+    )
+    coverage = _coverage(
+        client,
+        owner_headers,
+        first["id"],
+        matter_id=matter["id"],
+        responsible=owner_id,
+    )
+    _mark_coverage_projected(coverage["id"])
+    created = _review(client, owner_headers).json()
+    signed = _sign_off(
+        client,
+        owner_headers,
+        created["id"],
+        created["version"],
+    ).json()
+
+    _docket(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Later Control Mark",
+    )
+    reread = client.get(
+        f"/api/ip/control-reviews/{created['id']}",
+        headers=owner_headers,
+    ).json()
+
+    assert reread["signed_off_at"] == signed["signed_off_at"]
+    assert reread["manifest_sha256"] == signed["manifest_sha256"]
+    assert reread["snapshot"] == signed["snapshot"]
+    assert reread["report"] == signed["report"]
+    assert [row["docket_id"] for row in reread["snapshot"]["included_records"]] == [
+        first["id"]
+    ]
+
+    later = _review(client, owner_headers).json()
+    assert later["report"]["docket_count"] == 2
+    assert later["manifest_sha256"] != signed["manifest_sha256"]
+    assert len(later["snapshot"]["included_records"]) == 2
+
+
+def test_uj59_corrupt_snapshot_cannot_be_exported_or_signed(
+    client: TestClient,
+) -> None:
+    """Integrity validation happens before either evidence mutation commits."""
+
+    from caseops_api.db.models import IpDocketControlReview
+    from caseops_api.db.session import get_session_factory
+
+    owner_headers, _owner_id, _rh, _rid, matter = _setup(client)
+    _docket(client, owner_headers, matter_id=matter["id"], title="Integrity Mark")
+    review = _review(client, owner_headers).json()
+
+    factory = get_session_factory()
+    with factory() as session:
+        row = session.get(IpDocketControlReview, review["id"])
+        assert row is not None
+        tampered = dict(row.report_snapshot_json)
+        tampered["timezone"] = "Etc/UTC"
+        row.report_snapshot_json = tampered
+        session.commit()
+
+    refused_export = client.post(
+        f"/api/ip/control-reviews/{review['id']}/export",
+        headers=owner_headers,
+        json={"outcome": "generated"},
+    )
+    assert refused_export.status_code == 500, refused_export.text
+    assert refused_export.json()["code"] == "ip_control_review_snapshot_integrity_failed"
+
+    refused_signoff = _sign_off(
+        client,
+        owner_headers,
+        review["id"],
+        review["version"],
+    )
+    assert refused_signoff.status_code == 500, refused_signoff.text
+    assert refused_signoff.json()["code"] == "ip_control_review_snapshot_integrity_failed"
+
+    with factory() as session:
+        row = session.get(IpDocketControlReview, review["id"])
+        assert row is not None
+        assert row.export_status == "not_requested"
+        assert row.signed_off_at is None
+        assert row.version == review["version"]
 
 
 def test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off(
@@ -175,7 +333,15 @@ def test_uj59_exc03_export_failure_does_not_mark_review_complete(
     """IPLF-UJ-59-EXC-03 — a failed export blocks sign-off until it succeeds."""
 
     owner_headers, owner_id, _rh, _rid, matter = _setup(client)
-    _docket(client, owner_headers, matter_id=matter["id"], title="Export Mark")
+    docket = _docket(client, owner_headers, matter_id=matter["id"], title="Export Mark")
+    coverage = _coverage(
+        client,
+        owner_headers,
+        docket["id"],
+        matter_id=matter["id"],
+        responsible=owner_id,
+    )
+    _mark_coverage_projected(coverage["id"])
 
     review = _review(client, owner_headers).json()
     assert review["completeness_status"] == "complete"
@@ -251,16 +417,41 @@ def test_cal_ops_13_exceptions_survive_filters_and_cannot_be_dismissed(
 ) -> None:
     """CAL-OPS-13 — a filter narrows the view but never hides an exception."""
 
-    owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    owner_headers, _owner_id, _rh, _rid, matter = _setup(client)
+    team = _team(client, owner_headers, name="Patents", slug="patents")
+    matter = _assign_matter_team(client, owner_headers, matter, team["id"])
     uncovered = _docket(
         client, owner_headers, matter_id=matter["id"], title="Uncovered Mark"
     )
+    off_team = _docket(
+        client,
+        owner_headers,
+        matter_id=None,
+        title="Firm-wide Mark",
+    )
+
+    team_scoped_response = _review(
+        client,
+        owner_headers,
+        filters={"team": "patents"},
+    )
+    assert team_scoped_response.status_code == 201, team_scoped_response.text
+    team_scoped = team_scoped_response.json()
+    assert team_scoped["report"]["docket_count"] == 1
+    assert [
+        row["docket_id"] for row in team_scoped["snapshot"]["included_records"]
+    ] == [uncovered["id"]]
+    assert off_team["id"] not in str(team_scoped)
 
     # A filter that plainly excludes the record still reports its exception.
-    filtered = _review(
+    filtered_response = _review(
         client, owner_headers, filters={"team": "patents", "exclude_docket_ids": [uncovered["id"]]}
-    ).json()
+    )
+    assert filtered_response.status_code == 201, filtered_response.text
+    filtered = filtered_response.json()
     assert filtered["filters"]["exclude_docket_ids"] == [uncovered["id"]]
+    assert filtered["report"]["docket_count"] == 0
+    assert filtered["snapshot"]["included_records"] == []
     kinds = {item["kind"] for item in filtered["mandatory_exceptions"]}
     assert "uncovered" in kinds
     assert any(
@@ -274,9 +465,46 @@ def test_cal_ops_13_exceptions_survive_filters_and_cannot_be_dismissed(
     ).json()
     assert reread["mandatory_exceptions"] == filtered["mandatory_exceptions"]
 
-    # Signing off does not clear them: they remain attached as evidence.
-    signed = _sign_off(client, owner_headers, filtered["id"], filtered["version"]).json()
-    assert signed["mandatory_exceptions"] == filtered["mandatory_exceptions"]
+    # Until explicit resolution evidence exists, sign-off fails without mutation.
+    blocked = _sign_off(client, owner_headers, filtered["id"], filtered["version"])
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["code"] == "ip_control_review_exceptions_unresolved"
+    assert blocked.json()["mandatory_exception_count"] == len(
+        filtered["mandatory_exceptions"]
+    )
+    after_refusal = client.get(
+        f"/api/ip/control-reviews/{filtered['id']}",
+        headers=owner_headers,
+    ).json()
+    assert after_refusal["version"] == filtered["version"]
+    assert after_refusal["signed_off_at"] is None
+    assert after_refusal["mandatory_exceptions"] == filtered["mandatory_exceptions"]
+
+
+def test_control_review_filters_reject_unknown_or_ineffective_values(
+    client: TestClient,
+) -> None:
+    """Only exact, query-effective filter values may enter signed evidence."""
+
+    from sqlalchemy import func, select
+
+    from caseops_api.db.models import IpDocketControlReview
+    from caseops_api.db.session import get_session_factory
+
+    owner_headers, _owner_id, _rh, _rid, _matter = _setup(client)
+    invalid_filters = [
+        {"status": "ready"},
+        {"team": "not a valid slug"},
+        {"team": "missing-team"},
+        {"exclude_docket_ids": ["not-a-uuid"]},
+        {"exclude_docket_ids": ["00000000-0000-0000-0000-000000000000"]},
+    ]
+    for filters in invalid_filters:
+        refused = _review(client, owner_headers, filters=filters)
+        assert refused.status_code == 422, (filters, refused.text)
+
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(IpDocketControlReview.id))) == 0
 
 
 def test_control_reviews_are_tenant_isolated(client: TestClient) -> None:
@@ -305,3 +533,42 @@ def test_control_reviews_are_tenant_isolated(client: TestClient) -> None:
         == 404
     )
     assert _sign_off(client, other_headers, review["id"], review["version"]).status_code == 404
+
+
+def test_control_review_generation_requires_write_capability_and_creates_no_row(
+    client: TestClient,
+) -> None:
+    """A report generation is an evidence write, not an `ip:read` operation."""
+
+    from sqlalchemy import func, select, update
+
+    from caseops_api.db.models import (
+        CompanyMembership,
+        IpDocketControlReview,
+        MembershipRole,
+    )
+    from caseops_api.db.session import get_session_factory
+
+    bootstrap = bootstrap_company(client)
+    membership_id = str(bootstrap["membership"]["id"])
+    company_id = str(bootstrap["company"]["id"])
+    token = str(bootstrap["access_token"])
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(
+            update(CompanyMembership)
+            .where(CompanyMembership.id == membership_id)
+            .values(role=MembershipRole.VIEWER)
+        )
+        session.commit()
+
+    refused = _review(client, auth_headers(token))
+    assert refused.status_code == 403, refused.text
+
+    with factory() as session:
+        count = session.scalar(
+            select(func.count(IpDocketControlReview.id)).where(
+                IpDocketControlReview.company_id == company_id
+            )
+        )
+        assert count == 0

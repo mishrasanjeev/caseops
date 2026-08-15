@@ -12,9 +12,12 @@ DATA-GOVERNANCE-MAP: updated
 saved queue stores filter criteria and a name chosen by a member, which can
 describe a matter or client focus, and its team scoping makes it a shared view
 into that team's workload. It is tenant-scoped through ``company_id`` with the
-fail-closed ``registry_fail_closed`` handler; the ``owner_membership_id`` and
-``created_by_membership_id`` foreign keys are ``ON DELETE SET NULL`` so an
-offboarded member's queue survives attribution loss rather than disappearing.
+fail-closed ``registry_fail_closed`` handler. Normal employee offboarding
+transfers personal queues to the explicit active replacement. A direct physical
+membership deletion cascades the personal queue instead of violating the scope
+check or leaving an invisible orphan; creator attribution remains ``SET NULL``.
+Team, owner and creator references are all company-matched by paired composite
+foreign keys.
 """
 
 from __future__ import annotations
@@ -55,7 +58,7 @@ def upgrade() -> None:
         sa.Column(
             "owner_membership_id",
             sa.String(length=36),
-            sa.ForeignKey("company_memberships.id", ondelete="SET NULL"),
+            sa.ForeignKey("company_memberships.id", ondelete="CASCADE"),
             nullable=True,
         ),
         sa.Column(
@@ -66,6 +69,21 @@ def upgrade() -> None:
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["team_id", "company_id"],
+            ["teams.id", "teams.company_id"],
+            name="fk_ip_docket_queue_team_company",
+        ),
+        sa.ForeignKeyConstraint(
+            ["owner_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_queue_owner_company",
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_queue_creator_company",
+        ),
         sa.UniqueConstraint("company_id", "name", name="uq_ip_docket_queue_company_name"),
         # A queue that belongs to nobody cannot be governed or cleaned up.
         sa.CheckConstraint(

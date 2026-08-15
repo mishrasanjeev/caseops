@@ -446,7 +446,15 @@ class MicrosoftGraphOutlookProvider:
             response = httpx.get(
                 "https://graph.microsoft.com/v1.0/me/events/"
                 f"{quote(provider_event_id, safe='')}",
-                headers={"Authorization": f"Bearer {access_token}"},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    # Graph returns event start/end values in UTC unless the
+                    # caller asks for a timezone. CaseOps creates these
+                    # all-day projections at midnight India Standard Time, so
+                    # reading the UTC representation and truncating its date
+                    # would falsely move every event to the preceding day.
+                    "Prefer": 'outlook.timezone="India Standard Time"',
+                },
                 params={"$select": "id,isAllDay,isCancelled,start"},
                 timeout=15,
             )
@@ -804,7 +812,10 @@ def _decrypt_token_payload(value: str | None) -> dict[str, Any]:
         raw = _fernet().decrypt(value.removeprefix("fernet:").encode("ascii"))
     except (InvalidToken, ValueError) as exc:
         raise CalendarProviderError("Stored calendar token cannot be decrypted.") from exc
-    decoded = json.loads(raw.decode("utf-8"))
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalendarProviderError("Stored calendar token payload is malformed.") from exc
     if not isinstance(decoded, dict):
         raise CalendarProviderError("Stored calendar token payload is malformed.")
     return decoded
@@ -4213,14 +4224,22 @@ def _drift_provider_reader(
     if connection.status != CalendarConnectionStatus.CONNECTED:
         return None
     try:
-        provider = _provider_for(connection.provider)
+        # Tenant-admin OAuth configuration is resolved from the current
+        # company. Omitting session/context silently falls back to environment
+        # configuration and makes otherwise valid tenant connections unreadable.
+        provider = _provider_for(connection.provider, session, context=context)
     except Exception:  # pragma: no cover - defensive: unknown provider string
         return None
     reader = getattr(provider, "fetch_event", None)
     if reader is None or not getattr(provider, "configured", False):
         # A provider that cannot be read yields `unknown`, never `matches`.
         return None
-    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    try:
+        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    except CalendarProviderError:
+        # A damaged or legacy token makes this connection unreadable; it must
+        # not abort checks for every other connection in the tenant.
+        return None
     if not token_payload:
         return None
 

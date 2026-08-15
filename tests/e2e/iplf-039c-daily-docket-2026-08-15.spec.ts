@@ -106,6 +106,10 @@ async function signIn(page: Page, slug: string, email: string): Promise<void> {
 
 test("IPLF-039C acknowledges, exports and signs off the daily docket", async ({ page }) => {
   test.setTimeout(180_000);
+  // Exercise the complete grouped-control surface at a phone width.  A DOM
+  // assertion alone cannot prove that the action buttons remain visible or
+  // that the nested grids shrink instead of widening the page.
+  await page.setViewportSize({ width: 375, height: 812 });
   const api = await request.newContext();
   const tenant = await bootstrap(api);
   const ownerHeaders = { Authorization: `Bearer ${tenant.access_token as string}` };
@@ -195,6 +199,12 @@ test("IPLF-039C acknowledges, exports and signs off the daily docket", async ({ 
 
   await signIn(page, tenant.slug as string, tenant.email as string);
   await page.goto("/app/ip/docket");
+
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 
   // CAL-OPS-09: provenance is on the page, not behind a tooltip.
   const provenance = page.getByTestId("ip-docket-provenance");

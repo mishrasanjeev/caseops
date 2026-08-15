@@ -15,7 +15,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import date, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     IpDeadline,
     IpDocketRecord,
     Matter,
+    MatterStatus,
     TrademarkApplication,
 )
 from caseops_api.schemas.ip_portfolio import (
@@ -35,10 +36,6 @@ from caseops_api.schemas.ip_portfolio import (
     IpPortfolioRow,
 )
 from caseops_api.services.matter_access import visible_ip_dockets_filter
-from caseops_api.services.matter_operational_guard import (
-    MatterNotOperationalError,
-    assert_operational_matter,
-)
 from caseops_api.services.session_context import SessionContext
 
 MAX_LIMIT = 200
@@ -92,11 +89,37 @@ def _scoped_query(
         select(TrademarkApplication, IpAsset, IpDocketRecord)
         .join(IpDocketRecord, IpDocketRecord.id == TrademarkApplication.docket_id)
         .outerjoin(IpAsset, IpAsset.id == TrademarkApplication.asset_id)
+        .outerjoin(
+            Matter,
+            and_(
+                Matter.id == IpDocketRecord.matter_id,
+                Matter.company_id == context.company.id,
+            ),
+        )
         .where(
             TrademarkApplication.company_id == context.company.id,
             IpDocketRecord.company_id == context.company.id,
             IpDocketRecord.archived_by_matter_disposal.is_(False),
             visible_ip_dockets_filter(session, context=context),
+            # Operational visibility is part of the SQL scope, not a
+            # post-pagination filter.  Applying it after LIMIT can return an
+            # empty page and discard the cursor even when later live records
+            # exist.  Missing linked Matters fail closed; unlinked IP dockets
+            # remain valid portfolio records.
+            or_(
+                IpDocketRecord.matter_id.is_(None),
+                and_(
+                    Matter.id.is_not(None),
+                    Matter.is_active.is_(True),
+                    Matter.status.in_(
+                        [
+                            MatterStatus.INTAKE.value,
+                            MatterStatus.ACTIVE.value,
+                            MatterStatus.ON_HOLD.value,
+                        ]
+                    ),
+                ),
+            ),
         )
     )
     if not filters.include_inactive:
@@ -209,19 +232,7 @@ def list_ip_portfolio(
     has_more = len(candidates) > limit
     candidates = candidates[:limit]
 
-    # A linked Matter that is no longer operational hides its IP rows the same
-    # way the docket listing does; this is a visibility rule, not a filter.
-    visible: list[tuple] = []
-    for application, asset, docket in candidates:
-        if docket.matter_id:
-            matter = session.get(Matter, docket.matter_id)
-            if matter is None:
-                continue
-            try:
-                assert_operational_matter(session, matter=matter)
-            except MatterNotOperationalError:
-                continue
-        visible.append((application, asset, docket))
+    visible = candidates
 
     docket_ids = [docket.id for _a, _s, docket in visible]
     deadlines = _deadline_counts(session, company_id=context.company.id, docket_ids=docket_ids)
@@ -296,17 +307,7 @@ def list_ip_portfolio_families(
     statement = _scoped_query(session, context=context, filters=filters)
     rows = list(session.execute(statement).all())
 
-    visible: list[tuple] = []
-    for application, asset, docket in rows:
-        if docket.matter_id:
-            matter = session.get(Matter, docket.matter_id)
-            if matter is None:
-                continue
-            try:
-                assert_operational_matter(session, matter=matter)
-            except MatterNotOperationalError:
-                continue
-        visible.append((application, asset, docket))
+    visible = rows
 
     deadlines = _deadline_counts(
         session,

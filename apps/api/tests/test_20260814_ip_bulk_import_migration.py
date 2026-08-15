@@ -25,6 +25,20 @@ EXPECTED_INDEXES = {
     ("ip_import_rows", "ix_ip_import_rows_job_commit"),
 }
 LEGACY_IMPORT_TABLES = {"matter_bulk_import_jobs", "employee_bulk_import_jobs"}
+EXPECTED_TENANT_FOREIGN_KEYS = {
+    "fk_bulk_import_job_creator_company": (
+        "bulk_import_jobs",
+        ["created_by_membership_id", "company_id"],
+        "company_memberships",
+        ["id", "company_id"],
+    ),
+    "fk_ip_import_row_created_docket_company": (
+        "ip_import_rows",
+        ["created_docket_id", "company_id"],
+        "ip_docket_records",
+        ["id", "company_id"],
+    ),
+}
 
 
 def _config(project_root: Path) -> Config:
@@ -80,6 +94,21 @@ def test_ip_bulk_import_expand_is_additive_and_rollback_is_clean(
         for index in inspector.get_indexes(table)
     }
     assert EXPECTED_INDEXES <= present
+
+    foreign_keys = {
+        foreign_key["name"]: (
+            table,
+            foreign_key["constrained_columns"],
+            foreign_key["referred_table"],
+            foreign_key["referred_columns"],
+        )
+        for table in NEW_TABLES
+        for foreign_key in inspector.get_foreign_keys(table)
+        if foreign_key.get("name")
+    }
+    assert foreign_keys.keys() >= EXPECTED_TENANT_FOREIGN_KEYS.keys()
+    for name, expected in EXPECTED_TENANT_FOREIGN_KEYS.items():
+        assert foreign_keys[name] == expected
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM bulk_import_jobs")) == 0

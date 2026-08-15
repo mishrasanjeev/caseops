@@ -13,16 +13,21 @@ rather than inserting docket rows directly.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import token_hex
+from threading import Lock
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import BulkImportJob, IpImportRow, Matter
+from caseops_api.db.models import AuditEvent, BulkImportJob, IpDocketRecord, IpImportRow, Matter
 from caseops_api.schemas.ip_imports import (
     IpImportCommitRequest,
     IpImportCommitResponse,
@@ -40,6 +45,76 @@ DOMAIN = "ip_trademark"
 PREVIEW_TTL = timedelta(minutes=30)
 REQUIRED_FIELDS = ("title", "mark_text", "class_number", "applicant_name")
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+IMPORT_MATERIALIZATION_ACTION = "ip_docket.source_materialized"
+
+
+@dataclass
+class _LocalLockEntry:
+    lock: Lock
+    users: int = 0
+
+
+_LOCAL_IMPORT_LOCKS_GUARD = Lock()
+_LOCAL_IMPORT_LOCKS: dict[str, _LocalLockEntry] = {}
+
+
+@contextmanager
+def _local_import_locks(resources: tuple[str, ...]) -> Iterator[None]:
+    """Serialize SQLite/local import tests across the writer's inner commits."""
+
+    entries: list[tuple[str, _LocalLockEntry]] = []
+    with _LOCAL_IMPORT_LOCKS_GUARD:
+        for resource in resources:
+            entry = _LOCAL_IMPORT_LOCKS.get(resource)
+            if entry is None:
+                entry = _LocalLockEntry(lock=Lock())
+                _LOCAL_IMPORT_LOCKS[resource] = entry
+            entry.users += 1
+            entries.append((resource, entry))
+
+    acquired: list[tuple[str, _LocalLockEntry]] = []
+    try:
+        for resource, entry in entries:
+            entry.lock.acquire()
+            acquired.append((resource, entry))
+        yield
+    finally:
+        for _resource, entry in reversed(acquired):
+            entry.lock.release()
+        with _LOCAL_IMPORT_LOCKS_GUARD:
+            for resource, entry in entries:
+                entry.users -= 1
+                if entry.users == 0 and _LOCAL_IMPORT_LOCKS.get(resource) is entry:
+                    del _LOCAL_IMPORT_LOCKS[resource]
+
+
+@contextmanager
+def _import_commit_locks(session: Session, *resources: str) -> Iterator[None]:
+    """Hold import locks across the canonical writer's transaction boundaries.
+
+    ``create_ip_docket`` intentionally commits each accepted row. A normal
+    ``FOR UPDATE`` lock therefore protects only the first row and used to let a
+    concurrent commit materialise the same remaining rows. PostgreSQL advisory
+    transaction locks live on a dedicated connection, so they remain held while
+    the request session commits its row transactions. SQLite is local/test-only
+    and uses the equivalent in-process keyed locks.
+    """
+
+    ordered = tuple(sorted(set(resources)))
+    bind = session.get_bind()
+    if bind.dialect.name == "postgresql":
+        engine = getattr(bind, "engine", bind)
+        with engine.connect() as lock_connection, lock_connection.begin():
+            for resource in ordered:
+                lock_connection.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtextextended(:resource, 0))"),
+                    {"resource": resource},
+                )
+            yield
+        return
+
+    with _local_import_locks(ordered):
+        yield
 
 
 def _now() -> datetime:
@@ -273,6 +348,23 @@ def revalidate_ip_import_job(
     context: SessionContext,
     job_id: str,
 ) -> IpImportPreviewResponse:
+    """Refresh an expired preview while excluding a concurrent commit."""
+
+    resource = f"ip-import-job:{context.company.id}:{job_id}"
+    with _import_commit_locks(session, resource):
+        return _revalidate_ip_import_job_locked(
+            session,
+            context=context,
+            job_id=job_id,
+        )
+
+
+def _revalidate_ip_import_job_locked(
+    session: Session,
+    *,
+    context: SessionContext,
+    job_id: str,
+) -> IpImportPreviewResponse:
     """UJ-02-EXC-01 — refresh an expired preview against current data."""
 
     job = _job_or_404(session, context=context, job_id=job_id, for_update=True)
@@ -280,6 +372,17 @@ def revalidate_ip_import_job(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A terminal import job cannot be revalidated.",
+        )
+    if job.status == "staged" and job.idempotency_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_import_commit_claimed",
+                "message": (
+                    "This import is being committed or awaits recovery; retry commit "
+                    "with its original idempotency key."
+                ),
+            },
         )
     valid = invalid = 0
     for row in _rows(session, job):
@@ -354,6 +457,55 @@ def _set_row_outcome(
     session.commit()
 
 
+def _import_docket_id(row_id: str) -> str:
+    """Stable materialization id derived from the durable staging-row owner."""
+
+    return str(uuid5(NAMESPACE_URL, f"caseops:ip-import-row:{row_id}"))
+
+
+def _recover_materialized_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> IpDocketRecord | None:
+    """Reuse a docket committed before its staging-row outcome was recorded.
+
+    The deterministic docket id and source audit event are committed in the
+    canonical writer's transaction. Seeing both proves that this exact import
+    row materialized the docket; a same-key retry can therefore repair the row
+    outcome without invoking the writer again.
+    """
+
+    docket_id = _import_docket_id(row_id)
+    docket = session.scalar(
+        select(IpDocketRecord).where(
+            IpDocketRecord.id == docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+    )
+    if docket is None:
+        return None
+    provenance = session.scalar(
+        select(AuditEvent.id).where(
+            AuditEvent.company_id == context.company.id,
+            AuditEvent.action == IMPORT_MATERIALIZATION_ACTION,
+            AuditEvent.target_type == "ip_import_row",
+            AuditEvent.target_id == row_id,
+            AuditEvent.ip_docket_id == docket.id,
+        )
+    )
+    if provenance is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_import_materialization_provenance_missing",
+                "message": "A reserved docket exists without matching import provenance.",
+            },
+        )
+    return docket
+
+
 def commit_ip_import_job(
     session: Session,
     *,
@@ -366,6 +518,26 @@ def commit_ip_import_job(
     Idempotent by ``idempotency_key``: a repeated commit returns the original
     terminal result without creating a second record (UJ-02-EXC-03).
     """
+
+    job_resource = f"ip-import-job:{context.company.id}:{job_id}"
+    key_resource = f"ip-import-key:{context.company.id}:{DOMAIN}:{payload.idempotency_key}"
+    with _import_commit_locks(session, job_resource, key_resource):
+        return _commit_ip_import_job_locked(
+            session,
+            context=context,
+            job_id=job_id,
+            payload=payload,
+        )
+
+
+def _commit_ip_import_job_locked(
+    session: Session,
+    *,
+    context: SessionContext,
+    job_id: str,
+    payload: IpImportCommitRequest,
+) -> IpImportCommitResponse:
+    """Commit while the job and tenant/idempotency-key locks are held."""
 
     job = _job_or_404(session, context=context, job_id=job_id, for_update=True)
 
@@ -382,31 +554,87 @@ def commit_ip_import_job(
         )
     if job.status == "cancelled":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Import job is cancelled.")
-    if not job.preview_token or payload.preview_token != job.preview_token:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Import preview changed; preview again."
+
+    key_owner = session.scalar(
+        select(BulkImportJob).where(
+            BulkImportJob.company_id == context.company.id,
+            BulkImportJob.domain == DOMAIN,
+            BulkImportJob.idempotency_key == payload.idempotency_key,
+            BulkImportJob.id != job.id,
         )
-    expires = _aware(job.preview_expires_at)
-    if expires and expires <= _now():
+    )
+    if key_owner is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "code": "ip_import_preview_expired",
-                "message": "The import preview expired and must be revalidated.",
+                "code": "ip_import_idempotency_key_reused",
+                "message": "This idempotency key belongs to a different import job.",
             },
         )
+
+    resuming = job.status == "staged" and bool(job.idempotency_key)
+    if resuming:
+        if job.idempotency_key != payload.idempotency_key:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This import is already claimed by a different idempotency key.",
+            )
+    else:
+        if job.status != "preview_ready":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This import job is not ready to commit.",
+            )
+        if not job.preview_token or payload.preview_token != job.preview_token:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Import preview changed; preview again.",
+            )
+        expires = _aware(job.preview_expires_at)
+        if expires and expires <= _now():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_import_preview_expired",
+                    "message": "The import preview expired and must be revalidated.",
+                },
+            )
+
+        # Persist the ownership claim before the canonical row writer starts
+        # committing. If the worker exits between rows, the same key can resume
+        # rows whose outcomes are still pending; a different key cannot.
+        job.status = "staged"
+        job.idempotency_key = payload.idempotency_key
+        job.preview_token = None
+        job.preview_expires_at = None
+        job.version += 1
+        session.commit()
 
     # The canonical docket writer commits per call, so each row's outcome is
     # persisted immediately. UJ-02-EXC-02: a later row that fails and rolls back
     # its own partial write cannot discard an already-recorded sibling result.
-    committed = failed = 0
     plan = [
-        (row.id, row.validation_status, dict(row.normalized_json or {}))
+        (row.id, row.validation_status, row.commit_status, dict(row.normalized_json or {}))
         for row in _rows(session, job)
     ]
-    for row_id, validation_status, normalized in plan:
+    for row_id, validation_status, commit_status, normalized in plan:
+        if commit_status in {"committed", "failed", "skipped"}:
+            continue
         if validation_status != "valid":
             _set_row_outcome(session, row_id=row_id, commit_status="skipped")
+            continue
+        recovered = _recover_materialized_docket(
+            session,
+            context=context,
+            row_id=row_id,
+        )
+        if recovered is not None:
+            _set_row_outcome(
+                session,
+                row_id=row_id,
+                commit_status="committed",
+                docket_id=recovered.id,
+            )
             continue
         try:
             docket = create_ip_docket(
@@ -418,6 +646,8 @@ def commit_ip_import_job(
                     restricted=False,
                     particulars=_particulars_for(normalized),
                 ),
+                docket_id=_import_docket_id(row_id),
+                source_provenance=("ip_import_row", row_id),
             )
         except HTTPException as exc:
             # Discard any partial write the rejected call had flushed.
@@ -432,18 +662,19 @@ def commit_ip_import_job(
                     else "commit_rejected"
                 ),
             )
-            failed += 1
             continue
         _set_row_outcome(session, row_id=row_id, commit_status="committed", docket_id=docket.id)
-        committed += 1
 
     job = _job_or_404(session, context=context, job_id=job_id, for_update=True)
+
+    final_rows = _rows(session, job)
+    committed = sum(row.commit_status == "committed" for row in final_rows)
+    failed = sum(row.commit_status == "failed" for row in final_rows)
 
     job.committed_rows = committed
     job.failed_rows = failed
     job.status = "committed_with_errors" if failed else "committed"
     job.committed_at = _now()
-    job.idempotency_key = payload.idempotency_key
     job.preview_token = None
     job.version += 1
 

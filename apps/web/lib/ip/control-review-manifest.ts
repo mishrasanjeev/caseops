@@ -57,6 +57,9 @@ function describeFreshness(review: IpControlReview): string {
 export function buildControlReviewManifest(review: IpControlReview): string {
   const rows: [string, string][] = [
     ["Generated", review.generated_at],
+    ["Query version", review.query_version],
+    ["Snapshot schema", String(review.snapshot.schema_version)],
+    ["Timezone", review.snapshot.timezone],
     ["Filters", describeFilters(review.filters)],
     ["Freshness", describeFreshness(review)],
     ["Completeness", review.completeness_status],
@@ -91,6 +94,15 @@ export function buildControlReviewManifest(review: IpControlReview): string {
         .join("")}</ul></section>`
     : "<section><h2>Exceptions</h2><p>None recorded at generation.</p></section>";
 
+  const includedRecords = review.snapshot.included_records.length
+    ? `<section><h2>Included records (${review.snapshot.included_records.length})</h2><ul>${review.snapshot.included_records
+        .map(
+          (record) =>
+            `<li>record ${escapeHtml(record.docket_id)} · version ${record.current_version} · SHA-256 ${escapeHtml(record.sha256)}</li>`,
+        )
+        .join("")}</ul></section>`
+    : "<section><h2>Included records</h2><p>None visible at generation.</p></section>";
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -120,6 +132,7 @@ ${rows
 </table>
 ${incompleteness}
 ${exceptions}
+${includedRecords}
 <footer>
 This manifest lists identifiers and counts only. It carries no record titles or
 other privileged content. Check the SHA-256 above against the stored review to

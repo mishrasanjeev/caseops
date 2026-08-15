@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     HearingPack,
     HearingReminder,
     IpDeadlineCoverage,
+    IpDocketQueue,
     IpDocketRecord,
     Matter,
     MatterAccessGrant,
@@ -229,6 +230,13 @@ def _seed_owned_objects(
             responsible_membership_id=target_membership_id,
             coverage_status="accepted",
         )
+        personal_queue = IpDocketQueue(
+            company_id=company_id,
+            name="Departing lawyer daily docket",
+            filters_json={"critical_only": True},
+            owner_membership_id=target_membership_id,
+            created_by_membership_id=target_membership_id,
+        )
         hearing = MatterHearing(
             matter_id=matter.id,
             hearing_on=date(2026, 5, 22),
@@ -271,6 +279,7 @@ def _seed_owned_objects(
                 task,
                 deadline,
                 ip_coverage,
+                personal_queue,
                 reminder,
                 draft_review,
                 hearing_pack,
@@ -286,6 +295,7 @@ def _seed_owned_objects(
             "task_id": task.id,
             "deadline_id": deadline.id,
             "ip_coverage_id": ip_coverage.id,
+            "ip_docket_queue_id": personal_queue.id,
             "reminder_id": reminder.id,
             "draft_id": draft.id,
             "draft_review_id": draft_review.id,
@@ -318,7 +328,7 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
         str(target["setup"]["debug_token"]),
         password="TargetPass123!",
     )
-    _complete_setup(
+    replacement_token = _complete_setup(
         client,
         str(replacement["setup"]["debug_token"]),
         password="ReplacementPass123!",
@@ -354,6 +364,7 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
     assert preview_body["supported_counts"]["matter_tasks"] == 1
     assert preview_body["supported_counts"]["matter_deadlines"] == 1
     assert preview_body["supported_counts"]["ip_deadline_coverages"] == 1
+    assert preview_body["supported_counts"]["ip_docket_queues"] == 1
     assert preview_body["supported_counts"]["hearing_reminders"] == 1
     assert preview_body["unsupported_counts"]["drafts"] == 1
     assert preview_body["unsupported_counts"]["draft_reviews"] == 1
@@ -371,6 +382,15 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
     assert commit_body["employee"]["employment_status"] == "inactive"
     assert commit_body["employee"]["membership_active"] is False
     assert commit_body["employee"]["user_active"] is False
+
+    replacement_queues = client.get(
+        "/api/ip/docket-queues",
+        headers=auth_headers(replacement_token),
+    )
+    assert replacement_queues.status_code == 200, replacement_queues.text
+    assert [row["name"] for row in replacement_queues.json()["queues"]] == [
+        "Departing lawyer daily docket"
+    ]
 
     stale = client.get("/api/auth/me", headers=auth_headers(target_token))
     assert stale.status_code in {401, 403}
@@ -394,6 +414,7 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
         task = session.get(MatterTask, seeded["task_id"])
         deadline = session.get(MatterDeadline, seeded["deadline_id"])
         ip_coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        personal_queue = session.get(IpDocketQueue, seeded["ip_docket_queue_id"])
         reminder = session.get(HearingReminder, seeded["reminder_id"])
         draft = session.get(Draft, seeded["draft_id"])
         assert matter is not None and matter.assignee_membership_id == replacement_id
@@ -416,6 +437,8 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
         assert ip_coverage.pending_replacement_membership_id == replacement_id
         assert ip_coverage.emergency_escalation_membership_id is not None
         assert ip_coverage.coverage_status == "reassigned"
+        assert personal_queue is not None
+        assert personal_queue.owner_membership_id == replacement_id
         assert reminder is not None and reminder.recipient_membership_id == replacement_id
         assert draft is not None and draft.created_by_membership_id == target_id
 
@@ -431,6 +454,70 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
     assert "employee.session_revoked" in actions
     assert "employee.account_setup.completed" in actions
     assert "employee.login" in actions
+
+
+def test_offboarding_refuses_to_replace_backup_with_existing_primary(
+    client: TestClient,
+) -> None:
+    """A departure cannot silently collapse distinct IP deadline coverage."""
+
+    boot = _bootstrap(
+        client,
+        slug="lw-s8-distinct-backup",
+        email="owner@distinct-backup-lws8.example",
+    )
+    owner_token = str(boot["access_token"])
+    owner_id = str(boot["membership"]["id"])
+    company_id = str(boot["company"]["id"])
+    target = _create_employee(
+        client,
+        owner_token,
+        email="departing-backup@lws8.example",
+        full_name="Departing Backup",
+    )
+    target_id = str(target["employee"]["membership_id"])
+    _complete_setup(
+        client,
+        str(target["setup"]["debug_token"]),
+        password="DepartingBackup123!",
+    )
+    seeded = _seed_owned_objects(
+        company_id=company_id,
+        target_membership_id=target_id,
+    )
+
+    with get_session_factory()() as session:
+        coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        assert coverage is not None
+        coverage.responsible_membership_id = owner_id
+        coverage.backup_membership_id = target_id
+        session.commit()
+
+    preview = client.post(
+        f"/api/companies/current/employees/{target_id}/offboarding/preview",
+        headers=auth_headers(owner_token),
+        json={"reassign_to_membership_id": owner_id},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_commit"] is False
+    assert "distinct ip deadline backup" in " ".join(
+        preview.json()["blockers"]
+    ).lower()
+
+    commit = client.post(
+        f"/api/companies/current/employees/{target_id}/offboarding/commit",
+        headers=auth_headers(owner_token),
+        json={"reassign_to_membership_id": owner_id},
+    )
+    assert commit.status_code == 400, commit.text
+
+    with get_session_factory()() as session:
+        target_membership = session.get(CompanyMembership, target_id)
+        coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        assert target_membership is not None and target_membership.is_active is True
+        assert coverage is not None
+        assert coverage.responsible_membership_id == owner_id
+        assert coverage.backup_membership_id == target_id
 
 
 def test_offboarding_shared_global_user_preserves_other_tenant_access(

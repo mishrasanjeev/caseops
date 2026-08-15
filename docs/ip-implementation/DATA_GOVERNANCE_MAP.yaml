@@ -138,7 +138,15 @@
     }
   },
   "table_policy_profile_overrides": {},
-  "column_category_overrides": {},
+  "column_category_overrides": {
+    "ip_docket_control_reviews": {
+      "manifest_sha256": "lifecycle_or_audit_evidence",
+      "report_snapshot_json": "lifecycle_or_audit_evidence"
+    },
+    "ip_identifiers": {
+      "superseded_by_identifier_id": "tenant_or_access_identifier"
+    }
+  },
   "change_controls": {
     "migration_marker": "DATA-GOVERNANCE-MAP: updated",
     "ci_validate_command": "uv --directory apps/api run python ../../scripts/ip_data_governance_map.py validate",
@@ -9634,8 +9642,18 @@
           "nullable": false
         },
         "manifest_sha256": {
-          "category_id": "domain_attribute",
+          "category_id": "lifecycle_or_audit_evidence",
           "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "query_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "report_snapshot_json": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "JSON",
           "nullable": false
         },
         "signed_off_at": {
@@ -9652,6 +9670,11 @@
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(255)",
           "nullable": true
+        },
+        "snapshot_schema_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
         },
         "updated_at": {
           "category_id": "temporal_or_version_metadata",
@@ -10547,6 +10570,11 @@
           "category_id": "external_or_provider_identifier",
           "sql_type": "VARCHAR(120)",
           "nullable": false
+        },
+        "superseded_by_identifier_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
         },
         "supersedes_identifier_id": {
           "category_id": "tenant_or_access_identifier",
@@ -22770,12 +22798,12 @@
       }
     }
   ],
-  "schema_fingerprint": "e4498c123f7f1e96486998ffa341fbd547c9db668bd7ebd1b2c70aac09f0e1ad",
+  "schema_fingerprint": "a52263e7782fbe53ab7a3061e3fe0327bff7eda680b0a2a2fc79f5e43a6dd45a",
   "index_inventory": {
-    "orm_index_count": 1146,
-    "orm_index_fingerprint": "63bfb7f8fc26bd7f5f9bd70d4b4a92d2e7448d5ac51e42280dfa585c3b7238aa",
-    "migration_index_count": 506,
-    "migration_index_fingerprint": "98b7e9742ddf73096f187eef31c4343ea11d8b1e956babbb6c6555337cbe2f07",
+    "orm_index_count": 1147,
+    "orm_index_fingerprint": "a83ceeade72cbac48d88c832aa3d55e25fecdbb7f2515560e8ecfb49afea5435",
+    "migration_index_count": 507,
+    "migration_index_fingerprint": "53a9b3a26b99689c5ff82ddc1c1099594e9c9c1dcff7ef97b6fd051699da129c",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

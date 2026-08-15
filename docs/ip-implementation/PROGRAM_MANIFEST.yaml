@@ -7464,8 +7464,8 @@
           "evidence": "Isolated hard-coded production origins and tenant, exact API/web release identity, predecessor-only preparation, typed non-mutating governance probes, five legal-deadline writers, zero notification intents, and exact-shape synthetic Matter reconciliation/disposal"
         }
       ],
-      "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-47/UJ-67, and 25. A0 owns only schema-free mutation quiescence over the three existing rule-governance writers. The five legal-deadline writers remain operable over already selected immutable rules and policies. A1 retains tenant ownership/schema/backfill/concurrency, the guarded standalone policy-selection command, mandatory server-side rollout-expiry plus current-company entitlement enforcement, qualified reviewer authorization, unsupported-kind evaluator fail-closed behavior, effective-range/emergency-disable behavior, and strict PostgreSQL ownership/concurrency proof. A2 retains config-only controlled resume and deployed acceptance and is forbidden until those A1 gates have exact deployed proof. Calendar governance, read-only impact/readiness, Matter/shared-work ownership, and risk-response records remain with their existing owners.",
-      "implementation_status": "not_started",
+      "allocation_review": "Reviewed against PRD Sections 11, 23 UJ-47/UJ-67, and 25. A0 owns only schema-free mutation quiescence over the three existing rule-governance writers. The five legal-deadline writers remain operable over already selected immutable rules and policies. A1 retains tenant ownership/schema/backfill/concurrency, the guarded standalone policy-selection command, mandatory server-side rollout-expiry plus current-company entitlement enforcement, qualified reviewer authorization, unsupported-kind evaluator fail-closed behavior, effective-range/emergency-disable behavior, and strict PostgreSQL ownership/concurrency proof. A2 retains config-only controlled resume and deployed acceptance and is forbidden until those A1 gates have exact deployed proof. Calendar governance, read-only impact/readiness, Matter/shared-work ownership, and risk-response records remain with their existing owners. UJ-67-NORMAL, UJ-67-EXC-02, and UJ-67-EXC-05 are decomposed to IPLF-027E; IPLF-027B retains UJ-67-EXC-01, UJ-67-EXC-03, UJ-67-EXC-04, and UJ-67-EXC-06 plus the incomplete A0/A1/A2 release lane.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -7979,7 +7979,10 @@
       "primary_behavior": "Repository data-map inventory and fail-closed Definition-of-Ready enforcement",
       "migration_boundary": "No schema migration or runtime data mutation. Future migrations must update the map and include the required data-governance marker.",
       "release_boundary": "Repository/CI control only; no deployment or data-operation activation is claimed by this slice.",
-      "requirement_ids": [],
+      "requirement_ids": [
+        "DATA-GOV-01",
+        "DATA-GOV-03"
+      ],
       "journey_path_ids": [],
       "ownership": [
         {
@@ -8087,8 +8090,8 @@
         }
       ],
       "allocation_review": "Derived IPLF-028 decomposition under PRD Sections 11.5(21), 13.24 DATA-GOV-01 and DATA-GOV-03, 23.1 M2-F, and 25.2 Definition of Ready. DATA-GOV-02 remains with the policy-dependent workflow slices and is not claimed here.",
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -10062,15 +10065,16 @@
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "Rebuild increments 1-13 make the slice functionally complete, with a regenerated typed client and its migrations, constraints, defaults and uniqueness verified on real PostgreSQL 17 + pgvector 0.8.3 at commit 9e65d8b6 (alembic head 20260815_0004, 27 postgres tests passed on a freshly created database). One item remains: the Microsoft Graph and Google fetch_event adapters have no live-provider verification and are exercised only against provider doubles. Note the PostgreSQL run was a local container matching CI's image, not a hosted CI run and not Cloud SQL, and the IP suites and browser E2E still run on SQLite.",
+          "summary": "Rebuild increments 1-13 add substantial repository behavior but do not functionally complete all 22 paths. UJ-62-EXC-03 is partial: the default-off drift probe compares a limited date/cancel/delete set through provider doubles, while the status contract still declares changed_event_detection=unsupported_no_provider_snapshot and no immutable provider snapshot or explicit reconciliation candidate exists. The Microsoft Graph and Google fetch_event adapters also have no live-provider verification. Migrations, constraints, defaults and uniqueness were verified on local PostgreSQL 17 + pgvector 0.8.3 at commit 9e65d8b6 (alembic head 20260815_0004, 27 tests), not hosted CI or Cloud SQL; the IP suites and browser E2E still run on SQLite.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
-          "evidence_needed": "Live-provider verification of the two fetch_event adapters against an OAuth sandbox, a hosted CI run at the target commit, and dated deployed acceptance.",
-          "safe_fallback": "The control review is additive and read-derived; the unbuilt areas keep their existing behaviour and the latent calendar gap is pinned by test_ip_latent_exposure_guards.py.",
+          "evidence_needed": "Implement immutable provider snapshots and an explicit accept/reject reconciliation-candidate contract for external edits/deletes; verify both fetch_event adapters against an OAuth sandbox; then obtain hosted CI and dated deployed acceptance.",
+          "safe_fallback": "Calendar drift automation stays default-off and fails closed before provider access unless readiness, entitlement and rollout gates pass; CaseOps remains authoritative and users reconcile external changes manually.",
           "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "Verify the two fetch_event adapters against a live provider sandbox."
+          "next_independent_slice": "Complete UJ-62-EXC-03 provider-snapshot/candidate semantics, then verify both adapters against a live provider sandbox."
         }
       ],
       "next_actions": [
+        "Implement immutable provider snapshots and explicit reconciliation candidates for external calendar edits/deletes (UJ-62-EXC-03).",
         "Verify the Microsoft Graph and Google fetch_event adapters against a live provider sandbox.",
         "Push to trigger the hosted postgres-validation CI job at the target commit.",
         "Take the rebuilt slice through the release gate with dated deployed acceptance."
@@ -39341,12 +39345,13 @@
         "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md"
       ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-028B",
+        "IPLF-028C",
         "IPLF-071B"
       ],
       "allocation_rationale": "DATA-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-028, IPLF-071. IPLF-028C implements the repository-wide inventory facet; policy-approved runtime behavior and the later workflow/reconciliation facets remain allocated to IPLF-028B and IPLF-071B.",
@@ -39446,12 +39451,13 @@
         "docs/ip-implementation/evidence/m2/IPLF-028C/repository-inventory-2026-08-13.md"
       ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-028B",
+        "IPLF-028C",
         "IPLF-071B"
       ],
       "allocation_rationale": "DATA-GOV allocation reviewed against PRD requirement family and parent epic scope: IPLF-028, IPLF-071. IPLF-028C implements the repository Definition-of-Ready gate; later runtime/reconciliation behavior remains allocated to IPLF-028B and IPLF-071B.",
@@ -42737,11 +42743,11 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_readiness.py::test_ip_readiness_is_tenant_scoped_observable_and_side_effect_free",
-        "apps/web/app/app/ip/page.test.tsx",
         "apps/api/tests/test_ip_workspace_configuration.py::test_missing_provider_failure_does_not_block_manual_workspace#IPLF-UJ-01-EXC-01",
-        "apps/api/tests/test_ip_workspace_configuration.py::test_readiness_fails_closed_on_tenant_configuration_and_test_state#IPLF-UJ-01-EXC-02",
         "apps/api/tests/test_ip_workspace_configuration.py::test_missing_provider_failure_does_not_block_manual_workspace#IPLF-UJ-01-EXC-03",
-        "apps/api/tests/test_ip_workspace_configuration.py::test_normal_workspace_setup_records_tests_terms_flags_and_actor#IPLF-UJ-01-NORMAL"
+        "apps/api/tests/test_ip_workspace_configuration.py::test_normal_workspace_setup_records_tests_terms_flags_and_actor#IPLF-UJ-01-NORMAL",
+        "apps/api/tests/test_ip_workspace_configuration.py::test_readiness_fails_closed_on_tenant_configuration_and_test_state#IPLF-UJ-01-EXC-02",
+        "apps/web/app/app/ip/page.test.tsx"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-020B/release-2026-08-07.md",
@@ -42779,19 +42785,21 @@
       ],
       "requirement_ids": [],
       "test_refs": [
-        "apps/api/tests/test_ip_bulk_import.py::test_uj02_normal_import_trademark_portfolio#IPLF-UJ-02-NORMAL",
         "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc01_expired_preview_requires_revalidation#IPLF-UJ-02-EXC-01",
         "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc02_individual_rows_can_fail_without_aborting_siblings#IPLF-UJ-02-EXC-02",
         "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc03_repeated_commit_returns_original_result#IPLF-UJ-02-EXC-03",
-        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc04_cross_tenant_reference_is_rejected_without_disclosure#IPLF-UJ-02-EXC-04"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc04_cross_tenant_reference_is_rejected_without_disclosure#IPLF-UJ-02-EXC-04",
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_normal_import_trademark_portfolio#IPLF-UJ-02-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
+      ],
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-032B"
+        "IPLF-032A"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -42901,11 +42909,13 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc01_pre_filing_draft_saves_without_an_application_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc02_filed_phase_requires_explicit_identifier_allocation#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_normal_create_trademark_application_manually#IPLF-UJ-03-NORMAL"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "in_progress",
@@ -42959,17 +42969,20 @@
         "IP-PORT-10"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_portfolio_listing.py::test_uj04_exc02_restricted_records_are_omitted_not_teased#IPLF-UJ-04-EXC-02",
         "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
         "planned:IPLF-UJ-04-EXC-03",
         "planned:IPLF-UJ-04-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
+        "IPLF-030A",
         "IPLF-030B"
       ],
       "not_required_approval": {
@@ -43002,16 +43015,18 @@
         "IP-ID-08"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_normal_detect_and_resolve_duplicate#IPLF-UJ-05-NORMAL",
-        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_exc01_conflicting_client_blocks_automatic_merge#IPLF-UJ-05-EXC-01"
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_exc01_conflicting_client_blocks_automatic_merge#IPLF-UJ-05-EXC-01",
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_normal_detect_and_resolve_duplicate#IPLF-UJ-05-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031A/local-2026-08-14.md"
+      ],
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-031B"
+        "IPLF-031A"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -43049,15 +43064,15 @@
         "IP-PROS-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL"
+        "apps/api/tests/test_ip_application_families.py::test_uj06_normal_record_prosecution_event_and_read_timeline#IPLF-UJ-06-NORMAL",
+        "apps/api/tests/test_ip_prosecution_workflow.py::test_uj06_event_preview_commit_reconcile_correct_and_report#IPLF-UJ-06-EXC-01",
+        "apps/api/tests/test_ip_prosecution_workflow.py::test_uj06_event_preview_commit_reconcile_correct_and_report#IPLF-UJ-06-EXC-02",
+        "apps/api/tests/test_ip_prosecution_workflow.py::test_uj06_event_preview_commit_reconcile_correct_and_report#IPLF-UJ-06-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -43065,6 +43080,7 @@
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-022B",
+        "IPLF-033A",
         "IPLF-033B"
       ],
       "not_required_approval": {
@@ -43162,11 +43178,13 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-08-EXC-01",
+        "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-08-EXC-01",
         "planned:IPLF-UJ-08-EXC-02",
         "planned:IPLF-UJ-08-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -43228,17 +43246,22 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL"
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-09-NORMAL",
+        "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_completed_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01",
+        "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_superseded_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01",
+        "planned:IPLF-UJ-09-EXC-02"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-023B",
+        "IPLF-034A",
         "IPLF-034B"
       ],
       "not_required_approval": {
@@ -43303,18 +43326,21 @@
         "NOTIF-24"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_deadline_notifications.py::test_uj10_exc03_unacknowledged_owner_is_withheld_in_the_plan#IPLF-UJ-10-EXC-03",
+        "apps/api/tests/test_ip_deadline_notifications.py::test_uj10_normal_preview_then_confirm_matches_the_plan#IPLF-UJ-10-NORMAL",
         "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL"
+        "planned:IPLF-UJ-10-EXC-02"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-025B",
+        "IPLF-035A",
         "IPLF-035B"
       ],
       "not_required_approval": {
@@ -43364,13 +43390,14 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "apps/api/tests/test_notification_convergence_20260804.py",
-        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts"
+        "apps/api/tests/test_notification_convergence_20260804.py::IPLF-UJ-11-EXC-01::test_provider_events_are_monotonic_idempotent_suppressed_and_fallback",
+        "apps/api/tests/test_notification_convergence_20260804.py::IPLF-UJ-11-EXC-02::test_provider_disabled_recovery_is_versioned_and_previewed",
+        "tests/e2e/iplf-007c-notification-convergence-2026-08-04.spec.ts::IPLF-UJ-11-NORMAL"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "not_run",
@@ -43542,19 +43569,22 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix#IPLF-UJ-14-EXC-03",
+        "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links#IPLF-UJ-14-EXC-02",
+        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock#IPLF-UJ-14-NORMAL",
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-01",
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-04"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-024B",
+        "IPLF-036A",
         "IPLF-036B"
       ],
       "not_required_approval": {
@@ -43656,14 +43686,18 @@
         "TRUST-RSCH-14"
       ],
       "test_refs": [
+        "IPLF-UJ-16-EXC-01",
+        "IPLF-UJ-16-EXC-02",
+        "IPLF-UJ-16-EXC-03",
+        "IPLF-UJ-16-NORMAL",
         "apps/api/tests/test_authorities.py",
         "apps/web/app/app/research/page.test.tsx",
         "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
         "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
+        "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "not_run",
@@ -45410,7 +45444,11 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-01",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-02",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-03",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-04",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-NORMAL",
         "apps/api/tests/test_portal_auth.py",
         "apps/api/tests/test_portal_outside_counsel.py",
         "apps/web/components/ip/IpAccessWorkspace.test.tsx",
@@ -45508,23 +45546,27 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_rule_governance.py::test_uj47_normal_propose_test_activate_retire#IPLF-UJ-47-NORMAL",
         "apps/api/tests/test_ip_rule_governance.py::test_rulegov06_confirmed_calculation_stays_reproducible#IPLF-UJ-47-NORMAL",
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov07_disable_alerts_record_owners#IPLF-UJ-47-EXC-05",
         "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc01_proposer_cannot_self_approve#IPLF-UJ-47-EXC-01",
         "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc02_failed_fixture_blocks_activation#IPLF-UJ-47-EXC-02",
         "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc03_overlapping_effective_ranges_conflict#IPLF-UJ-47-EXC-03",
         "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc04_activation_preserves_confirmed_deadlines#IPLF-UJ-47-EXC-04",
         "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc05_emergency_disable_is_fail_closed#IPLF-UJ-47-EXC-05",
-        "apps/api/tests/test_ip_rule_governance.py::test_rulegov07_disable_alerts_record_owners#IPLF-UJ-47-EXC-05"
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_normal_propose_test_activate_retire#IPLF-UJ-47-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027C/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027D/local-2026-08-14.md"
+      ],
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-023B",
-        "IPLF-027B"
+        "IPLF-027C",
+        "IPLF-027D"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -45811,13 +45853,16 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-50-EXC-01",
-        "planned:IPLF-UJ-50-EXC-02",
-        "planned:IPLF-UJ-50-EXC-03",
-        "planned:IPLF-UJ-50-EXC-04",
-        "planned:IPLF-UJ-50-NORMAL"
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc01_restricted_work_contributes_no_leaked_counts#IPLF-UJ-50-EXC-01",
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc02_absent_or_disabled_owner_triggers_backup_policy#IPLF-UJ-50-EXC-02",
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc03_stale_provider_data_is_not_shown_as_no_work#IPLF-UJ-50-EXC-03",
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_exc04_unacknowledged_critical_item_re_escalates#IPLF-UJ-50-EXC-04",
+        "apps/api/tests/test_ip_daily_docket.py::test_uj50_normal_triage_daily_docket_and_workload#IPLF-UJ-50-NORMAL",
+        "apps/web/app/app/ip/docket/page.test.tsx",
+        "tests/e2e/iplf-039c-daily-docket-2026-08-15.spec.ts"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "implementation_status": "in_progress",
@@ -46059,15 +46104,16 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc03_a_filing_payment_is_not_a_client_payment#IPLF-UJ-52-EXC-03",
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc06_a_broken_billing_link_surfaces_instead_of_matching#IPLF-UJ-52-EXC-06",
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_normal_record_legal_cost_and_reconcile_against_billing#IPLF-UJ-52-NORMAL",
         "planned:IPLF-UJ-52-EXC-01",
         "planned:IPLF-UJ-52-EXC-02",
-        "planned:IPLF-UJ-52-EXC-03",
         "planned:IPLF-UJ-52-EXC-04",
-        "planned:IPLF-UJ-52-EXC-05",
-        "planned:IPLF-UJ-52-EXC-06",
-        "planned:IPLF-UJ-52-NORMAL"
+        "planned:IPLF-UJ-52-EXC-05"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "implementation_status": "in_progress",
@@ -46192,14 +46238,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prosecution_workflow.py",
         "apps/api/tests/test_ip_lifecycle_service.py",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
+        "apps/api/tests/test_ip_prosecution_workflow.py",
         "planned:IPLF-UJ-53-EXC-01",
         "planned:IPLF-UJ-53-EXC-02",
         "planned:IPLF-UJ-53-EXC-03",
         "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "planned:IPLF-UJ-53-NORMAL",
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
@@ -46314,13 +46360,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-54-EXC-01",
-        "planned:IPLF-UJ-54-EXC-02",
-        "planned:IPLF-UJ-54-EXC-03",
-        "planned:IPLF-UJ-54-EXC-04",
-        "planned:IPLF-UJ-54-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc01_unsupported_mark_or_form_type_blocks_filing_ready#IPLF-UJ-54-EXC-01",
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc02_missing_priority_evidence_is_an_explicit_exception#IPLF-UJ-54-EXC-02",
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc03_change_after_approval_supersedes_and_requires_reapproval#IPLF-UJ-54-EXC-03",
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_exc04_imported_data_never_silently_fills_a_declaration#IPLF-UJ-54-EXC-04",
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj54_normal_capture_and_approve_complete_filing_particulars#IPLF-UJ-54-NORMAL"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "in_progress",
@@ -46626,15 +46673,18 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-57-EXC-01",
-        "planned:IPLF-UJ-57-EXC-02",
-        "planned:IPLF-UJ-57-EXC-03",
-        "planned:IPLF-UJ-57-EXC-04",
-        "planned:IPLF-UJ-57-EXC-05",
-        "planned:IPLF-UJ-57-EXC-06",
-        "planned:IPLF-UJ-57-NORMAL"
+        "apps/api/tests/test_ip_coverage_reassignment_access.py::test_uj57_exc01_single_reassignment_refuses_a_replacement_without_access#IPLF-UJ-57-EXC-01",
+        "apps/api/tests/test_ip_coverage_reassignment_access.py::test_uj57_exc02_ethical_wall_blocks_bulk_transfer_in_full#IPLF-UJ-57-EXC-02",
+        "apps/api/tests/test_ip_coverage_transfer_reconciliation.py",
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc03_assignee_rejects_and_work_returns_to_the_owner#IPLF-UJ-57-EXC-03",
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc04_concurrent_change_after_preview_is_refused#IPLF-UJ-57-EXC-04",
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc05_emergency_coverage_is_time_boxed_with_escalation#IPLF-UJ-57-EXC-05",
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_exc06_completed_work_stays_attributed_to_the_original_actor#IPLF-UJ-57-EXC-06",
+        "apps/api/tests/test_ip_coverage_transfer_workflow.py::test_uj57_normal_preview_propose_then_accept#IPLF-UJ-57-NORMAL",
+        "apps/web/app/app/ip/page.test.tsx"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "implementation_status": "in_progress",
@@ -46748,14 +46798,15 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc02_caseops_abstains_from_automated_remedy_or_contact#IPLF-UJ-58-EXC-02",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_normal_flag_contain_and_verify_corrective_action#IPLF-UJ-58-NORMAL",
         "planned:IPLF-UJ-58-EXC-01",
-        "planned:IPLF-UJ-58-EXC-02",
         "planned:IPLF-UJ-58-EXC-03",
         "planned:IPLF-UJ-58-EXC-04",
-        "planned:IPLF-UJ-58-EXC-05",
-        "planned:IPLF-UJ-58-NORMAL"
+        "planned:IPLF-UJ-58-EXC-05"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "in_progress",
@@ -46877,12 +46928,15 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-59-EXC-01",
-        "planned:IPLF-UJ-59-EXC-02",
-        "planned:IPLF-UJ-59-EXC-03",
-        "planned:IPLF-UJ-59-NORMAL"
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off#IPLF-UJ-59-EXC-01",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts#IPLF-UJ-59-EXC-02",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc03_export_failure_does_not_mark_review_complete#IPLF-UJ-59-EXC-03",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_normal_produce_and_sign_off_a_control_review#IPLF-UJ-59-NORMAL",
+        "apps/web/app/app/ip/docket/page.test.tsx",
+        "tests/e2e/iplf-039c-daily-docket-2026-08-15.spec.ts"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "implementation_status": "in_progress",
@@ -47043,11 +47097,12 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-61-EXC-01",
-        "planned:IPLF-UJ-61-EXC-02",
-        "planned:IPLF-UJ-61-NORMAL"
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_exc01_overlapping_and_unrecorded_interests_are_flagged#IPLF-UJ-61-EXC-01",
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_exc02_family_association_never_updates_another_recordal#IPLF-UJ-61-EXC-02",
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_normal_reconcile_chain_of_title_and_family#IPLF-UJ-61-NORMAL"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039E/per-path-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "implementation_status": "in_progress",
@@ -47186,14 +47241,16 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_ip_calendar_drift.py::test_uj62_exc03_a_moved_event_is_detected#IPLF-UJ-62-EXC-03",
+        "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc01_outage_retries_rather_than_dropping_the_projection#IPLF-UJ-62-EXC-01",
+        "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc02_revocation_is_a_connection_state_that_preserves_history#IPLF-UJ-62-EXC-02",
+        "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc04_projection_carries_no_privileged_content#IPLF-UJ-62-EXC-04",
+        "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc05_a_date_only_obligation_carries_a_date_not_a_time#IPLF-UJ-62-EXC-05",
+        "apps/api/tests/test_ip_calendar_projection.py::test_uj62_normal_projection_is_a_pointer_that_cannot_duplicate#IPLF-UJ-62-NORMAL",
+        "apps/web/app/app/ip/docket/page.test.tsx"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "implementation_status": "in_progress",
@@ -47522,21 +47579,24 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_exc02_mixed_version_contract_fails_closed#IPLF-UJ-67-EXC-02",
+        "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_exc05_rollback_preserves_history_without_duplicate_consumers#IPLF-UJ-67-EXC-05",
+        "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_normal_old_and_new_revisions_coexist#IPLF-UJ-67-NORMAL",
         "planned:IPLF-UJ-67-EXC-01",
-        "planned:IPLF-UJ-67-EXC-02",
         "planned:IPLF-UJ-67-EXC-03",
         "planned:IPLF-UJ-67-EXC-04",
-        "planned:IPLF-UJ-67-EXC-05",
-        "planned:IPLF-UJ-67-EXC-06",
-        "planned:IPLF-UJ-67-NORMAL"
+        "planned:IPLF-UJ-67-EXC-06"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-027B"
+        "IPLF-027B",
+        "IPLF-027E"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -66161,7 +66221,17 @@
         "IPLF-039C",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-62 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-025, IPLF-035, IPLF-039. | 2026-08-15: verified absent. No drift detection exists for an externally edited or deleted event, so the planned: reference is accurate. | 2026-08-15 increment 11: implemented. Drift is detected and reported, never silently repaired, and an unreadable provider records unknown rather than matches.",
+      "allocation_rationale": "UJ-62 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-025, IPLF-035, IPLF-039. | 2026-08-15: verified absent. No drift detection exists for an externally edited or deleted event, so the planned: reference is accurate. | 2026-08-15 increment 11: partial. A default-off probe reports limited date/cancel/delete drift and unknown provider state, but no immutable provider snapshot or explicit reconciliation candidate implements the full PRD path.",
+      "blockers": [
+        {
+          "id": "UJ-62-EXC-03-RECONCILIATION-CANDIDATE-MISSING",
+          "summary": "External edit/delete detection is a limited default-off drift finding, not the PRD-required explicit reconciliation candidate; the status contract declares unsupported_no_provider_snapshot.",
+          "owner": "Calendar integration engineering",
+          "evidence_needed": "Immutable provider snapshot/version plus accept/reject reconciliation-candidate persistence, authorization, audit, and regressions.",
+          "safe_fallback": "Keep calendar automation default-off and CaseOps authoritative; require manual reconciliation.",
+          "milestone_impact": "Keeps UJ-62-EXC-03 and IPLF-039C in progress/not-run/blocked."
+        }
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -67713,7 +67783,7 @@
         "planned:IPLF-UJ-67-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -67841,7 +67911,7 @@
         "planned:IPLF-UJ-67-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -67904,7 +67974,7 @@
         "planned:IPLF-UJ-67-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -68032,7 +68102,7 @@
         "planned:IPLF-UJ-67-EXC-06"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",

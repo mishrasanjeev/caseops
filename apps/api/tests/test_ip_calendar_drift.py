@@ -20,22 +20,31 @@ Stable manifest test IDs:
 from __future__ import annotations
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    BillingSubscription,
     CalendarConnectionStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    CalendarProvider,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import calendar_sync
 from caseops_api.services.calendar_sync import (
     CalendarProviderError,
+    GoogleCalendarProvider,
+    MicrosoftGraphOutlookProvider,
     check_ip_calendar_projection_drift,
 )
+from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
@@ -178,10 +187,250 @@ def _drift_status(sync_id: str) -> tuple[str, str | None]:
         return row.drift_status, row.drift_detail
 
 
+def _manual_docketing_reason(context_ids: tuple[str, str]) -> str:
+    from caseops_api.db.models import Company, CompanyMembership
+
+    company_id, membership_id = context_ids
+    factory = get_session_factory()
+    with factory() as session:
+        membership = session.get(CompanyMembership, membership_id)
+        company = session.get(Company, company_id)
+        assert membership is not None and company is not None
+        context = SessionContext(company=company, user=membership.user, membership=membership)
+        return next(
+            item.reason
+            for item in ip_workspace_readiness(
+                session,
+                context=context,
+                settings=get_settings(),
+            )
+            if item.feature_id == "manual_docketing"
+        )
+
+
+def _set_ip_workspace_entitlement(company_id: str, *, enabled: bool) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        subscription = session.scalar(
+            select(BillingSubscription)
+            .where(BillingSubscription.company_id == company_id)
+            .order_by(BillingSubscription.created_at.desc())
+        )
+        if subscription is None:
+            subscription = BillingSubscription(
+                company_id=company_id,
+                status="manual_active",
+                segment="law_firm",
+                source="calendar-drift-fixture",
+                externally_billable=False,
+                entitlement_overrides_json={"ip_workspace": enabled},
+            )
+            session.add(subscription)
+        else:
+            overrides = dict(subscription.entitlement_overrides_json or {})
+            overrides["ip_workspace"] = enabled
+            subscription.entitlement_overrides_json = overrides
+        session.commit()
+
+
+def _set_workspace_rollout(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    enabled: bool,
+    expires_at: str,
+) -> None:
+    monkeypatch.setenv("CASEOPS_IP_WORKSPACE_ENABLED", "true" if enabled else "false")
+    monkeypatch.setenv("CASEOPS_IP_WORKSPACE_ROLLOUT_EXPIRES_AT", expires_at)
+    get_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def _reset_provider():
+    get_settings.cache_clear()
     yield
     calendar_sync.set_google_calendar_provider_for_tests(None)
+    calendar_sync.set_outlook_provider_for_tests(None)
+    get_settings.cache_clear()
+
+
+def test_graph_fetch_event_uses_projection_timezone_and_parses_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real Graph adapter must not turn midnight IST into the prior UTC date."""
+
+    captured: dict[str, object] = {}
+
+    def fake_get(url: str, **kwargs: object) -> httpx.Response:
+        captured.update({"url": url, **kwargs})
+        return httpx.Response(
+            200,
+            request=httpx.Request("GET", url),
+            json={
+                "id": "graph-event/one",
+                "isAllDay": True,
+                "isCancelled": False,
+                "start": {
+                    "dateTime": "2026-08-20T00:00:00.0000000",
+                    "timeZone": "India Standard Time",
+                },
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    event = MicrosoftGraphOutlookProvider().fetch_event(
+        token_payload={"access_token": "graph-token"},
+        provider_event_id="graph-event/one",
+    )
+
+    assert event == {
+        "id": "graph-event/one",
+        "start_date": "2026-08-20",
+        "cancelled": False,
+    }
+    assert str(captured["url"]).endswith("/graph-event%2Fone")
+    assert captured["params"] == {"$select": "id,isAllDay,isCancelled,start"}
+    assert captured["timeout"] == 15
+    assert captured["headers"] == {
+        "Authorization": "Bearer graph-token",
+        "Prefer": 'outlook.timezone="India Standard Time"',
+    }
+
+
+@pytest.mark.parametrize(
+    ("start", "expected_date"),
+    [
+        ({"date": "2026-08-20"}, "2026-08-20"),
+        ({"dateTime": "2026-08-22T09:30:00+05:30"}, "2026-08-22"),
+    ],
+)
+def test_google_fetch_event_parses_documented_start_shapes(
+    monkeypatch: pytest.MonkeyPatch,
+    start: dict[str, str],
+    expected_date: str,
+) -> None:
+    """The real Google adapter accepts all-day and timed Event resources."""
+
+    captured: dict[str, object] = {}
+
+    def fake_get(url: str, **kwargs: object) -> httpx.Response:
+        captured.update({"url": url, **kwargs})
+        return httpx.Response(
+            200,
+            request=httpx.Request("GET", url),
+            json={"id": "google-event/one", "status": "confirmed", "start": start},
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    event = GoogleCalendarProvider().fetch_event(
+        token_payload={"access_token": "google-token"},
+        provider_event_id="google-event/one",
+    )
+
+    assert event == {
+        "id": "google-event/one",
+        "start_date": expected_date,
+        "cancelled": False,
+    }
+    assert str(captured["url"]).endswith("/google-event%2Fone")
+    assert captured["headers"] == {"Authorization": "Bearer google-token"}
+    assert captured["timeout"] == 15
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [MicrosoftGraphOutlookProvider(), GoogleCalendarProvider()],
+    ids=["graph", "google"],
+)
+def test_fetch_event_404_returns_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: MicrosoftGraphOutlookProvider | GoogleCalendarProvider,
+) -> None:
+    def fake_get(url: str, **kwargs: object) -> httpx.Response:
+        del kwargs
+        return httpx.Response(404, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    assert (
+        provider.fetch_event(
+            token_payload={"access_token": "provider-token"},
+            provider_event_id="missing-event",
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("provider", "message"),
+    [
+        (MicrosoftGraphOutlookProvider(), "Microsoft Graph calendar read failed."),
+        (GoogleCalendarProvider(), "Google Calendar read failed."),
+    ],
+    ids=["graph", "google"],
+)
+def test_fetch_event_http_error_is_safely_wrapped(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: MicrosoftGraphOutlookProvider | GoogleCalendarProvider,
+    message: str,
+) -> None:
+    def fake_get(url: str, **kwargs: object) -> httpx.Response:
+        del kwargs
+        return httpx.Response(429, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with pytest.raises(CalendarProviderError, match=message):
+        provider.fetch_event(
+            token_payload={"access_token": "provider-token"},
+            provider_event_id="rate-limited-event",
+        )
+
+
+def test_drift_reader_passes_tenant_context_to_provider_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenant-admin OAuth configuration must not fall back to process env."""
+
+    session_marker = object()
+    context_marker = object()
+    provider = _Reader(
+        {"id": "provider-event-1", "start_date": "2026-08-20", "cancelled": False}
+    )
+
+    def fake_provider_for(
+        provider_name: CalendarProvider,
+        session: object | None = None,
+        *,
+        context: object | None = None,
+    ) -> _Reader:
+        assert provider_name == CalendarProvider.GOOGLE_CALENDAR
+        assert session is session_marker
+        assert context is context_marker
+        return provider
+
+    monkeypatch.setattr(calendar_sync, "_provider_for", fake_provider_for)
+    connection = SimpleNamespace(
+        status=CalendarConnectionStatus.CONNECTED,
+        provider=CalendarProvider.GOOGLE_CALENDAR,
+        encrypted_token_ref=calendar_sync._encrypt_token_payload(
+            {"access_token": "tenant-token"}
+        ),
+    )
+
+    reader = calendar_sync._drift_provider_reader(
+        session_marker,  # type: ignore[arg-type]
+        context=context_marker,  # type: ignore[arg-type]
+        connection=connection,  # type: ignore[arg-type]
+    )
+
+    assert reader is not None
+    assert reader("provider-event-1") == {
+        "id": "provider-event-1",
+        "start_date": "2026-08-20",
+        "cancelled": False,
+    }
 
 
 def test_uj62_exc03_a_moved_event_is_detected(client: TestClient) -> None:
@@ -262,6 +511,74 @@ def test_uj62_exc03a_an_unreadable_provider_is_unknown_not_matching(
 
     assert [f.drift_status for f in findings] == ["unknown"]
     assert _drift_status(seeded["sync_id"])[0] == "unknown"
+
+
+@pytest.mark.parametrize(
+    "damaged_token_kind",
+    ["invalid_envelope", "malformed_json"],
+)
+def test_uj62_exc03a_a_damaged_token_does_not_abort_other_connections(
+    client: TestClient,
+    damaged_token_kind: str,
+) -> None:
+    """One unreadable credential is unknown; later connections are still checked."""
+
+    seeded = _seed(client)
+    factory = get_session_factory()
+    with factory() as session:
+        damaged_connection = session.get(
+            UserCalendarConnection, seeded["connection_id"]
+        )
+        assert damaged_connection is not None
+        if damaged_token_kind == "invalid_envelope":
+            damaged_connection.encrypted_token_ref = "not-a-fernet-token"
+        else:
+            malformed = calendar_sync._fernet().encrypt(b"{not-json")
+            damaged_connection.encrypted_token_ref = (
+                "fernet:" + malformed.decode("ascii")
+            )
+
+        healthy_connection = UserCalendarConnection(
+            company_id=seeded["context_ids"][0],
+            membership_id=seeded["membership_id"],
+            provider=CalendarProvider.OUTLOOK,
+            status=CalendarConnectionStatus.CONNECTED,
+            encrypted_token_ref=calendar_sync._encrypt_token_payload(
+                {"access_token": "healthy-token"}
+            ),
+        )
+        session.add(healthy_connection)
+        session.flush()
+        healthy_sync = CalendarEventSync(
+            company_id=seeded["context_ids"][0],
+            calendar_connection_id=healthy_connection.id,
+            source_type="matter_deadline",
+            source_id=seeded["deadline_id"],
+            provider_event_id="provider-event-healthy",
+            sync_status=CalendarEventSyncStatus.SYNCED,
+        )
+        session.add(healthy_sync)
+        session.commit()
+        healthy_sync_id = healthy_sync.id
+
+    reader = _Reader(
+        {
+            "id": "provider-event-healthy",
+            "start_date": DUE.isoformat(),
+            "cancelled": False,
+        }
+    )
+    calendar_sync.set_google_calendar_provider_for_tests(reader)
+    calendar_sync.set_outlook_provider_for_tests(reader)
+
+    findings = _run(seeded["context_ids"])
+
+    assert [(item.sync_id, item.drift_status) for item in findings] == [
+        (seeded["sync_id"], "unknown")
+    ]
+    assert _drift_status(seeded["sync_id"])[0] == "unknown"
+    assert _drift_status(healthy_sync_id)[0] == "matches"
+    assert reader.calls == ["provider-event-healthy"]
 
 
 def test_uj62_exc03a_a_provider_without_a_read_capability_is_unknown(
@@ -382,7 +699,54 @@ def test_uj62_exc03c_a_finding_names_no_record_the_caller_cannot_open(
     assert _drift_status(seeded["sync_id"])[0] == "missing"
 
 
-def test_uj62_exc03_the_drift_check_route_reports_findings(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    ("enabled", "expires_at", "grant_entitlement", "expected_reason"),
+    [
+        (False, "2099-01-01T00:00:00Z", True, "rollout_disabled"),
+        (True, "2099-01-01T00:00:00Z", False, "missing_entitlement"),
+        (True, "2020-01-01T00:00:00Z", True, "rollout_expired"),
+    ],
+    ids=["disabled", "unentitled", "expired"],
+)
+def test_drift_route_fails_closed_before_provider_access(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enabled: bool,
+    expires_at: str,
+    grant_entitlement: bool,
+    expected_reason: str,
+) -> None:
+    seeded = _seed(client)
+    _set_ip_workspace_entitlement(
+        seeded["context_ids"][0],
+        enabled=grant_entitlement,
+    )
+    _set_workspace_rollout(
+        monkeypatch,
+        enabled=enabled,
+        expires_at=expires_at,
+    )
+    reader = _Reader(
+        {"id": "provider-event-1", "start_date": DUE.isoformat(), "cancelled": False}
+    )
+    calendar_sync.set_google_calendar_provider_for_tests(reader)
+    assert _manual_docketing_reason(seeded["context_ids"]) == expected_reason
+
+    response = client.post(
+        "/api/ip/calendar-projections/drift-check", headers=seeded["headers"]
+    )
+
+    assert response.status_code == 503, response.text
+    # The global 5xx handler intentionally masks internal readiness details.
+    assert response.json()["detail"] == "Service unavailable"
+    assert reader.calls == []
+    assert _drift_status(seeded["sync_id"]) == ("unchecked", None)
+
+
+def test_uj62_exc03_the_drift_check_route_reports_findings(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The endpoint itself, not only the service behind it.
 
     Added after the route-coverage gate caught that every drift assertion here
@@ -391,6 +755,12 @@ def test_uj62_exc03_the_drift_check_route_reports_findings(client: TestClient) -
     """
 
     seeded = _seed(client)
+    _set_ip_workspace_entitlement(seeded["context_ids"][0], enabled=True)
+    _set_workspace_rollout(
+        monkeypatch,
+        enabled=True,
+        expires_at="2099-01-01T00:00:00Z",
+    )
     calendar_sync.set_google_calendar_provider_for_tests(_Reader(None))
 
     response = client.post(

@@ -749,3 +749,111 @@ def test_rule_policy_selection_is_tenant_isolated(client: TestClient) -> None:
     )
     assert leaked.status_code == 404
     assert client.get("/api/ip/rule-policies", headers=other_headers).json() == []
+
+
+def test_shared_rule_key_governance_never_crosses_tenant_ownership(
+    client: TestClient,
+) -> None:
+    """A shared legal-scope key cannot leak impact or retire another tenant's version."""
+
+    from sqlalchemy import select
+
+    from caseops_api.db.models import IpRuleVersion
+    from caseops_api.db.session import get_session_factory
+
+    first_headers, first_legal_headers, _first_legal_id, first_reviewer_id, _token = (
+        _governance_actors(client)
+    )
+    first = _propose(client, first_headers)
+    first_activated = _activate(
+        client,
+        first_legal_headers,
+        first["id"],
+        first_reviewer_id,
+        select_for_company=True,
+        auto_confirm_eligible=True,
+    )
+    assert first_activated.status_code == 200, first_activated.text
+
+    second_bootstrap = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Second Rule Governance Firm",
+            "company_slug": "second-rule-governance-firm",
+            "company_type": "law_firm",
+            "owner_full_name": "Second Rule Owner",
+            "owner_email": "second-rule-owner@example.com",
+            "owner_password": "SecondRuleOwner123!",
+        },
+    )
+    assert second_bootstrap.status_code == 200, second_bootstrap.text
+    second_token = str(second_bootstrap.json()["access_token"])
+    second_headers = auth_headers(second_token)
+    _second_legal_id, second_legal_token = _member(
+        client,
+        second_token,
+        name="Second Rule Legal Approver",
+        email="second-rule-legal@example.com",
+        company_slug="second-rule-governance-firm",
+    )
+    second_reviewer_id, _second_reviewer_token = _member(
+        client,
+        second_token,
+        name="Second Rule Fixture Reviewer",
+        email="second-rule-reviewer@example.com",
+        company_slug="second-rule-governance-firm",
+    )
+    second_legal_headers = auth_headers(second_legal_token)
+
+    # The stable rule-set key is shared catalog identity, but the candidate,
+    # active lifecycle, impact, and policy are owned by the proposing tenant.
+    second = _propose(client, second_headers)
+    second_impact = client.get(
+        f"/api/ip/deadline-rules/{second['id']}/impact",
+        headers=second_legal_headers,
+    )
+    assert second_impact.status_code == 200, second_impact.text
+    assert second_impact.json()["company_policy_count"] == 0
+    assert second_impact.json()["open_deadline_count"] == 0
+    assert second_impact.json()["candidate_deadline_count"] == 0
+
+    # Tenant A's active version is not an overlap Tenant B must supersede.
+    second_activated = _activate(
+        client,
+        second_legal_headers,
+        second["id"],
+        second_reviewer_id,
+        select_for_company=True,
+        auto_confirm_eligible=True,
+    )
+    assert second_activated.status_code == 200, second_activated.text
+
+    with get_session_factory()() as session:
+        states = dict(
+            session.execute(
+                select(IpRuleVersion.id, IpRuleVersion.status).where(
+                    IpRuleVersion.id.in_([first["id"], second["id"]])
+                )
+            ).all()
+        )
+    assert states == {first["id"]: "active", second["id"]: "active"}
+
+    second_active_impact = client.get(
+        f"/api/ip/deadline-rules/{second['id']}/impact",
+        headers=second_legal_headers,
+    ).json()
+    disabled = client.post(
+        f"/api/ip/deadline-rules/{second['id']}/transition",
+        headers=second_legal_headers,
+        json={
+            "impact_token": second_active_impact["impact_token"],
+            "reason": "Second tenant withdrew only its selected version.",
+            "emergency_disable": True,
+        },
+    )
+    assert disabled.status_code == 200, disabled.text
+
+    first_policy = client.get("/api/ip/rule-policies", headers=first_headers).json()
+    assert len(first_policy) == 1
+    assert first_policy[0]["active_rule_version_id"] == first["id"]
+    assert first_policy[0]["auto_confirm_eligible"] is True

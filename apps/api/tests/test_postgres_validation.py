@@ -2038,6 +2038,19 @@ def test_iplf039c_batch_altered_constraints_enforce_on_postgres(pg_engine):
             missing = names - found
             assert not missing, f"{table} lost check constraints on Postgres: {missing}"
 
+        queue_owner_delete_action = conn.scalar(
+            text(
+                "SELECT confdeltype FROM pg_constraint "
+                "WHERE conrelid = cast('ip_docket_queues' AS regclass) "
+                "AND contype = 'f' "
+                "AND pg_get_constraintdef(oid) LIKE "
+                "'FOREIGN KEY (owner_membership_id)%'"
+            )
+        )
+        # PostgreSQL encodes ON DELETE CASCADE as `c`. SET NULL (`n`) would
+        # collide with ck_ip_docket_queue_has_scope for a personal queue.
+        assert queue_owner_delete_action == "c"
+
     with pg_engine.begin() as conn:
         company_id = _seed_company(Session(bind=conn))
 
@@ -2151,6 +2164,233 @@ def test_iplf039c_queue_name_is_unique_per_company_on_postgres(pg_engine):
 
     # Per-tenant, not global.
     _insert_queue(other_company_id, "Critical this week", other_owner_id)
+
+
+@pytest.mark.postgres
+def test_new_ip_foreign_keys_are_tenant_matched_and_preserve_delete_actions(pg_engine):
+    expected = {
+        "bulk_import_jobs": {
+            "fk_bulk_import_job_creator_company": (
+                ["created_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            )
+        },
+        "ip_import_rows": {
+            "fk_ip_import_row_created_docket_company": (
+                ["created_docket_id", "company_id"],
+                "ip_docket_records",
+                ["id", "company_id"],
+            )
+        },
+        "ip_docket_control_reviews": {
+            "fk_ip_control_review_signer_company": (
+                ["signed_off_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+            "fk_ip_control_review_creator_company": (
+                ["created_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+        },
+        "ip_deadline_coverages": {
+            "fk_ip_coverage_pending_replacement_company": (
+                ["pending_replacement_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+            "fk_ip_coverage_emergency_escalation_company": (
+                ["emergency_escalation_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+        },
+        "ip_docket_queues": {
+            "fk_ip_docket_queue_team_company": (
+                ["team_id", "company_id"],
+                "teams",
+                ["id", "company_id"],
+            ),
+            "fk_ip_docket_queue_owner_company": (
+                ["owner_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+            "fk_ip_docket_queue_creator_company": (
+                ["created_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+        },
+        "ip_identifiers": {
+            "fk_ip_identifier_supersedes_company": (
+                ["supersedes_identifier_id", "company_id"],
+                "ip_identifiers",
+                ["id", "company_id"],
+            ),
+            "fk_ip_identifier_superseded_by_company": (
+                ["superseded_by_identifier_id", "company_id"],
+                "ip_identifiers",
+                ["id", "company_id"],
+            ),
+        },
+    }
+    schema = inspect(pg_engine)
+    for table, expected_by_name in expected.items():
+        actual_by_name = {
+            foreign_key["name"]: (
+                foreign_key["constrained_columns"],
+                foreign_key["referred_table"],
+                foreign_key["referred_columns"],
+            )
+            for foreign_key in schema.get_foreign_keys(table)
+            if foreign_key.get("name")
+        }
+        for name, shape in expected_by_name.items():
+            assert actual_by_name[name] == shape
+
+    with pg_engine.begin() as connection:
+        session = Session(bind=connection)
+        company_a = _seed_company(session)
+        company_b = _seed_company(session)
+        membership_a = _seed_membership(session, company_a)
+        membership_b = _seed_membership(session, company_b)
+        team_b = str(uuid4())
+        now = datetime.now(UTC)
+        connection.execute(
+            text(
+                "INSERT INTO teams "
+                "(id, company_id, name, slug, kind, is_active, created_at, updated_at) "
+                "VALUES (:id, :company, 'Foreign Team', :slug, 'team', true, :now, :now)"
+            ),
+            {
+                "id": team_b,
+                "company": company_b,
+                "slug": f"foreign-team-{team_b[:8]}",
+                "now": now,
+            },
+        )
+
+    invalid_writes = [
+        (
+            "fk_bulk_import_job_creator_company",
+            "INSERT INTO bulk_import_jobs "
+            "(id, company_id, domain, filename, source_sha256, "
+            " created_by_membership_id, creator_label_snapshot, created_at, updated_at) "
+            "VALUES (:id, :company, 'ip_trademark', 'tenant.csv', :sha, "
+            " :membership, 'Wrong tenant', :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "sha": "a" * 64,
+                "membership": membership_b,
+                "now": now,
+            },
+        ),
+        (
+            "fk_ip_control_review_signer_company",
+            "INSERT INTO ip_docket_control_reviews "
+            "(id, company_id, generated_at, filters_json, freshness_json, "
+            " incompleteness_reasons_json, mandatory_exception_ids_json, "
+            " query_version, report_snapshot_json, manifest_sha256, "
+            " signed_off_by_membership_id, created_at, updated_at) "
+            "VALUES (:id, :company, :now, '{}', '{}', '[]', '[]', "
+            " 'daily-docket-v1', '{}', :sha, :membership, :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "membership": membership_b,
+                "sha": "b" * 64,
+                "now": now,
+            },
+        ),
+        (
+            "fk_ip_docket_queue_owner_company",
+            "INSERT INTO ip_docket_queues "
+            "(id, company_id, name, filters_json, owner_membership_id, "
+            " created_at, updated_at) "
+            "VALUES (:id, :company, :name, '{}', :membership, :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "name": f"Foreign owner {uuid4()}",
+                "membership": membership_b,
+                "now": now,
+            },
+        ),
+        (
+            "fk_ip_docket_queue_team_company",
+            "INSERT INTO ip_docket_queues "
+            "(id, company_id, name, filters_json, team_id, created_at, updated_at) "
+            "VALUES (:id, :company, :name, '{}', :team, :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "name": f"Foreign team {uuid4()}",
+                "team": team_b,
+                "now": now,
+            },
+        ),
+    ]
+    for constraint_name, statement, parameters in invalid_writes:
+        with pytest.raises(IntegrityError) as excinfo:
+            with pg_engine.begin() as connection:
+                connection.execute(text(statement), parameters)
+        assert constraint_name in str(excinfo.value)
+
+    import_id = str(uuid4())
+    queue_id = str(uuid4())
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO bulk_import_jobs "
+                "(id, company_id, domain, filename, source_sha256, "
+                " created_by_membership_id, creator_label_snapshot, created_at, updated_at) "
+                "VALUES (:id, :company, 'ip_trademark', 'valid.csv', :sha, "
+                " :membership, 'Ephemeral Member', :now, :now)"
+            ),
+            {
+                "id": import_id,
+                "company": company_a,
+                "sha": "c" * 64,
+                "membership": membership_a,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ip_docket_queues "
+                "(id, company_id, name, filters_json, owner_membership_id, "
+                " created_at, updated_at) "
+                "VALUES (:id, :company, :name, '{}', :membership, :now, :now)"
+            ),
+            {
+                "id": queue_id,
+                "company": company_a,
+                "name": f"Ephemeral queue {queue_id[:8]}",
+                "membership": membership_a,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text("DELETE FROM company_memberships WHERE id = :id"),
+            {"id": membership_a},
+        )
+        assert connection.execute(
+            text(
+                "SELECT company_id, created_by_membership_id "
+                "FROM bulk_import_jobs WHERE id = :id"
+            ),
+            {"id": import_id},
+        ).one() == (company_a, None)
+        assert connection.scalar(
+            text("SELECT count(*) FROM ip_docket_queues WHERE id = :id"),
+            {"id": queue_id},
+        ) == 0
+
+
 def test_ip_rule_governance_fingerprint_uses_real_postgres_read_only_snapshot(
     pg_engine,
 ) -> None:

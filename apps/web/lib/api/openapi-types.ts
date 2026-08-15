@@ -18321,10 +18321,7 @@ export interface components {
         IpControlReviewCreateRequest: {
             /** Failed Queries */
             failed_queries?: string[];
-            /** Filters */
-            filters?: {
-                [key: string]: unknown;
-            };
+            filters?: components["schemas"]["IpControlReviewFilters"];
             /** Stale Sources */
             stale_sources?: string[];
         };
@@ -18337,6 +18334,28 @@ export interface components {
              * @enum {string}
              */
             outcome: "generated" | "failed";
+        };
+        /**
+         * IpControlReviewFilters
+         * @description The complete, versioned filter vocabulary for a control review.
+         */
+        IpControlReviewFilters: {
+            /** Exclude Docket Ids */
+            exclude_docket_ids?: string[];
+            /** Team */
+            team?: string | null;
+        };
+        /**
+         * IpControlReviewIncludedRecord
+         * @description One access-filtered docket row frozen into a control-review manifest.
+         */
+        IpControlReviewIncludedRecord: {
+            /** Current Version */
+            current_version: number;
+            /** Docket Id */
+            docket_id: string;
+            /** Sha256 */
+            sha256: string;
         };
         /** IpControlReviewRecord */
         IpControlReviewRecord: {
@@ -18367,11 +18386,14 @@ export interface components {
             mandatory_exceptions?: components["schemas"]["IpControlExceptionRecord"][];
             /** Manifest Sha256 */
             manifest_sha256: string;
+            /** Query Version */
+            query_version: string;
             report: components["schemas"]["IpDocketControlReport"];
             /** Signed Off At */
             signed_off_at?: string | null;
             /** Signer Label Snapshot */
             signer_label_snapshot?: string | null;
+            snapshot: components["schemas"]["IpControlReviewSnapshot"];
             /** Version */
             version: number;
         };
@@ -18381,6 +18403,47 @@ export interface components {
             attestation: string;
             /** Expected Version */
             expected_version: number;
+        };
+        /**
+         * IpControlReviewSnapshot
+         * @description Canonical, hash-bound input and output of one control-report query.
+         */
+        IpControlReviewSnapshot: {
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /** Freshness */
+            freshness: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Hidden Restricted Count Policy
+             * @constant
+             */
+            hidden_restricted_count_policy: "omit_without_count";
+            /** Included Records */
+            included_records?: components["schemas"]["IpControlReviewIncludedRecord"][];
+            /** Incompleteness Reasons */
+            incompleteness_reasons?: string[];
+            /** Mandatory Exceptions */
+            mandatory_exceptions?: components["schemas"]["IpControlExceptionRecord"][];
+            /** Query Version */
+            query_version: string;
+            report: components["schemas"]["IpDocketControlReport"];
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Timezone */
+            timezone: string;
         };
         /** IpCoreRecordResponse */
         IpCoreRecordResponse: {
@@ -18592,6 +18655,10 @@ export interface components {
             affected_coverage_ids?: string[];
             /** Affected Docket Ids */
             affected_docket_ids?: string[];
+            /** Affected Roles */
+            affected_roles?: {
+                [key: string]: ("responsible" | "backup")[];
+            };
             /** Blocked Docket Ids */
             blocked_docket_ids?: string[];
             /** From Membership Id */
@@ -20457,6 +20524,8 @@ export interface components {
             reconciliation_status: string;
             /** Source */
             source: string;
+            /** Superseded By Identifier Id */
+            superseded_by_identifier_id: string | null;
             /** Supersedes Identifier Id */
             supersedes_identifier_id: string | null;
         };

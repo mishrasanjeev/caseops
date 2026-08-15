@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import Matter
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -288,3 +290,61 @@ def test_portfolio_is_tenant_isolated_and_paginates(client: TestClient) -> None:
     leaked = _portfolio(client, other_headers).json()
     assert leaked["counts"]["total"] == 0
     assert leaked["rows"] == []
+
+
+def test_disposed_matter_filter_is_applied_before_portfolio_limit(
+    client: TestClient,
+) -> None:
+    """A hidden leading candidate cannot swallow later operational records."""
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+
+    live_matter = _mk_matter(client, token, "IP-PORT-LIVE-AFTER-DISPOSED")
+    live_docket = _docket(
+        client,
+        headers,
+        matter_id=live_matter["id"],
+        title="Visible portfolio row",
+    )
+    live_asset = _asset(client, headers, docket_id=live_docket["id"])
+    live_application = _application(
+        client,
+        headers,
+        docket_id=live_docket["id"],
+        asset_id=live_asset["id"],
+    )
+
+    # Create this application second so it sorts ahead of the live row.  A
+    # legacy/inconsistent disposal can leave the docket active; the portfolio
+    # must still hide it without consuming the page limit.
+    disposed_matter = _mk_matter(client, token, "IP-PORT-DISPOSED-FIRST")
+    disposed_docket = _docket(
+        client,
+        headers,
+        matter_id=disposed_matter["id"],
+        title="Hidden disposed portfolio row",
+    )
+    disposed_asset = _asset(client, headers, docket_id=disposed_docket["id"])
+    _application(
+        client,
+        headers,
+        docket_id=disposed_docket["id"],
+        asset_id=disposed_asset["id"],
+    )
+
+    factory = get_session_factory()
+    with factory() as session:
+        row = session.get(Matter, disposed_matter["id"])
+        assert row is not None
+        row.status = "disposed"
+        row.is_active = False
+        session.commit()
+
+    first = _portfolio(client, headers, limit=1)
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert [row["application_id"] for row in body["rows"]] == [live_application["id"]]
+    assert body["next_cursor"] is None
+    assert disposed_docket["id"] not in str(body)

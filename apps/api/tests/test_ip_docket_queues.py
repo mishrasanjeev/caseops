@@ -392,3 +392,16 @@ def test_calops09_queue04_a_queue_cannot_exist_without_a_scope(client: TestClien
             assert "ck_ip_docket_queue_has_scope" in str(exc), str(exc)
             return
         raise AssertionError("an unscoped queue was accepted by the database")
+
+
+def test_calops09_queue05_owner_delete_cascades_personal_queue() -> None:
+    """Physical deletion cannot SET NULL and violate the queue scope check."""
+
+    from caseops_api.db.models import IpDocketQueue
+
+    owner_fk = next(
+        constraint
+        for constraint in IpDocketQueue.__table__.foreign_key_constraints
+        if constraint.column_keys == ["owner_membership_id"]
+    )
+    assert owner_fk.ondelete == "CASCADE"

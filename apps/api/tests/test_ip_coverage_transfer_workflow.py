@@ -44,7 +44,7 @@ def _docket(client, headers, *, matter_id, title):
     return r.json()
 
 
-def _coverage(client, headers, docket_id, *, matter_id, responsible):
+def _coverage(client, headers, docket_id, *, matter_id, responsible, backup=None):
     deadline = client.post(
         f"/api/matters/{matter_id}/deadlines",
         headers=headers,
@@ -63,6 +63,7 @@ def _coverage(client, headers, docket_id, *, matter_id, responsible):
         json={
             "matter_deadline_id": deadline.json()["id"],
             "responsible_membership_id": responsible,
+            "backup_membership_id": backup,
             "coverage_status": "accepted",
         },
     )
@@ -176,6 +177,127 @@ def test_uj57_normal_preview_propose_then_accept(client: TestClient) -> None:
     # No duplication: still exactly one coverage row for this deadline.
     body = client.get(f"/api/ip/dockets/{env['docket']['id']}", headers=env["owner_headers"]).json()
     assert len(body["deadline_coverages"]) == 1
+
+
+def test_uj57_transfer_preserves_primary_owner_on_backup_only_rows(
+    client: TestClient,
+) -> None:
+    """Replacing a backup must not silently transfer primary accountability."""
+
+    env = _setup(client)
+    backup_docket = _docket(
+        client,
+        env["owner_headers"],
+        matter_id=env["matter"]["id"],
+        title="Backup-only Mark",
+    )
+    backup_only = _coverage(
+        client,
+        env["owner_headers"],
+        backup_docket["id"],
+        matter_id=env["matter"]["id"],
+        responsible=env["owner_id"],
+        backup=env["leaver_id"],
+    )
+
+    preview = _preview(
+        client, env["owner_headers"], env["leaver_id"], env["cover_id"]
+    )
+    assert preview.status_code == 200, preview.text
+    snapshot = preview.json()
+    assert snapshot["affected_roles"] == {
+        env["coverage"]["id"]: ["responsible"],
+        backup_only["id"]: ["backup"],
+    }
+
+    proposed = _propose(
+        client,
+        env["owner_headers"],
+        env["leaver_id"],
+        env["cover_id"],
+        snapshot["preview_token"],
+    )
+    assert proposed.status_code == 200, proposed.text
+    assert proposed.json()["affected_roles"] == snapshot["affected_roles"]
+
+    unchanged_primary = _coverage_row(
+        client, env["owner_headers"], backup_docket["id"], backup_only["id"]
+    )
+    assert unchanged_primary["responsible_membership_id"] == env["owner_id"]
+    assert unchanged_primary["backup_membership_id"] == env["cover_id"]
+    assert unchanged_primary["replacement_decision"] == "none"
+    assert unchanged_primary["pending_replacement_membership_id"] is None
+    assert unchanged_primary["coverage_status"] == "accepted"
+
+    accepted = _decide(
+        client, env["cover_headers"], env["coverage"]["id"], "accepted"
+    )
+    assert accepted.status_code == 200, accepted.text
+    after_acceptance = _coverage_row(
+        client, env["owner_headers"], backup_docket["id"], backup_only["id"]
+    )
+    assert after_acceptance["responsible_membership_id"] == env["owner_id"]
+    assert after_acceptance["backup_membership_id"] == env["cover_id"]
+    assert after_acceptance["replacement_decision"] == "none"
+
+
+def test_uj57_backup_cannot_be_replaced_by_the_existing_primary(
+    client: TestClient,
+) -> None:
+    """Preview, proposal, and bulk paths require a distinct backup owner."""
+
+    env = _setup(client)
+    backup_docket = _docket(
+        client,
+        env["owner_headers"],
+        matter_id=env["matter"]["id"],
+        title="Distinct Backup Mark",
+    )
+    backup_only = _coverage(
+        client,
+        env["owner_headers"],
+        backup_docket["id"],
+        matter_id=env["matter"]["id"],
+        responsible=env["owner_id"],
+        backup=env["leaver_id"],
+    )
+
+    preview = _preview(
+        client, env["owner_headers"], env["leaver_id"], env["owner_id"]
+    )
+    assert preview.status_code == 200, preview.text
+    snapshot = preview.json()
+    assert snapshot["transfer_allowed"] is False
+    assert snapshot["blocked_docket_ids"] == [backup_docket["id"]]
+
+    proposed = _propose(
+        client,
+        env["owner_headers"],
+        env["leaver_id"],
+        env["owner_id"],
+        snapshot["preview_token"],
+    )
+    assert proposed.status_code == 409, proposed.text
+    assert proposed.json()["code"] == "ip_coverage_distinct_backup_required"
+
+    bulk = client.post(
+        "/api/ip/deadline-coverages/bulk-reassign",
+        headers=env["owner_headers"],
+        json={
+            "from_membership_id": env["leaver_id"],
+            "to_membership_id": env["owner_id"],
+            "reason": "Departing backup requires a supported replacement.",
+        },
+    )
+    assert bulk.status_code == 409, bulk.text
+    assert bulk.json()["code"] == "ip_coverage_distinct_backup_required"
+
+    unchanged = _coverage_row(
+        client, env["owner_headers"], backup_docket["id"], backup_only["id"]
+    )
+    assert unchanged["responsible_membership_id"] == env["owner_id"]
+    assert unchanged["backup_membership_id"] == env["leaver_id"]
+    assert unchanged["replacement_decision"] == "none"
 
 
 def test_uj57_exc03_assignee_rejects_and_work_returns_to_the_owner(

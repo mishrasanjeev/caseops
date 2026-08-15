@@ -849,6 +849,7 @@ def resolve_ip_identifier_duplicate(
 
     now = datetime.now(UTC)
     resolved_ids = [item.identifier_id for item in preview.candidates]
+    superseded_by_identifier_id: str | None = None
     if payload.decision == "distinct":
         row.reconciliation_status = "confirmed"
         row.correction_reason = payload.reason
@@ -859,17 +860,33 @@ def resolve_ip_identifier_duplicate(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A superseding identifier from the preview is required.",
             )
-        target = session.get(IpIdentifier, target_id)
-        assert target is not None
+        target = session.scalar(
+            select(IpIdentifier)
+            .where(
+                IpIdentifier.id == target_id,
+                IpIdentifier.company_id == context.company.id,
+                IpIdentifier.effective_until.is_(None),
+                IpIdentifier.superseded_by_identifier_id.is_(None),
+            )
+            .with_for_update()
+        )
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Superseding identifier changed; preview again.",
+            )
         # The surviving record keeps the identity. This row retires with an
-        # explicit link and reason, so the prior value stays in history.
+        # explicit forward link and reason, so the prior value stays in
+        # history. ``supersedes_identifier_id`` has the opposite meaning: it
+        # belongs on a newly-created correction and must remain untouched here.
         row.effective_until = now
         row.reconciliation_status = "superseded"
-        row.supersedes_identifier_id = target_id
+        row.superseded_by_identifier_id = target.id
         row.correction_reason = payload.reason
         row.is_primary = False
         target.reconciliation_status = "confirmed"
-        resolved_ids = [target_id]
+        superseded_by_identifier_id = target.id
+        resolved_ids = [target.id]
 
     record_from_context(
         session,
@@ -884,6 +901,7 @@ def resolve_ip_identifier_duplicate(
             "reason": payload.reason,
             "decision_token": payload.decision_token,
             "candidate_ids": resolved_ids,
+            "superseded_by_identifier_id": superseded_by_identifier_id,
             "blocking_reasons": preview.blocking_reasons,
         },
     )

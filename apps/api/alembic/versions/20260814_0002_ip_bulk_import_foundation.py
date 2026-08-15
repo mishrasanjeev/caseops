@@ -2,7 +2,9 @@
 
 Additive and unseeded. The legacy ``matter_bulk_import_jobs`` and
 ``employee_bulk_import_jobs`` owners are untouched and remain canonical for
-their own domains; nothing is migrated out of them.
+their own domains; nothing is migrated out of them. Every optional actor or
+created-record reference is paired with ``company_id`` so the database, not
+only the service, refuses a cross-tenant link.
 
 Revision ID: 20260814_0002
 Revises: 20260814_0001
@@ -62,6 +64,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["created_by_membership_id"], ["company_memberships.id"], ondelete="SET NULL"
         ),
+        sa.ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_bulk_import_job_creator_company",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("id", "company_id", name="uq_bulk_import_job_company"),
         sa.UniqueConstraint(
@@ -111,6 +118,11 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["created_docket_id"], ["ip_docket_records.id"], ondelete="SET NULL"
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_import_row_created_docket_company",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("job_id", "row_number", name="uq_ip_import_row_number"),
