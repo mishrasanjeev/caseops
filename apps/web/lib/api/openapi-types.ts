@@ -3811,6 +3811,23 @@ export interface paths {
         patch: operations["patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch"];
         trace?: never;
     };
+    "/api/ip/calendar-projections/drift-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Calendar Drift Check */
+        post: operations["post_ip_calendar_drift_check_api_ip_calendar_projections_drift_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/control-reviews": {
         parameters: {
             query?: never;
@@ -3913,6 +3930,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadline-coverages/awaiting-me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Coverage Transfers Awaiting */
+        get: operations["get_ip_coverage_transfers_awaiting_api_ip_deadline_coverages_awaiting_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/bulk-acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Bulk Acknowledge */
+        post: operations["post_ip_coverage_bulk_acknowledge_api_ip_deadline_coverages_bulk_acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadline-coverages/bulk-reassign": {
         parameters: {
             query?: never;
@@ -3924,6 +3975,23 @@ export interface paths {
         put?: never;
         /** Post Ip Deadline Coverage Bulk Reassignment */
         post: operations["post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Assigned Coverage */
+        get: operations["get_ip_assigned_coverage_api_ip_deadline_coverages_mine_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4163,6 +4231,41 @@ export interface paths {
         /** Post Ip Deadline Recalculation */
         post: operations["post_ip_deadline_recalculation_api_ip_deadlines__deadline_id__recalculate_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/docket-queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Queues */
+        get: operations["get_ip_docket_queues_api_ip_docket_queues_get"];
+        put?: never;
+        /** Post Ip Docket Queue */
+        post: operations["post_ip_docket_queue_api_ip_docket_queues_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/docket-queues/{queue_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Ip Docket Queue Route */
+        delete: operations["delete_ip_docket_queue_route_api_ip_docket_queues__queue_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -18037,6 +18140,85 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** IpAssignedCoverageListResponse */
+        IpAssignedCoverageListResponse: {
+            /** Coverages */
+            coverages?: components["schemas"]["IpAssignedCoverageRecord"][];
+        };
+        /**
+         * IpAssignedCoverageRecord
+         * @description One deadline the calling member is responsible for (CAL-OPS-09).
+         *
+         *     The daily docket reports how much work each member holds; this is the work
+         *     itself, so a member can acknowledge it rather than only be counted.
+         */
+        IpAssignedCoverageRecord: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Coverage Id */
+            coverage_id: string;
+            /** Coverage Status */
+            coverage_status: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Days Until Due */
+            days_until_due?: number | null;
+            /** Deadline Title */
+            deadline_title?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Identifier */
+            docket_identifier?: string | null;
+            /** Docket Title */
+            docket_title: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Reassignment Version */
+            reassignment_version: number;
+            /**
+             * Transfer Pending
+             * @default false
+             */
+            transfer_pending: boolean;
+        };
+        /**
+         * IpCalendarDriftRecord
+         * @description A projected calendar event that no longer matches CaseOps (UJ-62-EXC-03).
+         */
+        IpCalendarDriftRecord: {
+            /** Connection Id */
+            connection_id: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Drift Status
+             * @enum {string}
+             */
+            drift_status: "moved" | "missing" | "unknown";
+            /** Ip Docket Id */
+            ip_docket_id?: string | null;
+            /** Membership Id */
+            membership_id?: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Sync Id */
+            sync_id: string;
+        };
+        /** IpCalendarDriftResponse */
+        IpCalendarDriftResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Findings */
+            findings?: components["schemas"]["IpCalendarDriftRecord"][];
+        };
         /** IpChecklistItem */
         IpChecklistItem: {
             /**
@@ -18316,8 +18498,45 @@ export interface components {
              */
             status: "matched" | "mismatch" | "missing" | "unlinked";
         };
+        /**
+         * IpCoverageAcknowledgeOutcome
+         * @description Per-record validation result (CAL-OPS-09).
+         *
+         *     Every requested id gets a row, so a caller can never mistake "silently
+         *     dropped" for "acknowledged".
+         */
+        IpCoverageAcknowledgeOutcome: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Coverage Id */
+            coverage_id: string;
+            /** Reason */
+            reason?: ("acknowledged" | "already_acknowledged" | "not_found" | "not_responsible" | "version_conflict" | "transfer_pending") | null;
+            /** Reassignment Version */
+            reassignment_version?: number | null;
+        };
+        /** IpCoverageBulkAcknowledgeRequest */
+        IpCoverageBulkAcknowledgeRequest: {
+            /** Coverage Ids */
+            coverage_ids: string[];
+            /** Expected Versions */
+            expected_versions?: {
+                [key: string]: number;
+            };
+        };
+        /** IpCoverageBulkAcknowledgeResponse */
+        IpCoverageBulkAcknowledgeResponse: {
+            /** Acknowledged Count */
+            acknowledged_count: number;
+            /** Outcomes */
+            outcomes?: components["schemas"]["IpCoverageAcknowledgeOutcome"][];
+            /** Rejected Count */
+            rejected_count: number;
+        };
         /** IpCoverageBulkReassignRequest */
         IpCoverageBulkReassignRequest: {
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
             /** Expected Versions */
             expected_versions?: {
                 [key: string]: number;
@@ -18328,6 +18547,12 @@ export interface components {
             reason: string;
             /** To Membership Id */
             to_membership_id: string;
+            /**
+             * Transfer Mode
+             * @default proposed
+             * @enum {string}
+             */
+            transfer_mode: "proposed" | "immediate";
         };
         /** IpCoverageBulkReassignResponse */
         IpCoverageBulkReassignResponse: {
@@ -18335,10 +18560,21 @@ export interface components {
             backup_count: number;
             /** Coverage Ids */
             coverage_ids: string[];
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
             /** Reassigned Count */
             reassigned_count: number;
             /** Responsible Count */
             responsible_count: number;
+            /**
+             * Transfer Mode
+             * @default proposed
+             * @enum {string}
+             */
+            transfer_mode: "proposed" | "immediate";
         };
         /** IpCoverageReassignPreviewRequest */
         IpCoverageReassignPreviewRequest: {
@@ -18390,7 +18626,58 @@ export interface components {
              */
             decision: "accepted" | "rejected";
             /** Reason */
-            reason: string;
+            reason?: string | null;
+        };
+        /**
+         * IpCoverageTransferAwaiting
+         * @description One coverage transfer awaiting the calling member's decision.
+         *
+         *     Carries what a lawyer needs in order to answer "can I hold this date?" —
+         *     which record, which deadline, when it falls, who asked and why — so the
+         *     decision does not require opening each docket in turn.
+         */
+        IpCoverageTransferAwaiting: {
+            /** Coverage Id */
+            coverage_id: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Days Until Due */
+            days_until_due?: number | null;
+            /** Deadline Title */
+            deadline_title?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Identifier */
+            docket_identifier?: string | null;
+            /** Docket Title */
+            docket_title: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Escalation Label */
+            escalation_label?: string | null;
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reassignment Version */
+            reassignment_version: number;
+            /** Responsible Label */
+            responsible_label: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /**
+             * Transfer Kind
+             * @enum {string}
+             */
+            transfer_kind: "proposed" | "immediate";
+        };
+        /** IpCoverageTransfersAwaitingResponse */
+        IpCoverageTransfersAwaitingResponse: {
+            /** Transfers */
+            transfers?: components["schemas"]["IpCoverageTransferAwaiting"][];
         };
         /**
          * IpDailyDocketEscalation
@@ -18569,12 +18856,20 @@ export interface components {
         IpDeadlineCoverageReassignRequest: {
             /** Backup Membership Id */
             backup_membership_id?: string | null;
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
             /** Expected Responsible Membership Id */
             expected_responsible_membership_id: string;
             /** Reason */
             reason: string;
             /** Responsible Membership Id */
             responsible_membership_id: string;
+            /**
+             * Transfer Mode
+             * @default proposed
+             * @enum {string}
+             */
+            transfer_mode: "proposed" | "immediate";
         };
         /** IpDeadlineCoverageRecord */
         IpDeadlineCoverageRecord: {
@@ -19165,6 +19460,56 @@ export interface components {
             count: number;
             /** Dockets */
             dockets: components["schemas"]["IpDocketRecordResponse"][];
+        };
+        /** IpDocketQueueListResponse */
+        IpDocketQueueListResponse: {
+            /** Queues */
+            queues?: components["schemas"]["IpDocketQueueRecord"][];
+        };
+        /** IpDocketQueueRecord */
+        IpDocketQueueRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Owner Membership Id */
+            owner_membership_id?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "team" | "personal";
+            /** Team Id */
+            team_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IpDocketQueueSaveRequest */
+        IpDocketQueueSaveRequest: {
+            /** Description */
+            description?: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Team Id */
+            team_id?: string | null;
         };
         /** IpDocketRecordResponse */
         IpDocketRecordResponse: {
@@ -39474,6 +39819,26 @@ export interface operations {
             };
         };
     };
+    post_ip_calendar_drift_check_api_ip_calendar_projections_drift_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCalendarDriftResponse"];
+                };
+            };
+        };
+    };
     post_ip_control_review_api_ip_control_reviews_post: {
         parameters: {
             query?: never;
@@ -39675,6 +40040,59 @@ export interface operations {
             };
         };
     };
+    get_ip_coverage_transfers_awaiting_api_ip_deadline_coverages_awaiting_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageTransfersAwaitingResponse"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_bulk_acknowledge_api_ip_deadline_coverages_bulk_acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageBulkAcknowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageBulkAcknowledgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post: {
         parameters: {
             query?: never;
@@ -39695,6 +40113,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpCoverageBulkReassignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_assigned_coverage_api_ip_deadline_coverages_mine_get: {
+        parameters: {
+            query?: {
+                unacknowledged_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpAssignedCoverageListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -40164,6 +40613,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IpDeadlineRecord"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_queues_api_ip_docket_queues_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketQueueListResponse"];
+                };
+            };
+        };
+    };
+    post_ip_docket_queue_api_ip_docket_queues_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocketQueueSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketQueueRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ip_docket_queue_route_api_ip_docket_queues__queue_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                queue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

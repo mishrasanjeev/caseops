@@ -9925,17 +9925,16 @@
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "Rebuild increments 1-11 make the slice functionally complete: all 22 owned paths are implemented and proven, including UJ-62-EXC-03 drift detection. What remains is verification and deployment, not code. The Microsoft Graph and Google fetch_event adapters have no live-provider verification and are exercised only against provider doubles; apps/web/lib/api/openapi-types.ts is stale for every endpoint added since increment 5; and everything, the E2E included, runs on SQLite with nothing deployed.",
+          "summary": "Rebuild increments 1-12 make the slice functionally complete with a regenerated typed client: all 22 owned paths are implemented and proven. What remains needs infrastructure, not code. The Microsoft Graph and Google fetch_event adapters have no live-provider verification and are exercised only against provider doubles, and everything -- the browser E2E included -- runs on SQLite with nothing deployed.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
-          "evidence_needed": "Live-provider verification of the two fetch_event adapters, regenerated openapi types, and exact-commit CI on real PostgreSQL with dated deployed acceptance.",
+          "evidence_needed": "Live-provider verification of the two fetch_event adapters, and exact-commit CI on real PostgreSQL with dated deployed acceptance.",
           "safe_fallback": "The control review is additive and read-derived; the unbuilt areas keep their existing behaviour and the latent calendar gap is pinned by test_ip_latent_exposure_guards.py.",
           "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "Regenerate openapi types and run exact-commit CI on real PostgreSQL."
+          "next_independent_slice": "Run exact-commit CI on real PostgreSQL and take the slice through the release gate."
         }
       ],
       "next_actions": [
         "Verify the Microsoft Graph and Google fetch_event adapters against a live provider sandbox.",
-        "Regenerate apps/web/lib/api/openapi-types.ts against a running server.",
         "Run exact-commit CI on real PostgreSQL and take the rebuilt slice through the release gate."
       ],
       "data_impact": [],
