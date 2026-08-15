@@ -20,6 +20,7 @@ import {
   fetchIpAssignedCoverage,
   fetchIpDailyDocket,
   fetchIpDocketQueues,
+  recordIpControlReviewExport,
   saveIpDocketQueue,
   signOffIpControlReview,
   type IpAssignedCoverage,
@@ -27,6 +28,7 @@ import {
   type IpDailyDocketQueue,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { downloadControlReviewManifest } from "@/lib/ip/control-review-manifest";
 
 const STAMP = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
@@ -151,7 +153,7 @@ export default function IpDailyDocketPage() {
           }}
         />
         ) : null}
-        <ControlReviewCard filters={filters} canApprove={canApprove} />
+        <ControlReviewCard filters={filters} canWrite={canWrite} canApprove={canApprove} />
       </div>
     </div>
   );
@@ -646,9 +648,13 @@ function SavedQueuesCard({
  */
 function ControlReviewCard({
   filters,
+  canWrite,
   canApprove,
 }: {
   filters: Record<string, unknown>;
+  // Recording an export is a write, so a read-only member must not be offered
+  // a control the API will refuse.
+  canWrite: boolean;
   canApprove: boolean;
 }) {
   const [review, setReview] = useState<IpControlReview | null>(null);
@@ -661,6 +667,44 @@ function ControlReviewCard({
       toast.success("Control review generated.");
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not generate the review.")),
+  });
+
+  /**
+   * Produce the manifest, then report what actually happened.
+   *
+   * The API only records the outcome, so reporting "generated" without having
+   * produced a document would claim an export that never occurred. The
+   * document is built first; only if that succeeds is success reported, and a
+   * failure is recorded with a redacted reason that names no record.
+   */
+  const exportManifest = useMutation({
+    mutationFn: async () => {
+      const target = review!;
+      try {
+        downloadControlReviewManifest(target);
+      } catch {
+        // The recorded failure is what blocks sign-off, so it is kept and
+        // shown rather than discarded in favour of a toast.
+        const failed = await recordIpControlReviewExport(target.id, {
+          outcome: "failed",
+          errorRedacted: "The manifest could not be produced in this browser.",
+        });
+        return { produced: false as const, review: failed };
+      }
+      const recorded = await recordIpControlReviewExport(target.id, {
+        outcome: "generated",
+      });
+      return { produced: true as const, review: recorded };
+    },
+    onSuccess: (result) => {
+      setReview(result.review);
+      if (result.produced) {
+        toast.success("Manifest exported. It is ready to print or file.");
+      } else {
+        toast.error("The manifest could not be produced, so the export is recorded as failed.");
+      }
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record the export.")),
   });
 
   const sign = useMutation({
@@ -682,7 +726,7 @@ function ControlReviewCard({
     : review.completeness_status !== "complete"
       ? "This review is incomplete, so it cannot be signed."
       : review.export_status === "failed"
-        ? "The export failed, so this review cannot be signed. Generate it again."
+        ? "The last export failed, so this review cannot be signed. Export it again."
         : null;
 
   return (
@@ -798,7 +842,18 @@ function ControlReviewCard({
               </div>
             )}
 
-            <div>
+            <div className="flex flex-wrap gap-2">
+              {canWrite && !review.signed_off_at ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={exportManifest.isPending}
+                  onClick={() => exportManifest.mutate()}
+                  data-testid="ip-docket-review-export"
+                >
+                  Export manifest
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="ghost"

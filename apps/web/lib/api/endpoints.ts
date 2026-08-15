@@ -9690,6 +9690,18 @@ export async function createIpControlReview(input: {
   });
 }
 
+export async function recordIpControlReviewExport(
+  reviewId: string,
+  // The API records the outcome; it does not produce the artifact. Only report
+  // "generated" once a document has actually been produced.
+  input: { outcome: "generated" | "failed"; errorRedacted?: string | null },
+): Promise<IpControlReview> {
+  return apiRequest(`/api/ip/control-reviews/${reviewId}/export`, {
+    method: "POST",
+    body: { outcome: input.outcome, error_redacted: input.errorRedacted ?? null },
+  });
+}
+
 export async function signOffIpControlReview(
   reviewId: string,
   // The attestation is the point of a sign-off, not paperwork around it: it is

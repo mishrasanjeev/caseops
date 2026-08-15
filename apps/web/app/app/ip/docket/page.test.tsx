@@ -12,6 +12,8 @@ const {
   deleteIpDocketQueueMock,
   createIpControlReviewMock,
   signOffIpControlReviewMock,
+  recordIpControlReviewExportMock,
+  downloadControlReviewManifestMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchIpDailyDocketMock: vi.fn(),
@@ -22,6 +24,8 @@ const {
   deleteIpDocketQueueMock: vi.fn(),
   createIpControlReviewMock: vi.fn(),
   signOffIpControlReviewMock: vi.fn(),
+  recordIpControlReviewExportMock: vi.fn(),
+  downloadControlReviewManifestMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -34,6 +38,11 @@ vi.mock("@/lib/api/endpoints", () => ({
   deleteIpDocketQueue: deleteIpDocketQueueMock,
   createIpControlReview: createIpControlReviewMock,
   signOffIpControlReview: signOffIpControlReviewMock,
+  recordIpControlReviewExport: recordIpControlReviewExportMock,
+}));
+
+vi.mock("@/lib/ip/control-review-manifest", () => ({
+  downloadControlReviewManifest: downloadControlReviewManifestMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -115,6 +124,8 @@ describe("IpDailyDocketPage", () => {
     deleteIpDocketQueueMock.mockReset();
     createIpControlReviewMock.mockReset();
     signOffIpControlReviewMock.mockReset();
+    recordIpControlReviewExportMock.mockReset();
+    downloadControlReviewManifestMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchIpDailyDocketMock.mockResolvedValue(FRESH_DOCKET);
@@ -388,5 +399,80 @@ describe("IpDailyDocketPage", () => {
       await within(card).findByText("Your role cannot sign off a control review."),
     ).toBeVisible();
     expect(within(card).queryByRole("button", { name: "Sign off" })).toBeNull();
+    // Recording an export is a write too, so that control is absent as well.
+    expect(within(card).queryByTestId("ip-docket-review-export")).toBeNull();
+  });
+
+  it("produces the manifest before reporting the export succeeded", async () => {
+    // The API only records the outcome, so reporting "generated" without having
+    // produced a document would claim an export that never happened.
+    createIpControlReviewMock.mockResolvedValue(REVIEW);
+    recordIpControlReviewExportMock.mockResolvedValue({
+      ...REVIEW,
+      export_status: "generated",
+      version: 2,
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+
+    const exportButton = await within(card).findByTestId("ip-docket-review-export");
+    fireEvent.click(exportButton);
+
+    await waitFor(() => expect(recordIpControlReviewExportMock).toHaveBeenCalledTimes(1));
+    expect(downloadControlReviewManifestMock).toHaveBeenCalledTimes(1);
+    expect(recordIpControlReviewExportMock).toHaveBeenCalledWith("review-1", {
+      outcome: "generated",
+    });
+  });
+
+  it("records a failure, and blocks sign-off, when the manifest cannot be produced", async () => {
+    createIpControlReviewMock.mockResolvedValue(REVIEW);
+    downloadControlReviewManifestMock.mockImplementation(() => {
+      throw new Error("blob unavailable");
+    });
+    recordIpControlReviewExportMock.mockResolvedValue({
+      ...REVIEW,
+      export_status: "failed",
+      export_error_redacted: "The manifest could not be produced in this browser.",
+      version: 2,
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+    fireEvent.click(await within(card).findByTestId("ip-docket-review-export"));
+
+    await waitFor(() => expect(recordIpControlReviewExportMock).toHaveBeenCalledTimes(1));
+    expect(recordIpControlReviewExportMock).toHaveBeenCalledWith("review-1", {
+      outcome: "failed",
+      errorRedacted: "The manifest could not be produced in this browser.",
+    });
+    // The recorded failure is kept and shown, not discarded for a toast.
+    expect(await within(card).findByTestId("ip-docket-review-blocked")).toHaveTextContent(
+      "The last export failed, so this review cannot be signed. Export it again.",
+    );
+    expect(within(card).queryByRole("button", { name: "Sign off" })).toBeNull();
+  });
+
+  it("does not offer to re-export a signed review", async () => {
+    createIpControlReviewMock.mockResolvedValue({
+      ...REVIEW,
+      signed_off_at: "2026-08-15T07:00:00Z",
+      signer_label_snapshot: "Priya Raghavan",
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+
+    // The API refuses re-export of a signed review, so the control is absent
+    // rather than present and failing.
+    expect(await within(card).findByTestId("ip-docket-review-signed")).toBeVisible();
+    expect(within(card).queryByTestId("ip-docket-review-export")).toBeNull();
   });
 });
