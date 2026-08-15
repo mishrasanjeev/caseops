@@ -236,12 +236,15 @@ read_execution_logs() {
     timeout --kill-after=5s 20s \
       gcloud logging read "${log_filter} AND logName=\"${log_name}\"" \
         --project "${PROJECT}" \
-        --order asc \
+        --order desc \
         --limit 20 \
         --format=json > "${output_path}"
     read_status=$?
     set -e
     if [[ ${read_status} -eq 0 ]]; then
+      # A successful CLI call can still return an empty indexed page. If its
+      # payload is absent, the caller's next attempt must use entries:list.
+      LOGGING_REST_ONLY=true
       return 0
     fi
     echo "WARNING: bounded gcloud log read failed; using the Logging API fallback." >&2
@@ -257,7 +260,7 @@ with open(output_path, "w", encoding="utf-8", newline="\n") as stream:
     json.dump(
         {
             "filter": log_filter,
-            "orderBy": "timestamp asc",
+            "orderBy": "timestamp desc",
             "pageSize": 20,
             "resourceNames": [f"projects/{project}"],
         },
