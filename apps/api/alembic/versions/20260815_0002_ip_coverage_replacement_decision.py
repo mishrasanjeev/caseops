@@ -10,6 +10,17 @@ Additive. Existing rows default to ``replacement_decision='none'``, which means
 
 Revision ID: 20260815_0002
 Revises: 20260815_0001
+
+DATA-GOVERNANCE-MAP: updated
+The new columns extend the existing ``ip_deadline_coverages``
+``tenant_restricted_legal_content`` class and add no new class.
+``pending_replacement_membership_id`` and
+``emergency_escalation_membership_id`` are registered as
+``tenant_or_access_identifier``; ``replacement_decision``,
+``replacement_decided_at``, ``replacement_decision_reason`` and
+``emergency_until`` are ``domain_attribute``. The reason field is free text
+supplied by a member about a colleague's coverage, so it inherits the table's
+existing tenant scoping and fail-closed disposition unchanged.
 """
 
 from __future__ import annotations

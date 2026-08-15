@@ -6,6 +6,15 @@ their own domains; nothing is migrated out of them.
 
 Revision ID: 20260814_0002
 Revises: 20260814_0001
+
+DATA-GOVERNANCE-MAP: updated
+``bulk_import_jobs`` is registered as a ``tenant_operational_record``: it holds
+counts, statuses and the submitting membership, not the imported content
+itself. ``ip_import_rows`` is registered as ``tenant_restricted_legal_content``
+because a staged row carries the caller's supplied record fields verbatim until
+it is accepted or discarded. Both are tenant-scoped through ``company_id`` and
+carry the fail-closed ``registry_fail_closed`` disposition handler, so neither
+has an approved runtime purge or export path.
 """
 
 from __future__ import annotations

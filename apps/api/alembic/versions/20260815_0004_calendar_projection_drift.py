@@ -9,6 +9,15 @@ not been checked.
 
 Revision ID: 20260815_0004
 Revises: 20260815_0003
+
+DATA-GOVERNANCE-MAP: updated
+The new columns extend the existing ``calendar_event_syncs``
+``tenant_operational_record`` class and add no new class. ``drift_status`` is
+registered as ``configuration_or_state_metadata``, ``drift_checked_at`` as
+``temporal_or_version_metadata``, and ``drift_detail`` as ``domain_attribute``.
+``drift_detail`` is deliberately content-free: it states that a projected copy
+moved or vanished, never the record title nor the date it moved to, so the
+column adds no privileged content to an operational row.
 """
 
 from __future__ import annotations

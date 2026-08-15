@@ -6,6 +6,15 @@ member, never neither.
 
 Revision ID: 20260815_0003
 Revises: 20260815_0002
+
+DATA-GOVERNANCE-MAP: updated
+``ip_docket_queues`` is registered as ``tenant_restricted_legal_content``. A
+saved queue stores filter criteria and a name chosen by a member, which can
+describe a matter or client focus, and its team scoping makes it a shared view
+into that team's workload. It is tenant-scoped through ``company_id`` with the
+fail-closed ``registry_fail_closed`` handler; the ``owner_membership_id`` and
+``created_by_membership_id`` foreign keys are ``ON DELETE SET NULL`` so an
+offboarded member's queue survives attribution loss rather than disappearing.
 """
 
 from __future__ import annotations

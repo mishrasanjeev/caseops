@@ -6,6 +6,15 @@ export-failed report can be refused rather than silently accepted.
 
 Revision ID: 20260815_0001
 Revises: 20260814_0002
+
+DATA-GOVERNANCE-MAP: updated
+``ip_docket_control_reviews`` is registered as
+``tenant_restricted_legal_content``. The stored filters, freshness block and
+mandatory exception list reference IP records by identifier and describe the
+state of a firm's docket on a given day, so the review is disclosive of
+workload even though it stores no record titles. It is tenant-scoped through
+``company_id`` under the fail-closed ``registry_fail_closed`` handler; a signed
+review is immutable evidence and has no approved runtime deletion path.
 """
 
 from __future__ import annotations
