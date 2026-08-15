@@ -5,7 +5,7 @@ import json
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -24,6 +24,7 @@ from caseops_api.db.models import (
     IpDeadlineCoverage,
     IpDeadlineIncident,
     IpDocketControlReview,
+    IpDocketQueue,
     IpDocketRecord,
     IpEvidenceCandidate,
     IpRelatedRightObligation,
@@ -35,6 +36,8 @@ from caseops_api.db.models import (
     MatterInvoice,
     MatterInvoiceLineItem,
     MatterTimeEntry,
+    Team,
+    TeamMembership,
     UserCalendarConnection,
 )
 from caseops_api.schemas.ip_operations import (
@@ -47,6 +50,9 @@ from caseops_api.schemas.ip_operations import (
     IpCostItemRecord,
     IpCostReconciliationReport,
     IpCostReconciliationRow,
+    IpCoverageAcknowledgeOutcome,
+    IpCoverageBulkAcknowledgeRequest,
+    IpCoverageBulkAcknowledgeResponse,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
     IpCoverageReassignPreviewRequest,
@@ -67,6 +73,9 @@ from caseops_api.schemas.ip_operations import (
     IpDocketControlReport,
     IpDocketCreateRequest,
     IpDocketListResponse,
+    IpDocketQueueListResponse,
+    IpDocketQueueRecord,
+    IpDocketQueueSaveRequest,
     IpDocketRecordResponse,
     IpDocketVersionCreateRequest,
     IpEvidenceCandidateRecord,
@@ -1730,6 +1739,10 @@ def ip_docket_control_report(session: Session, *, context: SessionContext) -> Ip
 
 
 __all__ = [
+    "bulk_acknowledge_ip_coverage",
+    "save_ip_docket_queue",
+    "list_ip_docket_queues",
+    "delete_ip_docket_queue",
     "list_ip_coverage_transfers_awaiting",
     "add_ip_cost_item",
     "add_ip_deadline_coverage",
@@ -2185,6 +2198,302 @@ def _coverages_for_member(
     if for_update:
         statement = statement.with_for_update()
     return list(session.scalars(statement).all())
+
+
+def _queue_scope(row: IpDocketQueue) -> str:
+    return "team" if row.team_id else "personal"
+
+
+def _serialize_queue(row: IpDocketQueue) -> IpDocketQueueRecord:
+    return IpDocketQueueRecord(
+        id=row.id,
+        name=row.name,
+        description=row.description,
+        filters=dict(row.filters_json or {}),
+        team_id=row.team_id,
+        owner_membership_id=row.owner_membership_id,
+        scope=_queue_scope(row),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _caller_team_ids(session: Session, *, context: SessionContext) -> set[str]:
+    return {
+        team_id
+        for team_id in session.scalars(
+            select(TeamMembership.team_id)
+            .join(Team, Team.id == TeamMembership.team_id)
+            .where(
+                Team.company_id == context.company.id,
+                TeamMembership.membership_id == context.membership.id,
+            )
+        ).all()
+    }
+
+
+def save_ip_docket_queue(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpDocketQueueSaveRequest,
+) -> IpDocketQueueRecord:
+    """Save a named daily-docket queue (CAL-OPS-09).
+
+    A team queue may only be saved by a member of that team: sharing a view
+    into a team's workload is a disclosure, not a preference.
+    """
+
+    if payload.team_id is not None:
+        team = session.scalar(
+            select(Team).where(
+                Team.id == payload.team_id,
+                Team.company_id == context.company.id,
+            )
+        )
+        if team is None:
+            raise HTTPException(status_code=404, detail="Team not found.")
+        if payload.team_id not in _caller_team_ids(session, context=context):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a member of the team can save a queue for it.",
+            )
+
+    existing = session.scalar(
+        select(IpDocketQueue).where(
+            IpDocketQueue.company_id == context.company.id,
+            IpDocketQueue.name == payload.name,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_docket_queue_name_taken",
+                "message": "A queue with this name already exists in this workspace.",
+            },
+        )
+
+    row = IpDocketQueue(
+        company_id=context.company.id,
+        name=payload.name,
+        description=payload.description,
+        filters_json=dict(payload.filters),
+        team_id=payload.team_id,
+        # A team queue is still attributed, so it can be governed and cleaned up.
+        owner_membership_id=None if payload.team_id else context.membership.id,
+        created_by_membership_id=context.membership.id,
+    )
+    session.add(row)
+    record_from_context(
+        session,
+        context,
+        action="ip_docket_queue.saved",
+        target_type="ip_docket_queue",
+        target_id=row.id,
+        metadata={"name": row.name, "scope": _queue_scope(row), "team_id": row.team_id},
+    )
+    session.commit()
+    session.refresh(row)
+    return _serialize_queue(row)
+
+
+def list_ip_docket_queues(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> IpDocketQueueListResponse:
+    """Queues the caller may use: their own, plus their teams'."""
+
+    team_ids = _caller_team_ids(session, context=context)
+    rows = list(
+        session.scalars(
+            select(IpDocketQueue)
+            .where(
+                IpDocketQueue.company_id == context.company.id,
+                or_(
+                    IpDocketQueue.owner_membership_id == context.membership.id,
+                    IpDocketQueue.team_id.in_(team_ids) if team_ids else false(),
+                ),
+            )
+            .order_by(IpDocketQueue.name)
+        ).all()
+    )
+    return IpDocketQueueListResponse(queues=[_serialize_queue(row) for row in rows])
+
+
+def delete_ip_docket_queue(
+    session: Session,
+    *,
+    context: SessionContext,
+    queue_id: str,
+) -> None:
+    row = session.scalar(
+        select(IpDocketQueue).where(
+            IpDocketQueue.id == queue_id,
+            IpDocketQueue.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Queue not found.")
+    if row.team_id:
+        if row.team_id not in _caller_team_ids(session, context=context):
+            raise HTTPException(status_code=404, detail="Queue not found.")
+    elif row.owner_membership_id != context.membership.id:
+        # Someone else's personal queue is not theirs to know about either.
+        raise HTTPException(status_code=404, detail="Queue not found.")
+
+    record_from_context(
+        session,
+        context,
+        action="ip_docket_queue.deleted",
+        target_type="ip_docket_queue",
+        target_id=row.id,
+        metadata={"name": row.name, "scope": _queue_scope(row)},
+    )
+    session.delete(row)
+    session.commit()
+
+
+def bulk_acknowledge_ip_coverage(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpCoverageBulkAcknowledgeRequest,
+) -> IpCoverageBulkAcknowledgeResponse:
+    """Acknowledge many assigned deadlines at once (CAL-OPS-09).
+
+    Acknowledgement is what stops a critical item escalating, so it must be a
+    real act by the person who holds the work: this only ever acknowledges rows
+    where the caller is the responsible member, which is why it is entitled to
+    write ``accepted_at``.
+
+    Validation is **per record and partial by design**. Acknowledging is not a
+    security boundary — a caller can only acknowledge their own work — so
+    failing all fifty because one row moved would be worse than reporting that
+    one. Every requested id is reported back, so a dropped row can never be
+    mistaken for an acknowledged one. This is the opposite of the transfer
+    path, where handing a restricted record to the wrong person *is* a boundary
+    and the whole batch fails closed.
+    """
+
+    requested = list(dict.fromkeys(payload.coverage_ids))
+    rows = {
+        row.id: row
+        for row in session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.id.in_(requested),
+                IpDeadlineCoverage.company_id == context.company.id,
+            )
+            .with_for_update()
+        ).all()
+    }
+    dockets = {
+        docket.id: docket
+        for docket in session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id.in_({row.docket_id for row in rows.values()} or {""}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).all()
+    }
+
+    now = _now()
+    outcomes: list[IpCoverageAcknowledgeOutcome] = []
+    acknowledged_ids: list[str] = []
+
+    for coverage_id in requested:
+        row = rows.get(coverage_id)
+        docket = dockets.get(row.docket_id) if row else None
+        if (
+            row is None
+            or docket is None
+            or not can_access_ip_docket(session, context=context, docket=docket)
+        ):
+            # A record the caller cannot open is reported as absent, never as a
+            # record they may not touch — that would confirm it exists.
+            outcomes.append(
+                IpCoverageAcknowledgeOutcome(coverage_id=coverage_id, acknowledged=False,
+                                             reason="not_found")
+            )
+            continue
+        if row.responsible_membership_id != context.membership.id:
+            outcomes.append(
+                IpCoverageAcknowledgeOutcome(
+                    coverage_id=coverage_id,
+                    acknowledged=False,
+                    reason="not_responsible",
+                    reassignment_version=row.reassignment_version,
+                )
+            )
+            continue
+        expected = payload.expected_versions.get(coverage_id)
+        if expected is not None and row.reassignment_version != expected:
+            outcomes.append(
+                IpCoverageAcknowledgeOutcome(
+                    coverage_id=coverage_id,
+                    acknowledged=False,
+                    reason="version_conflict",
+                    reassignment_version=row.reassignment_version,
+                )
+            )
+            continue
+        if row.replacement_decision == "pending":
+            # An outstanding transfer is a decision, not an acknowledgement;
+            # acknowledging around it would bury the choice.
+            outcomes.append(
+                IpCoverageAcknowledgeOutcome(
+                    coverage_id=coverage_id,
+                    acknowledged=False,
+                    reason="transfer_pending",
+                    reassignment_version=row.reassignment_version,
+                )
+            )
+            continue
+        if row.coverage_status == "accepted" and row.accepted_at is not None:
+            outcomes.append(
+                IpCoverageAcknowledgeOutcome(
+                    coverage_id=coverage_id,
+                    acknowledged=False,
+                    reason="already_acknowledged",
+                    reassignment_version=row.reassignment_version,
+                )
+            )
+            continue
+
+        row.coverage_status = "accepted"
+        row.accepted_at = now
+        row.updated_at = now
+        acknowledged_ids.append(coverage_id)
+        outcomes.append(
+            IpCoverageAcknowledgeOutcome(
+                coverage_id=coverage_id,
+                acknowledged=True,
+                reason="acknowledged",
+                reassignment_version=row.reassignment_version,
+            )
+        )
+
+    if acknowledged_ids:
+        record_from_context(
+            session,
+            context,
+            action="ip_deadline_coverage.bulk_acknowledged",
+            target_type="company_membership",
+            target_id=context.membership.id,
+            metadata={
+                "coverage_ids": acknowledged_ids,
+                "requested_count": len(requested),
+                "rejected_count": len(requested) - len(acknowledged_ids),
+            },
+        )
+    session.commit()
+    return IpCoverageBulkAcknowledgeResponse(
+        acknowledged_count=len(acknowledged_ids),
+        rejected_count=len(requested) - len(acknowledged_ids),
+        outcomes=outcomes,
+    )
 
 
 def list_ip_coverage_transfers_awaiting(

@@ -271,36 +271,56 @@ def test_uj57_recon03_declining_an_immediate_transfer_escalates(
 
 
 def test_uj57_recon05_only_the_decision_path_may_record_an_acceptance() -> None:
-    """IPLF-UJ-57-RECON-05 — the invariant that keeps the two paths reconciled.
+    """IPLF-UJ-57-RECON-05 — the invariant that keeps the transfer paths honest.
 
     Enforced against the source rather than one workflow, because the failure
     being prevented is a *future* transfer path quietly reintroducing a
     fabricated acceptance. Coverage creation is exempt: there the caller states
     the status directly and no transfer is involved.
+
+    **Widened in increment 7, not relaxed.** Bulk acknowledgement legitimately
+    writes ``accepted_at`` — it is the responsible member taking on their own
+    work. So instead of growing an allowlist of blessed function names, the rule
+    is restated as the thing that actually matters: a function may write
+    ``accepted_at`` only if it also gates on ``context.membership.id``, i.e. it
+    acts on the caller's own record. A transfer path that stamps an acceptance
+    for somebody else still fails here.
     """
 
     tree = ast.parse(SERVICE.read_text(encoding="utf-8"))
-    offenders: list[tuple[str, int]] = []
+    writers: dict[str, bool] = {}
 
     for function in ast.walk(tree):
         if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for node in ast.walk(function):
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Attribute)
-                    and target.attr == "accepted_at"
-                    and isinstance(target.value, ast.Name)
-                ):
-                    offenders.append((function.name, node.lineno))
+        writes = any(
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Attribute)
+                and target.attr == "accepted_at"
+                and isinstance(target.value, ast.Name)
+                for target in node.targets
+            )
+            for node in ast.walk(function)
+        )
+        if not writes:
+            continue
+        writers[function.name] = any(
+            isinstance(node, ast.Attribute)
+            and node.attr == "id"
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "membership"
+            for node in ast.walk(function)
+        )
 
-    assert offenders, "the scan must actually find the assignments it guards"
-    assert {name for name, _ in offenders} == {"decide_ip_coverage_replacement"}, (
-        "accepted_at may only be written where a named person actually decided: "
-        f"{offenders}"
-    )
+    assert writers, "the scan must actually find the assignments it guards"
+    assert set(writers) == {
+        "decide_ip_coverage_replacement",
+        "bulk_acknowledge_ip_coverage",
+    }, f"unexpected writer of accepted_at: {sorted(writers)}"
+    ungated = sorted(name for name, gated in writers.items() if not gated)
+    assert not ungated, f"writes accepted_at without checking the caller: {ungated}"
+
 
 
 def test_uj57_recon06_a_proposal_is_listed_for_the_person_it_is_addressed_to(

@@ -97,6 +97,8 @@ from caseops_api.schemas.ip_operations import (
     IpControlReviewSignOffRequest,
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
+    IpCoverageBulkAcknowledgeRequest,
+    IpCoverageBulkAcknowledgeResponse,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
     IpCoverageReassignPreviewRequest,
@@ -112,6 +114,9 @@ from caseops_api.schemas.ip_operations import (
     IpDocketControlReport,
     IpDocketCreateRequest,
     IpDocketListResponse,
+    IpDocketQueueListResponse,
+    IpDocketQueueRecord,
+    IpDocketQueueSaveRequest,
     IpDocketRecordResponse,
     IpDocketVersionCreateRequest,
     IpEvidenceCandidateReviewRequest,
@@ -233,17 +238,20 @@ from caseops_api.services.ip_operations import (
     add_ip_related_right_obligation,
     add_ip_title_interest,
     append_ip_docket_version,
+    bulk_acknowledge_ip_coverage,
     bulk_reassign_ip_deadline_coverages,
     complete_ip_related_right_obligation,
     create_ip_control_review,
     create_ip_docket,
     decide_ip_coverage_replacement,
+    delete_ip_docket_queue,
     discover_ip_evidence_candidates,
     get_ip_control_review,
     get_ip_docket,
     ip_daily_docket,
     ip_docket_control_report,
     list_ip_coverage_transfers_awaiting,
+    list_ip_docket_queues,
     list_ip_dockets,
     preview_ip_coverage_reassignment,
     propose_ip_coverage_reassignment,
@@ -251,6 +259,7 @@ from caseops_api.services.ip_operations import (
     reconcile_ip_cost_items,
     record_ip_control_review_export,
     review_ip_evidence_candidate,
+    save_ip_docket_queue,
     sign_off_ip_control_review,
     verify_ip_deadline_incident,
 )
@@ -1232,6 +1241,44 @@ async def get_ip_portfolio_families(
     return list_ip_portfolio_families(
         session, context=context, grouping=grouping, filters=filters
     )
+
+
+@router.post("/docket-queues", response_model=IpDocketQueueRecord, status_code=201)
+async def post_ip_docket_queue(
+    payload: IpDocketQueueSaveRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketQueueRecord:
+    return save_ip_docket_queue(session, context=context, payload=payload)
+
+
+@router.get("/docket-queues", response_model=IpDocketQueueListResponse)
+async def get_ip_docket_queues(
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketQueueListResponse:
+    return list_ip_docket_queues(session, context=context)
+
+
+@router.delete("/docket-queues/{queue_id}", status_code=204)
+async def delete_ip_docket_queue_route(
+    queue_id: str,
+    context: IpWriter,
+    session: DbSession,
+) -> None:
+    delete_ip_docket_queue(session, context=context, queue_id=queue_id)
+
+
+@router.post(
+    "/deadline-coverages/bulk-acknowledge",
+    response_model=IpCoverageBulkAcknowledgeResponse,
+)
+async def post_ip_coverage_bulk_acknowledge(
+    payload: IpCoverageBulkAcknowledgeRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageBulkAcknowledgeResponse:
+    return bulk_acknowledge_ip_coverage(session, context=context, payload=payload)
 
 
 @router.get(

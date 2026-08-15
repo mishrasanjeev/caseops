@@ -520,6 +520,69 @@ class IpDailyDocketResponse(BaseModel):
     escalations: list[IpDailyDocketEscalation] = Field(default_factory=list)
 
 
+class IpDocketQueueSaveRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    # A queue is either shared with a team or personal to the caller. There is
+    # no company-wide tier: a queue everyone can edit is a queue nobody owns.
+    team_id: str | None = None
+
+
+class IpDocketQueueRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: str | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+    team_id: str | None = None
+    owner_membership_id: str | None = None
+    scope: Literal["team", "personal"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class IpDocketQueueListResponse(BaseModel):
+    queues: list[IpDocketQueueRecord] = Field(default_factory=list)
+
+
+class IpCoverageBulkAcknowledgeRequest(BaseModel):
+    coverage_ids: list[str] = Field(min_length=1, max_length=500)
+    # Optional per-record fencing: a row that moved since the queue was read is
+    # reported rather than silently acknowledged at its new state.
+    expected_versions: dict[str, int] = Field(default_factory=dict)
+
+
+class IpCoverageAcknowledgeOutcome(BaseModel):
+    """Per-record validation result (CAL-OPS-09).
+
+    Every requested id gets a row, so a caller can never mistake "silently
+    dropped" for "acknowledged".
+    """
+
+    coverage_id: str
+    acknowledged: bool
+    reason: (
+        Literal[
+            "acknowledged",
+            "already_acknowledged",
+            "not_found",
+            "not_responsible",
+            "version_conflict",
+            "transfer_pending",
+        ]
+        | None
+    ) = None
+    reassignment_version: int | None = None
+
+
+class IpCoverageBulkAcknowledgeResponse(BaseModel):
+    acknowledged_count: int
+    rejected_count: int
+    outcomes: list[IpCoverageAcknowledgeOutcome] = Field(default_factory=list)
+
+
 class IpCoverageTransferAwaiting(BaseModel):
     """One coverage transfer awaiting the calling member's decision.
 

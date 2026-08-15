@@ -9800,6 +9800,65 @@
       }
     },
     {
+      "id": "ip_docket_queues",
+      "table_name": "ip_docket_queues",
+      "purpose": "Repository SQL persistence class `ip_docket_queues`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "description": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "filters_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "owner_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "team_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_docket_records",
       "table_name": "ip_docket_records",
       "purpose": "Repository SQL persistence class `ip_docket_records`; its exact column inventory is intentionally versioned below.",
@@ -22696,12 +22755,12 @@
       }
     }
   ],
-  "schema_fingerprint": "4d6ee5bd8c6d176fdd77db439c7f124bd8ae353cab8ae3eeb4cd1884884c423c",
+  "schema_fingerprint": "460767b7485951706000383933328f0ce173b546bf38f11c041a5a315447f462",
   "index_inventory": {
-    "orm_index_count": 1141,
-    "orm_index_fingerprint": "c1ca745a681eafa1cc6921733741194e0b55253da3004ab393da7e76effd93e0",
-    "migration_index_count": 500,
-    "migration_index_fingerprint": "ff1e63f8c961a3b240b9bdf117c43e979c3efb076009ff5039f67ae357a6615c",
+    "orm_index_count": 1146,
+    "orm_index_fingerprint": "63bfb7f8fc26bd7f5f9bd70d4b4a92d2e7448d5ac51e42280dfa585c3b7238aa",
+    "migration_index_count": 505,
+    "migration_index_fingerprint": "910ab9625c1f08bc2dd2d56e603ac7a1ef8e712662a8fe90ef1a0b1b19a8c04c",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

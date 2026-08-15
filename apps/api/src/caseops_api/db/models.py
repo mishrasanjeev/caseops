@@ -16415,3 +16415,46 @@ class IpDocketControlReview(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class IpDocketQueue(Base):
+    """A saved daily-docket queue (CAL-OPS-09).
+
+    A queue is a named, reusable set of daily-docket filters. Scoping is
+    explicit: a queue with ``team_id`` is shared with that team, and one
+    without it belongs to the member who saved it. There is no company-wide
+    tier, because a queue that everyone can edit is a queue nobody owns.
+    """
+
+    __tablename__ = "ip_docket_queues"
+    __table_args__ = (
+        UniqueConstraint("company_id", "name", name="uq_ip_docket_queue_company_name"),
+        CheckConstraint(
+            "team_id IS NOT NULL OR owner_membership_id IS NOT NULL",
+            name="ck_ip_docket_queue_has_scope",
+        ),
+        Index("ix_ip_docket_queues_company_team", "company_id", "team_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    filters_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    owner_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
