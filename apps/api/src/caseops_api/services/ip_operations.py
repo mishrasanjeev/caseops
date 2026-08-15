@@ -70,6 +70,7 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import (
     assert_access,
     assert_ip_docket_access,
+    can_access_ip_docket,
     seed_restricted_ip_creator_access,
     visible_ip_dockets_filter,
 )
@@ -943,9 +944,19 @@ def reassign_ip_deadline_coverage(
             status_code=409,
             detail="Deadline responsibility changed; reload before reassigning.",
         )
-    _membership_or_404(session, context, payload.responsible_membership_id)
-    if payload.backup_membership_id:
+    replacement = _membership_or_404(session, context, payload.responsible_membership_id)
+    backup = (
         _membership_or_404(session, context, payload.backup_membership_id)
+        if payload.backup_membership_id
+        else None
+    )
+    # Guard before any mutation: an incoming owner or backup who cannot open
+    # the record must not be given responsibility for its deadline.
+    for incoming in (replacement, backup):
+        if incoming is not None:
+            _assert_replacement_can_cover(
+                session, context=context, replacement=incoming, dockets=[docket]
+            )
     old_responsible = coverage.responsible_membership_id
     coverage.responsible_membership_id = payload.responsible_membership_id
     coverage.backup_membership_id = payload.backup_membership_id
@@ -970,6 +981,49 @@ def reassign_ip_deadline_coverage(
     )
     session.commit()
     return _serialize_docket(session, docket)
+
+
+def _assert_replacement_can_cover(
+    session: Session,
+    *,
+    context: SessionContext,
+    replacement: CompanyMembership,
+    dockets: list[IpDocketRecord],
+) -> None:
+    """UJ-57-EXC-01/02: never hand work to someone who cannot open the record.
+
+    Coverage reassignment previously checked only that the replacement existed,
+    so a restricted docket or an ethical wall could be bypassed by making the
+    walled-off member responsible for its deadline. The canonical
+    ``can_access_ip_docket`` policy is evaluated as the *replacement*, and the
+    transfer fails closed for the whole batch rather than partially applying.
+
+    Blocked docket ids are returned so an operator can act, but no title or
+    other record content is disclosed.
+    """
+
+    recipient = SessionContext(
+        company=context.company,
+        user=replacement.user,
+        membership=replacement,
+    )
+    blocked = [
+        docket.id
+        for docket in dockets
+        if not can_access_ip_docket(session, context=recipient, docket=docket)
+    ]
+    if blocked:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_replacement_lacks_access",
+                "message": (
+                    "The replacement cannot access every affected IP record, so the "
+                    "transfer was refused in full."
+                ),
+                "blocked_docket_ids": sorted(blocked),
+            },
+        )
 
 
 def bulk_reassign_ip_deadline_coverages(
@@ -1004,6 +1058,18 @@ def bulk_reassign_ip_deadline_coverages(
             .with_for_update()
         ).all()
     )
+    affected_dockets = list(
+        session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id.in_({row.docket_id for row in rows} or {""}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).all()
+    )
+    _assert_replacement_can_cover(
+        session, context=context, replacement=replacement, dockets=affected_dockets
+    )
+
     responsible_count = 0
     backup_count = 0
     now = _now()

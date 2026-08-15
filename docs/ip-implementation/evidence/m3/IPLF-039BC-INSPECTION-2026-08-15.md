@@ -93,11 +93,31 @@ to **30 missing features plus tests for all of them**.
    written because the behaviour does not exist.
 2. `IPLF-039C` should be treated as **largely unbuilt**, not as a verified
    deployed slice. Its recorded status is the least accurate in the program.
-3. The features are not uniformly valuable. `UJ-62-EXC-05` (date-only timezone),
-   `UJ-57-EXC-01/02` (reassignment without capability or ethical-wall checks) and
-   `UJ-51-EXC-07` (privileged correspondence reaching portal or AI) are
-   **client-facing correctness and confidentiality risks**. The rest are
-   completeness gaps.
+3. The features are not uniformly valuable. Three were called out as
+   client-facing risks. **See the correction below: only one was live.**
+
+## Correction — 2026-08-15, after verification
+
+This document originally described three client-facing risks. Verifying each
+before fixing it established that **only one was actually exploitable**. The
+other two were overstated here and are corrected:
+
+| Risk | Original claim | Verified reality |
+|---|---|---|
+| `UJ-57-EXC-01/02` reassignment without access checks | client-facing risk | **Confirmed and live.** Bulk reassignment swept coverage across every docket in the company with no access check, so a restricted record or ethical wall could be bypassed by making a walled-off member responsible for its deadline. **Fixed** — both single and bulk reassignment now evaluate the canonical `can_access_ip_docket` policy as the *replacement* and fail closed for the whole batch. |
+| `UJ-62-EXC-05` date-only timezone shift | "a filing-date correctness bug waiting for a DST change" | **Overstated — latent, not active.** `CalendarEventSync` stores only `(connection, source_type, source_id, status)` with no start, end, all-day or timezone column. No datetime is projected, so no date can shift. |
+| `UJ-51-EXC-07` privileged correspondence reaching portal or AI | "no gate against portal or AI exposure" | **Overstated — latent, not active.** True that no privilege field exists on `Communication`, `CompanyNotice` or `IpEvidenceCandidate`; false that there is live exposure. `IpEvidenceCandidate` is referenced only by `ip_operations.py` and `models.py` — no route, portal surface or AI retriever reads it. |
+
+Both latent gaps are now **pinned by tests** in
+`apps/api/tests/test_ip_latent_exposure_guards.py`. If someone adds a portal or
+AI surface over correspondence, or a calendar projection carrying real times,
+those tests fail and point at the requirement rather than letting the gap ship
+silently.
+
+The lesson for the rest of this audit: an "absent" verdict says a behaviour is
+unimplemented; it does **not** by itself establish that the absence is currently
+exploitable. Exposure has to be traced separately, and I did not do that before
+calling all three client-facing.
 
 ## Confidence and limits
 
