@@ -182,14 +182,34 @@ import sys
 
 raw_path, output_path = sys.argv[1:]
 candidates = []
-for line in open(raw_path, encoding="utf-8"):
-    line = line.strip()
-    if not line:
+raw = open(raw_path, encoding="utf-8").read()
+try:
+    parsed = json.loads(raw)
+except json.JSONDecodeError:
+    parsed = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+if isinstance(parsed, dict) and isinstance(parsed.get("entries"), list):
+    parsed = parsed["entries"]
+if not isinstance(parsed, list):
+    parsed = [parsed]
+for entry in parsed:
+    if not isinstance(entry, dict):
         continue
-    try:
-        value = json.loads(line)
-    except json.JSONDecodeError:
-        continue
+    value = entry.get("jsonPayload")
+    if not isinstance(value, dict):
+        value = entry.get("textPayload", entry)
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            continue
     if (
         isinstance(value, dict)
         and value.get("schema_version") == 1
@@ -202,6 +222,76 @@ with open(output_path, "w", encoding="utf-8", newline="\n") as stream:
     json.dump(candidates[0], stream, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     stream.write("\n")
 PY
+}
+
+read_execution_logs() {
+  local log_filter="$1"
+  local stream_name="$2"
+  local output_path="$3"
+  local log_name="projects/${PROJECT}/logs/run.googleapis.com%2F${stream_name}"
+  local read_status=1
+
+  if [[ "${LOGGING_REST_ONLY}" != "true" ]]; then
+    set +e
+    timeout --kill-after=5s 20s \
+      gcloud logging read "${log_filter} AND logName=\"${log_name}\"" \
+        --project "${PROJECT}" \
+        --order asc \
+        --limit 20 \
+        --format=json > "${output_path}"
+    read_status=$?
+    set -e
+    if [[ ${read_status} -eq 0 ]]; then
+      return 0
+    fi
+    echo "WARNING: bounded gcloud log read failed; using the Logging API fallback." >&2
+    LOGGING_REST_ONLY=true
+  fi
+
+  python - "${PROJECT}" "${log_filter} AND logName=\"${log_name}\"" "${LOG_REQUEST}" <<'PY'
+import json
+import sys
+
+project, log_filter, output_path = sys.argv[1:]
+with open(output_path, "w", encoding="utf-8", newline="\n") as stream:
+    json.dump(
+        {
+            "filter": log_filter,
+            "orderBy": "timestamp asc",
+            "pageSize": 20,
+            "resourceNames": [f"projects/{project}"],
+        },
+        stream,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    stream.write("\n")
+PY
+  local access_token=""
+  set +e
+  access_token=$(timeout --kill-after=5s 20s gcloud auth print-access-token --quiet)
+  read_status=$?
+  set -e
+  if [[ ${read_status} -ne 0 || -z "${access_token}" ]]; then
+    echo "WARNING: bounded Logging API credential lookup failed." >&2
+    return 1
+  fi
+  umask 077
+  printf 'Authorization: Bearer %s\n' "${access_token}" > "${LOG_AUTH_HEADER}"
+  access_token=""
+  set +e
+  timeout --kill-after=5s 25s \
+    curl --fail --silent --show-error \
+      --request POST \
+      --header "@${LOG_AUTH_HEADER}" \
+      --header "Content-Type: application/json" \
+      --data-binary "@${LOG_REQUEST}" \
+      "https://logging.googleapis.com/v2/entries:list" > "${output_path}"
+  read_status=$?
+  set -e
+  : > "${LOG_AUTH_HEADER}"
+  return "${read_status}"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -270,12 +360,16 @@ case "${ACTION}" in
     EXECUTION_DESCRIPTION=""
     RAW_STDOUT=""
     CANONICAL_STDOUT=""
+    LOG_REQUEST=""
+    LOG_AUTH_HEADER=""
     cleanup_execution_files() {
       [[ -z "${JOB_DESCRIPTION}" ]] || rm -f -- "${JOB_DESCRIPTION}"
       [[ -z "${EXECUTE_RESPONSE}" ]] || rm -f -- "${EXECUTE_RESPONSE}"
       [[ -z "${EXECUTION_DESCRIPTION}" ]] || rm -f -- "${EXECUTION_DESCRIPTION}"
       [[ -z "${RAW_STDOUT}" ]] || rm -f -- "${RAW_STDOUT}"
       [[ -z "${CANONICAL_STDOUT}" ]] || rm -f -- "${CANONICAL_STDOUT}"
+      [[ -z "${LOG_REQUEST}" ]] || rm -f -- "${LOG_REQUEST}"
+      [[ -z "${LOG_AUTH_HEADER}" ]] || rm -f -- "${LOG_AUTH_HEADER}"
     }
     trap cleanup_execution_files EXIT
     JOB_DESCRIPTION=$(mktemp)
@@ -283,6 +377,8 @@ case "${ACTION}" in
     EXECUTION_DESCRIPTION=$(mktemp)
     RAW_STDOUT=$(mktemp)
     CANONICAL_STDOUT=$(mktemp)
+    LOG_REQUEST=$(mktemp)
+    LOG_AUTH_HEADER=$(mktemp)
     describe_job "${JOB_DESCRIPTION}"
     validate_job "${JOB_DESCRIPTION}" "${IMAGE}"
 
@@ -317,7 +413,7 @@ case "${ACTION}" in
         --project "${PROJECT}" \
         --region "${REGION}" \
         --format=json > "${EXECUTION_DESCRIPTION}"
-      if python -c 'import json, sys; value=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(0 if any(item.get("type") == "Completed" for item in value.get("status", {}).get("conditions", [])) else 1)' "${EXECUTION_DESCRIPTION}"; then
+      if python -c 'import json, sys; value=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(0 if any(item.get("type") == "Completed" and str(item.get("status", "")).lower() in {"true", "false"} for item in value.get("status", {}).get("conditions", [])) else 1)' "${EXECUTION_DESCRIPTION}"; then
         EXECUTION_TERMINAL=true
         break
       fi
@@ -332,14 +428,11 @@ case "${ACTION}" in
     fi
 
     LOG_FILTER="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${JOB}\" AND labels.\"run.googleapis.com/execution_name\"=\"${EXECUTION_LABEL}\""
+    LOGGING_REST_ONLY=false
     SNAPSHOT_FOUND=false
     for _attempt in $(seq 1 30); do
-      gcloud logging read "${LOG_FILTER} AND logName=\"projects/${PROJECT}/logs/run.googleapis.com%2Fstdout\"" \
-        --project "${PROJECT}" \
-        --order asc \
-        --limit 20 \
-        --format='value(textPayload)' > "${RAW_STDOUT}"
-      if extract_snapshot_log "${RAW_STDOUT}" "${CANONICAL_STDOUT}"; then
+      if read_execution_logs "${LOG_FILTER}" "stdout" "${RAW_STDOUT}" && \
+        extract_snapshot_log "${RAW_STDOUT}" "${CANONICAL_STDOUT}"; then
         SNAPSHOT_FOUND=true
         break
       fi
@@ -359,11 +452,9 @@ case "${ACTION}" in
     fi
 
     if [[ ${EXECUTE_STATUS} -ne 0 || "${EXECUTION_VERIFIED}" != "true" || "${SNAPSHOT_FOUND}" != "true" || "${SNAPSHOT_MATCHED}" != "true" ]]; then
-      gcloud logging read "${LOG_FILTER} AND logName=\"projects/${PROJECT}/logs/run.googleapis.com%2Fstderr\"" \
-        --project "${PROJECT}" \
-        --order asc \
-        --limit 20 \
-        --format='value(textPayload)' >&2 || true
+      if read_execution_logs "${LOG_FILTER}" "stderr" "${RAW_STDOUT}"; then
+        command cat "${RAW_STDOUT}" >&2
+      fi
       exit 1
     fi
     ;;

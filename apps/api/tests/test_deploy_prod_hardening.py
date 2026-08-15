@@ -555,6 +555,15 @@ def _a0_execution_json(
     )
 
 
+def _a0_pending_execution_json(image: str) -> str:
+    value = json.loads(_a0_execution_json(image))
+    value["status"] = {
+        "conditions": [{"status": "Unknown", "type": "Completed"}],
+        "startTime": "2026-08-14T16:00:01Z",
+    }
+    return json.dumps(value, separators=(",", ":"))
+
+
 def _run_deploy_with_fakes(
     tmp_path: Path,
     *arguments: str,
@@ -616,11 +625,22 @@ elif [[ "$*" == *"run jobs execute caseops-ip-rule-governance-fingerprint-a0"* ]
   printf '%s\n' '{"metadata":{"name":"caseops-ip-rule-governance-fingerprint-a0-test"}}'
 elif [[ "$*" == *"run jobs executions describe"* && \
   "$*" == *"caseops-ip-rule-governance-fingerprint-a0-test"* ]]; then
-  printf '%s\n' "${FAKE_EXECUTION_JSON}"
+  if [[ "${FAKE_A0_MODE}" == "pending-structured" && \
+    ! -f "${FAKE_EXECUTION_POLLED}" ]]; then
+    touch "${FAKE_EXECUTION_POLLED}"
+    printf '%s\n' "${FAKE_PENDING_EXECUTION_JSON}"
+  else
+    printf '%s\n' "${FAKE_EXECUTION_JSON}"
+  fi
 elif [[ "$*" == *"logging read"* && "$*" == *"stdout"* ]]; then
-  printf '%s\n' "${FAKE_FINGERPRINT_JSON}"
+  if [[ "${FAKE_A0_MODE}" == "pending-structured" ]]; then
+    exit 124
+  fi
+  printf '%s\n' "${FAKE_FINGERPRINT_LOG_JSON}"
 elif [[ "$*" == *"logging read"* && "$*" == *"stderr"* ]]; then
   printf ''
+elif [[ "$*" == *"auth print-access-token"* ]]; then
+  printf '%s\n' 'fake-access-token'
 elif [[ "$*" == *"run jobs describe"* ]]; then
   printf '%s%s\n' \
     'asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:' \
@@ -687,11 +707,22 @@ fi
         fake_bin / "curl",
         """#!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "$*" == *"logging.googleapis.com/v2/entries:list"* ]]; then
+  printf '%s\n' "${FAKE_FINGERPRINT_REST_JSON}"
+  exit 0
+fi
 case "${FAKE_CURL_MODE}" in
   network-fail) exit 22 ;;
   degraded) printf '%s\n' '{"status":"degraded"}' ;;
   *) printf '%s\n' '{"status":"ok"}' ;;
 esac
+""",
+    )
+    _write_fake_executable(
+        fake_bin / "sleep",
+        """#!/usr/bin/env bash
+exit 0
 """,
     )
     _write_fake_executable(
@@ -711,6 +742,19 @@ exec "${FAKE_REAL_PYTHON}" "$@"
         "caseops-images/caseops-api@sha256:" + "a" * 64
     )
     env = os.environ.copy()
+    fingerprint_json = _a0_fingerprint_json()
+    fingerprint_log_json = json.dumps(
+        [
+            {
+                ("jsonPayload" if a0_mode == "pending-structured" else "textPayload"): (
+                    json.loads(fingerprint_json)
+                    if a0_mode == "pending-structured"
+                    else fingerprint_json
+                )
+            }
+        ],
+        separators=(",", ":"),
+    )
     env.update(
         {
             "FAKE_A0_MODE": a0_mode or "",
@@ -719,6 +763,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 immutable_image,
                 succeeded=a0_mode != "fingerprint-fail",
             ),
+            "FAKE_EXECUTION_POLLED": _bash_path(tmp_path / "execution-polled"),
             "FAKE_EXECUTIONS_JSON": json.dumps(
                 [
                     {
@@ -744,7 +789,11 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 separators=(",", ":"),
             ),
             "FAKE_FINGERPRINT_JOB_JSON": _a0_fingerprint_job_json(immutable_image),
-            "FAKE_FINGERPRINT_JSON": _a0_fingerprint_json(),
+            "FAKE_FINGERPRINT_LOG_JSON": fingerprint_log_json,
+            "FAKE_FINGERPRINT_REST_JSON": json.dumps(
+                {"entries": [{"jsonPayload": json.loads(fingerprint_json)}]},
+                separators=(",", ":"),
+            ),
             "FAKE_GCLOUD_LOG": _bash_path(gcloud_log),
             "FAKE_GIT_STATUS": git_status,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
@@ -757,6 +806,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 4,
             ),
             "FAKE_QA_UPDATED": _bash_path(tmp_path / "qa-updated"),
+            "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
@@ -909,6 +959,30 @@ def test_a0_deploy_captures_final_pre_route_baseline_in_fail_closed_order(
         "run deploy caseops-api"
     )
     assert sum("run jobs executions list" in call for call in calls) == 1
+
+
+def test_a0_fingerprint_waits_for_terminal_status_and_reads_structured_log(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        a0_mode="pending-structured",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    baseline = json.loads((tmp_path / "a0-baseline.json").read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == 1
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    execution_describes = [
+        call
+        for call in calls
+        if "run jobs executions describe caseops-ip-rule-governance-fingerprint-a0-test" in call
+    ]
+    assert len(execution_describes) == 2
+    assert any("logging read" in call and "--format=json" in call for call in calls)
+    assert any("auth print-access-token" in call for call in calls)
+    assert any("logging.googleapis.com/v2/entries:list" in call for call in calls)
 
 
 @pytest.mark.parametrize(
