@@ -13,7 +13,6 @@ import string
 from collections import defaultdict
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "docs/ip-implementation/PROGRAM_MANIFEST.yaml"
 RELEASE_1 = "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
@@ -196,12 +195,13 @@ def derived_slice(epic: dict, suffix: str, phase: str, depends_on: list[str]) ->
         "source_kind": "derived", "scope_source": epic["id"],
         "primary_behavior": phase,
         "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-        "release_boundary": "Independent exact-commit CI, staged rollout, rollback, and dated deployed acceptance for this behavior.",
+        "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
         "requirement_ids": [], "journey_path_ids": [],
         "ownership": [owner_for(epic["id"], epic["title"])],
-        "dependencies": depends_on, "implementation_refs": [], "test_refs": [],
+        "dependencies": depends_on, "external_preconditions": [],
+        "implementation_refs": [], "test_refs": [],
         "evidence_refs": [], "evidence_metadata": [], "approvals": [], "blockers": [],
-        "next_actions": ["Complete Definition of Ready and implement this bounded slice after its dependencies and external gates are satisfied."],
+        "next_actions": ["Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."],
         "data_impact": ["Pending slice design; no data mutation is authorized by this allocation row."],
         "documentation_impact": [], "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
         **status_block(),
@@ -258,7 +258,8 @@ def main() -> None:
         row.setdefault("scope_source", row["id"])
         row.setdefault("primary_behavior", row["title"])
         row.setdefault("migration_boundary", "No schema change unless named by release evidence; preserve the PRD expand/backfill/verify/switch contract.")
-        row.setdefault("release_boundary", "Independent exact-commit CI and dated deployed acceptance.")
+        row.setdefault("release_boundary", "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; fail-closed acceptance-pending scope may share the train.")
+        row.setdefault("external_preconditions", [])
         row.setdefault("evidence_metadata", [])
         row.setdefault("allocation_review", "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.")
         by_epic[row["epic_id"]].append(row)
@@ -434,6 +435,10 @@ def main() -> None:
         milestone.update(aggregate(epics_by_milestone[milestone["id"]] + gates_by_milestone[milestone["id"]]))
         milestone["evidence_refs"] = sorted({ref for row in epics_by_milestone[milestone["id"]] + gates_by_milestone[milestone["id"]] for ref in row.get("evidence_refs", [])})
     manifest["program"].update(aggregate(manifest["milestones"]))
+    manifest["program"]["execution_policy"] = (
+        "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the "
+        "current safety-critical fence lane, never an exclusive program scheduler"
+    )
     manifest["program"]["active_slice"] = "IPLF-002A"
     manifest["program"]["checkpoint"] = {
         "recorded_at": "2026-08-02T11:00:00+05:30",
@@ -442,7 +447,11 @@ def main() -> None:
         "completed_scope": "Reconciled previously delivered slices without claiming full requirements; Notices production fix is implemented locally and awaits exact-revision deployment proof.",
         "program_state": "PROGRAM INCOMPLETE",
         "next_slice": "IPLF-002A",
-        "next_action": "Finish Phase 0 Notices release proof and control-plane validation, then close remaining M0/M1 trust-recovery work in dependency order.",
+        "next_action": (
+            "Finish the Phase 0 Notices release proof and control-plane validation on their direct "
+            "dependency lane while executing every other dependency-ready M0-M10 node behind its "
+            "fail-closed activation boundary."
+        ),
         "evidence_ref": "docs/ip-implementation/evidence/phase0/control-plane-and-notices-2026-08-02.md",
     }
     MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
