@@ -1996,3 +1996,158 @@ def test_notice_direction_and_reply_checks_on_postgres(pg_engine):
                         **invalid_state,
                     },
                 )
+
+
+@pytest.mark.postgres
+def test_iplf039c_batch_altered_constraints_enforce_on_postgres(pg_engine):
+    """IPLF-039C — the two `batch_alter_table` migrations behave on the real dialect.
+
+    `20260815_0002` (coverage replacement decision) and `20260815_0004`
+    (calendar drift) both use `op.batch_alter_table`, which exists as a SQLite
+    workaround: it rebuilds the table by copy-and-move. On Postgres alembic
+    takes a different path entirely, so a constraint proven under SQLite is not
+    proven here.
+
+    This asserts the constraints exist **and fire**. A constraint that exists
+    but does not refuse is worse than none, because it reads as protection.
+    """
+
+    expected = {
+        "ip_deadline_coverages": {
+            "ck_ip_coverage_replacement_decision",
+            "ck_ip_coverage_pending_has_subject",
+            "ck_ip_coverage_emergency_is_time_boxed",
+        },
+        "calendar_event_syncs": {"ck_calendar_event_sync_drift_status"},
+        "ip_docket_queues": {"ck_ip_docket_queue_has_scope"},
+    }
+    with pg_engine.connect() as conn:
+        for table, names in expected.items():
+            found = {
+                row[0]
+                for row in conn.execute(
+                    text(
+                        # cast(...) rather than `:t::regclass`: the `::` cast
+                        # collides with SQLAlchemy's `:param` binding syntax.
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = cast(:t AS regclass) AND contype = 'c'"
+                    ),
+                    {"t": table},
+                )
+            }
+            missing = names - found
+            assert not missing, f"{table} lost check constraints on Postgres: {missing}"
+
+    with pg_engine.begin() as conn:
+        company_id = _seed_company(Session(bind=conn))
+
+    # A queue belonging to neither a team nor a member is refused.
+    with pytest.raises(IntegrityError) as scope_error:
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ip_docket_queues "
+                    "(id, company_id, name, filters_json, team_id, "
+                    " owner_membership_id, created_by_membership_id, "
+                    " created_at, updated_at) "
+                    "VALUES (:id, :co, 'Orphan', '{}', NULL, NULL, NULL, :ts, :ts)"
+                ),
+                {"id": str(uuid4()), "co": company_id, "ts": datetime.now(UTC)},
+            )
+    # Name the rule, so this cannot pass on an unrelated integrity error.
+    assert "ck_ip_docket_queue_has_scope" in str(scope_error.value)
+
+    # An out-of-vocabulary drift status is refused.
+    with pytest.raises(IntegrityError) as drift_error:
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO calendar_event_syncs "
+                    "(id, company_id, calendar_connection_id, source_type, "
+                    " source_id, sync_status, drift_status, attempts, "
+                    " max_attempts, created_at, updated_at) "
+                    "VALUES (:id, :co, :conn, 'matter_deadline', :src, "
+                    " 'pending', 'definitely_fine', 0, 3, :ts, :ts)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "co": company_id,
+                    "conn": str(uuid4()),
+                    "src": str(uuid4()),
+                    "ts": datetime.now(UTC),
+                },
+            )
+    assert "ck_calendar_event_sync_drift_status" in str(drift_error.value)
+
+
+@pytest.mark.postgres
+def test_iplf039c_drift_status_server_default_lands_on_postgres(pg_engine):
+    """`drift_status` must default to `unchecked`, never NULL.
+
+    The column was added with `server_default="unchecked"` so pre-existing rows
+    read truthfully as *not yet checked*. If the default failed to apply they
+    would be NULL, and the honesty rule this slice is built on — unverified is
+    never reported as verified — would be silently broken for every projection
+    that existed before the migration.
+    """
+
+    with pg_engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT column_default, is_nullable FROM information_schema.columns "
+                "WHERE table_name = 'calendar_event_syncs' "
+                "AND column_name = 'drift_status'"
+            )
+        ).one()
+
+    default, nullable = row
+    assert default is not None and "unchecked" in default, (
+        f"drift_status server_default did not apply on Postgres: {default!r}. "
+        "Migration 20260815_0004 would leave existing projections unlabelled."
+    )
+    assert nullable == "NO"
+
+
+@pytest.mark.postgres
+def test_iplf039c_queue_name_is_unique_per_company_on_postgres(pg_engine):
+    """A saved queue name cannot be shadowed inside one workspace.
+
+    Composite UNIQUE has looser NULL semantics on SQLite, so per-tenant
+    uniqueness is only meaningfully proven here. The second half matters as
+    much as the first: the name must stay free in a *different* workspace, so
+    one firm cannot deny another a queue name.
+    """
+
+    def _insert_queue(company_id: str, name: str, owner_id: str) -> None:
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ip_docket_queues "
+                    "(id, company_id, name, filters_json, team_id, "
+                    " owner_membership_id, created_by_membership_id, "
+                    " created_at, updated_at) "
+                    "VALUES (:id, :co, :name, '{}', NULL, :owner, NULL, :ts, :ts)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "co": company_id,
+                    "name": name,
+                    "owner": owner_id,
+                    "ts": datetime.now(UTC),
+                },
+            )
+
+    with pg_engine.begin() as conn:
+        session = Session(bind=conn)
+        company_id = _seed_company(session)
+        other_company_id = _seed_company(session)
+        owner_id = _seed_membership(session, company_id)
+        other_owner_id = _seed_membership(session, other_company_id)
+
+    _insert_queue(company_id, "Critical this week", owner_id)
+    with pytest.raises(IntegrityError) as excinfo:
+        _insert_queue(company_id, "Critical this week", owner_id)
+    assert "uq_ip_docket_queue_company_name" in str(excinfo.value)
+
+    # Per-tenant, not global.
+    _insert_queue(other_company_id, "Critical this week", other_owner_id)

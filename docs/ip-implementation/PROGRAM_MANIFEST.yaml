@@ -9914,7 +9914,8 @@
         "apps/web/app/app/ip/docket/page.test.tsx",
         "apps/web/lib/ip/control-review-manifest.test.ts",
         "tests/e2e/iplf-039c-daily-docket-2026-08-15.spec.ts",
-        "apps/api/tests/test_ip_calendar_drift.py"
+        "apps/api/tests/test_ip_calendar_drift.py",
+        "apps/api/tests/test_postgres_validation.py"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
@@ -9925,17 +9926,18 @@
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "Rebuild increments 1-12 make the slice functionally complete with a regenerated typed client: all 22 owned paths are implemented and proven. What remains needs infrastructure, not code. The Microsoft Graph and Google fetch_event adapters have no live-provider verification and are exercised only against provider doubles, and everything -- the browser E2E included -- runs on SQLite with nothing deployed.",
+          "summary": "Rebuild increments 1-13 make the slice functionally complete, with a regenerated typed client and its migrations, constraints, defaults and uniqueness verified on real PostgreSQL 17 + pgvector 0.8.3 at commit 9e65d8b6 (alembic head 20260815_0004, 27 postgres tests passed on a freshly created database). One item remains: the Microsoft Graph and Google fetch_event adapters have no live-provider verification and are exercised only against provider doubles. Note the PostgreSQL run was a local container matching CI's image, not a hosted CI run and not Cloud SQL, and the IP suites and browser E2E still run on SQLite.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
-          "evidence_needed": "Live-provider verification of the two fetch_event adapters, and exact-commit CI on real PostgreSQL with dated deployed acceptance.",
+          "evidence_needed": "Live-provider verification of the two fetch_event adapters against an OAuth sandbox, a hosted CI run at the target commit, and dated deployed acceptance.",
           "safe_fallback": "The control review is additive and read-derived; the unbuilt areas keep their existing behaviour and the latent calendar gap is pinned by test_ip_latent_exposure_guards.py.",
           "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "Run exact-commit CI on real PostgreSQL and take the slice through the release gate."
+          "next_independent_slice": "Verify the two fetch_event adapters against a live provider sandbox."
         }
       ],
       "next_actions": [
         "Verify the Microsoft Graph and Google fetch_event adapters against a live provider sandbox.",
-        "Run exact-commit CI on real PostgreSQL and take the rebuilt slice through the release gate."
+        "Push to trigger the hosted postgres-validation CI job at the target commit.",
+        "Take the rebuilt slice through the release gate with dated deployed acceptance."
       ],
       "data_impact": [],
       "documentation_impact": [],
