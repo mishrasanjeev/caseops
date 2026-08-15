@@ -602,6 +602,20 @@ def validate(manifest: dict[str, Any]) -> list[str]:
                 errors.append(f"{collection}/{row_id}: unapproved not_required status")
         if row.get("acceptance_status") == "approved" and row.get("verification_status") != "passed":
             errors.append(f"{collection}/{row_id}: approved acceptance requires passed verification")
+        # A `planned:` reference names a test that does not exist yet. A row may
+        # cite one while it is still being built, but it can never be evidence
+        # for a passed or deployment-verified claim.
+        if row.get("verification_status") == "passed" or row.get("release_status") == "deployment_verified":
+            unwritten = sorted(
+                str(reference)
+                for reference in row.get("test_refs", [])
+                if str(reference).startswith("planned:")
+            )
+            if unwritten:
+                errors.append(
+                    f"{collection}/{row_id}: passed/deployment_verified row cites unwritten "
+                    f"tests {unwritten}"
+                )
         for evidence_ref in row.get("evidence_refs", []):
             evidence_path = REPO_ROOT / evidence_ref
             if not evidence_path.is_file() or evidence_path.stat().st_size < 32:

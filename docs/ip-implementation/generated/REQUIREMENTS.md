@@ -4,32 +4,32 @@ Generated; do not edit.
 
 | Requirement | Family | Slices | Tests | Evidence | Implementation | Verification | Release | Verified |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TRUST-BA-01 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-02 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-03 | TRUST-BA | IPLF-004B, IPLF-006B, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-04 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-05 | TRUST-BA | IPLF-004B, IPLF-006C | 14 | 0 | implemented | passed | blocked | false |
-| TRUST-BA-06 | TRUST-BA | IPLF-004B, IPLF-006C | 14 | 0 | implemented | passed | blocked | false |
-| TRUST-BA-07 | TRUST-BA | IPLF-004B, IPLF-006B, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-08 | TRUST-BA | IPLF-004B, IPLF-006C | 14 | 0 | implemented | passed | blocked | false |
-| TRUST-BA-09 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-10 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-11 | TRUST-BA | IPLF-004B, IPLF-006B, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-BA-12 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | passed | blocked | false |
-| TRUST-RSCH-01 | TRUST-RSCH | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B, IPLF-005B | 14 | 1 | implemented | passed | blocked | false |
-| TRUST-RSCH-02 | TRUST-RSCH | IPLF-003B, IPLF-003C, IPLF-004B, IPLF-005B | 14 | 1 | implemented | passed | blocked | false |
-| TRUST-RSCH-03 | TRUST-RSCH | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B, IPLF-005B | 14 | 1 | implemented | passed | blocked | false |
-| TRUST-RSCH-04 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-05 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-06 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-07 | TRUST-RSCH | IPLF-003A, IPLF-003C, IPLF-004B, IPLF-005A, IPLF-005B | 10 | 1 | implemented | passed | blocked | false |
-| TRUST-RSCH-08 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-09 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-10 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-11 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-12 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 9 | 0 | implemented | passed | blocked | false |
-| TRUST-RSCH-13 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005A, IPLF-005B | 10 | 1 | implemented | passed | blocked | false |
-| TRUST-RSCH-14 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005A, IPLF-005B | 10 | 1 | implemented | passed | blocked | false |
+| TRUST-BA-01 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-02 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-03 | TRUST-BA | IPLF-004B, IPLF-006B, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-04 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-05 | TRUST-BA | IPLF-004B, IPLF-006C | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-BA-06 | TRUST-BA | IPLF-004B, IPLF-006C | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-BA-07 | TRUST-BA | IPLF-004B, IPLF-006B, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-08 | TRUST-BA | IPLF-004B, IPLF-006C | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-BA-09 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-10 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-11 | TRUST-BA | IPLF-004B, IPLF-006B, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-BA-12 | TRUST-BA | IPLF-004B, IPLF-006A, IPLF-006C | 15 | 1 | implemented | not_run | blocked | false |
+| TRUST-RSCH-01 | TRUST-RSCH | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B, IPLF-005B | 14 | 1 | implemented | not_run | blocked | false |
+| TRUST-RSCH-02 | TRUST-RSCH | IPLF-003B, IPLF-003C, IPLF-004B, IPLF-005B | 14 | 1 | implemented | not_run | blocked | false |
+| TRUST-RSCH-03 | TRUST-RSCH | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B, IPLF-005B | 14 | 1 | implemented | not_run | blocked | false |
+| TRUST-RSCH-04 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-05 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-06 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-07 | TRUST-RSCH | IPLF-003A, IPLF-003C, IPLF-004B, IPLF-005A, IPLF-005B | 10 | 1 | implemented | not_run | blocked | false |
+| TRUST-RSCH-08 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-09 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-10 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-11 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-12 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005B | 18 | 0 | implemented | passed | blocked | false |
+| TRUST-RSCH-13 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005A, IPLF-005B | 10 | 1 | implemented | not_run | blocked | false |
+| TRUST-RSCH-14 | TRUST-RSCH | IPLF-003C, IPLF-004B, IPLF-005A, IPLF-005B | 10 | 1 | implemented | not_run | blocked | false |
 | SRC-01 | SRC | IPLF-004B, IPLF-054B, IPLF-056B | 15 | 0 | in_progress | not_run | blocked | false |
 | SRC-02 | SRC | IPLF-004B, IPLF-054B, IPLF-056B | 15 | 0 | in_progress | not_run | blocked | false |
 | SRC-03 | SRC | IPLF-004B, IPLF-054B, IPLF-056B | 15 | 0 | in_progress | not_run | blocked | false |
@@ -66,20 +66,20 @@ Generated; do not edit.
 | NOTIF-22 | NOTIF | IPLF-007A, IPLF-007C, IPLF-035B | 15 | 1 | in_progress | not_run | blocked | false |
 | NOTIF-23 | NOTIF | IPLF-007A, IPLF-007C, IPLF-035B | 15 | 1 | in_progress | not_run | blocked | false |
 | NOTIF-24 | NOTIF | IPLF-007B, IPLF-007C, IPLF-035B | 17 | 1 | in_progress | not_run | blocked | false |
-| TRACK-01 | TRACK | IPLF-001A, IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 19 | 2 | implemented | passed | deployment_verified | true |
-| TRACK-02 | TRACK | IPLF-001A, IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 19 | 2 | implemented | passed | deployment_verified | true |
-| TRACK-03 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-04 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-05 | TRACK | IPLF-001A, IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 19 | 2 | implemented | passed | deployment_verified | true |
-| TRACK-06 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-07 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-08 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-09 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-10 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-11 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-12 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-13 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 11 | 0 | implemented | passed | deployment_verified | false |
-| TRACK-14 | TRACK | IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 18 | 2 | implemented | passed | deployment_verified | true |
+| TRACK-01 | TRACK | IPLF-001A, IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 19 | 2 | implemented | not_run | blocked | false |
+| TRACK-02 | TRACK | IPLF-001A, IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 19 | 2 | implemented | not_run | blocked | false |
+| TRACK-03 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-04 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-05 | TRACK | IPLF-001A, IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 19 | 2 | implemented | not_run | blocked | false |
+| TRACK-06 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-07 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-08 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-09 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-10 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-11 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-12 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-13 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
+| TRACK-14 | TRACK | IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 18 | 2 | implemented | not_run | blocked | false |
 | IP-PORT-01 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
 | IP-PORT-02 | IP-PORT | IPLF-030A | 1 | 1 | implemented | passed | blocked | false |
 | IP-PORT-03 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |

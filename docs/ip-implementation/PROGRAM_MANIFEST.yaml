@@ -66,7 +66,7 @@
       "exit_criteria": "Exact deployed scheduler/job revision and IAM/config drift checks pass; bounded canaries prove every required job can be invoked by its configured scheduler identity; source-link E2E; UJ-48; no unverified statute presented; suppressed critical reminder produces visible fallback. Natural-run health remains monitored operational evidence but is not a release-duration blocker",
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "epic_ids": [
@@ -424,8 +424,8 @@
         "IPLF-001C"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
@@ -524,7 +524,7 @@
         "IPLF-003C"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [
@@ -644,7 +644,7 @@
         "IPLF-005B"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [
@@ -697,8 +697,8 @@
         "IPLF-006C"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
@@ -751,8 +751,8 @@
         "IPLF-007C"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
@@ -3280,7 +3280,7 @@
         }
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "not_required",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -3306,7 +3306,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation."
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written."
     },
     {
       "id": "IPLF-001B",
@@ -3399,8 +3399,8 @@
         }
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-001B",
@@ -3418,7 +3418,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -3808,8 +3808,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-003A",
@@ -3827,7 +3827,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -3890,8 +3890,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-003B",
@@ -3909,7 +3909,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -4310,8 +4310,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-005A",
@@ -4329,7 +4329,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -4507,8 +4507,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-006A",
@@ -4526,7 +4526,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -4591,8 +4591,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-006B",
@@ -4610,7 +4610,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -4795,8 +4795,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-007A",
@@ -4814,7 +4814,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -4873,8 +4873,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-007B",
@@ -4892,7 +4892,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -9695,8 +9695,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039A",
@@ -9714,7 +9714,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -9801,8 +9801,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039B",
@@ -9820,7 +9820,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -9917,8 +9917,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039C",
@@ -9936,7 +9936,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -10000,8 +10000,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039D",
@@ -10019,7 +10019,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -10073,8 +10073,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039E",
@@ -10092,7 +10092,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -10154,8 +10154,8 @@
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039F",
@@ -10173,7 +10173,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -15315,7 +15315,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15368,7 +15368,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15421,7 +15421,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15474,7 +15474,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15503,20 +15503,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-BA-05",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_statute_source_governance.py",
+        "apps/api/tests/test_statute_enrichment.py",
+        "apps/api/tests/test_litigation_strategy.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_drafting_studio.py",
+        "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.test.tsx",
+        "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -15549,20 +15553,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-BA-06",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_statute_source_governance.py",
+        "apps/api/tests/test_statute_enrichment.py",
+        "apps/api/tests/test_litigation_strategy.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_drafting_studio.py",
+        "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.test.tsx",
+        "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -15619,7 +15627,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15648,20 +15656,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-BA-08",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_statute_source_governance.py",
+        "apps/api/tests/test_statute_enrichment.py",
+        "apps/api/tests/test_litigation_strategy.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_drafting_studio.py",
+        "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.test.tsx",
+        "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -15718,7 +15730,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15771,7 +15783,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15824,7 +15836,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15877,7 +15889,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15930,7 +15942,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -15983,7 +15995,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -16037,7 +16049,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -16067,15 +16079,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-04",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16108,15 +16129,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-05",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16149,15 +16179,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-06",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16211,7 +16250,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -16241,15 +16280,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-08",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16282,15 +16330,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-09",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16323,15 +16380,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-10",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16364,15 +16430,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-11",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16405,15 +16480,24 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRUST-RSCH-12",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL"
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_prd_slices.py",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_matter_file_qa.py",
+        "apps/api/tests/test_litigation_intelligence_review.py",
+        "apps/api/tests/test_statutes_routes.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_courts_registry.py",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "apps/api/tests/test_authorities.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-005b-research-outcomes-2026-08-04.spec.ts",
+        "tests/e2e/research.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -16465,7 +16549,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -16513,7 +16597,7 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18382,8 +18466,8 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-001A",
@@ -18442,8 +18526,8 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-001A",
@@ -18472,17 +18556,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-03",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18515,17 +18601,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-04",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18588,8 +18676,8 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-001A",
@@ -18618,17 +18706,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-06",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18661,17 +18751,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-07",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18704,17 +18796,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-08",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18747,17 +18841,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-09",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18790,17 +18886,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-10",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18833,17 +18931,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-11",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18876,17 +18976,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-12",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18919,17 +19021,19 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-TRACK-13",
-        "planned:IPLF-UJ-25-EXC-01",
-        "planned:IPLF-UJ-25-EXC-02",
-        "planned:IPLF-UJ-25-EXC-03",
-        "planned:IPLF-UJ-25-NORMAL",
-        "planned:IPLF-UJ-68-EXC-01",
-        "planned:IPLF-UJ-68-EXC-02",
-        "planned:IPLF-UJ-68-EXC-03",
-        "planned:IPLF-UJ-68-EXC-04",
-        "planned:IPLF-UJ-68-EXC-05",
-        "planned:IPLF-UJ-68-NORMAL"
+        "apps/api/tests/test_scheduler_inventory.py",
+        "python scripts/scheduler_inventory.py validate",
+        "python scripts/scheduler_inventory.py audit --project perfect-period-305406 --region asia-south1 --image <exact-api-digest>",
+        "python scripts/ip_program_manifest.py validate",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_google_calendar_sync.py",
+        "apps/api/tests/test_gmail_sync.py",
+        "apps/api/tests/test_google_drive_sync.py",
+        "apps/web/app/app/case-tracking/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/ram-2026-08-02-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-02-prod.spec.ts",
+        "tests/e2e/ram-2026-08-05-prod.spec.ts"
       ],
       "evidence_refs": [],
       "blockers": [],
@@ -18990,8 +19094,8 @@
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-001B",
@@ -42466,11 +42570,11 @@
       ],
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-02-EXC-01",
-        "planned:IPLF-UJ-02-EXC-02",
-        "planned:IPLF-UJ-02-EXC-03",
-        "planned:IPLF-UJ-02-EXC-04",
-        "planned:IPLF-UJ-02-NORMAL"
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_normal_import_trademark_portfolio#IPLF-UJ-02-NORMAL",
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc01_expired_preview_requires_revalidation#IPLF-UJ-02-EXC-01",
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc02_individual_rows_can_fail_without_aborting_siblings#IPLF-UJ-02-EXC-02",
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc03_repeated_commit_returns_original_result#IPLF-UJ-02-EXC-03",
+        "apps/api/tests/test_ip_bulk_import.py::test_uj02_exc04_cross_tenant_reference_is_rejected_without_disclosure#IPLF-UJ-02-EXC-04"
       ],
       "evidence_refs": [],
       "implementation_status": "implemented",
@@ -42689,8 +42793,8 @@
         "IP-ID-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_normal_detect_and_resolve_duplicate#IPLF-UJ-05-NORMAL",
+        "apps/api/tests/test_ip_duplicate_reconciliation.py::test_uj05_exc01_conflicting_client_blocks_automatic_merge#IPLF-UJ-05-EXC-01"
       ],
       "evidence_refs": [],
       "implementation_status": "implemented",
@@ -43060,8 +43164,8 @@
         "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-007A",
@@ -43297,8 +43401,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -43353,7 +43457,7 @@
         "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -43451,7 +43555,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -45101,12 +45205,7 @@
         "apps/api/tests/test_portal_auth.py",
         "apps/api/tests/test_portal_outside_counsel.py",
         "apps/web/components/ip/IpAccessWorkspace.test.tsx",
-        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
-        "planned:IPLF-UJ-46-EXC-01",
-        "planned:IPLF-UJ-46-EXC-02",
-        "planned:IPLF-UJ-46-EXC-03",
-        "planned:IPLF-UJ-46-EXC-04",
-        "planned:IPLF-UJ-46-NORMAL"
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
@@ -45200,12 +45299,14 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL"
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_normal_propose_test_activate_retire#IPLF-UJ-47-NORMAL",
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov06_confirmed_calculation_stays_reproducible#IPLF-UJ-47-NORMAL",
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc01_proposer_cannot_self_approve#IPLF-UJ-47-EXC-01",
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc02_failed_fixture_blocks_activation#IPLF-UJ-47-EXC-02",
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc03_overlapping_effective_ranges_conflict#IPLF-UJ-47-EXC-03",
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc04_activation_preserves_confirmed_deadlines#IPLF-UJ-47-EXC-04",
+        "apps/api/tests/test_ip_rule_governance.py::test_uj47_exc05_emergency_disable_is_fail_closed#IPLF-UJ-47-EXC-05",
+        "apps/api/tests/test_ip_rule_governance.py::test_rulegov07_disable_alerts_record_owners#IPLF-UJ-47-EXC-05"
       ],
       "evidence_refs": [],
       "implementation_status": "implemented",
@@ -45275,8 +45376,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -49248,8 +49349,8 @@
         "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-007A",
@@ -49307,8 +49408,8 @@
         "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-007A",
@@ -49366,8 +49467,8 @@
         "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-007A",
@@ -50074,8 +50175,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -50129,8 +50230,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -50184,8 +50285,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -50235,7 +50336,7 @@
         "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50285,7 +50386,7 @@
         "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50334,7 +50435,7 @@
         "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50384,7 +50485,7 @@
         "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50473,7 +50574,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50565,7 +50666,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50657,7 +50758,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50749,7 +50850,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
+      "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -56702,10 +56803,9 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-NORMAL",
         "apps/web/components/ip/IpAccessWorkspace.test.tsx",
-        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
-        "planned:IPLF-UJ-46-NORMAL"
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
@@ -56772,9 +56872,8 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_access_workflow.py",
-        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
-        "planned:IPLF-UJ-46-EXC-01"
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-01",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
@@ -56841,9 +56940,8 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_access_workflow.py",
-        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
-        "planned:IPLF-UJ-46-EXC-02"
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-02",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
@@ -56910,9 +57008,8 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_access_workflow.py",
-        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
-        "planned:IPLF-UJ-46-EXC-03"
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-03",
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
@@ -56979,11 +57076,10 @@
         "SEC-GOV-16"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_ip_record_access_workflow.py#IPLF-UJ-46-EXC-04",
         "apps/api/tests/test_portal_auth.py",
         "apps/api/tests/test_portal_outside_counsel.py",
-        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts",
-        "planned:IPLF-UJ-46-EXC-04"
+        "tests/e2e/iplf-026b-access-workflow-2026-08-11.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md"
@@ -57574,8 +57670,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -57629,8 +57725,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -57684,8 +57780,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -57739,8 +57835,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -57794,8 +57890,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
@@ -57849,8 +57945,8 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "deployment_verified",
+      "verification_status": "not_run",
+      "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-006A",
