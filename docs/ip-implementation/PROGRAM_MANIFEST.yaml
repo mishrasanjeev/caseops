@@ -9992,22 +9992,37 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prd_slices.py",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py",
         "planned:IPLF-UJ-58-EXC-01",
-        "planned:IPLF-UJ-58-EXC-02",
         "planned:IPLF-UJ-58-EXC-03",
         "planned:IPLF-UJ-58-EXC-04",
-        "planned:IPLF-UJ-58-EXC-05",
-        "planned:IPLF-UJ-58-NORMAL"
+        "planned:IPLF-UJ-58-EXC-05"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "approvals": [],
-      "blockers": [],
-      "next_actions": [],
+      "blockers": [
+        {
+          "id": "IPLF-039D-UNIMPLEMENTED-PATHS",
+          "summary": "Four of the six UJ-58 paths this slice owns are not implemented. Incident status is an unconstrained string only ever set to open or verified, so a disproved suspicion cannot be recorded; no legal-hold check exists in the IP incident path; impact_json is unstructured so per-client/insurer/regulator notification decisions cannot be represented let alone differ; and no kill switch is reachable. The incident surface is two routes, create and verify.",
+          "owner": "Engineering with the product and legal owners for the incident contract",
+          "evidence_needed": "A constrained incident lifecycle including a disproved/closed-without-fault state, a legal-hold check before any incident evidence deletion, a structured per-recipient notification-decision record, and a kill-switch path for platform-wide defects, each with per-path tests.",
+          "safe_fallback": "Incidents remain record-only: no automated remedy, notification or deletion occurs today, which the abstention test pins.",
+          "milestone_impact": "Blocks IPLF-039D implementation and release closure and leaves IP-INC-01..08 open.",
+          "next_independent_slice": "Continue per-path evidence with IPLF-039F (UJ-52, 7 paths)."
+        }
+      ],
+      "next_actions": [
+        "Implement a constrained incident lifecycle with a disproved/closed-without-fault state (UJ-58-EXC-01).",
+        "Consult legal holds before any incident evidence deletion (UJ-58-EXC-03).",
+        "Model per-recipient notification decisions for client, insurer, regulator and court (UJ-58-EXC-04).",
+        "Provide a kill-switch path for platform-wide defects (UJ-58-EXC-05)."
+      ],
       "data_impact": [],
       "documentation_impact": [],
-      "implementation_status": "implemented",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -10067,21 +10082,24 @@
       "test_refs": [
         "apps/api/tests/test_ip_prd_slices.py",
         "apps/api/tests/test_ip_prd_slices.py::test_ip_remaining_operations_end_to_end",
-        "planned:IPLF-UJ-61-EXC-01",
-        "planned:IPLF-UJ-61-EXC-02",
-        "planned:IPLF-UJ-61-NORMAL",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts"
+        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
+        "apps/api/tests/test_ip_039e_chain_of_title.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039E/per-path-2026-08-15.md"
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [],
+      "next_actions": [
+        "Model recordal legal basis, form and affected registrations/classes as fields for IP-POST-02.",
+        "Add the registry recordal projection for IP-POST-03.",
+        "Re-verify on real PostgreSQL CI and restore release_status only with fresh deployment evidence."
+      ],
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
@@ -63801,10 +63819,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-58-NORMAL"
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_normal_flag_contain_and_verify_corrective_action#IPLF-UJ-58-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63913,7 +63932,8 @@
         "planned:IPLF-UJ-58-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -63923,7 +63943,7 @@
         "IPLF-039D",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is not implemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -64019,10 +64039,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-58-EXC-02"
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc02_caseops_abstains_from_automated_remedy_or_contact#IPLF-UJ-58-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64131,7 +64152,8 @@
         "planned:IPLF-UJ-58-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64141,7 +64163,7 @@
         "IPLF-039D",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is not implemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -64240,7 +64262,8 @@
         "planned:IPLF-UJ-58-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64250,7 +64273,7 @@
         "IPLF-039D",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is not implemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -64349,7 +64372,8 @@
         "planned:IPLF-UJ-58-EXC-05"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -64359,7 +64383,7 @@
         "IPLF-039D",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039.",
+      "allocation_rationale": "UJ-58 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. | 2026-08-15: verified by code inspection that this path is not implemented; the planned: reference is accurate because the feature does not exist yet.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -65127,10 +65151,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-61-NORMAL"
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_normal_reconcile_chain_of_title_and_family#IPLF-UJ-61-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039E/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -65237,10 +65262,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-61-EXC-01"
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_exc01_overlapping_and_unrecorded_interests_are_flagged#IPLF-UJ-61-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039E/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -65347,10 +65373,11 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-61-EXC-02"
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_exc02_family_association_never_updates_another_recordal#IPLF-UJ-61-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039E/per-path-2026-08-15.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
