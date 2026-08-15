@@ -1925,7 +1925,7 @@ function CoverageCard({ docket, enabled, onChanged }: { docket: IpDocket; enable
       reason,
       expectedVersions: Object.fromEntries(docket.deadline_coverages.filter((row) => row.responsible_membership_id === fromMembershipId || row.backup_membership_id === fromMembershipId).map((row) => [row.id, row.reassignment_version])),
     }),
-    onSuccess: async (result) => { toast.success(`${result.reassigned_count} deadline coverage assignment(s) transferred.`); setReason(""); await onChanged(); },
+    onSuccess: async (result) => { toast.success(result.pending_count ? `${result.pending_count} deadline coverage assignment(s) offered. Responsibility moves once the replacement accepts.` : `${result.reassigned_count} deadline coverage assignment(s) transferred.`); setReason(""); await onChanged(); },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not transfer deadline coverage.")),
   });
   return (
@@ -1943,7 +1943,7 @@ function CoverageCard({ docket, enabled, onChanged }: { docket: IpDocket; enable
             <Field label="Current membership ID"><Input value={fromMembershipId} onChange={(event) => setFromMembershipId(event.target.value)} /></Field>
             <Field label="Replacement membership ID"><Input value={toMembershipId} onChange={(event) => setToMembershipId(event.target.value)} /></Field>
             <Field label="Transfer reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
-            <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!fromMembershipId || !toMembershipId || reason.length < 5 || mutation.isPending}>Transfer covered deadlines</Button>
+            <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!fromMembershipId || !toMembershipId || reason.length < 5 || mutation.isPending}>Offer covered deadlines</Button>
           </form>
         ) : <p className="text-xs text-[var(--color-mute)]">No covered deadlines are attached to this docket.</p>}
       </CardContent>

@@ -933,6 +933,76 @@ def add_ip_deadline_coverage(
     return _serialize_docket(session, docket)
 
 
+def _resolve_escalation(
+    session: Session,
+    context: SessionContext,
+    *,
+    mode: str,
+    escalation_membership_id: str | None,
+) -> CompanyMembership | None:
+    """An immediate transfer must name where a rejection goes.
+
+    Immediate transfers exist because the outgoing person cannot be waited on.
+    If the replacement then declines, the work has nowhere to fall back to, so
+    the escalation owner is mandatory rather than optional.
+    """
+
+    if mode != "immediate":
+        return None
+    if escalation_membership_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_escalation_required",
+                "message": (
+                    "An immediate transfer must name an escalation owner, so declined "
+                    "work cannot be left without a responsible person."
+                ),
+            },
+        )
+    return _membership_or_404(session, context, escalation_membership_id)
+
+
+def _apply_coverage_transfer(
+    coverage: IpDeadlineCoverage,
+    *,
+    replacement: CompanyMembership,
+    mode: str,
+    escalation: CompanyMembership | None,
+    reason: str,
+    now: datetime,
+) -> bool:
+    """Move or propose responsibility for one coverage row (CAL-OPS-08).
+
+    Returns ``True`` when responsibility actually moved. This is the single
+    place either transfer path may touch responsibility, and it deliberately
+    never writes ``accepted_at``: an acceptance is a record that a named person
+    took on a filing date, and only ``decide_ip_coverage_replacement`` — which
+    runs on that person's own action — is entitled to write one.
+    """
+
+    coverage.pending_replacement_membership_id = replacement.id
+    coverage.replacement_decision = "pending"
+    coverage.replacement_decided_at = None
+    coverage.replacement_decision_reason = reason
+    coverage.reassignment_version += 1
+    coverage.updated_at = now
+
+    if mode == "immediate":
+        coverage.responsible_membership_id = replacement.id
+        if coverage.backup_membership_id == replacement.id:
+            coverage.backup_membership_id = None
+        coverage.emergency_escalation_membership_id = escalation.id if escalation else None
+        coverage.coverage_status = "reassigned"
+        # They hold the work now, so it belongs on their calendar now.
+        coverage.calendar_projection_status = "pending"
+        return True
+
+    # Proposed: the current owner keeps the work until the replacement accepts.
+    coverage.coverage_status = "transfer_pending"
+    return False
+
+
 def reassign_ip_deadline_coverage(
     session: Session,
     *,
@@ -971,25 +1041,37 @@ def reassign_ip_deadline_coverage(
             _assert_replacement_can_cover(
                 session, context=context, replacement=incoming, dockets=[docket]
             )
+    escalation = _resolve_escalation(
+        session,
+        context,
+        mode=payload.transfer_mode,
+        escalation_membership_id=payload.escalation_membership_id,
+    )
     old_responsible = coverage.responsible_membership_id
-    coverage.responsible_membership_id = payload.responsible_membership_id
+    # Naming a backup is an administrative assignment and applies at once; the
+    # backup is not accountable for the date until responsibility moves.
     coverage.backup_membership_id = payload.backup_membership_id
-    coverage.coverage_status = "reassigned"
-    coverage.calendar_projection_status = "pending"
-    coverage.accepted_at = _now()
-    coverage.reassignment_version += 1
-    coverage.updated_at = _now()
+    _apply_coverage_transfer(
+        coverage,
+        replacement=replacement,
+        mode=payload.transfer_mode,
+        escalation=escalation,
+        reason=payload.reason,
+        now=_now(),
+    )
     record_from_context(
         session,
         context,
-        action="ip_deadline_coverage.reassigned",
+        action=f"ip_deadline_coverage.transfer_{payload.transfer_mode}",
         target_type="ip_deadline_coverage",
         target_id=coverage.id,
         matter_id=docket.matter_id,
         ip_docket_id=docket.id,
         metadata={
             "old_responsible_membership_id": old_responsible,
-            "new_responsible_membership_id": payload.responsible_membership_id,
+            "new_responsible_membership_id": coverage.responsible_membership_id,
+            "proposed_responsible_membership_id": payload.responsible_membership_id,
+            "transfer_mode": payload.transfer_mode,
             "reason": payload.reason,
         },
     )
@@ -1083,9 +1165,16 @@ def bulk_reassign_ip_deadline_coverages(
     _assert_replacement_can_cover(
         session, context=context, replacement=replacement, dockets=affected_dockets
     )
+    escalation = _resolve_escalation(
+        session,
+        context,
+        mode=payload.transfer_mode,
+        escalation_membership_id=payload.escalation_membership_id,
+    )
 
     responsible_count = 0
     backup_count = 0
+    pending_count = 0
     now = _now()
     for row in rows:
         expected_version = payload.expected_versions.get(row.id)
@@ -1095,29 +1184,41 @@ def bulk_reassign_ip_deadline_coverages(
                 detail=f"Coverage {row.id} changed; reload before bulk reassignment.",
             )
         changed_roles: list[str] = []
-        if row.responsible_membership_id == source.id:
-            row.responsible_membership_id = replacement.id
-            responsible_count += 1
-            changed_roles.append("responsible")
         if row.backup_membership_id == source.id:
-            row.backup_membership_id = (
-                None if row.responsible_membership_id == replacement.id else replacement.id
-            )
+            # Backup naming is administrative and applies at once.
+            row.backup_membership_id = replacement.id
             backup_count += 1
             changed_roles.append("backup")
+        if row.responsible_membership_id == source.id:
+            _apply_coverage_transfer(
+                row,
+                replacement=replacement,
+                mode=payload.transfer_mode,
+                escalation=escalation,
+                reason=payload.reason,
+                now=now,
+            )
+            responsible_count += 1
+            pending_count += 1
+            changed_roles.append("responsible")
+        else:
+            row.updated_at = now
+            row.reassignment_version += 1
         if row.backup_membership_id == row.responsible_membership_id:
             row.backup_membership_id = None
-        row.coverage_status = "reassigned"
-        row.calendar_projection_status = "pending"
-        row.accepted_at = now
-        row.reassignment_version += 1
-        row.updated_at = now
-        connection = session.scalar(
-            select(UserCalendarConnection).where(
-                UserCalendarConnection.company_id == context.company.id,
-                UserCalendarConnection.membership_id == replacement.id,
-                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+        # Only project onto the replacement's calendar once the work is actually
+        # theirs. A proposal they have not accepted must not appear as their
+        # commitment.
+        connection = (
+            session.scalar(
+                select(UserCalendarConnection).where(
+                    UserCalendarConnection.company_id == context.company.id,
+                    UserCalendarConnection.membership_id == replacement.id,
+                    UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+                )
             )
+            if row.responsible_membership_id == replacement.id
+            else None
         )
         if connection is not None:
             existing_sync = session.scalar(
@@ -1141,7 +1242,7 @@ def bulk_reassign_ip_deadline_coverages(
         record_from_context(
             session,
             context,
-            action="ip_deadline_coverage.bulk_reassigned",
+            action=f"ip_deadline_coverage.bulk_transfer_{payload.transfer_mode}",
             target_type="ip_deadline_coverage",
             target_id=row.id,
             matter_id=docket.matter_id if docket else None,
@@ -1152,6 +1253,8 @@ def bulk_reassign_ip_deadline_coverages(
                 "roles": changed_roles,
                 "reason": payload.reason,
                 "reassignment_version": row.reassignment_version,
+                "transfer_mode": payload.transfer_mode,
+                "responsible_membership_id": row.responsible_membership_id,
             },
         )
     session.flush()
@@ -1162,6 +1265,8 @@ def bulk_reassign_ip_deadline_coverages(
         responsible_count=responsible_count,
         backup_count=backup_count,
         coverage_ids=[row.id for row in rows],
+        transfer_mode=payload.transfer_mode,
+        pending_count=pending_count,
     )
 
 
@@ -2275,8 +2380,32 @@ def decide_ip_coverage_replacement(
             row.backup_membership_id = None
         row.coverage_status = "accepted"
         row.accepted_at = now
+    elif row.responsible_membership_id == context.membership.id:
+        # UJ-57-EXC-03, immediate transfer: the work is already theirs, so a
+        # rejection cannot simply be declined in place, and it must not go back
+        # to a person who has left. It escalates to the named owner.
+        escalation_id = row.emergency_escalation_membership_id
+        if escalation_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_coverage_no_escalation_owner",
+                    "message": (
+                        "This transfer has no escalation owner, so declining it would "
+                        "leave the deadline unowned. Reassign it explicitly instead."
+                    ),
+                },
+            )
+        _membership_or_404(session, context, escalation_id)
+        row.responsible_membership_id = escalation_id
+        if row.backup_membership_id == escalation_id:
+            row.backup_membership_id = None
+        row.coverage_status = "escalated"
+        row.accepted_at = None
+        row.calendar_projection_status = "pending"
     else:
         # UJ-57-EXC-03: a rejection returns the work, it never leaves it unowned.
+        # In proposed mode the original owner never stopped holding it.
         row.coverage_status = "accepted" if row.accepted_at else "pending"
     row.replacement_decision = payload.decision
     row.replacement_decided_at = now

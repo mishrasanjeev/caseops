@@ -1512,6 +1512,12 @@ def _reassign_offboarding_objects(
             from_membership_id=target_id,
             to_membership_id=replacement_id,
             reason="Employee offboarding coverage transfer",
+            # The departing person cannot be waited on, so responsibility moves
+            # now. It is still recorded as awaiting the replacement's
+            # acknowledgement rather than as an acceptance they never gave, and
+            # the admin running the offboarding is who a decline escalates to.
+            transfer_mode="immediate",
+            escalation_membership_id=context.membership.id,
         ),
         commit=False,
     )

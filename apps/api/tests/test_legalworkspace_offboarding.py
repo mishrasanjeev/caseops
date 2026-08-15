@@ -406,6 +406,16 @@ def test_offboarding_preview_commit_reassigns_supported_objects_and_revokes_sess
         assert ip_coverage is not None
         assert ip_coverage.responsible_membership_id == replacement_id
         assert ip_coverage.reassignment_version == 2
+        # IPLF-UJ-57-RECON-04 (2026-08-15): offboarding transfers immediately
+        # because the departing person cannot be waited on, but it must not
+        # record an acceptance the replacement never gave, and a decline needs
+        # somewhere to go. Coverage was seeded `accepted` by the leaver, so the
+        # test is that the transfer did not re-stamp acceptance onto the new
+        # owner and left the acknowledgement outstanding.
+        assert ip_coverage.replacement_decision == "pending"
+        assert ip_coverage.pending_replacement_membership_id == replacement_id
+        assert ip_coverage.emergency_escalation_membership_id is not None
+        assert ip_coverage.coverage_status == "reassigned"
         assert reminder is not None and reminder.recipient_membership_id == replacement_id
         assert draft is not None and draft.created_by_membership_id == target_id
 

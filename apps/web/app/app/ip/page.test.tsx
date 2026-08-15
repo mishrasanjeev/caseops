@@ -459,7 +459,9 @@ describe("IpDocketPage", () => {
     expect(await screen.findByRole("button", { name: "Discover Matter evidence" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Accept and link" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reject" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Transfer covered deadlines" })).toBeVisible();
+    // 2026-08-15: a routine transfer is a proposal, so the control offers the
+    // work rather than claiming it moved.
+    expect(screen.getByRole("button", { name: "Offer covered deadlines" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Add recordal obligation" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reconcile with Matter billing" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Preview prosecution event" })).toBeVisible();

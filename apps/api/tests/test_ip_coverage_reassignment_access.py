@@ -69,14 +69,14 @@ def _setup(client: TestClient):
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     owner_id = str(bootstrap["membership"]["id"])
-    insider_id, _t1 = _member(
+    insider_id, insider_token = _member(
         client, owner_token, name="Coverage Insider", email="cov-insider@asterlegal.in"
     )
     outsider_id, _t2 = _member(
         client, owner_token, name="Coverage Outsider", email="cov-outsider@asterlegal.in"
     )
     matter = _mk_matter(client, owner_token, "IP-COV-UJ57")
-    return owner_headers, owner_id, insider_id, outsider_id, matter
+    return owner_headers, owner_id, insider_id, outsider_id, matter, auth_headers(insider_token)
 
 
 def test_uj57_exc01_single_reassignment_refuses_a_replacement_without_access(
@@ -84,7 +84,9 @@ def test_uj57_exc01_single_reassignment_refuses_a_replacement_without_access(
 ) -> None:
     """IPLF-UJ-57-EXC-01 — a replacement who cannot open the record is refused."""
 
-    owner_headers, owner_id, insider_id, outsider_id, matter = _setup(client)
+    owner_headers, owner_id, insider_id, outsider_id, matter, _insider_headers = _setup(
+        client
+    )
     restricted = _docket(
         client,
         owner_headers,
@@ -126,7 +128,9 @@ def test_uj57_exc01_a_backup_without_access_is_refused_too(
 ) -> None:
     """The backup owner is checked, not just the primary."""
 
-    owner_headers, owner_id, insider_id, outsider_id, matter = _setup(client)
+    owner_headers, owner_id, insider_id, outsider_id, matter, _insider_headers = _setup(
+        client
+    )
     restricted = _docket(
         client,
         owner_headers,
@@ -158,7 +162,9 @@ def test_uj57_exc02_ethical_wall_blocks_bulk_transfer_in_full(
 ) -> None:
     """IPLF-UJ-57-EXC-02 — a walled record refuses the whole batch, not part."""
 
-    owner_headers, owner_id, insider_id, outsider_id, matter = _setup(client)
+    owner_headers, owner_id, insider_id, outsider_id, matter, _insider_headers = _setup(
+        client
+    )
     open_docket = _docket(client, owner_headers, matter_id=matter["id"], title="Open Coverage Mark")
     restricted = _docket(
         client,
@@ -208,7 +214,9 @@ def test_uj57_bulk_transfer_succeeds_when_the_replacement_has_access(
 ) -> None:
     """The guard must not block legitimate leave cover."""
 
-    owner_headers, owner_id, insider_id, _outsider_id, matter = _setup(client)
+    owner_headers, owner_id, insider_id, _outsider_id, matter, insider_headers = _setup(
+        client
+    )
     first = _docket(client, owner_headers, matter_id=matter["id"], title="Cover One Mark")
     second = _docket(client, owner_headers, matter_id=matter["id"], title="Cover Two Mark")
     _coverage(client, owner_headers, first["id"], matter_id=matter["id"], responsible=owner_id)
@@ -224,10 +232,35 @@ def test_uj57_bulk_transfer_succeeds_when_the_replacement_has_access(
         },
     )
     assert moved.status_code == 200, moved.text
-    assert moved.json()["responsible_count"] == 2
+    body = moved.json()
+    assert body["responsible_count"] == 2
+    # 2026-08-15 reconciliation: a routine bulk transfer is now a proposal, so
+    # the guard is proven by the transfer being *offered*, not by responsibility
+    # silently landing on someone who never agreed to it. This assertion
+    # previously expected the immediate move.
+    assert body["transfer_mode"] == "proposed"
+    assert body["pending_count"] == 2
 
     for docket in (first, second):
         row = client.get(f"/api/ip/dockets/{docket['id']}", headers=owner_headers).json()[
             "deadline_coverages"
         ][0]
+        assert row["responsible_membership_id"] == owner_id
+        assert row["coverage_status"] == "transfer_pending"
+
+    # The move completes only when the named replacement accepts it.
+    for docket in (first, second):
+        coverage_id = client.get(f"/api/ip/dockets/{docket['id']}", headers=owner_headers).json()[
+            "deadline_coverages"
+        ][0]["id"]
+        decided = client.post(
+            f"/api/ip/deadline-coverages/{coverage_id}/replacement-decision",
+            headers=insider_headers,
+            json={"decision": "accepted", "reason": "Taking the leave cover."},
+        )
+        assert decided.status_code == 200, decided.text
+        row = client.get(f"/api/ip/dockets/{docket['id']}", headers=owner_headers).json()[
+            "deadline_coverages"
+        ][0]
         assert row["responsible_membership_id"] == insider_id
+        assert row["coverage_status"] == "accepted"

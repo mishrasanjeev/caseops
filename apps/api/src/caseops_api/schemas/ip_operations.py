@@ -173,6 +173,11 @@ class IpDeadlineCoverageReassignRequest(BaseModel):
     responsible_membership_id: str
     backup_membership_id: str | None = None
     reason: str = Field(min_length=5, max_length=500)
+    # Same reconciliation as the bulk path: responsibility for a filing date is
+    # taken, not assigned. Backup naming stays immediate — a backup is not the
+    # accountable party until responsibility actually moves to them.
+    transfer_mode: Literal["proposed", "immediate"] = "proposed"
+    escalation_membership_id: str | None = None
 
 
 class IpDeadlineCoverageRecord(BaseModel):
@@ -201,6 +206,12 @@ class IpCoverageBulkReassignRequest(BaseModel):
     to_membership_id: str
     reason: str = Field(min_length=5, max_length=500)
     expected_versions: dict[str, int] = Field(default_factory=dict)
+    # CAL-OPS-08 requires an *accepted* replacement, so a routine transfer is a
+    # proposal. `immediate` exists only for departure and emergency, where the
+    # outgoing person cannot be waited on; it still requires acknowledgement and
+    # an escalation owner, and it never records an acceptance nobody gave.
+    transfer_mode: Literal["proposed", "immediate"] = "proposed"
+    escalation_membership_id: str | None = None
 
 
 class IpCoverageBulkReassignResponse(BaseModel):
@@ -208,6 +219,10 @@ class IpCoverageBulkReassignResponse(BaseModel):
     responsible_count: int
     backup_count: int
     coverage_ids: list[str]
+    transfer_mode: Literal["proposed", "immediate"] = "proposed"
+    # Rows awaiting the replacement's decision. In `proposed` mode responsibility
+    # has not moved for these; in `immediate` mode it has, pending acknowledgement.
+    pending_count: int = 0
 
 
 class IpDeadlineIncidentCreateRequest(BaseModel):

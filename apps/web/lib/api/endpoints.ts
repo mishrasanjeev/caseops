@@ -9518,11 +9518,18 @@ export async function bulkReassignIpCoverage(input: {
   toMembershipId: string;
   reason: string;
   expectedVersions: Record<string, number>;
+  // Defaults to "proposed": responsibility moves only once the replacement
+  // accepts. "immediate" is for departure and emergency and requires an
+  // escalation owner.
+  transferMode?: "proposed" | "immediate";
+  escalationMembershipId?: string;
 }): Promise<{
   reassigned_count: number;
   responsible_count: number;
   backup_count: number;
   coverage_ids: string[];
+  transfer_mode: "proposed" | "immediate";
+  pending_count: number;
 }> {
   return apiRequest("/api/ip/deadline-coverages/bulk-reassign", {
     method: "POST",
@@ -9531,6 +9538,10 @@ export async function bulkReassignIpCoverage(input: {
       to_membership_id: input.toMembershipId,
       reason: input.reason,
       expected_versions: input.expectedVersions,
+      ...(input.transferMode ? { transfer_mode: input.transferMode } : {}),
+      ...(input.escalationMembershipId
+        ? { escalation_membership_id: input.escalationMembershipId }
+        : {}),
     },
   });
 }
