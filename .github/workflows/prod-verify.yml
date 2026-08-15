@@ -26,7 +26,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 */6 * * *"  # every 6 hours
+    - cron: "0 */6 * * *" # every 6 hours
   workflow_dispatch:
     inputs:
       expected_release_sha:
@@ -113,6 +113,10 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
+      - name: Mark prod-Playwright prerequisites ready
+        id: prod-playwright-prerequisites
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
       - name: Run prod-Playwright suite (ram-batch)
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
@@ -129,19 +133,29 @@ jobs:
           CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_IP_QA_EMAIL: ${{ vars.CASEOPS_IP_QA_EMAIL }}
-          CASEOPS_IP_QA_SLUG: ${{ vars.CASEOPS_IP_QA_SLUG }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
+
+      - name: Run IPLF-027B A0 quiescence acceptance
+        # Keep this gate visible even when an independent RAM provider/quota
+        # assertion fails. This step is verify-only: fixture preparation is a
+        # separately invoked, pre-T_ROUTE operation pinned to the predecessor.
+        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        timeout-minutes: 5
+        env:
+          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_IP_A0_PROD_MODE: verify
+        run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list
 
       - name: Run prod-Playwright suite (notice module)
         # The RAM batch is intentionally broad and can expose an independent
         # provider or quota incident.  The Notice suite is still a required
         # production signal, so run it after a RAM failure and retain both
         # outcomes in the same fail-closed workflow result.
-        if: always()
+        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}

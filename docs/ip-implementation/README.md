@@ -41,10 +41,13 @@ evidence, or human approval allocated to later slices.
 Definition-of-Ready gate. It snapshots every current SQLAlchemy table and
 column, relational-index fingerprints, and the known object, cache, vector,
 queue/outbox/dead-letter, telemetry, export, provider-held, and backup classes.
-Its `registry_fail_closed` handler only blocks unregistered changes in CI: it
-does not activate retention, holds, export, purge, offboarding, restore,
-provider deletion, or backup recovery. The Records/Privacy/Legal/Security
-policy approval remains an explicit blocker.
+Validation embeds a deterministic canonical-map SHA-256 and compares the
+checked-in Markdown projection as exact LF-terminated UTF-8 bytes, so every
+semantic map update without `render` fails CI. Its
+`registry_fail_closed` handler only blocks unregistered changes in CI: it does
+not activate retention, holds, export, purge, offboarding, restore, provider
+deletion, or backup recovery. The Records/Privacy/Legal/Security policy
+approval remains an explicit blocker.
 `ip_m2_ownership_audit.py` is the IPLF-029A M2 reconciliation control. It
 requires every active M2 slice to retain a canonical-writer contract, checked-in
 test references, evidence artifact, and (when blocked) a named blocker. Its

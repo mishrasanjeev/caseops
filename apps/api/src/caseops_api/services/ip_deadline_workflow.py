@@ -12,10 +12,11 @@ from datetime import UTC, date, datetime, time, timedelta
 from hashlib import sha256
 from zoneinfo import ZoneInfo
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CompanyIpRulePolicy,
     CompanyMembership,
@@ -86,6 +87,31 @@ from caseops_api.services.session_context import SessionContext
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _assert_rule_governance_mutation_enabled() -> None:
+    """Quiesce rule-governance ownership before authoritative state access.
+
+    IPLF-027 A0 uses the existing default-off rollout control as a deployment
+    drain fence.  Keeping this guard inside the canonical service (and as the
+    first executable statement of each writer) also protects non-HTTP callers.
+    Existing deadline operations and read-only impact/workspace/readiness paths
+    deliberately remain available while governance ownership is quiesced.
+    """
+
+    if not get_settings().ip_rule_governance_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ip_rule_governance_quiesced",
+                "reason": "rollout_disabled",
+                "rollout_flag": "ip_rule_governance_enabled",
+                "detail": (
+                    "IP rule-governance mutations are temporarily unavailable "
+                    "during the controlled ownership rollout drain."
+                ),
+            },
+        )
 
 
 def _actor_label(context: SessionContext) -> str:
@@ -251,6 +277,7 @@ def propose_rule_version(
     context: SessionContext,
     payload: IpRuleVersionProposalRequest,
 ) -> IpRuleVersionRecord:
+    _assert_rule_governance_mutation_enabled()
     key = payload.key.strip().lower()
     rule_set = session.scalar(select(IpRuleSet).where(IpRuleSet.key == key).with_for_update())
     if rule_set is None:
@@ -463,6 +490,7 @@ def activate_rule_version(
     rule_version_id: str,
     payload: IpRuleActivationRequest,
 ) -> IpRuleVersionRecord:
+    _assert_rule_governance_mutation_enabled()
     row = session.scalar(
         select(IpRuleVersion).where(IpRuleVersion.id == rule_version_id).with_for_update()
     )
@@ -578,6 +606,7 @@ def transition_rule_version(
     rule_version_id: str,
     payload: IpRuleTransitionRequest,
 ) -> IpRuleVersionRecord:
+    _assert_rule_governance_mutation_enabled()
     row = session.scalar(
         select(IpRuleVersion).where(IpRuleVersion.id == rule_version_id).with_for_update()
     )

@@ -91,3 +91,41 @@ def test_drafting_gets_its_larger_max_tokens_ceiling(
     assert max_tokens_for_purpose(PURPOSE_HEARING_PACK) == 4096
     assert max_tokens_for_purpose(PURPOSE_RECOMMENDATIONS) == 2048
     assert max_tokens_for_purpose(None) == 2048
+
+
+def test_openai_metadata_extraction_disables_sdk_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quota exhaustion must reach the corpus driver's stop signal once."""
+    captured_retries: list[tuple[str, int]] = []
+
+    class _FakeOpenAIProvider:
+        name = "openai"
+
+        def __init__(
+            self,
+            *,
+            model: str,
+            api_key: str,
+            timeout_seconds: float,
+            max_retries: int,
+        ) -> None:
+            assert api_key == "sk-test"
+            assert timeout_seconds > 0
+            self.model = model
+            captured_retries.append((model, max_retries))
+
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "gpt-5-mini")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_RECOMMENDATIONS", "gpt-5.1")
+    monkeypatch.setattr(
+        "caseops_api.services.llm.OpenAIProvider",
+        _FakeOpenAIProvider,
+    )
+    _clear_cache()
+
+    build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    build_provider(purpose=PURPOSE_RECOMMENDATIONS)
+
+    assert captured_retries == [("gpt-5-mini", 0), ("gpt-5.1", 1)]

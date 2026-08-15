@@ -667,7 +667,8 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             "kind": "provider_held_object",
             "purpose": (
                 "Configured or optional LLM, embedding, and prompt-cache provider request/response "
-                "content and derived vectors."
+                "content and derived vectors, including bounded authority-metadata extraction "
+                "and its one-document provider canary."
             ),
             "sensitivity": "privileged_or_confidential",
             "source_licence_limits": (
@@ -676,6 +677,7 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             ),
             "implementation_refs": [
                 "apps/api/src/caseops_api/services/llm.py",
+                "apps/api/src/caseops_api/scripts/extract_authority_metadata.py",
                 "apps/api/src/caseops_api/services/embeddings.py",
                 "apps/api/src/caseops_api/core/settings.py",
             ],
@@ -727,7 +729,7 @@ def _skeleton() -> dict[str, Any]:
         "status": MAP_STATUS,
         "policy_status": "pending_named_human_approval",
         "purpose": (
-            "Versioned repository inventory for DATA-GOV-01 through DATA-GOV-03. It "
+            "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It "
             "snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered "
             "data-bearing changes fail Definition of Ready."
         ),
@@ -737,7 +739,7 @@ def _skeleton() -> dict[str, Any]:
             "residency, or data-governance/recovery milestone completion. The only current "
             "disposition behavior is fail-closed Definition-of-Ready validation."
         ),
-        "requirement_refs": ["DATA-GOV-01", "DATA-GOV-02", "DATA-GOV-03"],
+        "requirement_refs": ["DATA-GOV-01", "DATA-GOV-03"],
         "disposition_handlers": [
             {
                 "id": DEFAULT_HANDLER_ID,
@@ -867,7 +869,10 @@ def _required_string(value: object) -> bool:
 
 
 def _relative(path: Path) -> str:
-    return path.relative_to(REPO_ROOT).as_posix()
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _validate_ref(ref: object) -> bool:
@@ -885,6 +890,7 @@ def validate(
     sql_schema: dict[str, dict[str, dict[str, object]]] | None = None,
     orm_indexes: list[dict[str, object]] | None = None,
     migration_indexes: list[str] | None = None,
+    check_generated_view: bool = True,
 ) -> list[str]:
     """Return all map integrity errors without mutating the registry."""
 
@@ -906,8 +912,8 @@ def validate(
         if term not in completion_boundary:
             errors.append("data-governance map must state its explicit incomplete boundary")
             break
-    if data.get("requirement_refs") != ["DATA-GOV-01", "DATA-GOV-02", "DATA-GOV-03"]:
-        errors.append("data-governance map must retain the DATA-GOV-01..03 scope")
+    if data.get("requirement_refs") != ["DATA-GOV-01", "DATA-GOV-03"]:
+        errors.append("data-governance map must retain the DATA-GOV-01 and DATA-GOV-03 scope")
 
     profiles = data.get("policy_profiles")
     if not isinstance(profiles, Mapping) or not profiles:
@@ -1127,17 +1133,24 @@ def validate(
     missing_kinds = sorted(REQUIRED_NON_SQL_KINDS - kinds)
     if missing_kinds:
         errors.append(f"non-SQL data classes missing required kinds: {missing_kinds}")
+    if check_generated_view and not errors:
+        expected = _render_markdown(data).encode("utf-8")
+        if not GENERATED_VIEW_PATH.is_file():
+            errors.append(
+                "missing generated data-governance map "
+                f"{_relative(GENERATED_VIEW_PATH)}"
+            )
+        elif GENERATED_VIEW_PATH.read_bytes() != expected:
+            errors.append(
+                "stale or independently edited generated data-governance map "
+                f"{_relative(GENERATED_VIEW_PATH)}; run `render`"
+            )
     return errors
 
 
-def render(data: dict[str, Any] | None = None) -> Path:
-    """Render a compact human view; the machine-readable map remains canonical."""
+def _render_markdown(data: Mapping[str, Any]) -> str:
+    """Build the checked-in human projection without mutating the repository."""
 
-    if data is None:
-        data = _load(MAP_PATH)
-    errors = validate(data)
-    if errors:
-        raise ValueError("cannot render invalid data-governance map: " + "; ".join(errors))
     rows = data["sql_tables"]
     non_sql = data["non_sql_data_classes"]
     index_inventory = data["index_inventory"]
@@ -1150,6 +1163,7 @@ def render(data: dict[str, Any] | None = None) -> Path:
         "",
         f"- Status: `{data['status']}`",
         f"- Policy approval: `{data['policy_status']}`",
+        f"- Canonical map SHA-256: `{_fingerprint(data)}`",
         f"- SQL tables: `{len(rows)}`",
         f"- SQL columns: `{sum(len(row['columns']) for row in rows)}`",
         f"- ORM indexes: `{index_inventory['orm_index_count']}`",
@@ -1195,8 +1209,19 @@ def render(data: dict[str, Any] | None = None) -> Path:
             "",
         ]
     )
+    return "\n".join(lines)
+
+
+def render(data: dict[str, Any] | None = None) -> Path:
+    """Render a compact human view; the machine-readable map remains canonical."""
+
+    if data is None:
+        data = _load(MAP_PATH)
+    errors = validate(data, check_generated_view=False)
+    if errors:
+        raise ValueError("cannot render invalid data-governance map: " + "; ".join(errors))
     GENERATED_VIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
-    GENERATED_VIEW_PATH.write_text("\n".join(lines), encoding="utf-8")
+    GENERATED_VIEW_PATH.write_bytes(_render_markdown(data).encode("utf-8"))
     return GENERATED_VIEW_PATH
 
 

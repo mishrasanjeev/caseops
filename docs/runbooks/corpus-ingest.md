@@ -16,12 +16,12 @@ authority corpus. Tracks Sprint G in
   ingestion temporarily touches a few tens of GB even with streaming.
 - Embedding backend configured:
 
-  | Provider | `CASEOPS_EMBEDDING_PROVIDER` | Notes |
-  | --- | --- | --- |
-  | Mock (offline, default) | `mock` | Deterministic; CI-safe; wrong for production retrieval. |
-  | fastembed (BGE-small) | `fastembed` | `uv sync --extra embeddings`; first run downloads ~250 MB. Dev/offline fallback, not the production default. |
-  | Voyage (voyage-4-large) | `voyage` | `CASEOPS_EMBEDDING_API_KEY=…` required. Current production standard on GCP. |
-  | Gemini (text-embedding-005) | `gemini` | `CASEOPS_EMBEDDING_API_KEY=…`. General-purpose alternative, not the current production default. |
+  | Provider                    | `CASEOPS_EMBEDDING_PROVIDER` | Notes                                                                                                        |
+  | --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+  | Mock (offline, default)     | `mock`                       | Deterministic; CI-safe; wrong for production retrieval.                                                      |
+  | fastembed (BGE-small)       | `fastembed`                  | `uv sync --extra embeddings`; first run downloads ~250 MB. Dev/offline fallback, not the production default. |
+  | Voyage (voyage-4-large)     | `voyage`                     | `CASEOPS_EMBEDDING_API_KEY=…` required. Current production standard on GCP.                                  |
+  | Gemini (text-embedding-005) | `gemini`                     | `CASEOPS_EMBEDDING_API_KEY=…`. General-purpose alternative, not the current production default.              |
 
   All four providers write into the same `vector(1024)` column — a
   switch between them is a re-embedding, not a re-ingestion.
@@ -51,15 +51,15 @@ uv run caseops-ingest-corpus --court hc --years 2015-2024 --from-s3 \
 
 Useful flags:
 
-| Flag | Default | Purpose |
-| --- | --- | --- |
-| `--limit N` | off | Cap per year; good for smoke tests. |
-| `--batch-size N` | from settings | How many PDFs per streaming batch (HC) or chunk size per iteration. |
-| `--max-workdir-mb N` | 500 | Soft cap on disk used by the streaming temp dir. |
-| `--keep` | off | Don't delete PDFs after ingesting (useful for forensics). |
-| `--temp-root PATH` | `tempfile.gettempdir()` | Override the workdir root (e.g. point at a fast SSD). |
-| `--hc-courts names` | — | Comma list — only ingest these HCs. See `HC_COURT_CATALOG` for valid names. |
-| `-v` | — | Progress-per-scope to stdout. |
+| Flag                 | Default                 | Purpose                                                                     |
+| -------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `--limit N`          | off                     | Cap per year; good for smoke tests.                                         |
+| `--batch-size N`     | from settings           | How many PDFs per streaming batch (HC) or chunk size per iteration.         |
+| `--max-workdir-mb N` | 500                     | Soft cap on disk used by the streaming temp dir.                            |
+| `--keep`             | off                     | Don't delete PDFs after ingesting (useful for forensics).                   |
+| `--temp-root PATH`   | `tempfile.gettempdir()` | Override the workdir root (e.g. point at a fast SSD).                       |
+| `--hc-courts names`  | —                       | Comma list — only ingest these HCs. See `HC_COURT_CATALOG` for valid names. |
+| `-v`                 | —                       | Progress-per-scope to stdout.                                               |
 
 ## 2. Re-embed — model swap without re-ingesting
 
@@ -80,6 +80,58 @@ uv run caseops-ingest-corpus --reembed -v
 - `--batch-size N` (default 64) controls chunks per provider call.
 - Keyset-paginated by chunk id, so commits inside the loop don't
   cause rows to be skipped.
+
+### 2.1 Authority-metadata extraction safety
+
+The scheduled metadata extractor treats provider credit exhaustion as a
+process-wide stop, not as 800,000 independent document errors. It keeps at
+most `--concurrency` calls in flight, records the failed provider call, drains
+only that bounded window, and exits non-zero:
+
+| Exit code | Meaning                       | Operator action                                                                            |
+| --------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `0`       | Requested sweep completed     | Review counters and normal evidence.                                                       |
+| `2`       | Daily spend cap reached       | Review the cap and spend before another run.                                               |
+| `3`       | Provider credits exhausted    | Keep the schedule paused; restore credits and run the canary below.                        |
+| `4`       | Provider canary failed closed | Keep the schedule paused; no eligible row or no successful provider completion was proved. |
+
+On 2026-08-14, execution `caseops-extract-authority-metadata-wv2b7` was
+cancelled after repeatedly receiving OpenAI `credit_balance_exhausted` while
+walking an 803,139-document backlog. The daily scheduler was paused. Do not
+resume it merely because a new image was deployed: first prove the configured
+secret and provider account with one document on the current job image.
+The checked-in scheduler inventory intentionally declares this scheduler
+`PAUSED`; standard deployment must preserve that state until the reviewed
+restart change described below.
+
+```bash
+gcloud run jobs execute caseops-extract-authority-metadata \
+  --region=asia-south1 \
+  --project=perfect-period-305406 \
+  --args="-m,caseops_api.scripts.extract_authority_metadata,--provider-canary" \
+  --wait
+```
+
+`--provider-canary` ignores broader limit/concurrency/force options, selects
+one metadata-missing document with at least 200 text characters, and forces
+`--limit=1 --concurrency=1`. The canary passes only when all of these are true:
+
+- the Cloud Run execution exits `0`;
+- the final log reports `processed=1`, `submitted=1`, `llm_err=0`, and
+  `parse_err=0`; and
+- a new `metadata_extract` `ModelRun` has `status=ok` for the configured live
+  provider/model.
+
+A successful one-document canary does **not** authorize an untracked direct
+resume. In a reviewed canonical change, flip only the authority job's
+`desired_state` in `infra/cloudrun/scheduler-inventory.json` from `PAUSED` to
+`ENABLED`, then deploy/reconcile that exact revision. The reconciler performs
+the resume and verifies state plus the canonical 43,200-second task timeout.
+An emergency direct `gcloud scheduler jobs resume` is temporary drift and must
+be followed immediately by the same reviewed inventory change and reconcile.
+
+If the canary reports exit code `2`, `3`, or `4`, leave the scheduler paused.
+Never launch the full backlog as a provider-health probe.
 
 ## 3. Verification
 
@@ -115,9 +167,9 @@ below when a run completes.
 
 ### Bench runs
 
-| Date | Provider + model | Corpus size | Recall@10 | p95 latency | Notes |
-| --- | --- | --- | --- | --- | --- |
-| _(none recorded yet — add one after first `--reembed`)_ | | | | | |
+| Date                                                    | Provider + model | Corpus size | Recall@10 | p95 latency | Notes |
+| ------------------------------------------------------- | ---------------- | ----------- | --------- | ----------- | ----- |
+| _(none recorded yet — add one after first `--reembed`)_ |                  |             |           |             |       |
 
 ## 5. Known footguns
 

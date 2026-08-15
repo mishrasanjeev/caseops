@@ -50,6 +50,63 @@ def test_map_rejects_missing_policy_and_runtime_overclaim() -> None:
     assert any("must not overclaim runtime policy approval" in error for error in errors)
 
 
+def test_map_rejects_stale_view_after_non_projected_semantic_change(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data = _map()
+    target = tmp_path / "DATA_GOVERNANCE_MAP.md"
+    target.write_bytes(ip_data_governance_map._render_markdown(data).encode("utf-8"))
+    monkeypatch.setattr(ip_data_governance_map, "GENERATED_VIEW_PATH", target)
+    data["non_sql_data_classes"][0]["purpose"] += " Reviewed semantic change."
+
+    errors = ip_data_governance_map.validate(data)
+
+    assert any(
+        "stale or independently edited generated data-governance map" in error
+        for error in errors
+    )
+
+
+def test_map_rejects_a_missing_generated_view(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "DATA_GOVERNANCE_MAP.md"
+    monkeypatch.setattr(ip_data_governance_map, "GENERATED_VIEW_PATH", target)
+
+    errors = ip_data_governance_map.validate(_map())
+
+    assert any("missing generated data-governance map" in error for error in errors)
+
+
+def test_map_rejects_crlf_bytes_for_the_lf_projection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    target = tmp_path / "DATA_GOVERNANCE_MAP.md"
+    expected = ip_data_governance_map._render_markdown(_map()).encode("utf-8")
+    target.write_bytes(expected.replace(b"\n", b"\r\n"))
+    monkeypatch.setattr(ip_data_governance_map, "GENERATED_VIEW_PATH", target)
+
+    errors = ip_data_governance_map.validate(_map())
+
+    assert any(
+        "stale or independently edited generated data-governance map" in error
+        for error in errors
+    )
+
+
+def test_render_repairs_a_stale_view_without_recursive_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data = _map()
+    target = tmp_path / "DATA_GOVERNANCE_MAP.md"
+    target.write_bytes(b"stale\n")
+    monkeypatch.setattr(ip_data_governance_map, "GENERATED_VIEW_PATH", target)
+
+    assert ip_data_governance_map.render(data) == target
+    assert target.read_bytes() == ip_data_governance_map._render_markdown(data).encode(
+        "utf-8"
+    )
+    assert ip_data_governance_map.validate(data) == []
+
+
 def test_change_gate_requires_map_update_and_migration_marker() -> None:
     migration = "apps/api/alembic/versions/20260814_0001_new_data.py"
     errors = ip_data_governance_map.change_gate_errors(

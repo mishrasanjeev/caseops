@@ -49,7 +49,9 @@ def test_quota_error_is_subclass_of_provider_error() -> None:
     [
         _StatusErr(402, "Payment Required"),
         Exception("Your credit balance is too low to access the Anthropic API."),
+        Exception("credit_balance_exhausted"),
         Exception("insufficient_quota: please add credits"),
+        Exception("No credits remaining for this organization"),
         Exception("You exceeded your current quota, please check your plan."),
         Exception("billing_hard_limit_reached"),
     ],
@@ -123,8 +125,17 @@ def test_anthropic_provider_keeps_other_errors_as_generic_provider_error(
     assert not isinstance(info.value, LLMQuotaExhaustedError)
 
 
-def test_openai_provider_wraps_insufficient_quota_as_quota_exhausted(
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Error code: 429 - {'error': {'code': 'insufficient_quota'}}",
+        "Error code: 429 - {'error': {'code': 'credit_balance_exhausted'}}",
+        "Error code: 429 - No credits remaining for this organization",
+    ],
+)
+def test_openai_provider_wraps_exhausted_credit_as_quota_exhausted(
     monkeypatch: pytest.MonkeyPatch,
+    message: str,
 ) -> None:
     """OpenAI's ``insufficient_quota`` must also be wrapped so a
     cross-provider OpenAI fallback that *also* runs out of credits
@@ -137,11 +148,7 @@ def test_openai_provider_wraps_insufficient_quota_as_quota_exhausted(
         class completions:
             @staticmethod
             def create(**_kwargs):
-                raise Exception(
-                    "Error code: 429 - "
-                    "{'error': {'code': 'insufficient_quota', "
-                    "'message': 'You exceeded your current quota'}}",
-                )
+                raise Exception(message)
 
     monkeypatch.setattr(provider._client, "chat", _FakeChat())
 

@@ -33,6 +33,13 @@ REFERENCE_PATH = re.compile(
     r"((?:apps|docs|infra|scripts|tests|\.github)/"
     r"[A-Za-z0-9_./\-\[\]]+\.(?:md|py|ps1|sh|tsx|ts|yaml|yml|json))"
 )
+ROOT_REFERENCE_ALLOWLIST = frozenset(
+    {
+        "playwright.app.config.ts",
+        "playwright.config.ts",
+        "playwright.ip-a0-prod.config.ts",
+    }
+)
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -58,6 +65,10 @@ def _reference_path(reference: object) -> Path | None:
         return None
     raw_reference = str(reference).strip()
     direct_path = raw_reference.split("::", maxsplit=1)[0]
+    if direct_path in ROOT_REFERENCE_ALLOWLIST:
+        candidate = REPO_ROOT / direct_path
+        if candidate.is_file():
+            return candidate
     if direct_path.startswith(("apps/", "docs/", "infra/", "scripts/", "tests/", ".github/")):
         candidate = REPO_ROOT / direct_path
         if candidate.is_file():
@@ -173,8 +184,7 @@ def validate(
         expected = _render_markdown(manifest)
         if not GENERATED_VIEW_PATH.is_file():
             errors.append(
-                "missing generated M2 ownership audit "
-                f"{_display_path(GENERATED_VIEW_PATH)}"
+                f"missing generated M2 ownership audit {_display_path(GENERATED_VIEW_PATH)}"
             )
         elif GENERATED_VIEW_PATH.read_text(encoding="utf-8") != expected:
             errors.append(

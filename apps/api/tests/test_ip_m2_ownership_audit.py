@@ -24,6 +24,12 @@ def test_committed_m2_slices_have_one_writer_reconciliation_evidence() -> None:
     assert ip_m2_ownership_audit.validate(_manifest()) == []
 
 
+def test_audit_accepts_only_allowlisted_root_playwright_config_references() -> None:
+    for path in ip_m2_ownership_audit.ROOT_REFERENCE_ALLOWLIST:
+        assert ip_m2_ownership_audit._reference_path(path) == REPO_ROOT / path
+    assert ip_m2_ownership_audit._reference_path("unreviewed-root.config.ts") is None
+
+
 def test_audit_rejects_missing_writer_test_and_evidence_for_active_slice() -> None:
     manifest = _manifest()
     row = _slice(manifest, "IPLF-020A")
@@ -56,8 +62,7 @@ def test_audit_rejects_a_stale_generated_view(tmp_path: Path, monkeypatch) -> No
     errors = ip_m2_ownership_audit.validate(_manifest())
 
     assert any(
-        "stale or independently edited generated M2 ownership audit" in error
-        for error in errors
+        "stale or independently edited generated M2 ownership audit" in error for error in errors
     )
 
 

@@ -16,6 +16,19 @@ docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:88
 24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:444
 24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:540
 
+# 2026-08-15 scheduled history scan: exact false positives on deterministic
+# IP acceptance-test matter codes, a rule-governance fixture key, a public
+# program blocker ID, and a documented Cloud Build execution UUID.
+c6b5608b480c6a5e1e7b9ed5a22b0887a63283df:apps/api/tests/test_ip_daily_docket.py:generic-api-key:226
+64d35ff63e3e6ebd01ec282837c0265d2d32ba3c:apps/api/tests/test_ip_039e_chain_of_title.py:generic-api-key:183
+f23778afc9407eb1619de86320ac83003aa0c1b4:apps/api/tests/test_ip_039a_filing_particulars.py:generic-api-key:271
+f23778afc9407eb1619de86320ac83003aa0c1b4:apps/api/tests/test_ip_039a_filing_particulars.py:generic-api-key:321
+f23778afc9407eb1619de86320ac83003aa0c1b4:apps/api/tests/test_ip_039a_filing_particulars.py:generic-api-key:371
+f23778afc9407eb1619de86320ac83003aa0c1b4:apps/api/tests/test_ip_039a_filing_particulars.py:generic-api-key:441
+5d58cc2f14fefecb10030ea8749deb342dad3b93:apps/api/tests/test_ip_rule_governance.py:generic-api-key:157
+b6bfd1fec8ea7032c98e3ce072a7104d59967818:scripts/reconcile_ip_program_manifest_phase0.py:generic-api-key:308
+66011927ad0516ea97237f36f72927360068db66:docs/ip-implementation/evidence/m1/IPLF-001B/release-2026-08-01.md:generic-api-key:125
+
 # 2026-08-06 IPLF-001C retarget: exact false positive on a public immutable
 # container digest recorded in the program checkpoint. This suppresses only the
 # historical fingerprint; new generic-key findings remain blocking.
@@ -45,3 +58,9 @@ a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST
 # in production, so it is deliberately not rewritten. New generic-key findings
 # remain blocking.
 6db34b644d04fa075fe7e3a0ceb5fb0c391114c3:apps/api/tests/test_20260814_matter_import_ram_workbook.py:generic-api-key:157
+
+# 2026-08-14 IPLF-028C checkpoint: exact false positive on the public,
+# immutable Cloud Run API image digest recorded at the canonical program
+# checkpoint. This suppresses only the reviewed e18cc266 finding; newly
+# introduced generic-key findings remain blocking.
+e18cc266f557aa3b8006311393b2a65e71986db2:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21

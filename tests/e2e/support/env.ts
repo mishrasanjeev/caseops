@@ -42,6 +42,7 @@ export const e2eEnv: Record<string, string> = {
   // dated IP suite. Keep the independent rollout dimension explicit too;
   // production flags and billing state are never changed by this harness.
   CASEOPS_IP_WORKSPACE_ENABLED: "true",
+  CASEOPS_IP_RULE_GOVERNANCE_ENABLED: "true",
   CASEOPS_CASE_TRACKING_PROVIDER: "ecourtsindia",
   CASEOPS_ECOURTSINDIA_API_BASE_URL: "https://provider.example",
   CASEOPS_ECOURTSINDIA_API_TOKEN: "e2e-provider-token",
