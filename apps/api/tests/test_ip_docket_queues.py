@@ -309,3 +309,86 @@ def test_calops09_ack03_a_pending_transfer_is_not_acknowledged_around(
     assert result.status_code == 200, result.text
     assert result.json()["outcomes"][0]["reason"] == "transfer_pending"
     assert result.json()["acknowledged_count"] == 0
+
+
+def test_calops09_ack05_the_count_can_be_acted_on_not_only_read(
+    client: TestClient,
+) -> None:
+    """IPLF-CAL-OPS-09-ACK-05 — the workload count needs work behind it.
+
+    The daily docket reports how many deadlines a member holds. Without a list
+    of the work itself a member can be told "seven unacknowledged" and have
+    nothing to acknowledge, so the count and the list must agree.
+    """
+
+    owner_headers, owner_id, other_id, _oh, matter = _setup(client)
+    _d1, mine = _coverage(
+        client, owner_headers, matter_id=matter["id"], title="Mine One Mark", responsible=owner_id
+    )
+    _d2, theirs = _coverage(
+        client, owner_headers, matter_id=matter["id"], title="Theirs Mark", responsible=other_id
+    )
+
+    listed = client.get("/api/ip/deadline-coverages/mine", headers=owner_headers)
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()["coverages"]
+    assert [row["coverage_id"] for row in rows] == [mine["id"]]
+    assert theirs["id"] not in listed.text
+    row = rows[0]
+    assert row["docket_title"] == "Mine One Mark"
+    assert row["acknowledged"] is False
+    assert row["due_on"] is not None
+    assert row["days_until_due"] == 30
+
+    docket = client.get("/api/ip/daily-docket", headers=owner_headers).json()
+    queue = next(q for q in docket["queues"] if q["membership_id"] == owner_id)
+    unacknowledged = [r for r in rows if not r["acknowledged"]]
+    # The number the manager sees is the number of rows the member can act on.
+    assert queue["unacknowledged_count"] == len(unacknowledged)
+
+    client.post(
+        "/api/ip/deadline-coverages/bulk-acknowledge",
+        headers=owner_headers,
+        json={"coverage_ids": [r["coverage_id"] for r in unacknowledged]},
+    )
+    after = client.get(
+        "/api/ip/deadline-coverages/mine?unacknowledged_only=true", headers=owner_headers
+    )
+    assert after.json()["coverages"] == []
+
+
+def test_calops09_queue04_a_queue_cannot_exist_without_a_scope(client: TestClient) -> None:
+    """IPLF-CAL-OPS-09-QUEUE-04 — the service rule is duplicated in the schema.
+
+    A queue belonging to neither a team nor a member cannot be governed,
+    audited, or cleaned up when someone leaves.
+    """
+
+    import sqlalchemy as sa
+
+    from caseops_api.db.session import get_engine
+
+    bootstrap = bootstrap_company(client)
+    company = bootstrap["company"]
+    assert isinstance(company, dict)
+    company_id = str(company["id"])
+
+    engine = get_engine()
+    with engine.begin() as connection:
+        try:
+            connection.execute(
+                sa.text(
+                    "INSERT INTO ip_docket_queues "
+                    "(id, company_id, name, filters_json, team_id, owner_membership_id, "
+                    " created_by_membership_id, created_at, updated_at) "
+                    "VALUES ('queue-orphan', :company, 'Orphan', '{}', NULL, NULL, NULL, "
+                    " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {"company": company_id},
+            )
+        except sa.exc.IntegrityError as exc:
+            # Assert *which* rule refused it, so this cannot pass on an
+            # unrelated integrity error and look like proof.
+            assert "ck_ip_docket_queue_has_scope" in str(exc), str(exc)
+            return
+        raise AssertionError("an unscoped queue was accepted by the database")

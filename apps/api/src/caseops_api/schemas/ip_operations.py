@@ -583,6 +583,31 @@ class IpCoverageBulkAcknowledgeResponse(BaseModel):
     outcomes: list[IpCoverageAcknowledgeOutcome] = Field(default_factory=list)
 
 
+class IpAssignedCoverageRecord(BaseModel):
+    """One deadline the calling member is responsible for (CAL-OPS-09).
+
+    The daily docket reports how much work each member holds; this is the work
+    itself, so a member can acknowledge it rather than only be counted.
+    """
+
+    coverage_id: str
+    docket_id: str
+    docket_title: str
+    docket_identifier: str | None = None
+    deadline_title: str | None = None
+    due_on: date | None = None
+    days_until_due: int | None = None
+    critical: bool = False
+    acknowledged: bool
+    coverage_status: str
+    transfer_pending: bool = False
+    reassignment_version: int
+
+
+class IpAssignedCoverageListResponse(BaseModel):
+    coverages: list[IpAssignedCoverageRecord] = Field(default_factory=list)
+
+
 class IpCoverageTransferAwaiting(BaseModel):
     """One coverage transfer awaiting the calling member's decision.
 

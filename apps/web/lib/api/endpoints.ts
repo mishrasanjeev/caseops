@@ -9513,6 +9513,195 @@ export async function reviewIpEvidenceCandidate(input: {
   );
 }
 
+export type IpDailyDocketQueue = {
+  membership_id: string;
+  label: string;
+  active: boolean;
+  capacity_state: "available" | "unavailable";
+  // Null means the source was stale and the number is unknown. It must never
+  // be rendered as zero: unknown work is not no work (UJ-50-EXC-03).
+  assigned_count: number | null;
+  critical_count: number | null;
+  unacknowledged_count: number | null;
+};
+
+export type IpDailyDocketEscalation = {
+  coverage_id: string;
+  docket_id: string;
+  reason: "owner_inactive" | "unacknowledged_critical" | "unowned";
+  critical: boolean;
+  escalate_to_membership_id: string | null;
+};
+
+export type IpDailyDocket = {
+  generated_at: string;
+  filters: Record<string, unknown>;
+  stale_sources: string[];
+  counts_are_complete: boolean;
+  queues: IpDailyDocketQueue[];
+  escalations: IpDailyDocketEscalation[];
+};
+
+export async function fetchIpDailyDocket(input?: {
+  team?: string | null;
+  staleSources?: string[];
+}): Promise<IpDailyDocket> {
+  const params = new URLSearchParams();
+  if (input?.team) params.set("team", input.team);
+  for (const source of input?.staleSources ?? []) params.append("stale_source", source);
+  const query = params.toString();
+  return apiRequest(`/api/ip/daily-docket${query ? `?${query}` : ""}`);
+}
+
+export type IpAssignedCoverage = {
+  coverage_id: string;
+  docket_id: string;
+  docket_title: string;
+  docket_identifier: string | null;
+  deadline_title: string | null;
+  due_on: string | null;
+  days_until_due: number | null;
+  critical: boolean;
+  acknowledged: boolean;
+  coverage_status: string;
+  transfer_pending: boolean;
+  reassignment_version: number;
+};
+
+export async function fetchIpAssignedCoverage(input?: {
+  unacknowledgedOnly?: boolean;
+}): Promise<{ coverages: IpAssignedCoverage[] }> {
+  const query = input?.unacknowledgedOnly ? "?unacknowledged_only=true" : "";
+  return apiRequest(`/api/ip/deadline-coverages/mine${query}`);
+}
+
+export type IpCoverageAcknowledgeOutcome = {
+  coverage_id: string;
+  acknowledged: boolean;
+  reason:
+    | "acknowledged"
+    | "already_acknowledged"
+    | "not_found"
+    | "not_responsible"
+    | "version_conflict"
+    | "transfer_pending"
+    | null;
+  reassignment_version: number | null;
+};
+
+export async function bulkAcknowledgeIpCoverage(input: {
+  coverageIds: string[];
+  expectedVersions?: Record<string, number>;
+}): Promise<{
+  acknowledged_count: number;
+  rejected_count: number;
+  outcomes: IpCoverageAcknowledgeOutcome[];
+}> {
+  return apiRequest("/api/ip/deadline-coverages/bulk-acknowledge", {
+    method: "POST",
+    body: {
+      coverage_ids: input.coverageIds,
+      expected_versions: input.expectedVersions ?? {},
+    },
+  });
+}
+
+export type IpDocketQueue = {
+  id: string;
+  name: string;
+  description: string | null;
+  filters: Record<string, unknown>;
+  team_id: string | null;
+  owner_membership_id: string | null;
+  scope: "team" | "personal";
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchIpDocketQueues(): Promise<{ queues: IpDocketQueue[] }> {
+  return apiRequest("/api/ip/docket-queues");
+}
+
+export async function saveIpDocketQueue(input: {
+  name: string;
+  description?: string | null;
+  filters: Record<string, unknown>;
+  teamId?: string | null;
+}): Promise<IpDocketQueue> {
+  return apiRequest("/api/ip/docket-queues", {
+    method: "POST",
+    body: {
+      name: input.name,
+      description: input.description ?? null,
+      filters: input.filters,
+      team_id: input.teamId ?? null,
+    },
+  });
+}
+
+export async function deleteIpDocketQueue(queueId: string): Promise<void> {
+  await apiRequest(`/api/ip/docket-queues/${queueId}`, { method: "DELETE" });
+}
+
+export type IpControlException = {
+  docket_id: string;
+  kind: "uncovered" | "inactive_owner" | "unprojected_calendar" | "open_incident";
+  critical: boolean;
+};
+
+export type IpControlReview = {
+  id: string;
+  generated_at: string;
+  filters: Record<string, unknown>;
+  freshness: Record<string, unknown>;
+  completeness_status: string;
+  incompleteness_reasons: string[];
+  mandatory_exceptions: IpControlException[];
+  manifest_sha256: string;
+  export_status: string;
+  export_error_redacted: string | null;
+  signer_label_snapshot: string | null;
+  signed_off_at: string | null;
+  version: number;
+  report: {
+    generated_at: string;
+    docket_count: number;
+    ready_count: number;
+    uncovered_deadline_count: number;
+    open_incident_count: number;
+    unprojected_calendar_count: number;
+    inactive_coverage_count: number;
+    total_cost_minor_by_currency: Record<string, number>;
+  };
+};
+
+export async function createIpControlReview(input: {
+  filters?: Record<string, unknown>;
+  staleSources?: string[];
+  failedQueries?: string[];
+}): Promise<IpControlReview> {
+  return apiRequest("/api/ip/control-reviews", {
+    method: "POST",
+    body: {
+      filters: input.filters ?? {},
+      stale_sources: input.staleSources ?? [],
+      failed_queries: input.failedQueries ?? [],
+    },
+  });
+}
+
+export async function signOffIpControlReview(
+  reviewId: string,
+  // The attestation is the point of a sign-off, not paperwork around it: it is
+  // what the signer is putting their name to.
+  input: { expectedVersion: number; attestation: string },
+): Promise<IpControlReview> {
+  return apiRequest(`/api/ip/control-reviews/${reviewId}/sign-off`, {
+    method: "POST",
+    body: { expected_version: input.expectedVersion, attestation: input.attestation },
+  });
+}
+
 export type IpCoverageTransferAwaiting = {
   coverage_id: string;
   docket_id: string;

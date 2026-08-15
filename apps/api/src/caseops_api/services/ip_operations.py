@@ -41,6 +41,8 @@ from caseops_api.db.models import (
     UserCalendarConnection,
 )
 from caseops_api.schemas.ip_operations import (
+    IpAssignedCoverageListResponse,
+    IpAssignedCoverageRecord,
     IpControlExceptionRecord,
     IpControlReviewCreateRequest,
     IpControlReviewExportRequest,
@@ -1739,6 +1741,7 @@ def ip_docket_control_report(session: Session, *, context: SessionContext) -> Ip
 
 
 __all__ = [
+    "list_ip_assigned_coverage",
     "bulk_acknowledge_ip_coverage",
     "save_ip_docket_queue",
     "list_ip_docket_queues",
@@ -2494,6 +2497,91 @@ def bulk_acknowledge_ip_coverage(
         rejected_count=len(requested) - len(acknowledged_ids),
         outcomes=outcomes,
     )
+
+
+def list_ip_assigned_coverage(
+    session: Session,
+    *,
+    context: SessionContext,
+    unacknowledged_only: bool = False,
+) -> IpAssignedCoverageListResponse:
+    """The caller's own deadlines (CAL-OPS-09).
+
+    The daily docket counts each member's workload; this returns the work
+    itself, so the count can be acted on rather than only read. Restricted
+    records the caller cannot open are excluded, exactly as the counts are.
+    """
+
+    rows = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                IpDeadlineCoverage.responsible_membership_id == context.membership.id,
+            )
+            .order_by(IpDeadlineCoverage.id)
+        ).all()
+    )
+    if not rows:
+        return IpAssignedCoverageListResponse()
+
+    dockets = {
+        docket.id: docket
+        for docket in session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id.in_({row.docket_id for row in rows}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).all()
+    }
+    deadlines = {
+        deadline.id: deadline
+        for deadline in session.scalars(
+            select(MatterDeadline).where(
+                MatterDeadline.id.in_({row.matter_deadline_id for row in rows} or {""})
+            )
+        ).all()
+    }
+    critical_ids = {
+        value
+        for value in session.scalars(
+            select(IpDeadline.matter_deadline_id).where(
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.is_critical.is_(True),
+                IpDeadline.matter_deadline_id.is_not(None),
+            )
+        ).all()
+        if value
+    }
+
+    today = _now().date()
+    records: list[IpAssignedCoverageRecord] = []
+    for row in rows:
+        docket = dockets.get(row.docket_id)
+        if docket is None or not can_access_ip_docket(session, context=context, docket=docket):
+            continue
+        acknowledged = row.coverage_status == "accepted" and row.accepted_at is not None
+        if unacknowledged_only and acknowledged:
+            continue
+        deadline = deadlines.get(row.matter_deadline_id)
+        due_on = getattr(deadline, "due_on", None)
+        records.append(
+            IpAssignedCoverageRecord(
+                coverage_id=row.id,
+                docket_id=docket.id,
+                docket_title=docket.title,
+                docket_identifier=docket.primary_identifier,
+                deadline_title=getattr(deadline, "title", None),
+                due_on=due_on,
+                days_until_due=(due_on - today).days if due_on else None,
+                critical=row.matter_deadline_id in critical_ids,
+                acknowledged=acknowledged,
+                coverage_status=row.coverage_status,
+                transfer_pending=row.replacement_decision == "pending",
+                reassignment_version=row.reassignment_version,
+            )
+        )
+    return IpAssignedCoverageListResponse(coverages=records)
 
 
 def list_ip_coverage_transfers_awaiting(

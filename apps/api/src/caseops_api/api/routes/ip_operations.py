@@ -91,6 +91,7 @@ from caseops_api.schemas.ip_lifecycle import (
     IpProsecutionWorkspaceResponse,
 )
 from caseops_api.schemas.ip_operations import (
+    IpAssignedCoverageListResponse,
     IpControlReviewCreateRequest,
     IpControlReviewExportRequest,
     IpControlReviewRecord,
@@ -250,6 +251,7 @@ from caseops_api.services.ip_operations import (
     get_ip_docket,
     ip_daily_docket,
     ip_docket_control_report,
+    list_ip_assigned_coverage,
     list_ip_coverage_transfers_awaiting,
     list_ip_docket_queues,
     list_ip_dockets,
@@ -1279,6 +1281,20 @@ async def post_ip_coverage_bulk_acknowledge(
     session: DbSession,
 ) -> IpCoverageBulkAcknowledgeResponse:
     return bulk_acknowledge_ip_coverage(session, context=context, payload=payload)
+
+
+@router.get(
+    "/deadline-coverages/mine",
+    response_model=IpAssignedCoverageListResponse,
+)
+async def get_ip_assigned_coverage(
+    context: IpWriter,
+    session: DbSession,
+    unacknowledged_only: bool = False,
+) -> IpAssignedCoverageListResponse:
+    return list_ip_assigned_coverage(
+        session, context=context, unacknowledged_only=unacknowledged_only
+    )
 
 
 @router.get(
