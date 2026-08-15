@@ -300,13 +300,22 @@ function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
                       <Badge tone="warning">Unavailable</Badge>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-right">
+                  <td
+                    className="py-2 pr-3 text-right"
+                    data-testid={`ip-docket-assigned-${queue.membership_id}`}
+                  >
                     <Count value={queue.assigned_count} />
                   </td>
-                  <td className="py-2 pr-3 text-right">
+                  <td
+                    className="py-2 pr-3 text-right"
+                    data-testid={`ip-docket-critical-${queue.membership_id}`}
+                  >
                     <Count value={queue.critical_count} />
                   </td>
-                  <td className="py-2 text-right">
+                  <td
+                    className="py-2 text-right"
+                    data-testid={`ip-docket-unacknowledged-${queue.membership_id}`}
+                  >
                     <Count value={queue.unacknowledged_count} />
                   </td>
                 </tr>
@@ -767,7 +776,7 @@ function ControlReviewCard({
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
-                  Manifest
+                  Manifest SHA-256
                 </dt>
                 <dd className="break-all font-mono text-xs text-[var(--color-ink-2)]">
                   {review.manifest_sha256}
