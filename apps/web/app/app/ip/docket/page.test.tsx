@@ -260,7 +260,10 @@ describe("IpDailyDocketPage", () => {
 
     // A row that did not acknowledge must never look like one that did.
     const rejected = await screen.findByTestId("ip-docket-ack-rejected");
-    expect(within(rejected).getByText(/cov-2/)).toBeVisible();
+    // The user saw these deadlines by name a moment ago; a failure report that
+    // refers to them by UUID cannot be matched up against that list.
+    expect(within(rejected).getByText("BETA DEVICE · Renewal")).toBeVisible();
+    expect(within(rejected).queryByText(/cov-2/)).toBeNull();
     expect(within(rejected).getByText(/Changed since you loaded this page/)).toBeVisible();
   });
 

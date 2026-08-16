@@ -396,7 +396,12 @@ function EscalationsCard({
  */
 function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [rejected, setRejected] = useState<{ coverage_id: string; reason: string | null }[]>([]);
+  // The label is captured at submit time, while the row is still in hand: after
+  // the refetch an acknowledged or vanished row is gone from `rows`, and the
+  // failure report would have nothing to name it by.
+  const [rejected, setRejected] = useState<
+    { coverage_id: string; reason: string | null; label: string }[]
+  >([]);
 
   const mine = useQuery({
     queryKey: ["ip-assigned-coverage"],
@@ -427,7 +432,16 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
       setRejected(
         result.outcomes
           .filter((outcome) => !outcome.acknowledged)
-          .map((outcome) => ({ coverage_id: outcome.coverage_id, reason: outcome.reason })),
+          .map((outcome) => {
+            const row = rows.find((candidate) => candidate.coverage_id === outcome.coverage_id);
+            return {
+              coverage_id: outcome.coverage_id,
+              reason: outcome.reason,
+              label: row
+                ? [row.docket_title, row.deadline_title].filter(Boolean).join(" · ")
+                : outcome.coverage_id,
+            };
+          }),
       );
       setSelected(new Set());
       if (result.acknowledged_count) {
@@ -542,7 +556,7 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
             <ul className="mt-1 flex flex-col gap-1 text-sm text-[var(--color-mute)]">
               {rejected.map((row) => (
                 <li key={row.coverage_id}>
-                  <span className="font-mono text-xs">{row.coverage_id}</span> —{" "}
+                  <span className="font-medium text-[var(--color-ink-2)]">{row.label}</span> —{" "}
                   {ACK_REASON[row.reason ?? ""] ?? "Could not be acknowledged"}
                 </li>
               ))}
