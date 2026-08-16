@@ -296,38 +296,38 @@ items, advocate identity.
 
 ---
 
-## 9. Blocked on a founder decision or an external input
+## 9. Open items — all resolved
 
-**All ten items are resolved in `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md`.**
-47 sub-questions were examined against the code; 44 were resolvable and only 3
-genuinely need a human. Most were not open questions at all — the repository had
-already answered 19 of them and constrained a further 26; the answers were simply
+**All ten open requirements are resolved in
+`docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md`, and the three that needed a
+commercial decision were decided on 2026-08-16. Nothing here is blocked.**
+
+47 sub-questions were examined against the code; 44 were resolvable without any
+external input. Most were not open questions at all — the repository had already
+answered 19 of them and constrained a further 26; the answers were simply
 undocumented.
 
-**Still needs a human (3):**
+**Founder decisions taken 2026-08-16:**
 
-1. **SMS / WhatsApp** — whether the firm wants paid channels at all. Needs a
-   Twilio account with DLT sender registration, a Meta Business Account with an
-   approved template, and budget approval. Recommended: defer out of the pilot.
-2. **Licensed source display** — whether to take a publisher licence, which
-   determines whether commercial sources may render in the in-app viewer.
-3. **Court-data vendor** — selection, contract, terms, rate limits. The
-   engineering posture is resolved and vendor-agnostic; the commercial choice is
-   not.
+| Item | Decision | Effect |
+|---|---|---|
+| SMS / WhatsApp | **Deferred for the pilot** | `IN_APP` + `EMAIL` only; both channels removed from every selector and marked `roadmap`. `T1-9` moves out of the pilot window and its fix becomes *removal*, not *implement delivery*. |
+| Licensed source display | **No publisher licence** | Allow-list stays official-only; commercial sources deep-link out with the `unverified` badge. The `permitted_uses` in-app path is not built. `destination_class` has two live values, not three. |
+| Court-data vendor | **Engineering posture accepted** | Build to the frozen adapter contract; vendor choice stays a configuration change. P0–P3 do not wait on it. |
 
-**Sign-off acts that block nothing meanwhile (2):** a named legal approver on
-workflow definition version 1; a scope call on non-Indian registries.
+**Remaining sign-off acts (neither blocks engineering):** a named legal approver
+on workflow definition version 1; a scope call on non-Indian registries.
 
-**Resolved (8):** matter-native vs separate IP workspace (§2.3); docket stages;
-pleading/document names; Application Number uniqueness; Opposition Number
-cardinality and timing; registry master and trademark classes; notification
-channels and reminder timing; source-link opening policy; the
-Judge–Judgment–Lawyer use case.
+**One consequence flagged, not assumed:** the licence decision answers *display
+of licensed content*, not *corpus acquisition*. If no publisher licence is taken
+at all, `T0-4` corpus expansion runs on official and open sources only — which
+changes the shape of that gap rather than closing it.
 
-Resolving them also surfaced **five defects** now recorded as `EH-SGR-12`…
-`EH-SGR-16`, including a duplicate-detection routine that silently under-detects,
-two disagreeing identifier normalisations, and notification channels that are
-selectable but structurally undeliverable.
+Resolving these also surfaced **five defects**, now `EH-SGR-12`…`EH-SGR-16`:
+duplicate detection that silently under-detects, two disagreeing identifier
+normalisations, terminal-status constants that are correct only by luck, an
+ingest fetcher sending a spoofed browser user-agent, and notification channels
+that are selectable while structurally undeliverable.
 
 ## 10. Cross-references
 

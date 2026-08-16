@@ -9,14 +9,15 @@ document left for confirmation.
 subject to, then an adjudicator challenged every proposal — both the ones
 claiming to be safe defaults and the ones claiming to be unresolvable.
 
-**Result: 47 sub-questions examined. 44 resolved, 3 genuinely external.**
+**Result: 47 sub-questions examined. 44 resolved from evidence; the 3 that needed
+a commercial decision were decided on 2026-08-16 (§10). Nothing is blocked.**
 
 | Basis | Count |
 |---|---|
 | Determined by existing code | 27 |
 | Engineering default | 12 |
 | Determined by statute or public record | 5 |
-| **Genuinely external — cannot resolve** | **3** |
+| Required a commercial decision — **since decided, §10** | 3 |
 
 Most of these were not open questions at all. The repository had already
 answered 19 of them and constrained a further 26; the answers simply were not
@@ -216,10 +217,22 @@ invariant). Once durable delivery owns the send, the lawyer's inbox shows
 "Open CaseOps to review this notification securely" with no date, matter code or
 link. Keep the posture; expect the complaint.
 
-**Genuinely external:** whether the firm wants paid SMS/WhatsApp at all. Needs a
-Twilio account with DLT sender registration, a Meta Business Account with an
-approved template, and per-message budget approval. Recommend deferring both out
-of the pilot — in-app + email covers the reported requirement.
+**DECIDED 2026-08-16 — deferred for the pilot.** SMS and WhatsApp are out of
+scope for the pilot. No Twilio account, DLT sender registration, Meta Business
+Account or per-message budget is required, and none should be pursued for this
+release.
+
+Consequences to implement:
+
+- `IN_APP` + `EMAIL` are the complete product-supported channel set. Remove
+  `SMS` and `WHATSAPP` from every user-facing selector and mark them `roadmap`
+  in the API response (`EH-SGR-16`). Keep the enum members.
+- `twilio_enabled` and `whatsapp_enabled` stay `false`; do not wire either into
+  any deploy manifest.
+- `T1-9` (WhatsApp distribution) in `docs/STRATEGIC_GAP_REVIEW_2026-08-16.md`
+  moves out of the pilot window. The verified finding there stands — WhatsApp is
+  a selectable channel with no delivery behind it — but the fix is now
+  *removal from the selector*, not *implement delivery*.
 
 ---
 
@@ -242,10 +255,26 @@ of the pilot — in-app + email covers the reported requirement.
   `services/source_actions.py`, derived from an ingest-populated provenance
   signal — this is the same fix as the F-13 trust predicate.
 
-**Genuinely external:** whether licensed commercial sources may be displayed
-in-app. Until a licence exists, keep the allow-list official-only; when one is
-taken, gate in-app display on the already-modelled `permitted_uses` containing
-`display`.
+**DECIDED 2026-08-16 — no publisher licence.** CaseOps is not taking a
+commercial legal-publisher licence for this release.
+
+Consequences to implement:
+
+- The source allow-list stays **official-only**. Commercial/licensed sources
+  deep-link out and render the `unverified` badge; they never open in the in-app
+  viewer.
+- Do **not** build the `permitted_uses`-gated in-app display path now. The
+  `permitted_uses` contract in `statute_source_governance._validate_source_policy`
+  stays as the extension point if a licence is ever taken.
+- This simplifies the F-13 work: `destination_class` has two live values for now
+  (`caseops_protected` and `verified_public`), not three.
+
+**Open consequence worth a separate decision.** This answers *display of licensed
+content*. It does not by itself settle *corpus acquisition*, which
+`docs/STRATEGIC_GAP_REVIEW_2026-08-16.md` T0-4 treats as the largest single gap.
+If no publisher licence is taken at all, corpus expansion must run on official
+and open sources only, which changes the shape of that gap rather than closing
+it. Flagged, not assumed.
 
 ---
 
@@ -315,24 +344,43 @@ configuration change plus one adapter class, not a re-architecture:
 add a per-host minimum interval, and honour `robots.txt`. This is cheap, and it
 removes the clearest terms-of-use exposure in the ingest path.
 
-**Genuinely external:** vendor, API, licence, terms, rate limits. A human must
-select and sign, then supply the authentication method, documented quotas, and
-the redistribution/caching terms. Park as commercially blocked; P4 sequencing in
-the strategic gap review stands.
+**DECIDED 2026-08-16 — engineering posture accepted; vendor selection stays
+commercially parked.** Build to the contract above so the vendor choice remains a
+configuration change plus one adapter class. Do not block P0–P3 work on it, and
+do not begin production ingestion from any vendor until the registry entry
+carries a recorded access decision.
+
+Consequences to implement:
+
+- `EH-SGR-15` (identifying user-agent, `robots.txt`, per-host interval) proceeds
+  now — it is required regardless of vendor and is the clearest terms-of-use
+  exposure in the ingest path.
+- `Retry-After` handling and the provider registry refactor proceed now.
+- P4 sequencing in `docs/STRATEGIC_GAP_REVIEW_2026-08-16.md` stands unchanged.
 
 ---
 
-## 10. What still needs a human
+## 10. Decisions taken
 
-Three items, down from ten:
+**All three external items were decided on 2026-08-16. Nothing is commercially
+blocked.**
 
-1. **SMS/WhatsApp** — whether the firm wants paid channels at all (§6).
-2. **Licensed source display** — whether to take a publisher licence, which
-   determines in-app display rights (§7).
-3. **Court-data vendor** — selection, contract, terms (§9).
+| Item | Decision |
+|---|---|
+| SMS / WhatsApp (§6) | **Deferred for the pilot.** In-app + email only; both channels removed from selectors. |
+| Licensed source display (§7) | **No publisher licence.** Allow-list stays official-only; no in-app display of commercial sources. |
+| Court-data vendor (§9) | **Engineering posture accepted**; vendor selection stays parked and blocks nothing. |
 
-Plus two sign-off acts that block nothing meanwhile: a named legal approver on
-workflow version 1 (§1), and a scope call on non-Indian registries (§5).
+Two sign-off acts remain, and neither blocks engineering:
+
+1. A named legal approver on workflow definition version 1 (§1). The schema
+   refuses `approved` without approver snapshots, so this is an act, not a
+   design question.
+2. A scope call on non-Indian registries (§5). India-only seed ships now either
+   way.
+
+One consequence flagged rather than assumed: the "no publisher licence" decision
+answers *display*, not *corpus acquisition*. See §7.
 
 ---
 

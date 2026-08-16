@@ -301,7 +301,7 @@ commercial or organisational rather than code.
 | T1-6 | Residency / BYOK | `Partially implemented` | `asia-south1` is a genuine residency story; **no CMEK, no KMS reference anywhere** |
 | T1-7 | DPDP artifacts | `Partially implemented` | Immutable storage landed 2026-08-13; nothing executes a retention or hold decision — §2.9 |
 | T1-8 | Pricing segmentation | **`Implemented`** | External review wrong |
-| T1-9 | WhatsApp | `Missing` | Selectable channel in schema and preference UI **with no delivery implementation behind it** — a user can choose a channel that silently does nothing |
+| T1-9 | WhatsApp | `Missing` | Selectable channel in schema and preference UI **with no delivery implementation behind it** — a user can choose a channel that silently does nothing. **Deferred out of the pilot 2026-08-16**; the fix is now *remove from the selector* (`EH-SGR-16`), not *implement delivery* |
 | T1-10 | Firm-knowledge retrieval | `Partially implemented` | Per-matter document Q&A works; firm-wide layer absent |
 | T1-11 | Approved-AI-tool positioning | `UNVERIFIABLE` | Commercial/regulatory |
 | T1-12 | Citation verification productised | `Partially implemented` | Internal control only — and see §2.7 before selling it |
@@ -358,7 +358,10 @@ product that issues wrong tax and breaks its own matter records.
 10. **Backup/DR**: one restore rehearsal has ever occurred (2026-04-24, 114 days
     before this review, 51 days past the missed quarterly slot). No backup
     configuration is in IaC; no artifact enables GCS versioning or lifecycle.
-11. **T1-9 WhatsApp**: implement delivery or remove the channel from the UI.
+11. **T1-9 WhatsApp**: **decided 2026-08-16 — deferred for the pilot.** Remove
+    WhatsApp and SMS from every user-facing selector and mark them `roadmap`
+    (`EH-SGR-16`); do not build delivery. In-app + email is the complete
+    pilot channel set.
 
 ### Then — build the differentiator (months 5–12)
 
