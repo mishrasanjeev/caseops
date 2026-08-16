@@ -1127,3 +1127,73 @@ Two methodology rules established by this pass and binding on future audits:
   legitimate re-filings allowed?), encoded once. The 2026-08-16 feedback document
   lists this as an open requirement, so the decision is a founder input.
 - **Severity:** scale-hardening, blocking for IP identifier UI work.
+
+### EH-SGR-12 - IP duplicate detection silently misses matches (office not normalised)
+
+- **Status:** Missing.
+- **Gap found:** `_duplicate_identifiers` (`services/ip_records.py:95-96`) keys on
+  the raw `office` value, so "Delhi" and "delhi" occupy different namespaces and
+  the duplicate check fails to detect real duplicates. A duplicate-detection
+  routine that silently under-detects is worse than none, because downstream
+  reconciliation treats its output as authoritative.
+- **Control required:** normalise `office` (and `jurisdiction`) before use as a
+  duplicate-detection key, and seed the registry-office master so the value comes
+  from a controlled list rather than free text.
+- **Severity:** stop-ship for IP identifier work. Surfaced by
+  `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md` D-1.
+
+### EH-SGR-13 - Two disagreeing identifier normalisations
+
+- **Status:** Partially implemented.
+- **Gap found:** `normalize_ip_identifier` (`services/ip_identifier_rules.py:14-18`)
+  applies NFKC + casefold + alphanumeric-only, while the docket create path
+  applies only `.strip().upper()` (`services/ip_operations.py:313`). `TM-1234`
+  and `TM 1234` therefore collide in the ledger but not on the docket - the same
+  pair of strings is one number in one layer and two in the other.
+- **Control required:** one normalisation. Resolved by deriving
+  `docket.primary_identifier` from the confirmed current `is_primary` ledger row
+  so it inherits the ledger normalisation (see OPEN_ITEM_RESOLUTIONS §3).
+- **Severity:** scale-hardening; becomes stop-ship once identifier UI ships.
+
+### EH-SGR-14 - Terminal-status constants disagree between IP modules
+
+- **Status:** Partially implemented.
+- **Gap found:** `services/ip_lifecycle.py:40-42` and `services/ip_records.py:708`
+  define different terminal sets. The latter mixes application phases
+  (`refused`/`withdrawn`/`registered`) into a docket-status test and omits
+  `archived`/`transferred`/`retired`. It is not fail-open today only because an
+  adjacent `docket_is_active` check at `ip_records.py:721` happens to cover the
+  gap - correct by luck, not by construction.
+- **Control required:** one shared terminal constant, asserted by a test that
+  fails if the two modules diverge again.
+- **Severity:** scale-hardening. Same class as the lifecycle rules already
+  recorded under EH-LC-01.
+
+### EH-SGR-15 - Ingest fetcher sends a spoofed browser user-agent
+
+- **Status:** Missing.
+- **Gap found:** the authority ingest fetcher presents a spoofed Chrome
+  user-agent and does not consult `robots.txt` or apply a per-host minimum
+  interval. This is the clearest terms-of-use exposure in the ingest path and it
+  sits badly against the repository rule that public legal data needs source,
+  lineage and access-boundary checks.
+- **Control required:** identifying user-agent
+  (`CaseOps-AuthorityIngest/1.0 (+https://<domain>/crawler; contact <ops-email>)`),
+  `robots.txt` fetched and honoured once per host per run, and a per-host minimum
+  request interval.
+- **Severity:** stop-ship before any expanded ingest run. Surfaced by
+  `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md` §9.
+
+### EH-SGR-16 - Dead notification channels are user-selectable
+
+- **Status:** Missing.
+- **Gap found:** `SMS` and `WHATSAPP` are selectable notification channels with
+  no way to reach a recipient - there is no verified phone number on `User` or
+  `CompanyMembership`, and WhatsApp has no adapter. Selecting `sms` on a hearing
+  produces reminder rows that can only ever reach `FAILED`, while the UI presents
+  the choice as valid.
+- **Control required:** remove both from every user-facing selector and mark them
+  `roadmap` in the API response until a verified-phone slice and an adapter
+  exist. Keep the enum members for forward compatibility.
+- **Severity:** stop-ship for the hearing-reminder workflow (F-03): it is the
+  product inviting a failure it cannot fulfil.

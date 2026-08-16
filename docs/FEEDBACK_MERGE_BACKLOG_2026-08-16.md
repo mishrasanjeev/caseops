@@ -298,27 +298,36 @@ items, advocate identity.
 
 ## 9. Blocked on a founder decision or an external input
 
-Engineering cannot start these. Listed so they are not mistaken for backlog.
+**All ten items are resolved in `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md`.**
+47 sub-questions were examined against the code; 44 were resolvable and only 3
+genuinely need a human. Most were not open questions at all — the repository had
+already answered 19 of them and constrained a further 26; the answers were simply
+undocumented.
 
-1. ~~Matter-native vs separate IP workspace~~ — **resolved in §2.3**: Matter is
-   the system of record, both entry points supported. Overrule there if you
-   disagree; P1 IP UI work is no longer blocked on it.
-2. Approved trademark **docket stages** and transition rules.
-3. Approved trademark **pleading/document names** (the document explicitly says
-   do not invent them — `DOC-IP-05`).
-4. **Application Number uniqueness rule** — currently two conflicting behaviours.
-5. When Opposition Number is mandatory; whether one application may have several
-   oppositions.
-6. **Registry/jurisdiction master list** and trademark class rules.
-7. Notification channels and reminder timing rules.
-8. External source access: API method, licensing, terms, rate limits.
-9. Whether source links open in a new tab, an in-app viewer, or both.
-10. The exact Judge–Judgment–Lawyer use case intended by the Delhi Courts
-    feedback.
-11. Whether IP/Trademark stays a Matter Portfolio view or becomes a top-level
-    module (overlaps 1).
+**Still needs a human (3):**
 
----
+1. **SMS / WhatsApp** — whether the firm wants paid channels at all. Needs a
+   Twilio account with DLT sender registration, a Meta Business Account with an
+   approved template, and budget approval. Recommended: defer out of the pilot.
+2. **Licensed source display** — whether to take a publisher licence, which
+   determines whether commercial sources may render in the in-app viewer.
+3. **Court-data vendor** — selection, contract, terms, rate limits. The
+   engineering posture is resolved and vendor-agnostic; the commercial choice is
+   not.
+
+**Sign-off acts that block nothing meanwhile (2):** a named legal approver on
+workflow definition version 1; a scope call on non-Indian registries.
+
+**Resolved (8):** matter-native vs separate IP workspace (§2.3); docket stages;
+pleading/document names; Application Number uniqueness; Opposition Number
+cardinality and timing; registry master and trademark classes; notification
+channels and reminder timing; source-link opening policy; the
+Judge–Judgment–Lawyer use case.
+
+Resolving them also surfaced **five defects** now recorded as `EH-SGR-12`…
+`EH-SGR-16`, including a duplicate-detection routine that silently under-detects,
+two disagreeing identifier normalisations, and notification channels that are
+selectable but structurally undeliverable.
 
 ## 10. Cross-references
 
