@@ -9,10 +9,11 @@ inspection.
 pending-work backlog.
 
 > The source document names two commercial products as benchmarking references
-> (§16, F-08). Those are captured here as a name-free requirement — benchmark IP
-> portfolio structure, docket/deadline handling, trademark identifiers and
-> search, document organisation, and reminders/reports/navigation — because this
-> repository is public and does not record competitor names.
+> (§16, F-08); that founder-supplied source remains the provenance for this
+> requirement. This backlog states the resulting product requirement by category
+> — IP portfolio structure, docket/deadline handling, trademark identifiers and
+> search, document organisation, and reminders/reports/navigation — while the
+> dated April/May benchmark analyses retain their named sources and URLs.
 
 ---
 
@@ -339,7 +340,7 @@ registries" into four distinct jobs — `FMB-11`…`FMB-14` — and record why t
 obvious version of the duplicate-detection fix is wrong.
 
 **No open items remain.** Every requirement in the source document is now either
-implemented, planned, tracked as `FMB-01`…`FMB-10`, or decided.
+implemented, planned, tracked as `FMB-01`…`FMB-14`, or decided.
 
 **One consequence flagged, not assumed:** the licence decision answers *display
 of licensed content*, not *corpus acquisition*. If no publisher licence is taken

@@ -4,10 +4,11 @@
 inspection.
 **Origin:** an external strategy review supplied by the founder
 (`caseops-gap-review.md`, 16 Aug 2026). That document benchmarked CaseOps
-against named commercial platforms. This repository does not record competitor
-names — the repo is public, and a named competitive teardown is neither safe to
-publish nor necessary to act on. Category descriptions are used throughout.
-**Verdict:** **NO-GO** for release-grade sign-off. See §1.
+against named commercial platforms. The dated April/May benchmark analyses keep
+the platform names and source URLs because they are evidence and provenance;
+this review uses category descriptions in its narrative.
+**Verdict:** **GO for continued implementation. NO-GO only for activation or a
+pilot that relies on the affected controls in §2.** See §1.
 
 > **How to read this.** The external review was *not* copied forward. Every
 > factual claim in it was re-verified against the code, following the precedent
@@ -49,14 +50,19 @@ Cloud Run environment variables for the API service, and organisational facts
 
 ## 1. Verdict
 
-**NO-GO for release-grade sign-off**, consistent with — and for different
-reasons than — `docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md`, which reached the
-same verdict on 10 July.
+**GO for continued repository implementation.** The findings below are not a
+repository-wide merge, implementation or documentation freeze. They are a
+**NO-GO only for production activation, release claims, or a pilot that relies
+on the affected billing, payment, citation, security or operational control.**
+The evidence limitations recorded in
+`docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md` remain relevant to their affected
+surfaces.
 
-The blocking reasons are **not** the strategic gaps the external review led with.
-They are billing correctness defects that produce wrong statutory tax on real
-client invoices, a payment path that permanently breaks matter records, and a
-citation verifier whose production path does not verify.
+The activation blockers are **not** the strategic gaps the external review led
+with. They are billing correctness defects that can produce the wrong statutory
+tax, payment paths that can break matter records, and a citation verifier whose
+production path does not verify. Unrelated implementation may proceed in
+parallel.
 
 This repository's governance artifacts remain more honest than its marketing.
 `docs/ip-implementation/PROGRAM_MANIFEST.yaml` records `PROGRAM INCOMPLETE` and
@@ -67,11 +73,13 @@ engineering record.
 
 ---
 
-## 2. Stop-ship control gaps
+## 2. Affected activation and pilot control gaps
 
 Severity-first, per `.claude/skills/enterprise-hardening/SKILL.md`. Every item
 here was found by verification, and **items 2.1–2.6 do not appear in the external
-review at all**.
+review at all**. Here, "stop-ship" means stop activation or pilot use of the
+named surface until its control passes; it never means stop unrelated repository
+implementation.
 
 ### 2.1 Intra-state invoices are issued with the wrong GST head — `Missing`
 
@@ -86,9 +94,14 @@ jurisdiction from GSTIN digits alone, which is why unregistered clients misfire.
 This is a filing-level defect on real client invoices, not a display bug. Every
 invoice already issued to an unregistered intra-state client is wrong.
 
-**Required:** place of supply must drive the determination; unregistered clients
-must resolve to the supplier's state; add a regression per tax head across
-registered/unregistered × intra/inter-state.
+**Required:** place of supply must be a structured input that drives the tax-head
+decision. For ordinary domestic services under IGST Act 2017 §12(2), use the
+registered recipient's location; for an unregistered recipient use the
+recipient's address on record when it exists, and the supplier's location only
+when no such address exists. Validate the applicable rule and fail closed rather
+than deriving the answer from malformed GSTIN digits. Add a regression per tax
+head across registered/unregistered × address-present/address-absent ×
+intra/inter-state.
 
 ### 2.2 A matter can be made permanently unopenable — `Missing`
 
@@ -249,9 +262,9 @@ Copying these forward would have caused real damage. Each was verified at
 | "Pricing not segmented, no published numbers" (T1-8) | **Implemented.** Three segments, 13 plans, concrete INR figures seeded in `20260531_0001`, rendered on a public page from an unauthenticated endpoint. Only "no self-serve" is true. |
 | "No filing-format validation" | Exists — per-court PDF profiles with a required-field validator (`court_format_profiles.py:357`) and pre-filing checklists. Descriptive, not blocking. |
 | "31 HCs / 26 HC judge registry" | **24 High Courts + SC, 785 judge records**, of which only 22 have a seeded `courts` row. Seed provenance is Wikipedia (`scripts/one-off/build-hc-judge-seeds.py:3-4`) — which sits badly against the repo's own source-lineage rule. |
-| "Audit export at 96% coverage" | The 96% refers to `services/audit.py`, a 117-line write-path helper with **no export code**. The actual JSONL/CSV export (`services/audit_exports.py`, 403 lines) has **no coverage gate at all**. |
+| "Audit export at 96% coverage" | The 96% refers to `services/audit.py`, a 117-line write-path helper with **no export code**. The actual JSONL/CSV export (`services/audit_exports.py`, 403 lines) has no direct per-file floor, but it is included in the `services` bucket and overall line/branch floors. |
 | "Corpus is 2,436 docs / 36,510 chunks" | **UNVERIFIABLE.** That figure is a single documentation assertion at `WORK_TO_BE_DONE.md:120` self-dated "as of 2026-04-18" — four months stale, never refreshed, with no mechanism to keep it current. Two in-repo numbers disagree with it. |
-| "Test coverage 41.5% / 10.0% branch" | **UNVERIFIABLE at HEAD.** Those are a 2026-04-25 baseline recorded in a source file. No committed coverage artifact exists; CI uploads with 14-day retention. **Correction 2026-08-16:** an earlier draft of this row said coverage is "never gated". That is wrong. `scripts/coverage_gate.py` runs in the `API (ruff + pytest)` job and asserts each **tracked** module is at or above its 2026-04-24 baseline. The accurate gap is narrower: the gate covers only modules that have a baseline, so untracked modules — including `services/audit_exports.py` — can drop to zero with CI green. |
+| "Test coverage 41.5% / 10.0% branch" | **UNVERIFIABLE at HEAD.** Those are a 2026-04-25 baseline recorded in a source file. No committed coverage artifact exists; CI uploads with 14-day retention. **Correction 2026-08-16:** `scripts/coverage_gate.py` runs in the aggregate `API (ruff + pytest)` job and enforces 9 direct per-file floors, line/branch floors for every file grouped into the 5 `api`/`core`/`db`/`schemas`/`services` buckets, and overall line/branch floors. A file absent from the 9-file list lacks a direct per-file floor but remains indirectly covered by its bucket and the totals; aggregate headroom can therefore absorb some file-level regression without CI failing. |
 
 Two additional corrections that make the picture *worse*, not better:
 
@@ -282,7 +295,7 @@ commercial or organisational rather than code.
 | T0-2 | SOC 2 / ISO | `UNVERIFIABLE` | Organisational; marketing status labels are the only in-repo artifact |
 | T0-3 | Marketing vs code | `Partially implemented` | Honesty framework is real but **prose-enforced, not test-enforced** — no test asserts a marketing claim against code. See §2.8 |
 | T0-4 | Corpus size | `UNVERIFIABLE` | External DB state; two in-repo figures disagree, both stale |
-| T0-5 | Test coverage | `Partially implemented` | Gated, but only for modules carrying a baseline in `scripts/coverage_gate.py`. Untracked modules are ungated and can drop to zero with CI green |
+| T0-5 | Test coverage | `Partially implemented` | 9 direct per-file floors + 5 all-file package buckets + overall line/branch floors. Files outside the direct list are indirectly, not individually, gated |
 | T0-6 | Postgres RLS | `Missing` | Isolation rests on app-layer `company_id` across 622 routes; 128 of 178 tenant tables have no composite FK backstop |
 | T0-7 | Prompt injection | `Partially implemented` | Verification is circular — §2.8 |
 | T0-8 | Payments | `Partially implemented` | Built, ships fail-closed; live value unverifiable |
@@ -298,7 +311,7 @@ commercial or organisational rather than code.
 | T1-3 | Tribunal coverage | `Partially implemented` | Modelled and format-profiled; no working ingest for any tribunal |
 | T1-4 | eCourts district | `Partially implemented` | Provider adapter + directories exist; national coverage and session-court automation do not |
 | T1-5 | Vernacular | `Partially implemented` | Indic OCR shipped but dark; no translation pipeline |
-| T1-6 | Residency / BYOK | `Partially implemented` | `asia-south1` is a genuine residency story; **no CMEK, no KMS reference anywhere** |
+| T1-6 | Residency / BYOK | `Partially implemented` | Core deploy configuration targets `asia-south1`, but the repository does **not** prove end-to-end India-resident processing: Anthropic/OpenAI/Gemini SDK calls have no pinned processing region and `corpus_ingest.py` opens S3 in `us-east-1`. No CMEK/KMS or per-tenant residency exists |
 | T1-7 | DPDP artifacts | `Partially implemented` | Immutable storage landed 2026-08-13; nothing executes a retention or hold decision — §2.9 |
 | T1-8 | Pricing segmentation | **`Implemented`** | External review wrong |
 | T1-9 | WhatsApp | `Missing` | Selectable channel in schema and preference UI **with no delivery implementation behind it** — a user can choose a channel that silently does nothing. **Deferred out of the pilot 2026-08-16**; the fix is now *remove from the selector* (`EH-SGR-16`), not *implement delivery* |
@@ -314,8 +327,11 @@ agentic execution (T2-6, by design), audio/video (T2-14), MCP server (T2-15),
 on-prem/VPC (T2-20).
 `Partially implemented`: Outlook (T2-2, one-way push only), DMS (T2-3, Drive only
 — no legal DMS), workflow builder (T2-7), chunking (T2-8), reranker (T2-9,
-implemented but **unproven in production**), eval harness (T2-11, good suite
-**that nothing in CI executes**), conflicts (T2-12, records but does not block),
+implemented but **unproven in production**), eval harness (T2-11, foundation
+only: the recorder explicitly does not drive a benchmark loop, the safety suite
+is fixture-only, no expert-gold baseline exists, the committed drafting result
+is 4.41/5 against a 4.8 target, and no live/gold evaluation runs in CI),
+conflicts (T2-12, records but does not block),
 time capture (T2-13, manual only), mobile (T2-16, responsive web), collaboration
 (T2-17), public API (T2-18 — but see §2.8), model routing (T2-19).
 `Missing as a maintained artifact`: the Indian-legal synonym/abbreviation map
@@ -329,7 +345,7 @@ Re-sequenced around verified findings. The external review's ordering led with
 strategy; the verified evidence says correctness first — you cannot pilot a
 product that issues wrong tax and breaks its own matter records.
 
-### Now — before any pilot (weeks 1–4)
+### Now — before an affected workflow is activated or included in a pilot (weeks 1–4)
 
 1. **Billing correctness** (§2.1–§2.4). Place-of-supply-driven GST; sum payment
    attempts; parse the documented webhook envelope with an explicit unit
@@ -343,7 +359,9 @@ product that issues wrong tax and breaks its own matter records.
 3. **Withdraw or implement the two sold-but-absent claims** (§2.8). Cheapest
    credibility item on the list.
 4. **Close the two fail-open controls and add log redaction** (§2.6).
-5. **Add a coverage gate** (T0-5). Measuring without gating is theatre.
+5. **Extend direct coverage floors where risk warrants** (T0-5). The existing
+   per-file, package-bucket and total gates remain; add a direct floor for a
+   critical module when aggregate floors are too coarse to catch its regression.
 
 ### Next — earn the right to sell (months 2–4)
 
@@ -353,7 +371,8 @@ product that issues wrong tax and breaks its own matter records.
    Dockerfile, set a collector target, emit Cloud Logging-shaped fields
    (`severity`, trace ids), wire `matter_id` — currently plumbed but never called
    — and add at least one alert policy. Today there is **zero** alerting.
-8. **T0-1 SSO/SCIM.** Gates every enterprise conversation; long lead time.
+8. **T0-1 SSO/SCIM.** Required before claims or pilots that depend on enterprise
+   identity provisioning; it does not gate unrelated implementation.
 9. **T0-6 RLS**, or an explicit accepted-risk record with compensating controls.
 10. **Backup/DR**: one restore rehearsal has ever occurred (2026-04-24, 114 days
     before this review, 51 days past the missed quarterly slot). No backup
@@ -386,8 +405,10 @@ Three defensible proof points, in order — **each conditional on work above**:
 
 1. **Procedure, not just research.** Already `Implemented` (T1-2) and genuinely
    differentiated. Lead with it.
-2. **India-resident processing.** True today for compute and data; **do not claim
-   BYOK or per-tenant residency** — neither exists.
+2. **India-hosted core infrastructure.** The checked-in deploy path targets
+   `asia-south1`. Do **not** claim end-to-end India-resident processing, BYOK or
+   per-tenant residency: external AI provider regions are not pinned and one
+   corpus source path is configured for `us-east-1`.
 3. **Priced for Indian practice.** Already `Implemented` (T1-8).
 
 Do **not** lead with citation verification until §2.7 is closed. It is currently
@@ -423,7 +444,8 @@ and no scope checker would invert the product's own safety model.
 ## 9. Cross-references
 
 - `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` — `EH-SGR-01..09` added by this review
-- `docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md` — prior NO-GO, still standing
+- `docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md` — prior deployment/evidence
+  limitations remain for their affected surfaces; they are not an implementation freeze
 - `docs/PRD_CLAUDE_CODE_2026-04-23.md` §6.1 — the reconciliation precedent this
   review follows
 - `docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md` — the enum-drift failure class
