@@ -213,8 +213,9 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   per-class fixture scope would shave ~120-200 s  - flagged for
   follow-on but not stop-ship.
   Current gate scope is exact: `scripts/coverage_gate.py` enforces 9 direct
-  per-file floors, line/branch floors across every file grouped into the 5
-  `api`/`core`/`db`/`schemas`/`services` buckets, and overall line/branch floors.
+  per-file floors; line floors across every file grouped into the 5
+  `api`/`core`/`db`/`schemas`/`services` buckets; branch floors for
+  `api`/`core`/`db`/`services` (not `schemas`); and overall line/branch floors.
   A file outside the 9-file list is indirectly covered by its bucket and the
   totals but has no individual floor, so aggregate headroom can absorb some
   file-level regression. Close the remaining sub-item by adding direct floors

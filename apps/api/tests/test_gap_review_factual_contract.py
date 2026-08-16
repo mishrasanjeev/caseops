@@ -25,6 +25,11 @@ def test_documented_coverage_scope_matches_the_gate() -> None:
         "schemas",
         "services",
     }
+    assert gate["BUCKET_THRESHOLDS"]["schemas"][1] is None
+    assert all(
+        gate["BUCKET_THRESHOLDS"][bucket][1] is not None
+        for bucket in ("api", "core", "db", "services")
+    )
     assert gate["TOTAL_LINE_MIN"] > 0
     assert gate["TOTAL_BRANCH_MIN"] > 0
 
@@ -33,7 +38,10 @@ def test_documented_coverage_scope_matches_the_gate() -> None:
     for document in (review, ledger):
         compact = _compact(document)
         assert "9 direct per-file floors" in compact
+        assert "line floors" in compact
         assert "5 `api`/`core`/`db`/`schemas`/`services` buckets" in compact
+        assert "branch floors for `api`/`core`/`db`/`services`" in compact
+        assert "not `schemas`" in compact or "has no branch floor" in compact
         assert "overall line/branch floors" in compact
         assert "untracked modules are ungated" not in compact
         assert "coverage is measured but never gated" not in compact.lower()
@@ -44,12 +52,18 @@ def test_documented_coverage_scope_matches_the_gate() -> None:
 
 def test_workflow_approval_is_not_claimed_without_runtime_state() -> None:
     backlog = _read("docs/EXECUTION_BACKLOG.md")
+    feedback = _read("docs/FEEDBACK_MERGE_BACKLOG_2026-08-16.md")
+    resolutions = _read("docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md")
     ownership = _read("docs/ip-implementation/OWNERSHIP_LEDGER.yaml")
     models = _read("apps/api/src/caseops_api/db/models.py")
 
     assert "No active workflow definition" in backlog
     assert "must first be seeded as `candidate`" in backlog
     assert "version 1 already approved" not in backlog.lower()
+    for document in (feedback, resolutions):
+        compact = _compact(document)
+        assert "No workflow service or route exists today" in compact
+        assert "existing approval path" not in compact
     assert "seeds no active workflow" in ownership
     assert 'default="candidate"' in models
 
@@ -102,11 +116,19 @@ def test_gst_and_owner_contracts_are_scoped_and_collision_free() -> None:
     assert "GO for continued repository implementation" in review
     assert "does not block unrelated repository implementation" in _compact(ledger)
     assert "| Either |" not in backlog
+    assert "`EH-SGR-17` | Enforce legal holds in storage deletion" in backlog
+    assert "`EH-SGR-09` | Observability that actually runs" in backlog
+    assert "ledger EH-SGR-09; gap review §5 item 7" in backlog
     for service in (
         "services/matter_billing.py",
         "services/matters.py",
+        "services/payments.py",
         "services/portal_outside_counsel.py",
         "services/pine_labs.py",
+        "services/llm.py",
+        "api/routes/payments.py",
+        "api/routes/portal.py",
+        "apps/web/app/portal/**",
         "services/court_sync_sources.py",
         "services/hearing_reminders.py",
         "services/ip_records.py",

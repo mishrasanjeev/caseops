@@ -39,19 +39,25 @@ Exact `EH-SGR` collision map:
 
 - **Claude — `EH-SGR-01..04`:**
   `services/matter_billing.py`, `services/matters.py`,
-  `services/portal_outside_counsel.py`, `services/pine_labs.py`,
-  `api/routes/matter_billing.py`, `api/routes/matters.py`,
-  `schemas/matter_billing.py`, `schemas/billing.py`, and the Matter billing UI.
-- **Claude — `EH-SGR-05..09`, `EH-SGR-15..16`:**
+  `services/payments.py`, `services/portal_outside_counsel.py`,
+  `services/pine_labs.py`, `api/routes/matter_billing.py`,
+  `api/routes/matters.py`, `api/routes/payments.py`, `api/routes/portal.py`,
+  `schemas/matter_billing.py`, `schemas/billing.py`,
+  `apps/web/app/app/matters/[id]/billing/**`,
+  `apps/web/app/app/admin/matter-billing/**`, `apps/web/app/portal/**`, and
+  `apps/web/lib/api/portal.ts`.
+- **Claude — `EH-SGR-05..09`, `EH-SGR-15..17`:**
   `core/rate_limit.py`, `core/csrf.py`, `core/observability.py`,
   `services/inbound_email.py`, `services/citations.py`,
   `services/recommendations.py`, `services/litigation_strategy.py`,
-  `services/drafting.py`, `services/source_actions.py`,
+  `services/drafting.py`, `services/llm.py`, `services/source_actions.py`,
   `services/authorities.py`, `services/text_chunking.py`,
   `services/reranker.py`, `services/court_sync_sources.py`,
   `services/hearing_reminders.py`, `services/notification_delivery.py`,
-  `services/saas_billing.py`, their corresponding routes/UI, the API image/deploy
-  configuration for `EH-SGR-09`, and `apps/web/components/marketing/Security.tsx`.
+  `services/saas_billing.py`, `services/data_governance.py`,
+  `services/document_storage.py`, `schemas/data_governance.py`, their
+  corresponding routes/UI, the API image/deploy configuration for `EH-SGR-09`,
+  and `apps/web/components/marketing/Security.tsx`.
 - **Codex — `EH-SGR-10..14`:** `services/ip_documents.py`,
   `services/ip_records.py`, `services/ip_identifier_rules.py`,
   `services/ip_operations.py`, `services/ip_lifecycle.py`, their IP routes,
@@ -102,7 +108,8 @@ they do not block unrelated repository implementation.
 | `FMB-12` | Matter conflict check becomes IP-aware | Codex | queued | resolutions §5a |
 | `FMB-04` | IP document filter/search by type + pagination | Codex | queued | backlog §4 |
 | `EH-SGR-10` | `/api/ip/documents` unpaginated with N+1 access check | Codex | queued | ledger |
-| `EH-SGR-09` | Observability that actually runs; at least one alert policy | Claude | queued | gap review §2.9 |
+| `EH-SGR-09` | Observability that actually runs; at least one alert policy | Claude | queued | ledger EH-SGR-09; gap review §5 item 7 |
+| `EH-SGR-17` | Enforce legal holds in storage deletion and execute retention decisions | Claude | queued | gap review §2.9; T1-7; §5 item 13 |
 | `FMB-05` `FMB-06` | Contextual help; structured validation errors | Claude | queued | backlog §4 |
 | `FMB-07` | Bridge tracked-case hearing changes into calendar | Claude | queued | backlog §4 |
 | `FMB-09` | Map the 27 QA cases onto the repo test-ID convention | Claude | queued | backlog §7 |

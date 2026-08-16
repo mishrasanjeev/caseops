@@ -326,9 +326,10 @@ undocumented.
 | Court-data vendor | **Engineering posture accepted** | Build to the frozen adapter contract; vendor choice stays a configuration change. P0–P3 do not wait on it. |
 
 **Sign-off:** the workflow definition version 1 approver is named — **Sanjeev
-Kumar**, 2026-08-16. The approval act itself is a runtime action against a seeded
-version 1, applied through the existing approval path so the approver snapshot is
-persisted; naming the approver in a document does not by itself produce an
+Kumar**, 2026-08-16. The approval act will be a runtime action against a seeded
+candidate version 1, applied through an approval path once that path is
+implemented so the approver snapshot is persisted. No workflow service or route
+exists today; naming the approver in a document does not by itself produce an
 approved workflow version.
 
 **Registry scope — decided 2026-08-16: seed all registries**, Indian and
