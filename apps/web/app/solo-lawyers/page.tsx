@@ -97,7 +97,7 @@ export default function SoloLawyersPage() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
               icon={Search}
-              title="SCC Online / Manupatra"
+              title="Research subscriptions"
               body="One subscription for research; another to download PDFs; citations pasted by hand."
             />
             <PitchCard

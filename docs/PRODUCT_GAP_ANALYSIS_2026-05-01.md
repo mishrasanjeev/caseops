@@ -48,14 +48,14 @@ Local repo evidence:
 
 External benchmark sources reviewed:
 
-- SCC Online AI Pro: https://www.scconline.com/ai-pro
-- Manupatra legal research: https://www.manupatra.ai/legal-research
-- Clio features: https://www.clio.com/features/
-- Thomson Reuters Legal Tracker outside counsel spend: https://legal.thomsonreuters.com/en/legal/financial-management/outside-counsel-spend
-- Thomson Reuters CoCounsel Legal: https://legal.thomsonreuters.com/en/products/cocounsel-legal
-- Lexis+ AI: https://www.lexisnexis.com/en-us/products/lexis-plus-ai.page
-- Ironclad AI overview: https://support.ironcladapp.com/hc/en-us/articles/12947738534935-Ironclad-AI-Overview
-- Harvey platform: https://www.harvey.ai/platform
+- Indian legal research platform (AI tier) — vendor documentation
+- Indian legal research platform — vendor documentation
+- Practice-management platform feature list — vendor documentation
+- Enterprise legal-spend / outside-counsel management platform — vendor documentation
+- Legal AI assistant platform — vendor documentation
+- Legal research AI platform — vendor documentation
+- Contract lifecycle management AI platform — vendor documentation
+- Legal AI platform for law firms — vendor documentation
 
 ## What Changed Since The 2026-04-30 Gap Report
 
@@ -245,7 +245,7 @@ What would make it best:
 
 ### Legal Research Leaders
 
-SCC Online AI Pro and Manupatra set a high bar on legal content, coverage, search, citations, and research confidence. They compete on corpus, court coverage, legal document types, citation graph, AI-assisted summaries, and research workflows.
+Established Indian legal research incumbents set a high bar on legal content, coverage, search, citations, and research confidence. They compete on corpus, court coverage, legal document types, citation graph, AI-assisted summaries, and research workflows.
 
 CaseOps gap:
 
@@ -264,7 +264,7 @@ Required bar:
 
 ### Practice Management Leaders
 
-Clio sets a broad practice management bar across intake, client management, calendars, documents, billing, payments, and communication.
+Established practice-management platforms set a broad bar across intake, client management, calendars, documents, billing, payments, and communication.
 
 CaseOps gap:
 
@@ -281,7 +281,7 @@ Required bar:
 
 ### Legal AI Leaders
 
-CoCounsel, Lexis+ AI, Harvey, and similar platforms compete on research, drafting, review, workflow automation, knowledge vaults, private workspaces, and enterprise controls.
+Leading legal AI platforms compete on research, drafting, review, workflow automation, knowledge vaults, private workspaces, and enterprise controls.
 
 CaseOps gap:
 
@@ -300,7 +300,7 @@ Required bar:
 
 ### CLM Leaders
 
-Ironclad and related CLM products compete on contract intake, playbooks, approvals, AI extraction, negotiation, e-signature, obligation management, and analytics.
+Leading CLM products compete on contract intake, playbooks, approvals, AI extraction, negotiation, e-signature, obligation management, and analytics.
 
 CaseOps gap:
 
@@ -321,7 +321,7 @@ Required bar:
 
 ### Outside Counsel Spend Leaders
 
-Thomson Reuters Legal Tracker and other legal operations platforms compete on e-billing, rate review, budgets, matter spend, invoice guidelines, vendor benchmarking, and outside counsel performance.
+Enterprise legal-operations platforms compete on e-billing, rate review, budgets, matter spend, invoice guidelines, vendor benchmarking, and outside counsel performance.
 
 CaseOps gap:
 

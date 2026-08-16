@@ -966,3 +966,234 @@ tracked under `WTD-5.1` / `WTD-5.3`.
   functional-QA process test locks both patterns.
 - **Evidence:** `playwright.app.config.ts`, `playwright.prod-ram.config.ts`, and
   `scripts/functional-qa-process.test.mjs`.
+
+## 2026-08-16 Strategic Gap Review — verified control gaps
+
+Source: `docs/STRATEGIC_GAP_REVIEW_2026-08-16.md`, verified against `ba869fa2`
+by direct code inspection (243 findings). An external strategy review triggered
+this pass; 35 of its 111 checkable claims were wrong or overstated and were not
+carried forward. Competitor names are deliberately absent from this repository.
+
+Two methodology rules established by this pass and binding on future audits:
+
+1. Confirm `git rev-parse --short HEAD` before measuring. A first pass measured a
+   tree 391 commits behind `main` and produced figures wrong by 3-6x.
+2. `infra/cloudrun/api-service.yaml` is a reference template, not production
+   truth: `scripts/deploy-prod.sh:364-389` deploys via
+   `gcloud run deploy --update-env-vars` and never applies it, and
+   `infra/cloudrun/deploy.ps1:234` warns against replacing it. Cloud Run *job*
+   manifests are applied and may be relied on.
+
+### EH-SGR-01 - Intra-state invoices issued with the wrong GST head
+
+- **Status:** Missing.
+- **Gap found:** intra-state B2C invoices are issued with IGST instead of
+  CGST+SGST, and a malformed client GSTIN silently produces the same wrong head.
+  Place of supply is a free-text display field that never reaches the tax engine,
+  which infers jurisdiction from GSTIN digits alone.
+- **Control required:** place of supply drives the determination; unregistered
+  clients resolve to the supplier's state; regression across every tax head for
+  registered/unregistered x intra/inter-state.
+- **Severity:** stop-ship. Filing-level defect on real client invoices.
+
+### EH-SGR-02 - A matter can be made permanently unopenable
+
+- **Status:** Missing.
+- **Gap found:** an outside-counsel portal invoice submission writes
+  `needs_review`, and a refund webhook writes an out-of-enum status; both are
+  valid DB states the read schema rejects, so `GET /api/matters/{id}` 500s on
+  every subsequent load with no in-product remedy.
+- **Control required:** one status enum reconciled across DB, write path and read
+  schema; the create/update/read-parse audit mandated for enum drift; backfill of
+  rows already in the bad state.
+- **Severity:** stop-ship. Repeats the failure class recorded in
+  `docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md`.
+
+### EH-SGR-03 - Client payments under-credited
+
+- **Status:** Missing.
+- **Gap found:** an invoice settled across several attempts credits only the
+  largest attempt; the webhook cannot read the amount from the provider's
+  documented nested payload and yields 0, so partial payments record as zero
+  collected; the flat `amount` key is read as paisa or rupees depending on JSON
+  type; the matter-invoice webhook path has no out-of-order guard.
+- **Control required:** sum attempts; parse the documented envelope with an
+  explicit unit contract; port the subscription path's out-of-order guard.
+- **Severity:** stop-ship. Clients are chased for money already paid.
+
+### EH-SGR-04 - Invoice numbering not gapless, not concurrency-safe, not immutable
+
+- **Status:** Partially implemented.
+- **Gap found:** arbitrary invoice numbers may be supplied by an admin or an
+  outside-counsel portal user; the sequence is read unlocked so concurrent
+  creation raises an uncaught IntegrityError (500, not retry); a tenant without a
+  billing profile can auto-number exactly one invoice ever; immutability exists
+  only because no edit endpoint was written - no CHECK, trigger or revision table.
+- **Severity:** stop-ship for GST invoicing.
+
+### EH-SGR-05 - Rate limiting covers 3.7% of the API and is per-instance
+
+- **Status:** Partially implemented.
+- **Gap found:** slowapi with process-local in-memory storage, no `storage_uri`
+  and no Redis anywhere, so limits are per container instance;
+  `scripts/deploy-prod.sh:58` pins max 20 instances at concurrency 1, making the
+  effective limit up to 20x documented. 7 of 40 route modules apply any limit,
+  covering 23 of 622 endpoint decorators. `test_ai_route_governance.py:32`
+  inspects only `/api/ai/*` and `/api/recommendations/*`.
+- **Severity:** stop-ship for abuse and cost control.
+
+### EH-SGR-06 - Two security controls fail open by construction
+
+- **Status:** Partially implemented.
+- **Gap found:** `services/inbound_email.py:224-225` bare-returns from
+  `_verify_signature` in mock mode before the HMAC comparison;
+  `core/csrf.py:72-80` exempts any path ending `/webhook` via
+  `_EXEMPT_SUFFIXES`, by design. Separately there is no log redaction, so any
+  `extra={...}` carrying client names, emails or payment payloads reaches Cloud
+  Logging in the clear.
+- **Severity:** stop-ship. Privilege exposure in a legal product.
+
+### EH-SGR-07 - Citation verifier does not check the proposition on production paths
+
+- **Status:** Partially implemented.
+- **Gap found:** of three `verified=True` paths in `services/citations.py`, the
+  bracket-tag short-circuit (`:161-171`) reads neither `source.text` nor
+  `claim.proposition`, and both production prompts
+  (`recommendations.py:1249-1256`, `litigation_strategy.py:653-655`) hard-require
+  that tag. Drafting passes `proposition=None` (`drafting.py:925-927`).
+  `tests/test_citations.py:99-115` asserts the bypass as intended behaviour.
+- **Control required:** mandatory proposition gate on production paths; bracket
+  tag demoted to a resolver; the bypass test deleted or inverted; any quality
+  claim that relied on the old number re-baselined.
+- **Severity:** stop-ship. Reliance on fabricated precedent is judicially treated
+  as misconduct.
+
+### EH-SGR-08 - Customer-facing claims not backed by running code
+
+- **Status:** Missing.
+- **Gap found:** `apps/web/components/marketing/Security.tsx:83` sells
+  "Prompt-injection tests" while the stripper is unreachable from
+  `AnthropicProvider` (`llm.py:398`), `OpenAIProvider` (`:509`) and
+  `GeminiProvider` (`:653`), with `conftest.py:106` pinning the suite to mock. A
+  billable "API access - API keys and dashboard" SKU is seeded active while no
+  API-key authentication exists.
+- **Control required:** a test that asserts each marketing claim against code.
+  The honesty framework is currently prose-enforced, not test-enforced.
+- **Severity:** stop-ship for commercial and revenue-recognition reasons.
+
+### EH-SGR-09 - Observability and DR are configured but not operative
+
+- **Status:** Partially implemented.
+- **Gap found:** OTel is broken at three independent layers - the `observability`
+  extra is never installed (`apps/api/Dockerfile:39-40`), no artifact sets the
+  flag for the production API, and the exporter default is `localhost:4318` with
+  no collector target. Staging sets `CASEOPS_OTEL_ENABLED=true` (`ci.yml:509`)
+  against an image without the SDK, so it emits no traces while reading as
+  working evidence. `matter_id` is plumbed but never called from any route,
+  service or worker. Logs are JSON but not Cloud Logging-shaped (`level`, not
+  `severity`; no trace field). There is no alert policy, uptime check, SLO, log
+  metric or paging integration anywhere. `/api/health` returns 200 with an
+  unreachable database. One restore rehearsal has ever occurred (2026-04-24),
+  51 days past the missed quarterly slot; no IaC artifact configures Cloud SQL
+  backups, GCS versioning or lifecycle.
+- **Severity:** scale-hardening, blocking for any monitored pilot.
+
+### EH-SGR-10 - IP documents endpoint returns every tenant document unpaginated
+
+- **Status:** Missing.
+- **Gap found:** surfaced while mapping the 2026-08-16 feedback document
+  (`docs/FEEDBACK_MERGE_BACKLOG_2026-08-16.md`, DOC-IP-03). `GET /api/ip/documents`
+  returns EVERY document in the tenant with no pagination and an N+1 per-row
+  access check (`_assert_document_targets_accessible`). There is no
+  taxonomy/type/state filter, so the caller cannot narrow the set either.
+- **Control required:** taxonomy_key / query / state filters plus pagination
+  applied in SQL *before* the per-row access loop, so restricted documents leak
+  no count and the row scan is bounded.
+- **Severity:** scale-hardening. Degrades with tenant size and duplicates the
+  unbounded-scan class already recorded against `/api/health/ingest` in
+  EH-SGR-09.
+
+### EH-SGR-11 - IP identifier uniqueness has two conflicting rules
+
+- **Status:** Partially implemented.
+- **Gap found:** `ip_identifiers` has no unique constraint and instead flags
+  duplicates via `_duplicate_identifiers` (`services/ip_records.py:80-104`) with
+  `reconciliation_status='needs_review'`, while `docket.primary_identifier` is
+  hard-unique per company (`uq_ip_docket_company_identifier`,
+  `db/models.py:14012-14016`) and returns HTTP 409. The same user-facing concept
+  ("application number already exists") therefore behaves two different ways
+  depending on which field it lands in.
+- **Control required:** one decided rule (per company? per registry+kind? are
+  legitimate re-filings allowed?), encoded once. The 2026-08-16 feedback document
+  lists this as an open requirement, so the decision is a founder input.
+- **Severity:** scale-hardening, blocking for IP identifier UI work.
+
+### EH-SGR-12 - IP duplicate detection silently misses matches (office not normalised)
+
+- **Status:** Missing.
+- **Gap found:** `_duplicate_identifiers` (`services/ip_records.py:95-96`) keys on
+  the raw `office` value, so "Delhi" and "delhi" occupy different namespaces and
+  the duplicate check fails to detect real duplicates. A duplicate-detection
+  routine that silently under-detects is worse than none, because downstream
+  reconciliation treats its output as authoritative.
+- **Control required:** normalise `office` (and `jurisdiction`) before use as a
+  duplicate-detection key, and seed the registry-office master so the value comes
+  from a controlled list rather than free text.
+- **Severity:** stop-ship for IP identifier work. Surfaced by
+  `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md` D-1.
+
+### EH-SGR-13 - Two disagreeing identifier normalisations
+
+- **Status:** Partially implemented.
+- **Gap found:** `normalize_ip_identifier` (`services/ip_identifier_rules.py:14-18`)
+  applies NFKC + casefold + alphanumeric-only, while the docket create path
+  applies only `.strip().upper()` (`services/ip_operations.py:313`). `TM-1234`
+  and `TM 1234` therefore collide in the ledger but not on the docket - the same
+  pair of strings is one number in one layer and two in the other.
+- **Control required:** one normalisation. Resolved by deriving
+  `docket.primary_identifier` from the confirmed current `is_primary` ledger row
+  so it inherits the ledger normalisation (see OPEN_ITEM_RESOLUTIONS §3).
+- **Severity:** scale-hardening; becomes stop-ship once identifier UI ships.
+
+### EH-SGR-14 - Terminal-status constants disagree between IP modules
+
+- **Status:** Partially implemented.
+- **Gap found:** `services/ip_lifecycle.py:40-42` and `services/ip_records.py:708`
+  define different terminal sets. The latter mixes application phases
+  (`refused`/`withdrawn`/`registered`) into a docket-status test and omits
+  `archived`/`transferred`/`retired`. It is not fail-open today only because an
+  adjacent `docket_is_active` check at `ip_records.py:721` happens to cover the
+  gap - correct by luck, not by construction.
+- **Control required:** one shared terminal constant, asserted by a test that
+  fails if the two modules diverge again.
+- **Severity:** scale-hardening. Same class as the lifecycle rules already
+  recorded under EH-LC-01.
+
+### EH-SGR-15 - Ingest fetcher sends a spoofed browser user-agent
+
+- **Status:** Missing.
+- **Gap found:** the authority ingest fetcher presents a spoofed Chrome
+  user-agent and does not consult `robots.txt` or apply a per-host minimum
+  interval. This is the clearest terms-of-use exposure in the ingest path and it
+  sits badly against the repository rule that public legal data needs source,
+  lineage and access-boundary checks.
+- **Control required:** identifying user-agent
+  (`CaseOps-AuthorityIngest/1.0 (+https://<domain>/crawler; contact <ops-email>)`),
+  `robots.txt` fetched and honoured once per host per run, and a per-host minimum
+  request interval.
+- **Severity:** stop-ship before any expanded ingest run. Surfaced by
+  `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md` §9.
+
+### EH-SGR-16 - Dead notification channels are user-selectable
+
+- **Status:** Missing.
+- **Gap found:** `SMS` and `WHATSAPP` are selectable notification channels with
+  no way to reach a recipient - there is no verified phone number on `User` or
+  `CompanyMembership`, and WhatsApp has no adapter. Selecting `sms` on a hearing
+  produces reminder rows that can only ever reach `FAILED`, while the UI presents
+  the choice as valid.
+- **Control required:** remove both from every user-facing selector and mark them
+  `roadmap` in the API response until a verified-phone slice and an adapter
+  exist. Keep the enum members for forward compatibility.
+- **Severity:** stop-ship for the hearing-reminder workflow (F-03): it is the
+  product inviting a failure it cannot fulfil.
