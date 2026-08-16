@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
@@ -351,7 +352,10 @@ function EscalationsCard({
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-2">
         {isLoading ? (
-          <p className="text-sm text-[var(--color-mute)]">Loading…</p>
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
         ) : escalations.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             Nothing is escalating. Items appear here when a deadline has no active owner, or when a
@@ -452,7 +456,10 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {mine.isLoading ? (
-          <p className="text-sm text-[var(--color-mute)]">Loading…</p>
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
         ) : rows.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             You have acknowledged every deadline you hold. Acknowledging is what stops a critical

@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   CreditCard,
   Download,
-  Loader2,
   RefreshCw,
   RotateCcw,
   ShoppingCart,
@@ -17,6 +16,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Card,
   CardContent,
@@ -314,9 +314,10 @@ export default function TenantBillingPage() {
 
       {isPending ? (
         <Card>
-          <CardContent className="flex items-center gap-2 text-sm text-[var(--color-mute)]">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Loading billing state...
+          <CardContent className="flex flex-col gap-3" aria-busy="true" aria-label="Loading billing state">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
           </CardContent>
         </Card>
       ) : null}
