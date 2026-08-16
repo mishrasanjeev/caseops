@@ -82,7 +82,7 @@ they do not block unrelated repository implementation.
 | `EH-SGR-03` | Payments under-credited — multi-attempt invoices credit only the largest attempt; webhook reads amount as 0 from the nested payload | Claude | queued | gap review §2.3 |
 | `EH-SGR-04` | Invoice numbering not gapless, not concurrency-safe, not immutable | Claude MIGRATION | queued | gap review §2.4 |
 | `EH-SGR-07` + `FMB-01` + `FMB-02` | Trust predicates. **One fix, not three** — citation verifier and source links are the same failure class: green in tests, hollow in production | Claude | active | gap review §2.7, backlog §3.1 |
-| `FMB-03` | Keyword search has no lexical retrieval path; depends on an embedding provider that defaults to mock | Claude | queued | backlog §3.2 |
+| `FMB-03` | Keyword search selects candidates by recency, not by the query — topical queries fall through to the 180 most recent of >800K docs. Needs an FTS index; **blocked behind `EH-SGR-04`'s migration** | Claude | blocked | backlog §3.2 (corrected) |
 
 ## P1 — decided, cheap, unblocked
 
