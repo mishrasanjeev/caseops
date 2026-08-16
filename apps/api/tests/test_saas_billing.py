@@ -7,7 +7,7 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from threading import Event
 
 import pytest
@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     BillingUsageAttribution,
     Company,
     CompanyMembership,
+    Matter,
     PlatformAdminAuditEvent,
     PlatformAdminMembership,
     ProviderCostProfile,
@@ -37,7 +38,11 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.pine_labs import verify_pine_labs_plural_signature
 from caseops_api.services.platform_admin import require_platform_admin
-from caseops_api.services.saas_billing import ensure_billing_account
+from caseops_api.services.saas_billing import (
+    assert_ai_credits_available,
+    debit_ai_credits,
+    ensure_billing_account,
+)
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -188,6 +193,246 @@ def test_billing_account_creation_is_idempotent_across_parallel_sqlite_sessions(
             == 1
         )
     assert len(account_ids) == 1
+
+
+def test_ai_credit_preflight_without_subscription_is_side_effect_free(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    company_id = str(bootstrap["company"]["id"])
+    factory = get_session_factory()
+    with factory() as session:
+        assert_ai_credits_available(
+            session,
+            company_id=company_id,
+            estimated_credits=2,
+        )
+        assert session.scalar(
+            select(func.count(BillingAccount.id)).where(
+                BillingAccount.company_id == company_id
+            )
+        ) == 0
+        assert session.scalar(
+            select(func.count(BillingSubscription.id)).where(
+                BillingSubscription.company_id == company_id
+            )
+        ) == 0
+        assert not session.info.get("caseops_sqlite_write_lock_held", False)
+
+
+def test_ai_credit_preflight_preserves_subscription_credit_and_tenant_semantics(
+    client: TestClient,
+) -> None:
+    def bootstrap_named(slug: str, email: str) -> dict[str, object]:
+        response = client.post(
+            "/api/bootstrap/company",
+            json={
+                "company_name": f"{slug.title()} LLP",
+                "company_slug": slug,
+                "company_type": "law_firm",
+                "owner_full_name": f"{slug.title()} Owner",
+                "owner_email": email,
+                "owner_password": "FoundersPass123!",
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    limited = bootstrap_named("credit-limited", "owner@limited.in")
+    other_tenant = bootstrap_named("credit-unlimited", "owner@unlimited.in")
+    limited_company_id = str(limited["company"]["id"])
+    other_company_id = str(other_tenant["company"]["id"])
+
+    for payload in (limited, other_tenant):
+        response = client.get(
+            "/api/billing/current",
+            headers=auth_headers(str(payload["access_token"])),
+        )
+        assert response.status_code == 200, response.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        assert_ai_credits_available(
+            session,
+            company_id=other_company_id,
+            estimated_credits=10_000,
+        )
+        assert session.scalar(
+            select(func.count(BillingCreditLedger.id)).where(
+                BillingCreditLedger.company_id == other_company_id
+            )
+        ) == 0
+        assert not session.info.get("caseops_sqlite_write_lock_held", False)
+
+    with factory() as session:
+        limited_subscription = session.scalar(
+            select(BillingSubscription).where(
+                BillingSubscription.company_id == limited_company_id
+            )
+        )
+        assert limited_subscription is not None
+        limited_subscription.entitlement_overrides_json = {
+            "ai_credits_monthly": 1,
+        }
+        other_subscription = session.scalar(
+            select(BillingSubscription).where(
+                BillingSubscription.company_id == other_company_id
+            )
+        )
+        assert other_subscription is not None
+        other_subscription.entitlement_overrides_json = {
+            "ai_credits_monthly": 100,
+        }
+        matter = Matter(
+            company_id=limited_company_id,
+            matter_code="SUBSCRIBED-AI-PREFLIGHT-RACE",
+            title="Subscribed AI preflight lifecycle race",
+            practice_area="civil",
+            forum_level="high_court",
+            status="intake",
+        )
+        session.add(matter)
+        session.commit()
+        matter_id = matter.id
+
+    with factory() as request_session:
+        # Each tenant sees only its own projected grant, and both missing
+        # grants remain unmaterialized until a completion is successfully
+        # debited.
+        assert_ai_credits_available(
+            request_session,
+            company_id=other_company_id,
+            estimated_credits=100,
+        )
+        assert_ai_credits_available(
+            request_session,
+            company_id=limited_company_id,
+            estimated_credits=1,
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            assert_ai_credits_available(
+                request_session,
+                company_id=limited_company_id,
+                estimated_credits=2,
+            )
+        assert exc_info.value.status_code == 402
+        assert request_session.scalar(
+            select(func.count(BillingCreditLedger.id)).where(
+                BillingCreditLedger.company_id == limited_company_id
+            )
+        ) == 0
+        assert not request_session.new
+        assert not request_session.dirty
+        assert not request_session.deleted
+        assert not request_session.info.get("caseops_sqlite_write_lock_held", False)
+
+        # This is the exact provider-callback shape that deadlocked when the
+        # finite-credit preflight flushed its missing grant and retained the
+        # process-wide SQLite writer lock.
+        def dispose_from_provider_callback() -> None:
+            with factory() as lifecycle_session:
+                lifecycle_matter = lifecycle_session.get(Matter, matter_id)
+                assert lifecycle_matter is not None
+                lifecycle_matter.status = "disposed"
+                lifecycle_matter.is_active = False
+                lifecycle_session.commit()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            lifecycle_write = executor.submit(dispose_from_provider_callback)
+            try:
+                lifecycle_write.result(timeout=5)
+            except FutureTimeoutError:
+                request_session.rollback()
+                lifecycle_write.result(timeout=5)
+                pytest.fail("Subscribed AI preflight blocked the lifecycle writer")
+
+    with factory() as session:
+        debit_ai_credits(
+            session,
+            company_id=limited_company_id,
+            actor_membership_id=None,
+            matter_id=matter_id,
+            purpose="matter_file_qa",
+            credits=1,
+            source_object_type="llm_completion",
+            source_object_id="successful-completion",
+        )
+        session.commit()
+        rows = list(
+            session.scalars(
+                select(BillingCreditLedger)
+                .where(BillingCreditLedger.company_id == limited_company_id)
+                .order_by(BillingCreditLedger.created_at, BillingCreditLedger.id)
+            )
+        )
+        assert [row.delta for row in rows] == [1, -1]
+        assert rows[-1].balance_after == 0
+
+    with factory() as session:
+        debit_ai_credits(
+            session,
+            company_id=other_company_id,
+            actor_membership_id=None,
+            matter_id=None,
+            purpose="matter_file_qa",
+            credits=1,
+            source_object_type="llm_completion",
+            source_object_id="other-tenant-completion",
+        )
+        session.commit()
+
+    with factory() as session:
+        with pytest.raises(HTTPException) as exc_info:
+            assert_ai_credits_available(
+                session,
+                company_id=limited_company_id,
+                estimated_credits=1,
+            )
+        assert exc_info.value.status_code == 402
+        assert_ai_credits_available(
+            session,
+            company_id=other_company_id,
+            estimated_credits=99,
+        )
+        with pytest.raises(HTTPException) as other_exc_info:
+            assert_ai_credits_available(
+                session,
+                company_id=other_company_id,
+                estimated_credits=100,
+            )
+        assert other_exc_info.value.status_code == 402
+
+    with factory() as session:
+        expiring_grant = session.scalar(
+            select(BillingCreditLedger).where(
+                BillingCreditLedger.company_id == other_company_id,
+                BillingCreditLedger.delta > 0,
+            )
+        )
+        assert expiring_grant is not None
+        expiring_grant.expires_at = datetime.now(UTC) - timedelta(days=1)
+        session.commit()
+
+    with factory() as session:
+        with pytest.raises(HTTPException) as expired_exc_info:
+            assert_ai_credits_available(
+                session,
+                company_id=other_company_id,
+                estimated_credits=1,
+            )
+        assert expired_exc_info.value.status_code == 402
+        assert session.scalar(
+            select(func.count(BillingCreditLedger.id)).where(
+                BillingCreditLedger.company_id == other_company_id
+            )
+        ) == 2
+        assert session.scalar(
+            select(func.count(BillingCreditLedger.id)).where(
+                BillingCreditLedger.company_id == other_company_id,
+                BillingCreditLedger.event_type == "expiry",
+            )
+        ) == 0
+        assert not session.info.get("caseops_sqlite_write_lock_held", False)
 
 
 def test_provider_disabled_checkout_does_not_activate_plan(client: TestClient) -> None:
