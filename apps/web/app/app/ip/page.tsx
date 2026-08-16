@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   addIpCostItem,
@@ -1437,11 +1438,17 @@ function DeadlineWorkspaceCard({
 
         {enabled && workspace.data?.deadlines.length ? (
           <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Field label="Primary membership ID">
-              <Input value={primaryId} onChange={(event) => setPrimaryId(event.target.value)} />
+            <Field label="Responsible lawyer" htmlFor="deadline-primary-owner">
+              <PersonPicker id="deadline-primary-owner" value={primaryId} onChange={setPrimaryId} />
             </Field>
-            <Field label="Backup membership ID">
-              <Input value={backupId} onChange={(event) => setBackupId(event.target.value)} />
+            <Field label="Backup" htmlFor="deadline-backup-owner">
+              <PersonPicker
+                id="deadline-backup-owner"
+                value={backupId}
+                onChange={setBackupId}
+                excludeMembershipIds={[primaryId]}
+                placeholder="No backup"
+              />
             </Field>
             <Field label="Internal target">
               <Input
@@ -1768,8 +1775,8 @@ function DeadlineGovernanceCard({
 
         {canPropose || canActivate ? (
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-            <Field label="Independent fixture reviewer membership ID">
-              <Input value={reviewerId} onChange={(event) => setReviewerId(event.target.value)} />
+            <Field label="Independent fixture reviewer" htmlFor="rule-fixture-reviewer">
+              <PersonPicker id="rule-fixture-reviewer" value={reviewerId} onChange={setReviewerId} />
             </Field>
             <Field label="Governance / impact reason">
               <Input value={governanceReason} onChange={(event) => setGovernanceReason(event.target.value)} />
@@ -2032,7 +2039,7 @@ function LifecycleCard({ docket, enabled, onChanged }: { docket: IpDocket; enabl
             <Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></Field>
             {toStatus === "transferred" ? <Field label="Successor docket ID"><Input value={successorDocketId} onChange={(event) => setSuccessorDocketId(event.target.value)} /></Field> : null}
-            <Field label="Second approver membership ID (optional)"><Input value={secondApproverMembershipId} onChange={(event) => setSecondApproverMembershipId(event.target.value)} /></Field>
+            <Field label="Second approver (optional)" htmlFor="lifecycle-second-approver"><PersonPicker id="lifecycle-second-approver" value={secondApproverMembershipId} onChange={setSecondApproverMembershipId} placeholder="No second approver" /></Field>
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview lifecycle impact</Button>
               <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => transition.mutate()} disabled={!previewCurrent || !blockersAcknowledged || transition.isPending}>Apply lifecycle transition</Button>
@@ -2119,14 +2126,16 @@ function CoverageCard({ docket, enabled, onChanged }: { docket: IpDocket; enable
       <CardContent className="flex min-w-0 flex-col gap-3">
         {docket.deadline_coverages.map((row) => (
           <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
-            <div className="break-all font-semibold">Responsible: {row.responsible_membership_id}</div>
+            <div className="min-w-0 font-semibold">
+              Responsible: <PersonName membershipId={row.responsible_membership_id} />
+            </div>
             <div className="mt-1 text-xs text-[var(--color-mute)]">{row.coverage_status} · calendar {row.calendar_projection_status} · v{row.reassignment_version}</div>
           </div>
         ))}
         {enabled && docket.deadline_coverages.length ? (
           <form className="grid min-w-0 gap-2" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
-            <Field label="Current membership ID"><Input value={fromMembershipId} onChange={(event) => setFromMembershipId(event.target.value)} /></Field>
-            <Field label="Replacement membership ID"><Input value={toMembershipId} onChange={(event) => setToMembershipId(event.target.value)} /></Field>
+            <Field label="Currently responsible" htmlFor="coverage-from"><PersonPicker id="coverage-from" value={fromMembershipId} onChange={setFromMembershipId} /></Field>
+            <Field label="Offer the work to" htmlFor="coverage-to"><PersonPicker id="coverage-to" value={toMembershipId} onChange={setToMembershipId} excludeMembershipIds={[fromMembershipId]} /></Field>
             <Field label="Transfer reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
             <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!fromMembershipId || !toMembershipId || reason.length < 5 || mutation.isPending}>Offer covered deadlines</Button>
           </form>
@@ -2201,7 +2210,7 @@ function ObligationCard({ docket, enabled, onChanged }: { docket: IpDocket; enab
         {enabled ? (
           <form className="grid min-w-0 gap-2" onSubmit={(event) => { event.preventDefault(); create.mutate(); }}>
             <Field label="Obligation"><Input value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-            <Field label="Owner membership ID"><Input value={ownerMembershipId} onChange={(event) => setOwnerMembershipId(event.target.value)} /></Field>
+            <Field label="Owner" htmlFor="obligation-owner"><PersonPicker id="obligation-owner" value={ownerMembershipId} onChange={setOwnerMembershipId} /></Field>
             <Field label="Due date (optional)"><Input type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} /></Field>
             <Field label="Obligation evidence"><Input value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field>
             <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={title.length < 3 || !ownerMembershipId || evidence.length < 3 || create.isPending}>Add recordal obligation</Button>
@@ -2278,7 +2287,26 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  htmlFor,
+}: {
+  label: string;
+  children: React.ReactNode;
+  // When the control is a composite (a picker with its own filter box), the
+  // label must point at the real control by id rather than wrap the group,
+  // otherwise it binds to whichever input happens to come first.
+  htmlFor?: string;
+}) {
+  if (htmlFor) {
+    return (
+      <div className="flex min-w-0 flex-col gap-1">
+        <Label htmlFor={htmlFor}>{label}</Label>
+        {children}
+      </div>
+    );
+  }
   return <label className="flex min-w-0 flex-col gap-1"><Label>{label}</Label>{children}</label>;
 }
 

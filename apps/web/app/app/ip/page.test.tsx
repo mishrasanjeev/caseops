@@ -210,7 +210,31 @@ describe("IpDocketPage", () => {
     });
     fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [] });
     listCalendarConnectionsMock.mockResolvedValue({ connections: [] });
-    listEmployeesMock.mockResolvedValue({ employees: [], total: 0 });
+    listEmployeesMock.mockResolvedValue({
+      employees: [
+        {
+          membership_id: "member-1",
+          full_name: "Priya Raghavan",
+          email: "priya@example.com",
+          designation: "Partner",
+          department: "IP",
+          membership_active: true,
+          user_active: true,
+          employment_status: "active",
+        },
+        {
+          membership_id: "member-2",
+          full_name: "Anand Rao",
+          email: "anand@example.com",
+          designation: "Associate",
+          department: "IP",
+          membership_active: true,
+          user_active: true,
+          employment_status: "active",
+        },
+      ],
+      total: 2,
+    });
     listTeamsMock.mockResolvedValue({ teams: [], total: 0 });
     fetchIpAccessPanelMock.mockResolvedValue({
       docket_id: "ip-1",
@@ -552,8 +576,12 @@ describe("IpDocketPage", () => {
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
     expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
-    expect(within(deadlineWorkspace).getByLabelText("Primary membership ID")).toBeVisible();
-    expect(within(deadlineWorkspace).getByLabelText("Backup membership ID")).toBeVisible();
+    // 2026-08-16: these were free-text boxes demanding a membership UUID. They
+    // are now pickers, so the assertion is that a lawyer can name a colleague.
+    const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");
+    expect(primary).toBeVisible();
+    expect(within(primary).getByRole("option", { name: /Priya Raghavan/ })).toBeInTheDocument();
+    expect(within(deadlineWorkspace).getByLabelText("Backup")).toBeVisible();
     expect(within(deadlineWorkspace).getByLabelText("Evidence reference")).toBeVisible();
     expect(within(deadlineWorkspace).getByRole("button", { name: "Confirm legal deadline" })).toBeVisible();
     expect(within(deadlineWorkspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
