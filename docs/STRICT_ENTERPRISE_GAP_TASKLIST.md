@@ -1097,3 +1097,33 @@ Two methodology rules established by this pass and binding on future audits:
   51 days past the missed quarterly slot; no IaC artifact configures Cloud SQL
   backups, GCS versioning or lifecycle.
 - **Severity:** scale-hardening, blocking for any monitored pilot.
+
+### EH-SGR-10 - IP documents endpoint returns every tenant document unpaginated
+
+- **Status:** Missing.
+- **Gap found:** surfaced while mapping the 2026-08-16 feedback document
+  (`docs/FEEDBACK_MERGE_BACKLOG_2026-08-16.md`, DOC-IP-03). `GET /api/ip/documents`
+  returns EVERY document in the tenant with no pagination and an N+1 per-row
+  access check (`_assert_document_targets_accessible`). There is no
+  taxonomy/type/state filter, so the caller cannot narrow the set either.
+- **Control required:** taxonomy_key / query / state filters plus pagination
+  applied in SQL *before* the per-row access loop, so restricted documents leak
+  no count and the row scan is bounded.
+- **Severity:** scale-hardening. Degrades with tenant size and duplicates the
+  unbounded-scan class already recorded against `/api/health/ingest` in
+  EH-SGR-09.
+
+### EH-SGR-11 - IP identifier uniqueness has two conflicting rules
+
+- **Status:** Partially implemented.
+- **Gap found:** `ip_identifiers` has no unique constraint and instead flags
+  duplicates via `_duplicate_identifiers` (`services/ip_records.py:80-104`) with
+  `reconciliation_status='needs_review'`, while `docket.primary_identifier` is
+  hard-unique per company (`uq_ip_docket_company_identifier`,
+  `db/models.py:14012-14016`) and returns HTTP 409. The same user-facing concept
+  ("application number already exists") therefore behaves two different ways
+  depending on which field it lands in.
+- **Control required:** one decided rule (per company? per registry+kind? are
+  legitimate re-filings allowed?), encoded once. The 2026-08-16 feedback document
+  lists this as an open requirement, so the decision is a founder input.
+- **Severity:** scale-hardening, blocking for IP identifier UI work.
