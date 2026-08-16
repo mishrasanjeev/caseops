@@ -966,3 +966,134 @@ tracked under `WTD-5.1` / `WTD-5.3`.
   functional-QA process test locks both patterns.
 - **Evidence:** `playwright.app.config.ts`, `playwright.prod-ram.config.ts`, and
   `scripts/functional-qa-process.test.mjs`.
+
+## 2026-08-16 Strategic Gap Review — verified control gaps
+
+Source: `docs/STRATEGIC_GAP_REVIEW_2026-08-16.md`, verified against `ba869fa2`
+by direct code inspection (243 findings). An external strategy review triggered
+this pass; 35 of its 111 checkable claims were wrong or overstated and were not
+carried forward. Competitor names are deliberately absent from this repository.
+
+Two methodology rules established by this pass and binding on future audits:
+
+1. Confirm `git rev-parse --short HEAD` before measuring. A first pass measured a
+   tree 391 commits behind `main` and produced figures wrong by 3-6x.
+2. `infra/cloudrun/api-service.yaml` is a reference template, not production
+   truth: `scripts/deploy-prod.sh:364-389` deploys via
+   `gcloud run deploy --update-env-vars` and never applies it, and
+   `infra/cloudrun/deploy.ps1:234` warns against replacing it. Cloud Run *job*
+   manifests are applied and may be relied on.
+
+### EH-SGR-01 - Intra-state invoices issued with the wrong GST head
+
+- **Status:** Missing.
+- **Gap found:** intra-state B2C invoices are issued with IGST instead of
+  CGST+SGST, and a malformed client GSTIN silently produces the same wrong head.
+  Place of supply is a free-text display field that never reaches the tax engine,
+  which infers jurisdiction from GSTIN digits alone.
+- **Control required:** place of supply drives the determination; unregistered
+  clients resolve to the supplier's state; regression across every tax head for
+  registered/unregistered x intra/inter-state.
+- **Severity:** stop-ship. Filing-level defect on real client invoices.
+
+### EH-SGR-02 - A matter can be made permanently unopenable
+
+- **Status:** Missing.
+- **Gap found:** an outside-counsel portal invoice submission writes
+  `needs_review`, and a refund webhook writes an out-of-enum status; both are
+  valid DB states the read schema rejects, so `GET /api/matters/{id}` 500s on
+  every subsequent load with no in-product remedy.
+- **Control required:** one status enum reconciled across DB, write path and read
+  schema; the create/update/read-parse audit mandated for enum drift; backfill of
+  rows already in the bad state.
+- **Severity:** stop-ship. Repeats the failure class recorded in
+  `docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md`.
+
+### EH-SGR-03 - Client payments under-credited
+
+- **Status:** Missing.
+- **Gap found:** an invoice settled across several attempts credits only the
+  largest attempt; the webhook cannot read the amount from the provider's
+  documented nested payload and yields 0, so partial payments record as zero
+  collected; the flat `amount` key is read as paisa or rupees depending on JSON
+  type; the matter-invoice webhook path has no out-of-order guard.
+- **Control required:** sum attempts; parse the documented envelope with an
+  explicit unit contract; port the subscription path's out-of-order guard.
+- **Severity:** stop-ship. Clients are chased for money already paid.
+
+### EH-SGR-04 - Invoice numbering not gapless, not concurrency-safe, not immutable
+
+- **Status:** Partially implemented.
+- **Gap found:** arbitrary invoice numbers may be supplied by an admin or an
+  outside-counsel portal user; the sequence is read unlocked so concurrent
+  creation raises an uncaught IntegrityError (500, not retry); a tenant without a
+  billing profile can auto-number exactly one invoice ever; immutability exists
+  only because no edit endpoint was written - no CHECK, trigger or revision table.
+- **Severity:** stop-ship for GST invoicing.
+
+### EH-SGR-05 - Rate limiting covers 3.7% of the API and is per-instance
+
+- **Status:** Partially implemented.
+- **Gap found:** slowapi with process-local in-memory storage, no `storage_uri`
+  and no Redis anywhere, so limits are per container instance;
+  `scripts/deploy-prod.sh:58` pins max 20 instances at concurrency 1, making the
+  effective limit up to 20x documented. 7 of 40 route modules apply any limit,
+  covering 23 of 622 endpoint decorators. `test_ai_route_governance.py:32`
+  inspects only `/api/ai/*` and `/api/recommendations/*`.
+- **Severity:** stop-ship for abuse and cost control.
+
+### EH-SGR-06 - Two security controls fail open by construction
+
+- **Status:** Partially implemented.
+- **Gap found:** `services/inbound_email.py:224-225` bare-returns from
+  `_verify_signature` in mock mode before the HMAC comparison;
+  `core/csrf.py:72-80` exempts any path ending `/webhook` via
+  `_EXEMPT_SUFFIXES`, by design. Separately there is no log redaction, so any
+  `extra={...}` carrying client names, emails or payment payloads reaches Cloud
+  Logging in the clear.
+- **Severity:** stop-ship. Privilege exposure in a legal product.
+
+### EH-SGR-07 - Citation verifier does not check the proposition on production paths
+
+- **Status:** Partially implemented.
+- **Gap found:** of three `verified=True` paths in `services/citations.py`, the
+  bracket-tag short-circuit (`:161-171`) reads neither `source.text` nor
+  `claim.proposition`, and both production prompts
+  (`recommendations.py:1249-1256`, `litigation_strategy.py:653-655`) hard-require
+  that tag. Drafting passes `proposition=None` (`drafting.py:925-927`).
+  `tests/test_citations.py:99-115` asserts the bypass as intended behaviour.
+- **Control required:** mandatory proposition gate on production paths; bracket
+  tag demoted to a resolver; the bypass test deleted or inverted; any quality
+  claim that relied on the old number re-baselined.
+- **Severity:** stop-ship. Reliance on fabricated precedent is judicially treated
+  as misconduct.
+
+### EH-SGR-08 - Customer-facing claims not backed by running code
+
+- **Status:** Missing.
+- **Gap found:** `apps/web/components/marketing/Security.tsx:83` sells
+  "Prompt-injection tests" while the stripper is unreachable from
+  `AnthropicProvider` (`llm.py:398`), `OpenAIProvider` (`:509`) and
+  `GeminiProvider` (`:653`), with `conftest.py:106` pinning the suite to mock. A
+  billable "API access - API keys and dashboard" SKU is seeded active while no
+  API-key authentication exists.
+- **Control required:** a test that asserts each marketing claim against code.
+  The honesty framework is currently prose-enforced, not test-enforced.
+- **Severity:** stop-ship for commercial and revenue-recognition reasons.
+
+### EH-SGR-09 - Observability and DR are configured but not operative
+
+- **Status:** Partially implemented.
+- **Gap found:** OTel is broken at three independent layers - the `observability`
+  extra is never installed (`apps/api/Dockerfile:39-40`), no artifact sets the
+  flag for the production API, and the exporter default is `localhost:4318` with
+  no collector target. Staging sets `CASEOPS_OTEL_ENABLED=true` (`ci.yml:509`)
+  against an image without the SDK, so it emits no traces while reading as
+  working evidence. `matter_id` is plumbed but never called from any route,
+  service or worker. Logs are JSON but not Cloud Logging-shaped (`level`, not
+  `severity`; no trace field). There is no alert policy, uptime check, SLO, log
+  metric or paging integration anywhere. `/api/health` returns 200 with an
+  unreachable database. One restore rehearsal has ever occurred (2026-04-24),
+  51 days past the missed quarterly slot; no IaC artifact configures Cloud SQL
+  backups, GCS versioning or lifecycle.
+- **Severity:** scale-hardening, blocking for any monitored pilot.
