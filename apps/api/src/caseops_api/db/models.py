@@ -445,6 +445,11 @@ class PaymentAttemptStatus(StrEnum):
     CREATED = "created"
     PARTIALLY_PAID = "partially_paid"
     PAID = "paid"
+    # EH-SGR-02: services/pine_labs.py maps a refund_processed webhook to
+    # "refunded", which services/payments.py assigns to attempt.status. Without
+    # this member the value was storable but unreadable, and the owning matter
+    # returned 500 on every subsequent load.
+    REFUNDED = "refunded"
     FAILED = "failed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"

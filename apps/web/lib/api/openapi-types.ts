@@ -17689,7 +17689,7 @@ export interface components {
              * @default draft
              * @enum {string}
              */
-            status: "draft" | "issued" | "partially_paid" | "paid" | "void";
+            status: "draft" | "needs_review" | "issued" | "partially_paid" | "paid" | "void";
             /**
              * Tax Amount Minor
              * @default 0
@@ -17788,7 +17788,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending" | "created" | "partially_paid" | "paid" | "failed" | "cancelled" | "expired" | "unknown";
+            status: "pending" | "created" | "partially_paid" | "paid" | "refunded" | "failed" | "cancelled" | "expired" | "unknown";
             /**
              * Updated At
              * Format: date-time
@@ -17881,7 +17881,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "draft" | "issued" | "partially_paid" | "paid" | "void";
+            status: "draft" | "needs_review" | "issued" | "partially_paid" | "paid" | "void";
             /** Subtotal Amount Minor */
             subtotal_amount_minor: number;
             /** Tax Amount Minor */

@@ -5,12 +5,25 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-InvoiceStatusLiteral = Literal["draft", "issued", "partially_paid", "paid", "void"]
+# EH-SGR-02: must admit every InvoiceStatus member. `needs_review` is written by
+# the outside-counsel portal on invoice submission; omitting it here made the
+# owning matter permanently unreadable rather than merely failing validation.
+InvoiceStatusLiteral = Literal[
+    "draft",
+    "needs_review",
+    "issued",
+    "partially_paid",
+    "paid",
+    "void",
+]
 PaymentAttemptStatusLiteral = Literal[
     "pending",
     "created",
     "partially_paid",
     "paid",
+    # EH-SGR-02: services/pine_labs.py maps a refund_processed webhook to
+    # "refunded" and services/payments.py assigns it straight onto the attempt.
+    "refunded",
     "failed",
     "cancelled",
     "expired",
