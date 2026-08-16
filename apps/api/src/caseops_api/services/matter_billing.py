@@ -447,6 +447,106 @@ def _state_code(value: str | None) -> str | None:
     return cleaned[:2] if len(cleaned) >= 2 and cleaned[:2].isdigit() else None
 
 
+# Statutory GST state codes (public record). Used to resolve a free-text place
+# of supply to the code the CGST/SGST-vs-IGST split is keyed on.
+_GST_STATE_CODES: dict[str, str] = {
+    "jammu and kashmir": "01",
+    "himachal pradesh": "02",
+    "punjab": "03",
+    "chandigarh": "04",
+    "uttarakhand": "05",
+    "haryana": "06",
+    "delhi": "07",
+    "rajasthan": "08",
+    "uttar pradesh": "09",
+    "bihar": "10",
+    "sikkim": "11",
+    "arunachal pradesh": "12",
+    "nagaland": "13",
+    "manipur": "14",
+    "mizoram": "15",
+    "tripura": "16",
+    "meghalaya": "17",
+    "assam": "18",
+    "west bengal": "19",
+    "jharkhand": "20",
+    "odisha": "21",
+    "chhattisgarh": "22",
+    "madhya pradesh": "23",
+    "gujarat": "24",
+    "dadra and nagar haveli and daman and diu": "26",
+    "maharashtra": "27",
+    "karnataka": "29",
+    "goa": "30",
+    "lakshadweep": "31",
+    "kerala": "32",
+    "tamil nadu": "33",
+    "puducherry": "34",
+    "andaman and nicobar islands": "35",
+    "telangana": "36",
+    "andhra pradesh": "37",
+    "ladakh": "38",
+}
+# Names the register also answers to.
+_GST_STATE_ALIASES: dict[str, str] = {
+    "new delhi": "07",
+    "nct of delhi": "07",
+    "orissa": "21",
+    "pondicherry": "34",
+    "uttaranchal": "05",
+}
+
+
+def gst_state_code_for_place(value: str | None) -> str | None:
+    """Resolve a place of supply to its GST state code.
+
+    Accepts either a state name or the two-digit code itself. Returns None when
+    the value is empty or is not a recognised state, so the caller can fall back
+    rather than guess a tax head.
+    """
+    if not value:
+        return None
+    cleaned = " ".join(value.strip().split())
+    if not cleaned:
+        return None
+    direct = _state_code(cleaned)
+    if direct is not None and len(cleaned) <= 2:
+        return direct
+    key = cleaned.casefold().replace("&", "and")
+    key = " ".join(key.replace(",", " ").split())
+    return _GST_STATE_CODES.get(key) or _GST_STATE_ALIASES.get(key)
+
+
+def resolve_place_of_supply_state_code(
+    *,
+    profile: MatterBillingProfile,
+    client_gstin: str | None,
+    place_of_supply: str | None,
+    firm_state: str | None,
+) -> str | None:
+    """Decide which state the supply is made in, in statutory precedence order.
+
+    1. An explicit place of supply on the invoice — the field the IGST Act keys
+       on, and the one a user sets deliberately.
+    2. The client's GSTIN state, for a registered recipient.
+    3. The profile's default place of supply.
+    4. The supplier's own state. Under IGST Act s.12(2)(b), where the recipient
+       is unregistered and no address is on record, the place of supply is the
+       location of the supplier — so an unregistered client is intra-state by
+       default, not inter-state.
+    """
+    explicit = gst_state_code_for_place(place_of_supply)
+    if explicit is not None:
+        return explicit
+    from_client = _state_code(client_gstin)
+    if from_client is not None:
+        return from_client
+    from_default = gst_state_code_for_place(profile.default_place_of_supply)
+    if from_default is not None:
+        return from_default
+    return firm_state
+
+
 def calculate_invoice_tax(
     *,
     profile: MatterBillingProfile | None,
@@ -455,6 +555,7 @@ def calculate_invoice_tax(
     amount_received_minor: int,
     tds_deducted_minor: int,
     payment_adjustment_minor: int,
+    place_of_supply: str | None = None,
 ) -> InvoiceTaxCalculation:
     if profile is None or not profile.gst_applicable:
         tax = 0
@@ -472,8 +573,16 @@ def calculate_invoice_tax(
             ),
         )
     firm_state = profile.gstin_state_code or _state_code(profile.firm_gstin)
-    client_state = _state_code(client_gstin)
-    intrastate = bool(firm_state and client_state and firm_state == client_state)
+    # EH-SGR-01: the split is keyed on place of supply, not on the presence of a
+    # client GSTIN. Requiring both state codes charged IGST to every unregistered
+    # client, which is a filing-level error rather than a display one.
+    supply_state = resolve_place_of_supply_state_code(
+        profile=profile,
+        client_gstin=client_gstin,
+        place_of_supply=place_of_supply,
+        firm_state=firm_state,
+    )
+    intrastate = bool(firm_state and supply_state and firm_state == supply_state)
     if intrastate:
         cgst = _amount_for_bps(taxable_value_minor, profile.cgst_rate_bps)
         sgst = _amount_for_bps(taxable_value_minor, profile.sgst_rate_bps)

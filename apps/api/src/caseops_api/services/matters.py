@@ -4989,6 +4989,9 @@ def create_matter_invoice(
             amount_received_minor=0,
             tds_deducted_minor=payload.tds_deducted_minor,
             payment_adjustment_minor=payload.payment_adjustment_minor,
+            # EH-SGR-01: place of supply is what the IGST Act keys the tax head
+            # on, so it has to reach the engine rather than only the PDF.
+            place_of_supply=invoice.place_of_supply,
         )
         taxable_value_minor = tax.taxable_value_minor
         tax_amount_minor = tax.tax_amount_minor
