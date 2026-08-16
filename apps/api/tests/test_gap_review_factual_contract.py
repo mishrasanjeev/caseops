@@ -38,6 +38,9 @@ def test_documented_coverage_scope_matches_the_gate() -> None:
         assert "untracked modules are ungated" not in compact
         assert "coverage is measured but never gated" not in compact.lower()
 
+    backlog = _read("docs/EXECUTION_BACKLOG.md")
+    assert "combines the 16 shard coverage artifacts" in backlog
+
 
 def test_workflow_approval_is_not_claimed_without_runtime_state() -> None:
     backlog = _read("docs/EXECUTION_BACKLOG.md")

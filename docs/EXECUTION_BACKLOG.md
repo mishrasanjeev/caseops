@@ -128,7 +128,7 @@ data integrity. Enforcement gates that catch real failures remain:
    repository policy can distinguish them.
 2. ~~The duplicate `API (ruff + pytest)` aggregate job.~~ **Withdrawn — it is not
    a duplicate.** It looks like a redundant gate on the shards, but it is also the
-   only place that combines the 10 shard coverage artifacts and runs
+   only place that combines the 16 shard coverage artifacts and runs
    `scripts/coverage_gate.py`. Removing it would silently delete the coverage
    gate. Left in place.
 3. **Asking for confirmation on reversible documentation decisions.** Decide,
