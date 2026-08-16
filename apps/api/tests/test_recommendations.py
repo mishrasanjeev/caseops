@@ -634,7 +634,16 @@ def test_shared_citation_credits_every_option_that_cites_it(
                     },
                     {
                         "label": "Seek review instead",
-                        "rationale": "The same ratio supports review jurisdiction.",
+                        # EH-SGR-07: this read "The same ratio supports review
+                        # jurisdiction" — no token of which appears in the
+                        # seeded source. It was credited anyway, by inheriting
+                        # option 1's verdict through the flat citation-string
+                        # map. The one-to-many contract this test asserts is
+                        # real; it just has to be earned per option now.
+                        "rationale": (
+                            "The same patent illegality ratio supports review "
+                            "jurisdiction."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
                         "risk_notes": None,
@@ -681,11 +690,15 @@ def test_shared_citation_credits_every_option_that_cites_it(
 def test_bracket_tag_citation_resolves_to_canonical_identifier(
     client: TestClient, monkeypatch
 ) -> None:
-    """Grounding fast path end-to-end. Model emits "[1] paraphrased title"
-    with a rationale that shares no tokens with the source text — the prior
-    proposition gate would 422 this. With the bracket-tag fast path, the
-    citation resolves by index, the proposition gate is skipped, and the UI
-    surfaces the canonical identifier (no [1] prefix, no paraphrase)."""
+    """Tag resolution end-to-end. Model emits "[1] paraphrased title" whose text
+    matches no source, so the tag resolves it by index; the rationale is then
+    checked against that source like any other, and the UI surfaces the
+    canonical identifier (no [1] prefix, no paraphrase).
+
+    EH-SGR-07: this docstring used to end "the proposition gate is skipped", and
+    the fixture was built to demonstrate exactly that - a rationale sharing no
+    tokens with the source. That was the defect stated as the contract. The
+    resolution half is still the contract; the skipping half is gone."""
     import json as _json
 
     from caseops_api.services.llm import LLMCompletion, LLMMessage
@@ -702,10 +715,24 @@ def test_bracket_tag_citation_resolves_to_canonical_identifier(
                 "options": [
                     {
                         "label": "Press patent illegality",
-                        # Rationale deliberately uses tokens absent from the
-                        # source text — the proposition gate would have
-                        # rejected this before the bracket-tag fast path.
-                        "rationale": "Foundational ratio xyz qrs supports relief here.",
+                        # EH-SGR-07: this rationale used to read "Foundational
+                        # ratio xyz qrs supports relief here" with the comment
+                        # "deliberately uses tokens absent from the source text
+                        # — the proposition gate would have rejected this before
+                        # the bracket-tag fast path". That was the defect, not a
+                        # feature: the tag is now a resolver and the proposition
+                        # is checked. What this test is actually for — the tag
+                        # resolving a paraphrased citation to its canonical
+                        # identifier — still holds, so the citation stays
+                        # unmatchable by text and only the rationale is grounded.
+                        # Paraphrase, not a copy of the seeded summary: a
+                        # verbatim copy would clear the gate by construction
+                        # and prove nothing about grounding.
+                        "rationale": (
+                            "Section 34 scrutiny is available here because the "
+                            "award is opposed to Indian law, which is what "
+                            "patent illegality means."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["[1] paraphrased Ssangyong tag"],
                         "risk_notes": None,
@@ -1017,7 +1044,10 @@ def test_objective_contexts_are_accepted_and_affect_prompt(
                 "options": [
                     {
                         "label": "Use the cited authority",
-                        "rationale": "Source-backed observations support lawyer review.",
+                        "rationale": (
+                            "Patent illegality under Section 34 is the "
+                            "source-backed observation supporting lawyer review."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
                         "risk_notes": "Risks/uncertainties require partner review.",
@@ -1097,7 +1127,11 @@ def test_custom_goal_audit_metadata_is_redacted(
                 "options": [
                     {
                         "label": "Review evidence gaps",
-                        "rationale": "The cited authority supports the review posture.",
+                        "rationale": (
+                            "The cited authority holds that patent illegality "
+                            "survives Section 34 scrutiny, which supports the "
+                            "review posture."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
                         "risk_notes": None,
@@ -1178,7 +1212,11 @@ def test_lawyer_thinking_is_preferred_redacted_and_analysis_is_serialized(
                 "options": [
                     {
                         "label": "Review reply-filing risk",
-                        "rationale": "The cited authority supports procedural caution.",
+                        "rationale": (
+                            "Patent illegality is available only where the "
+                            "award is fundamentally opposed to Indian law, so "
+                            "procedural caution is warranted."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
                         "risk_notes": "Skipping the reply may narrow the record.",
@@ -1325,7 +1363,11 @@ def test_matter_intelligence_prompt_includes_orders_statutes_and_excludes_other_
                 "options": [
                     {
                         "label": "Review the order",
-                        "rationale": "The cited authority supports review.",
+                        "rationale": (
+                            "The award is said to be fundamentally opposed to "
+                            "Indian law, which is the patent illegality "
+                            "ground under Section 34."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
                         "risk_notes": None,
@@ -1387,7 +1429,11 @@ def test_custom_goal_is_ignored_for_non_custom_objective_context(
                 "options": [
                     {
                         "label": "Review appellate posture",
-                        "rationale": "The cited authority supports lawyer review.",
+                        "rationale": (
+                            "Whether the award is fundamentally opposed to "
+                            "Indian law, and so patently illegal under Section "
+                            "34, needs lawyer review."
+                        ),
                         "confidence": "medium",
                         "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
                         "risk_notes": None,

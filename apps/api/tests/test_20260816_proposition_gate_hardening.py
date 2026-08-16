@@ -10,11 +10,15 @@ that was true:
 2. There was no stopword list anywhere in the module. The length>=3 cut keeps
    "the", "and", "that", "was", "his".
 
-This commit closes both. It does NOT make the proposition gate mandatory - the
-bracket-tag path still short-circuits ahead of it - so production paths that
-route through a bracket tag are unaffected. That flip is a separate change with
-its own measurement, because three of its four callers cannot satisfy the gate
-today.
+This commit closes both.
+
+SUPERSEDED IN THE SAME PR: this file originally continued "It does NOT make the
+proposition gate mandatory - the bracket-tag path still short-circuits ahead of
+it - so production paths that route through a bracket tag are unaffected." That
+was true when written and is now false. Once the callers passed real
+propositions, the tag was demoted to a source resolver and the gate became
+mandatory; see test_20260816_bracket_tag_is_a_resolver.py. The
+`test_bracket_tag_no_longer_short_circuits` case below is the inverted original.
 
 What this gate is, honestly, even after hardening: a topicality filter. It is
 bag-of-words and order-insensitive, so it cannot separate "X is a ground" from
@@ -85,11 +89,17 @@ class TestStopwordsAreExcluded:
 class TestUnchangedBehaviour:
     """Guard the properties that must not move in this commit."""
 
-    def test_bracket_tag_still_short_circuits(self) -> None:
-        """This commit hardens the gate; it does not make it mandatory."""
+    def test_bracket_tag_no_longer_short_circuits(self) -> None:
+        """Superseded in the same PR: the tag became a resolver, not a verdict.
+
+        This assertion originally read `verified is True` / `bracket_tag_match`
+        and was labelled "this commit hardens the gate; it does not make it
+        mandatory". Making it mandatory was the follow-up, once the callers
+        passed real propositions. See test_20260816_bracket_tag_is_a_resolver.py.
+        """
         check = _verify("wholly unrelated subject matter", citation="[1] anything")
-        assert check.verified is True
-        assert check.reason == "bracket_tag_match"
+        assert check.verified is False
+        assert check.reason == "proposition_not_supported"
 
     def test_no_proposition_is_still_a_bare_citation(self) -> None:
         report = verify_citations([Claim(citation="2021 SCC 1")], _sources())

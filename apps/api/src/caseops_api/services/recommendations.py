@@ -1421,30 +1421,38 @@ def _filter_and_verify_options(
     # option to cite it silently wins and earlier options appear
     # unsupported even though they claimed the same authority.
     claims: list[Claim] = []
-    citation_to_options: dict[str, list[int]] = {}
+    claim_option: list[int] = []  # parallel to claims: which option emitted it
     for idx, option in enumerate(options):
         for citation in option.supporting_citations:
             claims.append(
                 Claim(citation=citation, proposition=option.rationale[:400])
             )
-            citation_to_options.setdefault(citation, []).append(idx)
+            claim_option.append(idx)
     report = verify_citations(claims, sources)
-    # Map the model's raw citation string → the canonical SourceDoc.identifier
-    # so the UI shows the clean canonical form (no "[1]" prefix, no
-    # paraphrase). Dedup is by canonical so two raw spellings of the same
-    # source collapse to one.
-    canonical_for: dict[str, str] = {}
-    for check in report.checks:
-        if check.verified and check.source is not None:
-            canonical_for[check.claim.citation] = check.source.identifier
+    # EH-SGR-07: attribute each verdict back to the option that produced it.
+    #
+    # This used to collapse through `canonical_for[check.claim.citation]`, a
+    # flat citation-string → identifier map. That was safe only while the
+    # bracket-tag fast path made every claim for a given string verify
+    # identically. Now that the proposition is actually checked, two options
+    # citing the SAME string get DIFFERENT verdicts, and a flat map lets the
+    # first option to verify write a key that a failing option then reads back
+    # — silently lending it authority it did not earn. That is the fail-open
+    # this change exists to close, re-entering one layer up.
+    #
+    # `report.checks` is in claim order, so zip restores the attribution.
+    # Dedup is per option and by canonical identifier, so two raw spellings of
+    # the same source still collapse to one.
     per_option_verified: dict[int, list[str]] = {i: [] for i in range(len(options))}
-    for idx, option in enumerate(options):
-        seen: set[str] = set()
-        for citation in option.supporting_citations:
-            canonical = canonical_for.get(citation)
-            if canonical and canonical not in seen:
-                per_option_verified[idx].append(canonical)
-                seen.add(canonical)
+    seen_per_option: dict[int, set[str]] = {i: set() for i in range(len(options))}
+    for check, idx in zip(report.checks, claim_option, strict=True):
+        if not check.verified or check.source is None:
+            continue
+        canonical = check.source.identifier
+        if canonical in seen_per_option[idx]:
+            continue
+        per_option_verified[idx].append(canonical)
+        seen_per_option[idx].add(canonical)
     cleaned: list[_LLMOption] = []
     for idx, option in enumerate(options):
         cleaned.append(

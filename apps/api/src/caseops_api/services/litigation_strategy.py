@@ -904,47 +904,122 @@ def _verify_routes(
         for a in retrieved
     ]
     claims: list[Claim] = []
-    citation_to_options: dict[str, list[int]] = {}
+    claim_option: list[int] = []  # parallel to claims: which route emitted it
     for idx, option in enumerate(options):
         for citation in option.supporting_citations:
             claims.append(
                 Claim(citation=citation, proposition=option.rationale[:400])
             )
-            citation_to_options.setdefault(citation, []).append(idx)
+            claim_option.append(idx)
     report = verify_citations(claims, sources)
-    canonical_for: dict[str, str] = {}
-    for check in report.checks:
-        if check.verified and check.source is not None:
-            canonical_for[check.claim.citation] = check.source.identifier
-    cleaned: list[_StrategyOption] = []
-    for option in options:
-        seen: set[str] = set()
-        per_option: list[str] = []
-        for citation in option.supporting_citations:
-            canonical = canonical_for.get(citation)
-            if canonical and canonical not in seen:
-                per_option.append(canonical)
-                seen.add(canonical)
-        cleaned.append(
-            option.model_copy(update={"supporting_citations": per_option})
+    # EH-SGR-07: attribute each verdict back to the route that produced it.
+    #
+    # This used to collapse through `canonical_for[check.claim.citation]`, a
+    # flat citation-string → identifier map, which was safe only while the
+    # bracket-tag fast path made every claim for a given string verify
+    # identically. With the proposition actually checked, the primary route and
+    # an alternative citing the SAME string get different verdicts, and the flat
+    # map let a failing primary route read back the key the alternative wrote.
+    # That silently defeats the `rejected_primary_route_uncited` refusal below,
+    # whose whole purpose is that a primary route cannot ride on an
+    # alternative's authority.
+    per_route_verified: dict[int, list[str]] = {i: [] for i in range(len(options))}
+    seen_per_route: dict[int, set[str]] = {i: set() for i in range(len(options))}
+    for check, idx in zip(report.checks, claim_option, strict=True):
+        if not check.verified or check.source is None:
+            continue
+        canonical = check.source.identifier
+        if canonical in seen_per_route[idx]:
+            continue
+        per_route_verified[idx].append(canonical)
+        seen_per_route[idx].add(canonical)
+    cleaned: list[_StrategyOption] = [
+        option.model_copy(
+            update={"supporting_citations": per_route_verified.get(idx, [])}
         )
+        for idx, option in enumerate(options)
+    ]
     return cleaned, report
 
 
+_PROPOSITION_FIELDS = (
+    "description",
+    "rationale",
+    "label",
+    "stage_label",
+    "mitigation",
+    "action",
+)
+
+
+def item_proposition(raw: dict | str | None) -> str | None:
+    """Build the proposition a strategy item is actually asserting.
+
+    EH-SGR-07: the four ITEM call sites (forum steps, limitation flags, risks,
+    next-best-actions) used to pass the literal string
+    ``"strategy item citation"``. That is not a proposition - it shares no
+    vocabulary with any judgment, so it scores zero overlap and could never be
+    grounded. Those paths were therefore reduced to the bracket-tag resolver,
+    and the constant hid it: the check looked like it was running when nothing
+    was being checked. (The route path in ``_verify_routes`` never used the
+    constant; it has always passed ``option.rationale``.)
+
+    Uses the item's own substantive text so the gate has something real to
+    compare against the cited source. Returns None when the item carries no
+    text at all - and ``_verify_item_citations`` fails closed on that, because
+    it is model-controlled input and would otherwise be a one-field bypass.
+    """
+    if isinstance(raw, str):
+        text = raw.strip()
+        return text or None
+    if not isinstance(raw, dict):
+        return None
+    parts = [
+        str(raw[field]).strip()
+        for field in _PROPOSITION_FIELDS
+        if isinstance(raw.get(field), str) and str(raw[field]).strip()
+    ]
+    joined = " ".join(parts).strip()
+    return joined[:400] or None
+
+
 def _verify_item_citations(
-    raw_citations: list[str], retrieved: list[RetrievedAuthority]
+    raw_citations: list[str],
+    retrieved: list[RetrievedAuthority],
+    proposition: str | None,
 ) -> list[str]:
     """Round-2 P1 #4 helper. Run a list of raw citation strings through
     the verifier and return only the canonical, verified survivors
-    (deduplicated, in original order)."""
+    (deduplicated, in original order).
+
+    ``proposition`` is what the item asserts; build it with ``item_proposition``.
+    It was previously a hardcoded constant, which made the proposition gate
+    unreachable for every strategy item.
+
+    EH-SGR-07: ``proposition`` has no default, and ``None`` fails closed. Both
+    matter. A default let a caller silently opt out of the gate, and passing
+    ``None`` through to the verifier lands on ``bare_citation``, which is
+    verified-by-existence - correct for drafting, wrong here. A strategy item is
+    a legal assertion; an item with citations and no assertion is not a
+    well-formed item.
+
+    The reason this is fail-closed rather than lenient: ``item_proposition``
+    returns ``None`` exactly when the model emitted no description, rationale,
+    label, stage_label, mitigation or action. That is model-controlled input, so
+    treating it as verified would hand the model a one-field bypass around the
+    gate this change exists to enforce - the same hole as the bracket tag,
+    through a different door.
+    """
     if not raw_citations:
+        return []
+    if proposition is None:
         return []
     sources = [
         SourceDoc(identifier=a.identifier, text=a.text, aliases=a.aliases)
         for a in retrieved
     ]
     claims = [
-        Claim(citation=citation, proposition="strategy item citation")
+        Claim(citation=citation, proposition=proposition)
         for citation in raw_citations
     ]
     report = verify_citations(claims, sources)
@@ -1711,7 +1786,9 @@ def _build_forum_steps(
         if not isinstance(raw_citations, list):
             raw_citations = []
         verified = _verify_item_citations(
-            [c for c in raw_citations if isinstance(c, str)], retrieved
+            [c for c in raw_citations if isinstance(c, str)],
+            retrieved,
+            item_proposition(raw),
         )
         statutory_basis = [
             s for s in (raw.get("statutory_basis") or []) if isinstance(s, str)
@@ -1757,6 +1834,7 @@ def _build_limitation_flags(
     limitation flags entirely (option (a) from the brief).
     """
     out: list[LimitationFlag] = []
+    dropped_flags: list[str] = []
     for raw in raw_flags:
         if not isinstance(raw, dict):
             continue
@@ -1764,11 +1842,22 @@ def _build_limitation_flags(
         if not isinstance(raw_citations, list):
             raw_citations = []
         verified = _verify_item_citations(
-            [c for c in raw_citations if isinstance(c, str)], retrieved
+            [c for c in raw_citations if isinstance(c, str)],
+            retrieved,
+            item_proposition(raw),
         )
         # Round-3 P2 #R3-3: fail-closed on unverified limitation flags.
         # No citation survived → don't show the flag at all.
+        #
+        # EH-SGR-07: keep the policy, remove the blindness. Dropping silently
+        # was tolerable while the gate was hollow and this almost never fired.
+        # Now that the proposition is actually checked it fires for real, and a
+        # limitation flag is a DEADLINE warning - the one item here where
+        # silently showing the lawyer nothing is worse than showing it flagged.
+        # Not changing the drop policy in this change (that is a product call),
+        # but an operator has to be able to see it happening.
         if not verified:
+            dropped_flags.append(str(raw.get("label") or "unlabelled"))
             continue
         try:
             flag = LimitationFlag(
@@ -1783,6 +1872,13 @@ def _build_limitation_flags(
         except ValidationError:
             continue
         out.append(flag)
+    if dropped_flags:
+        logger.warning(
+            "litigation_strategy dropped %d limitation flag(s) with no verified "
+            "citation: %s",
+            len(dropped_flags),
+            "; ".join(dropped_flags[:5]),
+        )
     return out
 
 
@@ -1808,7 +1904,7 @@ def _build_risks(
         if not isinstance(raw_citations, list):
             raw_citations = []
         cleaned_raw = [c for c in raw_citations if isinstance(c, str)]
-        verified = _verify_item_citations(cleaned_raw, retrieved)
+        verified = _verify_item_citations(cleaned_raw, retrieved, item_proposition(raw))
         # Only flag unverified when the LLM emitted citations and none verified.
         unverified_flag = len(cleaned_raw) > 0 and len(verified) == 0
         try:
@@ -1873,7 +1969,7 @@ def _build_next_best_actions(
         if not isinstance(raw_citations, list):
             raw_citations = []
         cleaned_raw = [c for c in raw_citations if isinstance(c, str)]
-        verified = _verify_item_citations(cleaned_raw, retrieved)
+        verified = _verify_item_citations(cleaned_raw, retrieved, item_proposition(raw))
         # Round-4 R4 #2 (2026-05-03): a structured action with empty
         # ``supporting_citations`` is a citation-bypass — the model
         # ships a legal/procedural claim ("File SLP within 60 days")
