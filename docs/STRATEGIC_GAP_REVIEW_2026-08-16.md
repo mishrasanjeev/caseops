@@ -251,7 +251,7 @@ Copying these forward would have caused real damage. Each was verified at
 | "31 HCs / 26 HC judge registry" | **24 High Courts + SC, 785 judge records**, of which only 22 have a seeded `courts` row. Seed provenance is Wikipedia (`scripts/one-off/build-hc-judge-seeds.py:3-4`) — which sits badly against the repo's own source-lineage rule. |
 | "Audit export at 96% coverage" | The 96% refers to `services/audit.py`, a 117-line write-path helper with **no export code**. The actual JSONL/CSV export (`services/audit_exports.py`, 403 lines) has **no coverage gate at all**. |
 | "Corpus is 2,436 docs / 36,510 chunks" | **UNVERIFIABLE.** That figure is a single documentation assertion at `WORK_TO_BE_DONE.md:120` self-dated "as of 2026-04-18" — four months stale, never refreshed, with no mechanism to keep it current. Two in-repo numbers disagree with it. |
-| "Test coverage 41.5% / 10.0% branch" | **UNVERIFIABLE at HEAD.** Those are a 2026-04-25 baseline recorded in a source file. No committed coverage artifact exists; CI uploads with 14-day retention. Worse: **coverage is measured but never gated** — a PR can drop it arbitrarily and CI stays green. |
+| "Test coverage 41.5% / 10.0% branch" | **UNVERIFIABLE at HEAD.** Those are a 2026-04-25 baseline recorded in a source file. No committed coverage artifact exists; CI uploads with 14-day retention. **Correction 2026-08-16:** an earlier draft of this row said coverage is "never gated". That is wrong. `scripts/coverage_gate.py` runs in the `API (ruff + pytest)` job and asserts each **tracked** module is at or above its 2026-04-24 baseline. The accurate gap is narrower: the gate covers only modules that have a baseline, so untracked modules — including `services/audit_exports.py` — can drop to zero with CI green. |
 
 Two additional corrections that make the picture *worse*, not better:
 
@@ -282,7 +282,7 @@ commercial or organisational rather than code.
 | T0-2 | SOC 2 / ISO | `UNVERIFIABLE` | Organisational; marketing status labels are the only in-repo artifact |
 | T0-3 | Marketing vs code | `Partially implemented` | Honesty framework is real but **prose-enforced, not test-enforced** — no test asserts a marketing claim against code. See §2.8 |
 | T0-4 | Corpus size | `UNVERIFIABLE` | External DB state; two in-repo figures disagree, both stale |
-| T0-5 | Test coverage | `Partially implemented` | Measured and archived, **never gated** |
+| T0-5 | Test coverage | `Partially implemented` | Gated, but only for modules carrying a baseline in `scripts/coverage_gate.py`. Untracked modules are ungated and can drop to zero with CI green |
 | T0-6 | Postgres RLS | `Missing` | Isolation rests on app-layer `company_id` across 622 routes; 128 of 178 tenant tables have no composite FK backstop |
 | T0-7 | Prompt injection | `Partially implemented` | Verification is circular — §2.8 |
 | T0-8 | Payments | `Partially implemented` | Built, ships fail-closed; live value unverifiable |
