@@ -33,13 +33,17 @@ it exist in code, and is it in any existing plan.
 
 **Most of this document is already covered.** The IP module is ~22.7k LOC of
 production runtime and the backend for Application Number, Opposition Number,
-mark capture and identifier search is built and tested. The genuinely new work
-is 14 items (§4), plus 25 that are planned only in part (§5).
+mark capture and identifier search is built and tested. The genuinely new work is
+tracked as `FMB-01`…`FMB-10` (§4) — the 14 unplanned requirements consolidated,
+plus `FMB-10` split out by the §2.3 resolution — alongside 25 items that are
+planned only in part (§5).
 
 Three things matter more than the counts:
 
-1. **One founder decision gates four requirements** and contradicts the plan of
-   record (§2). Nothing IP-facing should start until it is settled.
+1. **An apparent conflict with the plan of record turned out to be narrower than
+   it looked, and is resolved in §2.** The two documents disagree about the UI,
+   not the system of record; the schema already enforces a tenant-safe
+   matter link. Four requirements are unblocked by that resolution.
 2. **The two "critical bug" items (F-13, F-14) have identified root causes** that
    are deeper than the symptoms reported (§3). Both are P0.
 3. **The document's own QA matrix (27 cases) was the weakest part of this
@@ -47,30 +51,78 @@ Three things matter more than the counts:
 
 ---
 
-## 2. The founder decision that gates the IP work
+## 2. The architecture conflict — resolved
 
-**Blocked on you, not on engineering.**
+### 2.1 What the conflict was
 
 The feedback document asks (§4.2) that the **New Matter form reveal an IP Details
-section** when practice area indicates Trademark/IP — i.e. IP capture lives
-inside the matter-native flow.
+section** when practice area indicates Trademark/IP — IP capture inside the
+matter-native flow.
 
-`docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md` deliberately specifies the
-opposite: *"The top-level Portfolio switch makes `Matters` versus `IP`
-explicit"* (`:282`), with the IP workspace as the first screen (`:280`). In code,
-IP data lives in a separate entity graph rooted at `ip_docket_records`
-(`models.py:13968`) carrying a **nullable** `matter_id` (`:14054`); the Matter
-row has zero IP columns (`models.py:1389-1500`).
+`docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md` appears to specify the opposite:
+*"The top-level Portfolio switch makes `Matters` versus `IP` explicit"* (`:282`),
+with the IP workspace as the first screen (`:280`).
 
-So this is not an unplanned feature — it is a **conflict with the current plan of
-record**, and it is the pivot for four separate requirements: `F04-00-ARCH`,
-`F-04-1` (in-matter docket view), `F-04-5` (pleadings in Documents), and
-`F01-06-ROWOPEN` (listing row opens the matter workspace).
+This is the pivot for four requirements: `F04-00-ARCH`, `F-04-1` (in-matter
+docket view), `F-04-5` (pleadings in Documents), `F01-06-ROWOPEN` (listing row
+opens the matter workspace).
 
-**Decision needed:** does IP capture become matter-native, or does the separate
-IP workspace stand and the feedback's "New Matter form" wording get read as "the
-IP workspace's create form"? Answer this before any IP UI work starts. Either
-answer is defensible; building both is not.
+### 2.2 Why it is narrower than it looks
+
+Inspecting the schema rather than the prose shows the two documents disagree
+about the **UI**, not about the **system of record**:
+
+- `ip_docket_records.matter_id` is already constrained by a tenant-safe
+  composite foreign key — `fk_ip_docket_matter_company` on
+  `(matter_id, company_id) → (matters.id, matters.company_id)` with
+  `ondelete=RESTRICT` (`db/models.py` `IpDocketRecord.__table_args__`). This
+  follows the repository's standard tenant-integrity pattern, so an IP record
+  cannot point at a missing or cross-tenant matter.
+- The only genuine fork is **nullability**: `matter_id` is
+  `String(36), nullable=True` (`:14054`), so an IP record may float free of any
+  matter.
+- The feedback document itself already asserts the matter-native principle at
+  §3 — *"Matter remains the central entity. IP/Trademark information becomes
+  practice-area-aware data attached to a Matter"* — and at §1 prefers extending
+  existing modules over duplicate workflows.
+
+So the PRD's separate workspace is a presentation decision, and the feedback's
+requirement is a data-ownership decision. They only collide because the schema
+currently permits an IP record with no matter, which satisfies **neither**
+document's stated principle.
+
+### 2.3 Decision of record
+
+**The Matter is the system of record. Both entry points are supported.**
+
+1. **Data.** Every IP docket record links to a Matter. Entering from the IP
+   workspace creates and links a Matter in the same transaction rather than
+   producing an unlinked record. The composite FK already enforces tenant safety;
+   what changes is that the product stops producing `matter_id IS NULL` rows.
+   Tighten the column to `NOT NULL` only after a backfill establishes that no
+   legacy unlinked rows remain — treat nullable as a migration allowance, not a
+   supported state.
+2. **UI.** Keep the PRD's top-level IP workspace for IP-first users **and** add
+   the feedback's conditional IP Details section to the New Matter form for
+   matter-first users. Both write the same record through the existing
+   `POST /api/ip/dockets` writer, which already accepts `matter_id`
+   (`schemas/ip_operations.py:85`).
+
+This unblocks `F-04-1`, `F-04-5` and `F01-06-ROWOPEN` immediately: with the
+matter as the system of record, an in-matter docket view and a listing row that
+opens the Matter workspace are both well defined.
+
+**Rationale.** Neither document loses. The PRD keeps its workspace; the feedback
+gets its matter-native contract. The alternative — resolving in favour of the
+PRD alone — would leave IP records that no matter-level permission, audit,
+billing or conflict check can reach, which contradicts the repository's own rule
+that every persistent business object is tenant- and matter-aware.
+
+**Reversible.** This is a documentation decision, not code. If you prefer the
+strict PRD reading (IP as a wholly separate portfolio with optional matter
+linkage), say so and §5/§8 re-sequence accordingly — but the `matter_id IS NULL`
+state should still be closed either way, because it is unreachable by matter-level
+controls.
 
 ---
 
@@ -130,7 +182,8 @@ anywhere". Each carries an `FMB-` id for tracking.
 | `FMB-05` | Contextual help scoped to the current page/module, with a help affordance in the app shell | F-09 | M |
 | `FMB-06` | Structured, machine-readable validation errors carrying field + accepted format, surfaced as plain language | F-09, UX-04 | M |
 | `FMB-07` | Bridge tracked-case hearing changes into the calendar surface | F-11 | M |
-| `FMB-08` | Founder decision on matter-native vs separate IP workspace (see §2) — **decision, not engineering** | F-04 | L |
+| `FMB-08` | Enforce Matter as the system of record for IP: always link `matter_id` on create from either entry point, backfill legacy unlinked rows, then tighten to `NOT NULL` (§2.3) | F-04 | M |
+| `FMB-10` | Conditional IP Details section on the New Matter form, writing through the existing `POST /api/ip/dockets` writer (§2.3) | F-04 | M |
 | `FMB-09` | Map the document's 27 QA cases onto the repo's test-ID convention and close the gaps (see §7) | §21 | M |
 
 Two adjacent defects were found while mapping and are escalated separately
@@ -225,8 +278,9 @@ document: `FMB-01`, `FMB-02` (source-link root cause — same failure class as t
 citation finding, fix together), `FMB-03` (keyword search), and the hearing
 notification flags (`F-03-02`, `F-03-06`).
 
-**P1 — IP foundation.** Gated on `FMB-08` (§2). Once decided: registry master,
-identifier UI (IPLF-031B), trademark view and identifier search.
+**P1 — IP foundation.** Unblocked by §2.3. Order: `FMB-08` (always-linked
+matter, then backfill), registry master, identifier UI (IPLF-031B), `FMB-10`
+(New Matter IP section), trademark view and identifier search.
 
 **P2 — IP docketing.** Blocked on the approved docket stages and approved
 trademark document names, which the document states were not supplied.
@@ -246,7 +300,9 @@ items, advocate identity.
 
 Engineering cannot start these. Listed so they are not mistaken for backlog.
 
-1. Matter-native vs separate IP workspace (§2) — **gates all P1 IP UI work**.
+1. ~~Matter-native vs separate IP workspace~~ — **resolved in §2.3**: Matter is
+   the system of record, both entry points supported. Overrule there if you
+   disagree; P1 IP UI work is no longer blocked on it.
 2. Approved trademark **docket stages** and transition rules.
 3. Approved trademark **pleading/document names** (the document explicitly says
    do not invent them — `DOC-IP-05`).
