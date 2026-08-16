@@ -28,6 +28,7 @@ import { OrderBadges } from "@/components/matters/OrderBadges";
 import { AddCourtOrderDialog } from "@/components/matters/AddCourtOrderDialog";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -1079,7 +1080,10 @@ export function ComplianceReviewSection({
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-[var(--color-mute)]">Loading compliance items...</p>
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading compliance items">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             <ComplianceExtractionRuns

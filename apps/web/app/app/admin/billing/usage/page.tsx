@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Download } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Card,
   CardContent,
@@ -150,9 +151,9 @@ export default function TenantBillingUsagePage() {
 
       {usageQuery.isPending || spendQuery.isPending ? (
         <Card>
-          <CardContent className="flex items-center gap-2 text-sm text-[var(--color-mute)]">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Loading usage...
+          <CardContent className="flex flex-col gap-3" aria-busy="true" aria-label="Loading usage">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-28 w-full" />
           </CardContent>
         </Card>
       ) : null}
