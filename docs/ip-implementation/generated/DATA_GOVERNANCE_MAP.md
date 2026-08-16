@@ -6,7 +6,7 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `d4bcc898947f9b063ca08f6d097e60e86af47f15f85ad8a6b09113ef7d2f01f8`
+- Canonical map SHA-256: `b85dff1f261e80cf8ad686ff5de13c13a03fedd1f5f99690c7b2a4f497797c81`
 - SQL tables: `260`
 - SQL columns: `4013`
 - ORM indexes: `1147`
@@ -15,7 +15,7 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 ## Boundary
 
-This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup and deadline-coverage guards use existing registered SQL classes; they add no non-SQL data class or disposition authority.
+This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup and deadline-coverage guards use existing registered SQL classes; they add no non-SQL data class or disposition authority. The Today IP coverage stream is a read projection over already-registered SQL classes (ip_deadline_coverages, ip_docket_records, matter_deadlines) reusing the existing IP docket access predicate; it introduces no SQL or non-SQL data class, no new storage, and no disposition authority.
 
 ## SQL table inventory
 

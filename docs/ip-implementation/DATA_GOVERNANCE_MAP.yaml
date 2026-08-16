@@ -4,7 +4,7 @@
   "status": "repository_inventory_snapshot_policy_unapproved",
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
-  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup and deadline-coverage guards use existing registered SQL classes; they add no non-SQL data class or disposition authority.",
+  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup and deadline-coverage guards use existing registered SQL classes; they add no non-SQL data class or disposition authority. The Today IP coverage stream is a read projection over already-registered SQL classes (ip_deadline_coverages, ip_docket_records, matter_deadlines) reusing the existing IP docket access predicate; it introduces no SQL or non-SQL data class, no new storage, and no disposition authority.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
