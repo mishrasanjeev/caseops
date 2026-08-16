@@ -424,7 +424,15 @@ def test_recommendation_format_error_retries_once_then_succeeds(
         "options": [
             {
                 "label": "File writ petition",
-                "rationale": "The retrieved authorities support the relief sought.",
+                # 2026-08-16 (EH-SGR-07): this rationale used to clear the
+                # proposition gate only because duplicate stopwords counted
+                # toward the two-token rule. It is now grounded in what the
+                # seeded authority actually holds - patent illegality under
+                # Section 34 - so it passes on substance rather than on "the".
+                "rationale": (
+                    "Patent illegality under Section 34 supports setting aside "
+                    "the arbitral award."
+                ),
                 "confidence": "medium",
                 "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
                 "risk_notes": None,

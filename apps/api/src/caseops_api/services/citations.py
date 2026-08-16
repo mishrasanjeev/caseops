@@ -76,6 +76,25 @@ _WORD_RE = re.compile(r"[a-z0-9]+")
 # explicitly named the source).
 _BRACKET_TAG_RE = re.compile(r"^\s*\[(\d+)\]")
 
+# EH-SGR-07: the proposition gate's docstring promised "non-stopword tokens" but
+# no such list existed, and the length>=3 cut keeps "the", "and", "that", "was".
+# Function words plus the legal boilerplate that appears in nearly every Indian
+# judgment, so overlap has to come from the substance of the proposition rather
+# than from words two unrelated documents share by construction.
+_STOPWORDS = frozenset(
+    {
+        "the", "and", "that", "was", "were", "his", "her", "its", "for", "with",
+        "not", "but", "are", "has", "had", "have", "this", "these", "those",
+        "any", "all", "such", "from", "into", "upon", "under", "over", "than",
+        "then", "there", "their", "them", "they", "which", "who", "whom", "been",
+        "being", "would", "could", "should", "shall", "will", "may", "must",
+        "also", "only", "other", "some", "more", "most", "said", "same",
+        # Boilerplate that carries no discriminating power in a judgment.
+        "court", "case", "matter", "order", "judgment", "para", "paragraph",
+        "hon", "honourable", "learned", "counsel", "appeal", "petition",
+    }
+)
+
 
 def _normalize(text: str) -> str:
     text = unicodedata.normalize("NFKD", text)
@@ -148,10 +167,16 @@ def verify_citations(
     - If the citation cannot be matched to any source, the claim is
       unverified with reason ``unknown_source``.
     - If it matches, and a ``proposition`` was provided, the proposition must
-      share meaningful overlap with the source text. Meaningful overlap is
-      defined as at least two non-stopword tokens (length >= 3) appearing in
-      the source text. This is deliberately strict for legal drafting, and
-      callers that want looser matching can pre-process the proposition.
+      share topical overlap with the source text: at least two DISTINCT
+      non-stopword tokens (length >= 3) appearing in the source.
+
+      Be precise about what this is. It is a **topicality filter**, not a
+      support check. The comparison is bag-of-words and order-insensitive, so it
+      cannot distinguish "X is a ground" from "X is not a ground" - a negated
+      proposition shares every content word with the holding it contradicts.
+      Describing a passing result as "the source supports the claim" overstates
+      it; the honest reading is "the proposition is on-topic with the source".
+      Closing that gap needs an entailment or quoted-span mechanism.
     - If the citation matches and no proposition was provided, the claim is
       verified as a bare citation (``bare_citation``).
     """
@@ -185,8 +210,18 @@ def verify_citations(
             )
             continue
         source_tokens = set(_tokens(source.text))
-        claim_tokens = [tok for tok in _tokens(claim.proposition) if len(tok) >= 3]
-        meaningful = [tok for tok in claim_tokens if tok in source_tokens]
+        # EH-SGR-07: `meaningful` used to be a list built from an unfiltered
+        # token stream, so the gate had two independent holes. The same token
+        # counted twice satisfied the two-token rule, and there was no stopword
+        # list at all despite the docstring promising one - so a proposition
+        # containing "the" twice verified against any source containing "the".
+        # Count DISTINCT, non-stopword tokens.
+        claim_tokens = [
+            tok
+            for tok in _tokens(claim.proposition)
+            if len(tok) >= 3 and tok not in _STOPWORDS
+        ]
+        meaningful = {tok for tok in claim_tokens if tok in source_tokens}
         if len(meaningful) >= 2:
             checks.append(
                 CitationCheck(
