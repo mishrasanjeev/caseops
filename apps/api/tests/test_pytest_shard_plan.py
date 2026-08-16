@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,9 +16,40 @@ pytest_shard_plan = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = pytest_shard_plan
 SPEC.loader.exec_module(pytest_shard_plan)
 
+EVIDENCE_ISOLATED_TEST_FILES = (
+    "test_legal_knowledge_graph.py",
+    "test_litigation_strategy.py",
+    "test_matter_file_qa.py",
+)
+
 
 def _test_file(root: Path, name: str, lines: int) -> None:
     (root / name).write_text("\n".join("pass" for _ in range(lines)) + "\n")
+
+
+def _run_planner_cli(
+    *,
+    test_root: Path,
+    total_shards: int,
+    shard: int,
+    output: Path,
+    isolated_files: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        sys.executable,
+        str(SCRIPT_PATH),
+        "--test-root",
+        str(test_root),
+        "--total-shards",
+        str(total_shards),
+        "--shard",
+        str(shard),
+        "--output",
+        str(output),
+    ]
+    for path in isolated_files:
+        command.extend(("--isolated-file", path))
+    return subprocess.run(command, check=False, capture_output=True, text=True)
 
 
 def test_plan_is_deterministic_balanced_and_covers_each_file_once(tmp_path: Path) -> None:
@@ -128,19 +160,83 @@ def test_registered_runtime_heavy_files_are_singleton_shards(tmp_path: Path) -> 
     ]
 
 
+def test_cli_defaults_to_no_repository_specific_isolation(tmp_path: Path) -> None:
+    root = tmp_path / "arbitrary-tests"
+    root.mkdir()
+    _test_file(root, "test_alpha.py", 5)
+    _test_file(root, "test_beta.py", 4)
+    output = tmp_path / "default-shard.txt"
+
+    result = _run_planner_cli(
+        test_root=root,
+        total_shards=2,
+        shard=1,
+        output=output,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert output.read_text(encoding="utf-8") == "arbitrary-tests/test_alpha.py\n"
+
+
+def test_cli_repeatable_isolated_file_flags_create_singleton_shards(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    for name, lines in {
+        "test_heavy_b.py": 40,
+        "test_regular_b.py": 30,
+        "test_heavy_a.py": 20,
+        "test_regular_a.py": 10,
+    }.items():
+        _test_file(root, name, lines)
+    isolated = ("test_heavy_b.py", "test_heavy_a.py")
+
+    for shard, expected in ((1, "test_heavy_a.py"), (2, "test_heavy_b.py")):
+        output = tmp_path / f"isolated-shard-{shard}.txt"
+        result = _run_planner_cli(
+            test_root=root,
+            total_shards=3,
+            shard=shard,
+            output=output,
+            isolated_files=isolated,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert output.read_text(encoding="utf-8") == f"tests/{expected}\n"
+
+
+def test_cli_missing_isolated_file_fails_closed(tmp_path: Path) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    _test_file(root, "test_alpha.py", 2)
+    _test_file(root, "test_beta.py", 1)
+
+    result = _run_planner_cli(
+        test_root=root,
+        total_shards=2,
+        shard=1,
+        output=tmp_path / "missing.txt",
+        isolated_files=("test_missing.py",),
+    )
+
+    assert result.returncode != 0
+    assert "isolated test file registry paths are missing" in result.stderr
+
+
 def test_repository_runtime_registry_is_exact_once_and_leaves_ten_regular_shards() -> None:
     root = REPO_ROOT / "apps" / "api" / "tests"
-    total_shards = 10 + len(pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES)
+    total_shards = 10 + len(EVIDENCE_ISOLATED_TEST_FILES)
     plan = pytest_shard_plan.build_plan(
         root,
         total_shards,
-        isolated_files=pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES,
+        isolated_files=EVIDENCE_ISOLATED_TEST_FILES,
     )
     expected_files = sorted(path.resolve() for path in root.rglob("test_*.py"))
     planned_files = [path.resolve() for shard in plan for path in shard.files]
 
     assert tuple(shard.files[0].name for shard in plan[:3]) == tuple(
-        sorted(pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES)
+        sorted(EVIDENCE_ISOLATED_TEST_FILES)
     )
     assert all(len(shard.files) == 1 for shard in plan[:3])
     assert len(plan[3:]) == 10
@@ -190,7 +286,7 @@ def test_ci_workflow_keeps_coverage_shards_and_aggregation_fail_closed() -> None
     parsed = yaml.safe_load(workflow)
     shard_job = parsed["jobs"]["api-test-shards"]
     aggregate_job = parsed["jobs"]["api"]
-    total_shards = 10 + len(pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES)
+    total_shards = 10 + len(EVIDENCE_ISOLATED_TEST_FILES)
 
     assert shard_job["timeout-minutes"] == 90
     assert shard_job["strategy"]["max-parallel"] == 10
@@ -199,6 +295,13 @@ def test_ci_workflow_keeps_coverage_shards_and_aggregation_fail_closed() -> None
         "total_shards": [total_shards],
     }
     steps_by_name = {step.get("name"): step for step in shard_job["steps"]}
+    selection = steps_by_name["Select deterministic test shard"]
+    isolated_flags = tuple(
+        line.strip().split()[1]
+        for line in selection["run"].splitlines()
+        if line.strip().startswith("--isolated-file ")
+    )
+    assert isolated_flags == EVIDENCE_ISOLATED_TEST_FILES
     prepare = steps_by_name["Prepare coverage shard artifact"]
     upload = steps_by_name["Upload coverage shard data"]
     assert prepare["if"] == "always()"

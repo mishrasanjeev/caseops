@@ -114,6 +114,9 @@ jobs:
             --test-root tests \
             --total-shards "$PYTEST_TOTAL_SHARDS" \
             --shard "$PYTEST_SHARD" \
+            --isolated-file test_legal_knowledge_graph.py \
+            --isolated-file test_litigation_strategy.py \
+            --isolated-file test_matter_file_qa.py \
             --output .pytest-shard-files
 
       - name: Pytest with coverage shard (P1-001 per-area gates)

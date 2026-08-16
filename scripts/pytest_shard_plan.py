@@ -27,18 +27,6 @@ from pathlib import Path, PurePosixPath
 # parsing avoids importing test modules or depending on a prior CI artifact.
 TEST_DEFINITION_WEIGHT = 100
 
-# Hosted run 31942321727 at exact head 9fe3e250 timed out after the next
-# collected item entered each file: litigation strategy item 217, matter-file
-# QA item 217, and legal-knowledge graph item 145.  Keep this small, reviewable
-# registry path-based and fail closed if an entry is duplicated, renamed, or
-# removed.  The files run as singleton shards; every other test file continues
-# through the deterministic hybrid balancer.
-RUNTIME_ISOLATED_TEST_FILES = (
-    "test_legal_knowledge_graph.py",
-    "test_litigation_strategy.py",
-    "test_matter_file_qa.py",
-)
-
 
 @dataclass(frozen=True)
 class Shard:
@@ -241,13 +229,22 @@ def main() -> None:
     parser.add_argument("--total-shards", type=int, required=True)
     parser.add_argument("--shard", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--isolated-file",
+        action="append",
+        default=[],
+        help=(
+            "Test-root-relative file to reserve as a singleton shard; repeat for "
+            "additional files"
+        ),
+    )
     args = parser.parse_args()
     write_shard_file(
         test_root=args.test_root,
         total_shards=args.total_shards,
         shard=args.shard,
         output=args.output,
-        isolated_files=RUNTIME_ISOLATED_TEST_FILES,
+        isolated_files=args.isolated_file,
     )
 
 
