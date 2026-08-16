@@ -315,8 +315,12 @@ undocumented.
 | Licensed source display | **No publisher licence** | Allow-list stays official-only; commercial sources deep-link out with the `unverified` badge. The `permitted_uses` in-app path is not built. `destination_class` has two live values, not three. |
 | Court-data vendor | **Engineering posture accepted** | Build to the frozen adapter contract; vendor choice stays a configuration change. P0–P3 do not wait on it. |
 
-**Remaining sign-off acts (neither blocks engineering):** a named legal approver
-on workflow definition version 1; a scope call on non-Indian registries.
+**Sign-off:** the workflow definition version 1 approver is named — **Sanjeev
+Kumar**, 2026-08-16. The approval act itself is a runtime action against a seeded
+version 1, applied through the existing approval path so the approver snapshot is
+persisted; naming the approver in a document does not by itself produce an
+approved workflow version. One scope call remains open and blocks nothing: non-Indian
+registries.
 
 **One consequence flagged, not assumed:** the licence decision answers *display
 of licensed content*, not *corpus acquisition*. If no publisher licence is taken

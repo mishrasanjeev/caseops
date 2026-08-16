@@ -77,9 +77,17 @@ sits precisely there, and `proceeding_kind` already includes `'opposition'`
   not as a second hard-coded state machine.
 - Fix **D-3** as part of this work: reconcile onto one terminal constant.
 
-**Residual sign-off:** the approval act itself. A named legal approver must
-approve workflow version 1, because the schema refuses `approved` without
-approver snapshots. Engineering is not blocked meanwhile.
+**Approver named 2026-08-16: Sanjeev Kumar.** The residual sign-off was the
+approval act itself, because the schema refuses `approved` without approver
+snapshots.
+
+Note what this does and does not close. The named approver is now recorded, so no
+further decision is outstanding. The act itself is a **runtime data action**, not
+a documentation one: it requires a seeded workflow definition version 1 to exist
+first (§1), and the approval must then be applied through the existing approval
+path so the approver snapshot is persisted and auditable. Recording a name in a
+document is not the same as an approved workflow version, and this document does
+not claim otherwise.
 
 ---
 
@@ -371,13 +379,14 @@ blocked.**
 | Licensed source display (§7) | **No publisher licence.** Allow-list stays official-only; no in-app display of commercial sources. |
 | Court-data vendor (§9) | **Engineering posture accepted**; vendor selection stays parked and blocks nothing. |
 
-Two sign-off acts remain, and neither blocks engineering:
+Sign-off status:
 
-1. A named legal approver on workflow definition version 1 (§1). The schema
-   refuses `approved` without approver snapshots, so this is an act, not a
-   design question.
-2. A scope call on non-Indian registries (§5). India-only seed ships now either
-   way.
+1. **Workflow definition version 1 approver — named 2026-08-16: Sanjeev Kumar**
+   (§1). No decision outstanding. The approval act itself still has to be applied
+   at runtime against a seeded version 1, through the existing approval path, so
+   the approver snapshot is persisted and auditable.
+2. **Non-Indian registries scope** (§5) — still open, blocks nothing. The
+   India-only seed ships either way.
 
 One consequence flagged rather than assumed: the "no publisher licence" decision
 answers *display*, not *corpus acquisition*. See §7.
