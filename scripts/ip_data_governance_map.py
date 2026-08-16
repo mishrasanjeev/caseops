@@ -91,13 +91,26 @@ RISKY_SOURCE_ROOTS = (
     "apps/web/",
     "infra/",
 )
+# Matches a real provider/storage/telemetry boundary, not a passing mention of
+# the word. The bare-word form used to fire on ordinary prose - a comment saying
+# "Inbound legal requests from business units" and the route path
+# `/api/intake/requests` both tripped it - which meant every edit to models.py or
+# endpoints.ts demanded a governance-map regeneration that produced no diff.
+# Anchoring on an import or an attribute access keeps the detection and drops the
+# noise.
+_RISKY_MODULES = (
+    r"google\.cloud|boto3|azure\.storage|openai|anthropic|voyageai|google\.genai|"
+    r"opentelemetry|redis|pubsub|httpx|requests|aiohttp|urllib3"
+)
 RISKY_SOURCE_PATTERN = re.compile(
-    r"\b(?:"
-    r"google\.cloud|boto3|azure\.storage|storage\.Client|"
-    r"openai|anthropic|voyageai|google\.genai|"
-    r"opentelemetry|OTLPSpanExporter|redis|pubsub|cloud.?tasks|"
-    r"httpx|requests|aiohttp|urllib3"
-    r")\b",
+    # `import x`, `from x import ...`, `require('x')`, `from "x"`
+    rf"(?:^|\n)\s*(?:import|from)\s+(?:{_RISKY_MODULES})\b"
+    rf"|require\(\s*['\"](?:{_RISKY_MODULES})"
+    rf"|from\s+['\"](?:{_RISKY_MODULES})"
+    # attribute access on the module, e.g. httpx.post(, redis.Redis(
+    rf"|\b(?:{_RISKY_MODULES})\s*\.\s*\w+\s*\("
+    # unambiguous single-token boundaries that are never ordinary prose
+    r"|\bstorage\.Client\b|\bOTLPSpanExporter\b|\bcloud.?tasks\b",
     re.IGNORECASE,
 )
 
