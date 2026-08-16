@@ -406,15 +406,12 @@ def test_ip_remaining_operations_end_to_end(
             "expected_versions": {coverage_row["id"]: coverage_row["reassignment_version"]},
         },
     )
-    # UJ-57-EXC-01/02 (2026-08-15): this docket is `restricted: True` and the
-    # replacement was inserted with no access grant, so the transfer is now
-    # refused. This assertion previously expected 200, which encoded the defect
-    # that bulk reassignment could hand a restricted record to a walled-off
-    # member. The success path is covered by
-    # `test_ip_coverage_reassignment_access.py::
-    # test_uj57_bulk_transfer_succeeds_when_the_replacement_has_access`.
+    # The replacement is already this row's backup. The role-collision guard is
+    # intentionally evaluated before access: either defect must refuse the
+    # whole transfer, and the structural coverage invariant is independent of
+    # whether this restricted docket later grants the replacement access.
     assert bulk.status_code == 409, bulk.text
-    assert bulk.json()["code"] == "ip_coverage_replacement_lacks_access"
+    assert bulk.json()["code"] == "ip_coverage_distinct_backup_required"
     assert bulk.json()["blocked_docket_ids"] == [docket_id]
 
     # Fail closed: the original owner still holds the coverage.
@@ -577,9 +574,8 @@ def test_ip_remaining_operations_end_to_end(
     with get_session_factory()() as session:
         persisted_coverage = session.get(IpDeadlineCoverage, coverage_row["id"])
         assert persisted_coverage is not None
-        # UJ-57-EXC-01/02 (2026-08-15): the bulk transfer above was refused
-        # because this docket is restricted and the replacement holds no grant,
-        # so the coverage is durably unchanged in the database too.
+        # The bulk transfer above was refused because the replacement already
+        # holds backup cover, so the distinct-role invariant is durable too.
         assert persisted_coverage.responsible_membership_id != replacement_id
         assert (
             persisted_coverage.responsible_membership_id

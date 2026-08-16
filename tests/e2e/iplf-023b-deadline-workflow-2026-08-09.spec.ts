@@ -382,7 +382,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
   await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
   await expect(deadlineWorkspace.getByText("2026-08-18 Â· candidate Â· v1")).toBeVisible();
-  await deadlineWorkspace.getByLabel("Backup membership ID").fill(seeded.backupMembershipId);
+  await deadlineWorkspace.getByLabel("Backup").selectOption(seeded.backupMembershipId);
 
   for (const name of ["Calculate deadline proposal", "Confirm legal deadline"]) {
     const control = deadlineWorkspace.getByRole("button", { name });

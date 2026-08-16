@@ -116,7 +116,7 @@ def test_owner_can_create_and_list_company_users(client: TestClient) -> None:
     }
 
 
-def test_non_owner_cannot_manage_memberships(client: TestClient) -> None:
+def test_non_owner_can_list_but_cannot_manage_memberships(client: TestClient) -> None:
     bootstrap_payload = bootstrap_company(client)
     owner_token = str(bootstrap_payload["access_token"])
 
@@ -141,6 +141,19 @@ def test_non_owner_cannot_manage_memberships(client: TestClient) -> None:
         },
     )
     member_token = str(login_response.json()["access_token"])
+
+    # Person-picking workflows are available to ordinary authenticated tenant
+    # members, so the tenant-scoped read endpoint must not require the separate
+    # company:manage_users administration capability.
+    list_response = client.get(
+        "/api/companies/current/users",
+        headers=auth_headers(member_token),
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert {user["email"] for user in list_response.json()["users"]} == {
+        "owner@asterlegal.in",
+        "meera@asterlegal.in",
+    }
 
     response = client.post(
         "/api/companies/current/users",

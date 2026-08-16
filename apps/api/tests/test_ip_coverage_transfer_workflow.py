@@ -23,6 +23,8 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import IpDeadlineCoverage
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _member
@@ -298,6 +300,207 @@ def test_uj57_backup_cannot_be_replaced_by_the_existing_primary(
     assert unchanged["responsible_membership_id"] == env["owner_id"]
     assert unchanged["backup_membership_id"] == env["leaver_id"]
     assert unchanged["replacement_decision"] == "none"
+
+
+def test_deadline_coverage_create_and_direct_reassign_refuse_collapsed_roles(
+    client: TestClient,
+) -> None:
+    """Every direct writer refuses one person in both roles before mutation."""
+
+    env = _setup(client)
+    docket = _docket(
+        client,
+        env["owner_headers"],
+        matter_id=env["matter"]["id"],
+        title="Distinct direct coverage",
+    )
+    deadline = client.post(
+        f"/api/matters/{env['matter']['id']}/deadlines",
+        headers=env["owner_headers"],
+        json={
+            "source": "custom",
+            "kind": "licence_royalty",
+            "title": "Distinct-role direct coverage",
+            "due_on": str(date.today() + timedelta(days=21)),
+            "assignee_membership_id": env["cover_id"],
+        },
+    )
+    assert deadline.status_code == 200, deadline.text
+
+    collapsed_create = client.post(
+        f"/api/ip/dockets/{docket['id']}/deadline-coverages",
+        headers=env["owner_headers"],
+        json={
+            "matter_deadline_id": deadline.json()["id"],
+            "responsible_membership_id": env["cover_id"],
+            "backup_membership_id": env["cover_id"],
+            "coverage_status": "accepted",
+        },
+    )
+    assert collapsed_create.status_code == 409, collapsed_create.text
+    assert collapsed_create.json()["code"] == "ip_coverage_distinct_backup_required"
+    after_create = client.get(
+        f"/api/ip/dockets/{docket['id']}", headers=env["owner_headers"]
+    )
+    assert after_create.status_code == 200, after_create.text
+    assert after_create.json()["deadline_coverages"] == []
+
+    before = _coverage_row(
+        client,
+        env["owner_headers"],
+        env["docket"]["id"],
+        env["coverage"]["id"],
+    )
+    collapsed_reassign = client.post(
+        f"/api/ip/dockets/{env['docket']['id']}/deadline-coverages/"
+        f"{env['coverage']['id']}/reassign",
+        headers=env["owner_headers"],
+        json={
+            "expected_responsible_membership_id": env["leaver_id"],
+            "responsible_membership_id": env["cover_id"],
+            "backup_membership_id": env["cover_id"],
+            "reason": "A distinct backup is required for direct reassignment.",
+        },
+    )
+    assert collapsed_reassign.status_code == 409, collapsed_reassign.text
+    assert collapsed_reassign.json()["code"] == "ip_coverage_distinct_backup_required"
+    assert (
+        _coverage_row(
+            client,
+            env["owner_headers"],
+            env["docket"]["id"],
+            env["coverage"]["id"],
+        )
+        == before
+    )
+
+    # Proposed mode keeps the current owner until acceptance while applying
+    # backup changes immediately. Naming that owner as backup must be rejected
+    # by the service, not left for the database constraint to turn into a 500.
+    collapsed_pending_state = client.post(
+        f"/api/ip/dockets/{env['docket']['id']}/deadline-coverages/"
+        f"{env['coverage']['id']}/reassign",
+        headers=env["owner_headers"],
+        json={
+            "expected_responsible_membership_id": env["leaver_id"],
+            "responsible_membership_id": env["cover_id"],
+            "backup_membership_id": env["leaver_id"],
+            "reason": "Pending cover must remain distinct from the current owner.",
+            "transfer_mode": "proposed",
+        },
+    )
+    assert collapsed_pending_state.status_code == 409, collapsed_pending_state.text
+    assert (
+        collapsed_pending_state.json()["code"]
+        == "ip_coverage_distinct_backup_required"
+    )
+    assert (
+        _coverage_row(
+            client,
+            env["owner_headers"],
+            env["docket"]["id"],
+            env["coverage"]["id"],
+        )
+        == before
+    )
+
+
+def test_uj57_primary_cannot_be_replaced_by_its_existing_backup(
+    client: TestClient,
+) -> None:
+    """Preview, proposal, and bulk transfer fail before collapsing primary cover."""
+
+    env = _setup(client)
+    conflict_docket = _docket(
+        client,
+        env["owner_headers"],
+        matter_id=env["matter"]["id"],
+        title="Existing backup conflict",
+    )
+    conflict = _coverage(
+        client,
+        env["owner_headers"],
+        conflict_docket["id"],
+        matter_id=env["matter"]["id"],
+        responsible=env["leaver_id"],
+        backup=env["cover_id"],
+    )
+    before = _coverage_row(
+        client, env["owner_headers"], conflict_docket["id"], conflict["id"]
+    )
+
+    preview = _preview(
+        client, env["owner_headers"], env["leaver_id"], env["cover_id"]
+    )
+    assert preview.status_code == 200, preview.text
+    snapshot = preview.json()
+    assert snapshot["transfer_allowed"] is False
+    assert conflict_docket["id"] in snapshot["blocked_docket_ids"]
+
+    proposed = _propose(
+        client,
+        env["owner_headers"],
+        env["leaver_id"],
+        env["cover_id"],
+        snapshot["preview_token"],
+    )
+    assert proposed.status_code == 409, proposed.text
+    assert proposed.json()["code"] == "ip_coverage_distinct_backup_required"
+
+    bulk = client.post(
+        "/api/ip/deadline-coverages/bulk-reassign",
+        headers=env["owner_headers"],
+        json={
+            "from_membership_id": env["leaver_id"],
+            "to_membership_id": env["cover_id"],
+            "reason": "A distinct backup is required for portfolio transfer.",
+        },
+    )
+    assert bulk.status_code == 409, bulk.text
+    assert bulk.json()["code"] == "ip_coverage_distinct_backup_required"
+    assert (
+        _coverage_row(
+            client, env["owner_headers"], conflict_docket["id"], conflict["id"]
+        )
+        == before
+    )
+
+
+def test_uj57_acceptance_refuses_legacy_pending_backup_collision(
+    client: TestClient,
+) -> None:
+    """A legacy proposal cannot accept by silently deleting its backup."""
+
+    env = _setup(client)
+    with get_session_factory()() as session:
+        row = session.get(IpDeadlineCoverage, env["coverage"]["id"])
+        assert row is not None
+        row.backup_membership_id = env["cover_id"]
+        row.pending_replacement_membership_id = env["cover_id"]
+        row.replacement_decision = "pending"
+        row.coverage_status = "transfer_pending"
+        session.commit()
+
+    before = _coverage_row(
+        client,
+        env["owner_headers"],
+        env["docket"]["id"],
+        env["coverage"]["id"],
+    )
+    accepted = _decide(
+        client, env["cover_headers"], env["coverage"]["id"], "accepted"
+    )
+    assert accepted.status_code == 409, accepted.text
+    assert accepted.json()["code"] == "ip_coverage_distinct_backup_required"
+    assert (
+        _coverage_row(
+            client,
+            env["owner_headers"],
+            env["docket"]["id"],
+            env["coverage"]["id"],
+        )
+        == before
+    )
 
 
 def test_uj57_exc03_assignee_rejects_and_work_returns_to_the_owner(

@@ -24,7 +24,7 @@ const {
   proposeIpLegalDeadlineMock,
   createIpSharedHearingMock,
   fetchIpAccessPanelMock,
-  listEmployeesMock,
+  listCompanyUsersMock,
   listTeamsMock,
   previewIpAccessChangeMock,
   applyIpAccessChangeMock,
@@ -52,7 +52,7 @@ const {
   proposeIpLegalDeadlineMock: vi.fn(),
   createIpSharedHearingMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
-  listEmployeesMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
   listTeamsMock: vi.fn(),
   previewIpAccessChangeMock: vi.fn(),
   applyIpAccessChangeMock: vi.fn(),
@@ -113,7 +113,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   activateIpDeadlineRule: vi.fn(),
   transitionIpDeadlineRule: vi.fn(),
   fetchIpAccessPanel: fetchIpAccessPanelMock,
-  listEmployees: listEmployeesMock,
+  listCompanyUsers: listCompanyUsersMock,
   listTeams: listTeamsMock,
   previewIpAccessChange: previewIpAccessChangeMock,
   applyIpAccessChange: applyIpAccessChangeMock,
@@ -161,7 +161,7 @@ describe("IpDocketPage", () => {
     proposeIpLegalDeadlineMock.mockReset();
     createIpSharedHearingMock.mockReset();
     fetchIpAccessPanelMock.mockReset();
-    listEmployeesMock.mockReset();
+    listCompanyUsersMock.mockReset();
     listTeamsMock.mockReset();
     previewIpAccessChangeMock.mockReset();
     applyIpAccessChangeMock.mockReset();
@@ -210,7 +210,32 @@ describe("IpDocketPage", () => {
     });
     fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [] });
     listCalendarConnectionsMock.mockResolvedValue({ connections: [] });
-    listEmployeesMock.mockResolvedValue({ employees: [], total: 0 });
+    listCompanyUsersMock.mockResolvedValue({
+      company_id: "company-1",
+      company_slug: "firm",
+      users: [
+        {
+          membership_id: "member-1",
+          full_name: "Priya Raghavan",
+          email: "priya@example.com",
+          role: "partner",
+          membership_active: true,
+          user_id: "user-1",
+          user_active: true,
+          created_at: "2026-08-16T00:00:00Z",
+        },
+        {
+          membership_id: "member-2",
+          full_name: "Anand Rao",
+          email: "anand@example.com",
+          role: "member",
+          membership_active: true,
+          user_id: "user-2",
+          user_active: true,
+          created_at: "2026-08-16T00:00:00Z",
+        },
+      ],
+    });
     listTeamsMock.mockResolvedValue({ teams: [], total: 0 });
     fetchIpAccessPanelMock.mockResolvedValue({
       docket_id: "ip-1",
@@ -466,6 +491,20 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    const continuityHeading = await screen.findByRole("heading", {
+      name: "Deadline continuity",
+    });
+    const continuityCard = continuityHeading.parentElement?.parentElement;
+    expect(continuityCard).not.toBeNull();
+    expect(
+      await within(continuityCard!).findByText((_content, element) =>
+        Boolean(
+          element?.classList.contains("font-semibold") &&
+            element.textContent ===
+              "Responsible: Priya Raghavan — priya@example.com",
+        ),
+      ),
+    ).toBeVisible();
     expect(await screen.findByRole("button", { name: "Discover Matter evidence" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Accept and link" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reject" })).toBeVisible();
@@ -552,8 +591,12 @@ describe("IpDocketPage", () => {
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
     expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
-    expect(within(deadlineWorkspace).getByLabelText("Primary membership ID")).toBeVisible();
-    expect(within(deadlineWorkspace).getByLabelText("Backup membership ID")).toBeVisible();
+    // 2026-08-16: these were free-text boxes demanding a membership UUID. They
+    // are now pickers, so the assertion is that a lawyer can name a colleague.
+    const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");
+    expect(primary).toBeVisible();
+    expect(within(primary).getByRole("option", { name: /Priya Raghavan/ })).toBeInTheDocument();
+    expect(within(deadlineWorkspace).getByLabelText("Backup")).toBeVisible();
     expect(within(deadlineWorkspace).getByLabelText("Evidence reference")).toBeVisible();
     expect(within(deadlineWorkspace).getByRole("button", { name: "Confirm legal deadline" })).toBeVisible();
     expect(within(deadlineWorkspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();

@@ -73,8 +73,8 @@ sits precisely there, and `proceeding_kind` already includes `'opposition'`
 
 - Adopt `EVENT_PHASES` + `opposition` as the shipped default stage list.
 - Express transition rules as **workflow definition version 1**, seeded as a
-  `candidate` `transition_table_json` travelling the existing approval path —
-  not as a second hard-coded state machine.
+  `candidate` `transition_table_json` that will travel the approval path once
+  that path is implemented — not as a second hard-coded state machine.
 - Fix **D-3** as part of this work: reconcile onto one terminal constant.
 
 **Approver named 2026-08-16: Sanjeev Kumar.** The residual sign-off was the
@@ -84,10 +84,11 @@ snapshots.
 Note what this does and does not close. The named approver is now recorded, so no
 further decision is outstanding. The act itself is a **runtime data action**, not
 a documentation one: it requires a seeded workflow definition version 1 to exist
-first (§1), and the approval must then be applied through the existing approval
-path so the approver snapshot is persisted and auditable. Recording a name in a
-document is not the same as an approved workflow version, and this document does
-not claim otherwise.
+first (§1), and the approval must then be applied through an approval path once
+that path is implemented so the approver snapshot is persisted and auditable.
+No workflow service or route exists today. Recording a name in a document is not
+the same as an approved workflow version, and this document does not claim
+otherwise.
 
 ---
 
@@ -436,8 +437,9 @@ Sign-off status:
 
 1. **Workflow definition version 1 approver — named 2026-08-16: Sanjeev Kumar**
    (§1). No decision outstanding. The approval act itself still has to be applied
-   at runtime against a seeded version 1, through the existing approval path, so
-   the approver snapshot is persisted and auditable.
+   at runtime against a seeded candidate version 1, through an approval path once
+   that path is implemented, so the approver snapshot is persisted and auditable.
+   No workflow service or route exists today.
 2. **Registry scope** (§5) — **decided 2026-08-16: seed all registries**,
    Indian and foreign. This supersedes an earlier same-day decision to defer
    foreign registries; it changed because IP checking must span all registers

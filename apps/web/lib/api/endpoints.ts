@@ -3936,6 +3936,34 @@ export type EmployeeEmploymentStatus = "invited" | "active" | "inactive" | "offb
 export type EmployeeRole = "owner" | "admin" | "partner" | "member" | "paralegal" | "viewer";
 export type AssignableEmployeeRole = Exclude<EmployeeRole, "owner">;
 
+export type CompanyUserRecord = {
+  membership_id: string;
+  role: EmployeeRole;
+  membership_active: boolean;
+  user_id: string;
+  email: string;
+  full_name: string;
+  user_active: boolean;
+  created_at: string;
+};
+
+export type CompanyUsersResponse = {
+  company_id: string;
+  company_slug: string;
+  users: CompanyUserRecord[];
+};
+
+/**
+ * List the current tenant's memberships for ordinary authenticated workflows.
+ *
+ * This is intentionally distinct from the employee-administration directory:
+ * `/current/employees` requires `company:manage_users`, while person pickers
+ * are also used by partners and other non-manager roles.
+ */
+export async function listCompanyUsers(): Promise<CompanyUsersResponse> {
+  return apiRequest<CompanyUsersResponse>("/api/companies/current/users");
+}
+
 export type EmployeeRecord = {
   company_id: string;
   membership_id: string;

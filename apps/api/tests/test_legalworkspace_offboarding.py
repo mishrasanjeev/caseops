@@ -520,6 +520,146 @@ def test_offboarding_refuses_to_replace_backup_with_existing_primary(
         assert coverage.backup_membership_id == target_id
 
 
+def test_offboarding_refuses_to_replace_primary_with_existing_backup(
+    client: TestClient,
+) -> None:
+    """Preview and commit agree when the replacement is already the backup."""
+
+    boot = _bootstrap(
+        client,
+        slug="lw-s8-distinct-primary",
+        email="owner@distinct-primary-lws8.example",
+    )
+    owner_token = str(boot["access_token"])
+    owner_id = str(boot["membership"]["id"])
+    company_id = str(boot["company"]["id"])
+    target = _create_employee(
+        client,
+        owner_token,
+        email="departing-primary@lws8.example",
+        full_name="Departing Primary",
+    )
+    target_id = str(target["employee"]["membership_id"])
+    _complete_setup(
+        client,
+        str(target["setup"]["debug_token"]),
+        password="DepartingPrimary123!",
+    )
+    seeded = _seed_owned_objects(
+        company_id=company_id,
+        target_membership_id=target_id,
+    )
+
+    with get_session_factory()() as session:
+        coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        assert coverage is not None
+        assert coverage.responsible_membership_id == target_id
+        coverage.backup_membership_id = owner_id
+        session.commit()
+
+    preview = client.post(
+        f"/api/companies/current/employees/{target_id}/offboarding/preview",
+        headers=auth_headers(owner_token),
+        json={"reassign_to_membership_id": owner_id},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_commit"] is False
+    assert "distinct ip deadline backup" in " ".join(
+        preview.json()["blockers"]
+    ).lower()
+
+    commit = client.post(
+        f"/api/companies/current/employees/{target_id}/offboarding/commit",
+        headers=auth_headers(owner_token),
+        json={"reassign_to_membership_id": owner_id},
+    )
+    assert commit.status_code == 400, commit.text
+
+    with get_session_factory()() as session:
+        target_membership = session.get(CompanyMembership, target_id)
+        coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        assert target_membership is not None and target_membership.is_active is True
+        assert coverage is not None
+        assert coverage.responsible_membership_id == target_id
+        assert coverage.backup_membership_id == owner_id
+
+
+def test_offboarding_preview_blocks_backup_as_decline_escalation(
+    client: TestClient,
+) -> None:
+    """Preview mirrors the commit's admin fallback for an immediate transfer."""
+
+    boot = _bootstrap(
+        client,
+        slug="lw-s8-distinct-escalation",
+        email="owner@distinct-escalation-lws8.example",
+    )
+    owner_token = str(boot["access_token"])
+    owner_id = str(boot["membership"]["id"])
+    company_id = str(boot["company"]["id"])
+    target = _create_employee(
+        client,
+        owner_token,
+        email="departing-escalation@lws8.example",
+        full_name="Departing Escalation",
+    )
+    target_id = str(target["employee"]["membership_id"])
+    _complete_setup(
+        client,
+        str(target["setup"]["debug_token"]),
+        password="DepartingEscalation123!",
+    )
+    replacement = _create_employee(
+        client,
+        owner_token,
+        email="replacement-escalation@lws8.example",
+        full_name="Replacement Escalation",
+    )
+    replacement_id = str(replacement["employee"]["membership_id"])
+    _complete_setup(
+        client,
+        str(replacement["setup"]["debug_token"]),
+        password="ReplacementEscalation123!",
+    )
+    seeded = _seed_owned_objects(
+        company_id=company_id,
+        target_membership_id=target_id,
+    )
+
+    with get_session_factory()() as session:
+        coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        assert coverage is not None
+        assert coverage.responsible_membership_id == target_id
+        coverage.backup_membership_id = owner_id
+        session.commit()
+
+    preview = client.post(
+        f"/api/companies/current/employees/{target_id}/offboarding/preview",
+        headers=auth_headers(owner_token),
+        json={"reassign_to_membership_id": replacement_id},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_commit"] is False
+    assert "distinct ip deadline backup" in " ".join(
+        preview.json()["blockers"]
+    ).lower()
+
+    commit = client.post(
+        f"/api/companies/current/employees/{target_id}/offboarding/commit",
+        headers=auth_headers(owner_token),
+        json={"reassign_to_membership_id": replacement_id},
+    )
+    assert commit.status_code == 400, commit.text
+
+    with get_session_factory()() as session:
+        target_membership = session.get(CompanyMembership, target_id)
+        coverage = session.get(IpDeadlineCoverage, seeded["ip_coverage_id"])
+        assert target_membership is not None and target_membership.is_active is True
+        assert coverage is not None
+        assert coverage.responsible_membership_id == target_id
+        assert coverage.backup_membership_id == owner_id
+
+
 def test_offboarding_shared_global_user_preserves_other_tenant_access(
     client: TestClient,
 ) -> None:

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,13 +9,20 @@ vi.mock("sonner", () => ({
 }));
 
 import TenantBillingUsagePage from "@/app/app/admin/billing/usage/page";
-import { mockBillingFetch } from "@/test/billing-fixtures";
+import {
+  jsonResponse,
+  mockBillingFetch,
+  usageReport,
+} from "@/test/billing-fixtures";
 
 function renderWithQuery(ui: ReactElement) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
+  };
 }
 
 describe("TenantBillingUsagePage", () => {
@@ -62,5 +69,55 @@ describe("TenantBillingUsagePage", () => {
         }),
       ).toBe(true),
     );
+  });
+
+  it("announces a layout-preserving loader before usage breakdowns resolve", () => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => undefined));
+
+    renderWithQuery(<TenantBillingUsagePage />);
+
+    const loading = screen.getByTestId("billing-usage-loading");
+    expect(loading).toHaveAttribute("role", "status");
+    expect(loading).toHaveAttribute("aria-live", "polite");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(within(loading).getByText("Loading usage and spend report.")).toHaveClass(
+      "sr-only",
+    );
+    expect(loading.querySelectorAll(".animate-pulse")).toHaveLength(7);
+    expect(screen.queryByText("No usage in this period.")).not.toBeInTheDocument();
+  });
+
+  it("keeps a resolved empty fallback hidden while the spend report is initially pending", async () => {
+    const emptyUsageReport = {
+      ...usageReport,
+      by_feature: [],
+      by_user: [],
+      by_matter: [],
+      by_tracked_case: [],
+      daily: [],
+      blocked_events: [],
+    };
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/billing/reports/spend")) {
+        return new Promise<Response>(() => undefined);
+      }
+      if (url.includes("/api/billing/usage")) {
+        return Promise.resolve(jsonResponse(emptyUsageReport));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    const { client } = renderWithQuery(<TenantBillingUsagePage />);
+
+    await waitFor(() =>
+      expect(client.getQueryState(["billing", "usage"])?.status).toBe("success"),
+    );
+    expect(client.getQueryState(["billing", "spend-report"])?.status).toBe(
+      "pending",
+    );
+    expect(screen.getByTestId("billing-usage-loading")).toBeInTheDocument();
+    expect(screen.queryByText("No usage in this period.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No active quota warnings.")).not.toBeInTheDocument();
   });
 });

@@ -9,10 +9,11 @@ inspection.
 pending-work backlog.
 
 > The source document names two commercial products as benchmarking references
-> (§16, F-08). Those are captured here as a name-free requirement — benchmark IP
-> portfolio structure, docket/deadline handling, trademark identifiers and
-> search, document organisation, and reminders/reports/navigation — because this
-> repository is public and does not record competitor names.
+> (§16, F-08); that founder-supplied source remains the provenance for this
+> requirement. This backlog states the resulting product requirement by category
+> — IP portfolio structure, docket/deadline handling, trademark identifiers and
+> search, document organisation, and reminders/reports/navigation — while the
+> dated April/May benchmark analyses retain their named sources and URLs.
 
 ---
 
@@ -325,9 +326,10 @@ undocumented.
 | Court-data vendor | **Engineering posture accepted** | Build to the frozen adapter contract; vendor choice stays a configuration change. P0–P3 do not wait on it. |
 
 **Sign-off:** the workflow definition version 1 approver is named — **Sanjeev
-Kumar**, 2026-08-16. The approval act itself is a runtime action against a seeded
-version 1, applied through the existing approval path so the approver snapshot is
-persisted; naming the approver in a document does not by itself produce an
+Kumar**, 2026-08-16. The approval act will be a runtime action against a seeded
+candidate version 1, applied through an approval path once that path is
+implemented so the approver snapshot is persisted. No workflow service or route
+exists today; naming the approver in a document does not by itself produce an
 approved workflow version.
 
 **Registry scope — decided 2026-08-16: seed all registries**, Indian and
@@ -339,7 +341,7 @@ registries" into four distinct jobs — `FMB-11`…`FMB-14` — and record why t
 obvious version of the duplicate-detection fix is wrong.
 
 **No open items remain.** Every requirement in the source document is now either
-implemented, planned, tracked as `FMB-01`…`FMB-10`, or decided.
+implemented, planned, tracked as `FMB-01`…`FMB-14`, or decided.
 
 **One consequence flagged, not assumed:** the licence decision answers *display
 of licensed content*, not *corpus acquisition*. If no publisher licence is taken

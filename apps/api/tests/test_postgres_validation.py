@@ -308,6 +308,52 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
     )
 
 
+def test_billing_account_creation_is_idempotent_under_postgres_race(pg_engine) -> None:
+    from caseops_api.db.models import BillingAccount, Company
+    from caseops_api.services.saas_billing import ensure_billing_account
+
+    with Session(pg_engine) as seed_session:
+        company_id = _seed_company(seed_session)
+        seed_session.commit()
+
+    first_inserted = Event()
+    release_first = Event()
+    second_started = Event()
+
+    def create_account(*, hold_transaction: bool) -> str:
+        with Session(pg_engine) as session:
+            company = session.get(Company, company_id)
+            assert company is not None
+            if not hold_transaction:
+                second_started.set()
+            account = ensure_billing_account(session, company)
+            if hold_transaction:
+                first_inserted.set()
+                assert release_first.wait(timeout=5)
+
+            # Prove conflict handling left the caller's transaction usable.
+            assert session.execute(text("SELECT 1")).scalar_one() == 1
+            session.commit()
+            return account.id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(create_account, hold_transaction=True)
+        assert first_inserted.wait(timeout=5)
+        second = executor.submit(create_account, hold_transaction=False)
+        assert second_started.wait(timeout=5)
+        try:
+            with pytest.raises(FutureTimeoutError):
+                second.result(timeout=0.25)
+        finally:
+            release_first.set()
+        account_ids = {first.result(timeout=5), second.result(timeout=5)}
+
+    with Session(pg_engine) as session:
+        account_count = session.query(BillingAccount).filter_by(company_id=company_id).count()
+    assert account_count == 1
+    assert len(account_ids) == 1
+
+
 def test_ip_delivery_holds_docket_lock_during_final_authorization(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,

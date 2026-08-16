@@ -63,17 +63,24 @@ jobs:
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
-    # Keep shards comfortably within the hosted-runner window under
-    # coverage. Every test file is still selected exactly once and the
-    # aggregate coverage gate combines every shard artifact.
-    timeout-minutes: 60
+    # Keep shards comfortably within the hosted-runner window under coverage.
+    # Every test file is still selected exactly once and the aggregate
+    # coverage gate combines every shard artifact. On 2026-08-16, comparable
+    # pre-candidate 10-way hosted runs completed in roughly 24-39 minutes.
+    # Exact candidates 70889c9 (16-way line-only) and 9fe3e25 (10-way hybrid)
+    # each left three shards at this 90-minute ceiling. The 9fe3e25 progress
+    # boundaries identified three runtime-heavy files; the planner runs those
+    # as singleton shards and balances every other file across ten regular
+    # shards. max-parallel retains the observed-safe runner concurrency.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
-        # Ten balanced shards leave realistic headroom for the slowest
-        # coverage-heavy suites while preserving whole-file isolation.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        total_shards: [10]
+        # Three evidence-backed singleton shards plus ten hybrid-balanced
+        # regular shards preserve whole-file isolation and exact-once coverage.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        total_shards: [13]
     steps:
       - uses: actions/checkout@v4
 
@@ -99,12 +106,17 @@ jobs:
           # later files into a different shard.  On 2026-08-13 that put
           # several large suites in one shard and it exceeded the 60-minute
           # cap. Keep whole files isolated, but spread a stable source-size
-          # estimate across ten shards so every file runs once without that
-          # concentration.
+          # estimate across the configured shards so every file runs once
+          # without that concentration. Source lines alone underprice dense
+          # database-backed modules, so the planner also weights each static
+          # test definition without importing the suite.
           python ../../scripts/pytest_shard_plan.py \
             --test-root tests \
             --total-shards "$PYTEST_TOTAL_SHARDS" \
             --shard "$PYTEST_SHARD" \
+            --isolated-file test_legal_knowledge_graph.py \
+            --isolated-file test_litigation_strategy.py \
+            --isolated-file test_matter_file_qa.py \
             --output .pytest-shard-files
 
       - name: Pytest with coverage shard (P1-001 per-area gates)

@@ -95,6 +95,10 @@ from caseops_api.schemas.ip_operations import (
     TrademarkParticularVersionRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_deadlines import (
+    assert_distinct_deadline_coverage,
+    assert_distinct_deadline_escalation,
+)
 from caseops_api.services.matter_access import (
     assert_access,
     assert_ip_docket_access,
@@ -904,6 +908,10 @@ def add_ip_deadline_coverage(
     docket_id: str,
     payload: IpDeadlineCoverageCreateRequest,
 ) -> IpDocketRecordResponse:
+    assert_distinct_deadline_coverage(
+        responsible_membership_id=payload.responsible_membership_id,
+        backup_membership_id=payload.backup_membership_id,
+    )
     docket = _docket_or_404(session, context=context, docket_id=docket_id)
     _deadline_for_docket(session, docket=docket, deadline_id=payload.matter_deadline_id)
     _membership_or_404(session, context, payload.responsible_membership_id)
@@ -1034,8 +1042,6 @@ def _apply_coverage_transfer(
 
     if mode == "immediate":
         coverage.responsible_membership_id = replacement.id
-        if coverage.backup_membership_id == replacement.id:
-            coverage.backup_membership_id = None
         coverage.emergency_escalation_membership_id = escalation.id if escalation else None
         coverage.coverage_status = "reassigned"
         # They hold the work now, so it belongs on their calendar now.
@@ -1055,6 +1061,10 @@ def reassign_ip_deadline_coverage(
     coverage_id: str,
     payload: IpDeadlineCoverageReassignRequest,
 ) -> IpDocketRecordResponse:
+    assert_distinct_deadline_coverage(
+        responsible_membership_id=payload.responsible_membership_id,
+        backup_membership_id=payload.backup_membership_id,
+    )
     docket = _docket_or_404(session, context=context, docket_id=docket_id)
     coverage = session.scalar(
         select(IpDeadlineCoverage)
@@ -1072,6 +1082,20 @@ def reassign_ip_deadline_coverage(
             status_code=409,
             detail="Deadline responsibility changed; reload before reassigning.",
         )
+    # Proposed mode changes backup cover immediately but leaves the current
+    # owner responsible until acceptance. Validate that transient state as well
+    # as the eventual replacement/backup pairing checked above; otherwise
+    # ``backup=current owner`` reaches the database as an A/A row and leaks a
+    # constraint failure instead of returning the typed domain conflict.
+    effective_responsible_membership_id = (
+        payload.responsible_membership_id
+        if payload.transfer_mode == "immediate"
+        else coverage.responsible_membership_id
+    )
+    assert_distinct_deadline_coverage(
+        responsible_membership_id=effective_responsible_membership_id,
+        backup_membership_id=payload.backup_membership_id,
+    )
     replacement = _membership_or_404(session, context, payload.responsible_membership_id)
     backup = (
         _membership_or_404(session, context, payload.backup_membership_id)
@@ -1091,6 +1115,11 @@ def reassign_ip_deadline_coverage(
         mode=payload.transfer_mode,
         escalation_membership_id=payload.escalation_membership_id,
     )
+    if escalation is not None:
+        assert_distinct_deadline_escalation(
+            escalation_membership_id=escalation.id,
+            backup_membership_id=payload.backup_membership_id,
+        )
     old_responsible = coverage.responsible_membership_id
     # Naming a backup is an administrative assignment and applies at once; the
     # backup is not accountable for the date until responsibility moves.
@@ -1220,6 +1249,12 @@ def bulk_reassign_ip_deadline_coverages(
         mode=payload.transfer_mode,
         escalation_membership_id=payload.escalation_membership_id,
     )
+    if escalation is not None:
+        _assert_distinct_escalation_backups(
+            rows,
+            source_membership_id=source.id,
+            escalation_membership_id=escalation.id,
+        )
 
     responsible_count = 0
     backup_count = 0
@@ -1253,8 +1288,6 @@ def bulk_reassign_ip_deadline_coverages(
         else:
             row.updated_at = now
             row.reassignment_version += 1
-        if row.backup_membership_id == row.responsible_membership_id:
-            row.backup_membership_id = None
         # Only project onto the replacement's calendar once the work is actually
         # theirs. A proposal they have not accepted must not appear as their
         # commitment.
@@ -2373,13 +2406,24 @@ def _backup_replacement_conflicts(
     source_membership_id: str,
     replacement_membership_id: str,
 ) -> list[IpDeadlineCoverage]:
-    """Rows where replacing a departing backup with the primary removes backup cover."""
+    """Rows where a replacement would occupy both coverage roles.
+
+    The collision can happen in either direction: replacing a backup with the
+    current primary, or replacing the primary with the current backup. Both
+    must be refused before a proposal or immediate transfer mutates any row.
+    """
 
     return [
         row
         for row in rows
-        if row.backup_membership_id == source_membership_id
-        and row.responsible_membership_id == replacement_membership_id
+        if (
+            row.backup_membership_id == source_membership_id
+            and row.responsible_membership_id == replacement_membership_id
+        )
+        or (
+            row.responsible_membership_id == source_membership_id
+            and row.backup_membership_id == replacement_membership_id
+        )
     ]
 
 
@@ -2400,13 +2444,29 @@ def _assert_distinct_backup_replacement(
             detail={
                 "code": "ip_coverage_distinct_backup_required",
                 "message": (
-                    "The proposed replacement already owns affected deadlines; "
-                    "choose a distinct backup so coverage is not removed."
+                    "The proposed replacement already holds the other coverage role "
+                    "on affected deadlines; choose a distinct backup."
                 ),
                 "blocked_coverage_ids": [row.id for row in conflicts],
                 "blocked_docket_ids": sorted({row.docket_id for row in conflicts}),
             },
         )
+
+
+def _assert_distinct_escalation_backups(
+    rows: list[IpDeadlineCoverage],
+    *,
+    source_membership_id: str,
+    escalation_membership_id: str,
+) -> None:
+    """Refuse a fallback that cannot take responsibility after a decline."""
+
+    for row in rows:
+        if row.responsible_membership_id == source_membership_id:
+            assert_distinct_deadline_escalation(
+                escalation_membership_id=escalation_membership_id,
+                backup_membership_id=row.backup_membership_id,
+            )
 
 
 def _coverage_preview_roles(
@@ -3081,6 +3141,12 @@ def propose_ip_coverage_reassignment(
             )
     else:
         escalation = None
+    if escalation is not None:
+        _assert_distinct_escalation_backups(
+            rows,
+            source_membership_id=payload.from_membership_id,
+            escalation_membership_id=escalation.id,
+        )
 
     affected_roles = _coverage_preview_roles(
         rows, membership_id=payload.from_membership_id
@@ -3114,8 +3180,6 @@ def propose_ip_coverage_reassignment(
                 row.replacement_decided_at = None
                 row.coverage_status = "transfer_pending"
 
-        if row.backup_membership_id == row.responsible_membership_id:
-            row.backup_membership_id = None
         row.reassignment_version += 1
         row.updated_at = now
 
@@ -3185,9 +3249,14 @@ def decide_ip_coverage_replacement(
     now = _now()
     previous_owner = row.responsible_membership_id
     if payload.decision == "accepted":
+        # A legacy pending transfer may already name the current backup as its
+        # replacement. Refuse that acceptance before changing responsibility;
+        # silently deleting backup coverage is not a safe reconciliation.
+        assert_distinct_deadline_coverage(
+            responsible_membership_id=context.membership.id,
+            backup_membership_id=row.backup_membership_id,
+        )
         row.responsible_membership_id = context.membership.id
-        if row.backup_membership_id == context.membership.id:
-            row.backup_membership_id = None
         row.coverage_status = "accepted"
         row.accepted_at = now
     elif row.responsible_membership_id == context.membership.id:
@@ -3207,9 +3276,11 @@ def decide_ip_coverage_replacement(
                 },
             )
         _membership_or_404(session, context, escalation_id)
+        assert_distinct_deadline_coverage(
+            responsible_membership_id=escalation_id,
+            backup_membership_id=row.backup_membership_id,
+        )
         row.responsible_membership_id = escalation_id
-        if row.backup_membership_id == escalation_id:
-            row.backup_membership_id = None
         row.coverage_status = "escalated"
         row.accepted_at = None
         row.calendar_projection_status = "pending"

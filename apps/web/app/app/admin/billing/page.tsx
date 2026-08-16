@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   CreditCard,
   Download,
-  Loader2,
   RefreshCw,
   RotateCcw,
   ShoppingCart,
@@ -17,6 +16,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Card,
   CardContent,
@@ -27,6 +27,7 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   cancelBillingSubscription,
@@ -128,6 +129,67 @@ function usageMetrics(usage: BillingUsageSnapshot) {
 
 function planPrice(plan: BillingPlanRecord, interval: "month" | "year") {
   return plan.prices.find((price) => price.interval === interval) ?? null;
+}
+
+function BillingPageLoading() {
+  return (
+    <div
+      className="flex flex-col gap-6"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-testid="billing-page-loading"
+    >
+      <span className="sr-only">Loading plan, usage, invoices, and credits.</span>
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]" aria-hidden="true">
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-9 w-36" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]" aria-hidden="true">
+        <Card>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-9 w-44" />
+          </CardContent>
+        </Card>
+      </div>
+      <Card aria-hidden="true">
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-44" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+      <Card aria-hidden="true">
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function checkoutMessage(checkout: BillingCheckoutResponse) {
@@ -281,7 +343,13 @@ export default function TenantBillingPage() {
     }
   }
 
-  const isPending = currentQuery.isPending || plansQuery.isPending;
+  const isPending =
+    currentQuery.isPending ||
+    plansQuery.isPending ||
+    addOnsQuery.isPending ||
+    invoicesQuery.isPending ||
+    ledgerQuery.isPending ||
+    (Boolean(checkoutId) && checkoutQuery.isPending);
 
   return (
     <div className="flex flex-col gap-6">
@@ -313,15 +381,10 @@ export default function TenantBillingPage() {
       ) : null}
 
       {isPending ? (
-        <Card>
-          <CardContent className="flex items-center gap-2 text-sm text-[var(--color-mute)]">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Loading billing state...
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {current ? (
+        <BillingPageLoading />
+      ) : (
+        <>
+          {current ? (
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <Card>
             <CardHeader className="flex-row items-start justify-between gap-4">
@@ -553,7 +616,7 @@ export default function TenantBillingPage() {
         </Card>
       </div>
 
-      <Card>
+          <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div>
             <CardTitle as="h2">Invoices and downloads</CardTitle>
@@ -601,7 +664,14 @@ export default function TenantBillingPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {invoicesQuery.isError ? (
+            <QueryErrorState
+              error={invoicesQuery.error}
+              title="Could not load invoices"
+              onRetry={() => invoicesQuery.refetch()}
+            />
+          ) : invoicesQuery.isSuccess ? (
+            <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>
@@ -662,7 +732,8 @@ export default function TenantBillingPage() {
                 ) : null}
               </tbody>
             </table>
-          </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -672,7 +743,14 @@ export default function TenantBillingPage() {
           <CardDescription>Tenant-visible credit grants, debits, refunds, and expiry.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {ledgerQuery.isError ? (
+            <QueryErrorState
+              error={ledgerQuery.error}
+              title="Could not load credit activity"
+              onRetry={() => ledgerQuery.refetch()}
+            />
+          ) : ledgerQuery.isSuccess ? (
+            <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>
@@ -702,9 +780,12 @@ export default function TenantBillingPage() {
                 ) : null}
               </tbody>
             </table>
-          </div>
+            </div>
+          ) : null}
         </CardContent>
-      </Card>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
