@@ -34,8 +34,9 @@ it exist in code, and is it in any existing plan.
 **Most of this document is already covered.** The IP module is ~22.7k LOC of
 production runtime and the backend for Application Number, Opposition Number,
 mark capture and identifier search is built and tested. The genuinely new work is
-tracked as `FMB-01`…`FMB-10` (§4) — the 14 unplanned requirements consolidated,
-plus `FMB-10` split out by the §2.3 resolution — alongside 25 items that are
+tracked as `FMB-01`…`FMB-14` (§4) — the 14 unplanned requirements consolidated,
+plus `FMB-10` from the §2.3 resolution and `FMB-11`…`FMB-14` from the registry
+decision — alongside 25 items that are
 planned only in part (§5).
 
 Three things matter more than the counts:
@@ -184,6 +185,10 @@ anywhere". Each carries an `FMB-` id for tracking.
 | `FMB-07` | Bridge tracked-case hearing changes into the calendar surface | F-11 | M |
 | `FMB-08` | Enforce Matter as the system of record for IP: always link `matter_id` on create from either entry point, backfill legacy unlinked rows, then tighten to `NOT NULL` (§2.3) | F-04 | M |
 | `FMB-10` | Conditional IP Details section on the New Matter form, writing through the existing `POST /api/ip/dockets` writer (§2.3) | F-04 | M |
+| `FMB-11` | External clearance / availability search across all registries, including Madrid Protocol designations enforceable in India. Nothing searches outside the tenant today | IP check | L–XL |
+| `FMB-12` | Make the matter conflict check IP-aware — `routes/conflicts.py` has zero IP awareness today | IP check | M |
+| `FMB-13` | Key duplicate detection on `jurisdiction`, not `office` — the Indian Register is national across five offices, but cross-jurisdiction number matching would be false positives | IP check | S–M |
+| `FMB-14` | Seed all registries, Indian and foreign | IP check | S |
 | `FMB-09` | Map the document's 27 QA cases onto the repo's test-ID convention and close the gaps (see §7) | §21 | M |
 
 Two adjacent defects were found while mapping and are escalated separately
@@ -325,9 +330,13 @@ version 1, applied through the existing approval path so the approver snapshot i
 persisted; naming the approver in a document does not by itself produce an
 approved workflow version.
 
-**Non-Indian registries — decided 2026-08-16: India-only for v1**, foreign
-registries deferred to a later stage. The `jurisdiction` column and seeded-master
-pattern stay, so adding them later is a seed rather than a migration.
+**Registry scope — decided 2026-08-16: seed all registries**, Indian and
+foreign. This supersedes an earlier same-day decision to defer foreign
+registries. It changed because IP checking must span all registers, and a check
+cannot span a register that is not seeded. See
+`docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md` §5 and §5a, which split "check all the
+registries" into four distinct jobs — `FMB-11`…`FMB-14` — and record why the
+obvious version of the duplicate-detection fix is wrong.
 
 **No open items remain.** Every requirement in the source document is now either
 implemented, planned, tracked as `FMB-01`…`FMB-10`, or decided.

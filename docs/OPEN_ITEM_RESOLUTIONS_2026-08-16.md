@@ -176,21 +176,63 @@ version resolved in §1. A dependency, not a blocker.
 - Fix **D-1** as part of this: normalise `office` before it is used as a
   duplicate-detection key.
 
-**DECIDED 2026-08-16 — India-only for v1; non-Indian registries deferred to a
-later stage.** Seed the five Indian offices and stop there.
+**DECIDED 2026-08-16 — seed all registries, not India-only.**
+
+> **Supersedes** the earlier same-day decision to defer non-Indian registries.
+> Recorded rather than rewritten, because the reason for the change matters: IP
+> checking is required to span all registries (§5a), and a check cannot span a
+> register that is not seeded.
 
 Consequences to implement:
 
-- Seed **Delhi, Mumbai, Kolkata, Chennai, Ahmedabad** only. Do not seed
-  Madrid/WIPO, EUIPO or USPTO rows.
-- **Keep the `jurisdiction` column and the seeded-master pattern as-is.** They
-  already accommodate foreign registries, so deferring costs nothing now and
-  adding later is a seed, not a migration. Do not "simplify" by hard-coding an
-  India assumption anywhere — that would convert a cheap future addition into a
-  schema change.
+- Seed the five Indian offices — **Delhi, Mumbai, Kolkata, Chennai, Ahmedabad** —
+  **and** the foreign registries: Madrid/WIPO, EUIPO, USPTO.
+- The `jurisdiction` column and seeded-master pattern already accommodate this,
+  so it remains a seed rather than a migration. The earlier warning still stands
+  and now matters more: do **not** hard-code an India assumption anywhere.
 - Class rules are unaffected: the Nice Classification is international, so the
-  45-class bound and the `CHECK (class_number BETWEEN 1 AND 45)` hold for any
-  registry added later.
+  45-class bound and `CHECK (class_number BETWEEN 1 AND 45)` hold for every
+  registry.
+
+### 5a. IP checking must span all registries — four separate pieces of work
+
+"Check all the registries" resolves into four distinct jobs, not one. They differ
+by an order of magnitude in cost and two of them are cheap.
+
+| Item | Work | Effort |
+|---|---|---|
+| `FMB-11` | **Clearance / availability search against external registers.** Does not exist in any form today — `search_ip_identifiers` is scoped to `company_id` and searches only the tenant's own records. Must include Madrid Protocol designations, which are enforceable in India and therefore belong in an Indian clearance search. | L–XL |
+| `FMB-12` | **Make the matter conflict check IP-aware.** `routes/conflicts.py` (PG-001) has zero IP awareness — `grep -c -i "trademark\|ip_\|mark"` returns 0 — so opening a trademark matter runs a conflict check that cannot see marks, applicants or opponents. | M |
+| `FMB-13` | **Widen internal duplicate detection — but key it on `jurisdiction`, not `office`.** See the design note below. | S–M |
+| `FMB-14` | **Seed all registries** (this section). | S |
+
+**Design note on `FMB-13` — the obvious version of this is wrong.**
+
+`_duplicate_identifiers` currently keys on
+`(company, identifier_kind, office, jurisdiction, normalized_value)`. Widening it
+naively to "match across all offices" would be correct inside India and wrong
+everywhere else:
+
+- The Indian Trade Marks Registry has five **offices**, but a single **national
+  Register**. Application numbers are allotted nationally, so the same number at
+  the Delhi and Mumbai offices is the *same application* — and today it is not
+  detected. Office-scoping is a genuine defect here.
+- Across jurisdictions the opposite holds. A USPTO serial number and an Indian
+  application number share a namespace only by accident, so cross-jurisdiction
+  number matching would manufacture false positives — the worst outcome for a
+  duplicate check, which is trusted precisely because it is quiet.
+
+**Resolution:** key duplicate detection on **`jurisdiction`** (the register), not
+**`office`** (the filing branch). The two are already separate columns
+(`models.py:14494-14495`), so this is a scope correction, not a schema change. It
+also composes with `EH-SGR-12`, which normalises both fields before use.
+
+Cross-register *mark* similarity is a different problem and belongs to `FMB-11`,
+not here.
+
+**Dependency, stated plainly.** `FMB-11` needs external registry data, which is
+the vendor/licensing item currently parked (§9). `FMB-12`, `FMB-13` and `FMB-14`
+have no such dependency and can proceed immediately.
 
 ---
 
@@ -396,12 +438,15 @@ Sign-off status:
    (§1). No decision outstanding. The approval act itself still has to be applied
    at runtime against a seeded version 1, through the existing approval path, so
    the approver snapshot is persisted and auditable.
-2. **Non-Indian registries scope** (§5) — **decided 2026-08-16: India-only for
-   v1**, foreign registries deferred to a later stage. The `jurisdiction` column
-   and seeded-master pattern stay in place so adding them later is a seed, not a
-   migration.
+2. **Registry scope** (§5) — **decided 2026-08-16: seed all registries**,
+   Indian and foreign. This supersedes an earlier same-day decision to defer
+   foreign registries; it changed because IP checking must span all registers
+   (§5a), and a check cannot span a register that is not seeded.
 
-**No open items remain in this document.**
+**No open items remain in this document.** Four new work items were added by the
+§5a decision — `FMB-11` (external clearance search, gated on registry data
+access), `FMB-12` (IP-aware matter conflict check), `FMB-13` (duplicate detection
+keyed on jurisdiction rather than office), `FMB-14` (seed all registries).
 
 One consequence flagged rather than assumed: the "no publisher licence" decision
 answers *display*, not *corpus acquisition*. See §7.
