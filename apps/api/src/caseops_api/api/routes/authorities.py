@@ -72,6 +72,7 @@ from caseops_api.services.judgment_alerts import (
 )
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
+    authority_source_verified,
     inspect_source_target_action,
 )
 
@@ -490,7 +491,8 @@ async def get_saved_annotations(
                     auth.source_reference,
                     target_type="authority_document",
                     target_id=auth.id,
-                    verified=(auth.source == "official"),
+                    # FMB-01: was auth.source == "official" (statically dead).
+                    verified=authority_source_verified(auth.source, auth.source_reference),
                 ),
                 authority_neutral_citation=auth.neutral_citation,
                 authority_case_reference=auth.case_reference,

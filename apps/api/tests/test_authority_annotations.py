@@ -331,7 +331,10 @@ def test_saved_annotation_preserves_source_contract(
     source_reference = "https://www.indiacode.nic.in/document.pdf"
     authority_id = _seed_authority(
         "Source-backed saved authority",
-        source="official",
+        # 2026-08-16 (FMB-01): was source="official", a value no ingest path
+        # writes. The predicate compared against that literal, so only the
+        # fixture could satisfy it. Use a real registry source key.
+        source="supreme_court_latest_orders",
         source_reference=source_reference,
     )
     created = client.post(
@@ -347,7 +350,7 @@ def test_saved_annotation_preserves_source_contract(
     )
     assert response.status_code == 200, response.text
     saved = response.json()["annotations"][0]
-    assert saved["authority_source"] == "official"
+    assert saved["authority_source"] == "supreme_court_latest_orders"
     assert saved["authority_source_reference"] == source_reference
     assert saved["authority_source_action"] == {
         "state": "available",

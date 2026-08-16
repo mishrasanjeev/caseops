@@ -60,6 +60,54 @@ def _is_official_host(hostname: str) -> bool:
     )
 
 
+def authority_source_verified(source: str | None, source_reference: str | None) -> bool:
+    """Whether an authority document's source can be trusted enough to open.
+
+    FMB-01/FMB-02: the previous predicate compared a source field against the
+    literal ``"official"``, a value no ingest path ever writes - the two writers
+    store adapter source keys (``corpus_ingest.py`` writes ``ecourts-hc`` /
+    ``ecourts-sc``; ``authorities.py`` copies the adapter's ``source_key``). The
+    check was therefore statically dead: it could never be satisfied by real
+    data, while a test fixture using the fake value kept the suite green.
+
+    The verdict is now derived from two things the ingest path really does
+    record, and both must hold:
+
+    1. the ``source`` key resolves to a registry entry classified official or
+       licensed, and
+    2. the ``source_reference`` is an approved official HTTPS URL.
+
+    Conjunctive on purpose. A trusted source key with a bare PDF filename fails,
+    because there is nothing to open; a good URL under an unknown source key
+    fails, because we cannot say where it came from.
+
+    Note this classification is *derived*, so editing the static registry
+    retroactively re-classifies historical rows. Bulk-mirror keys are
+    deliberately absent from the registry, so those rows read untrusted - which
+    is the honest answer, since they came from public mirrors rather than a
+    court registry.
+    """
+    from caseops_api.services.authority_sources import (
+        LEGAL_SOURCE_REGISTRY_BY_KEY,
+        SOURCE_TYPE_LICENSED,
+        SOURCE_TYPE_OFFICIAL,
+    )
+
+    entry = LEGAL_SOURCE_REGISTRY_BY_KEY.get((source or "").strip())
+    if entry is None or entry.source_type not in {SOURCE_TYPE_OFFICIAL, SOURCE_TYPE_LICENSED}:
+        return False
+    return is_official_source_reference(source_reference)
+
+
+def judge_appointment_source_verified(source_url: str | None) -> bool:
+    """Whether a judge appointment's source URL is an approved official one.
+
+    FMB-02: this branch previously hardcoded ``verified=True``, so an
+    appointment carrying any URL - or none - was reported as verified.
+    """
+    return is_official_source_reference(source_url)
+
+
 def is_official_source_reference(source_reference: str | None) -> bool:
     """Return whether a URL is an approved official HTTPS source reference."""
 
@@ -173,7 +221,9 @@ def resolve_source_target(
             target_type=target_type,
             target_id=row.id,
             source_reference=row.source_reference,
-            verified=True,
+            # FMB-02: was hardcoded True, which made this the fail-open half of
+            # a predicate the display surfaces failed closed on.
+            verified=authority_source_verified(row.source, row.source_reference),
             quarantined=False,
             source_version=row.updated_at.isoformat(),
             provider=row.source,
@@ -252,7 +302,8 @@ def resolve_source_target(
         target_type=target_type,
         target_id=row.id,
         source_reference=row.source_url,
-        verified=True,
+        # FMB-02: was hardcoded True in an unguarded trailing branch.
+        verified=judge_appointment_source_verified(row.source_url),
         quarantined=False,
         source_version=row.updated_at.isoformat(),
         provider="court_registry",

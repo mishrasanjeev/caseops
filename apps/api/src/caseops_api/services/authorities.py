@@ -1421,6 +1421,7 @@ def search_authorities(
         session, [r.authority_document_id for r in page],
     )
     from caseops_api.services.source_actions import (
+        authority_source_verified,
         inspect_source_target_action,
     )
 
@@ -1437,7 +1438,9 @@ def search_authorities(
                     r.source_reference,
                     target_type="authority_document",
                     target_id=r.authority_document_id,
-                    verified=(r.source == "official"),
+                    # FMB-01: was r.source == "official", a value no ingest
+                    # path writes, so this was statically dead.
+                    verified=authority_source_verified(r.source, r.source_reference),
                 ),
             },
         )
