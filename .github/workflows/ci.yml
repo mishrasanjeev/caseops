@@ -66,19 +66,21 @@ jobs:
     # Keep shards comfortably within the hosted-runner window under coverage.
     # Every test file is still selected exactly once and the aggregate
     # coverage gate combines every shard artifact. On 2026-08-16, comparable
-    # pre-candidate 10-way hosted runs completed in roughly 24-39 minutes,
-    # while exact candidate 70889c9's 16-way line-only plan caused three
-    # shards to exhaust this 90-minute ceiling. Ten-way concurrency avoids
-    # that regression; hybrid static estimates below address the density
-    # imbalance rather than treating source lines as runtime.
+    # pre-candidate 10-way hosted runs completed in roughly 24-39 minutes.
+    # Exact candidates 70889c9 (16-way line-only) and 9fe3e25 (10-way hybrid)
+    # each left three shards at this 90-minute ceiling. The 9fe3e25 progress
+    # boundaries identified three runtime-heavy files; the planner runs those
+    # as singleton shards and balances every other file across ten regular
+    # shards. max-parallel retains the observed-safe runner concurrency.
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
-        # Ten hybrid-balanced shards preserve observed-safe runner concurrency,
-        # whole-file isolation, and exact once-only selection.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        total_shards: [10]
+        # Three evidence-backed singleton shards plus ten hybrid-balanced
+        # regular shards preserve whole-file isolation and exact-once coverage.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        total_shards: [13]
     steps:
       - uses: actions/checkout@v4
 

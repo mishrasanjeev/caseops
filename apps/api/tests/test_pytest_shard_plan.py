@@ -104,6 +104,51 @@ def test_nested_class_and_async_tests_contribute_to_cost(tmp_path: Path) -> None
     )
 
 
+def test_registered_runtime_heavy_files_are_singleton_shards(tmp_path: Path) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    for name, lines in {
+        "test_heavy_b.py": 40,
+        "test_regular_b.py": 30,
+        "test_heavy_a.py": 20,
+        "test_regular_a.py": 10,
+    }.items():
+        _test_file(root, name, lines)
+
+    plan = pytest_shard_plan.build_plan(
+        root,
+        3,
+        isolated_files=("test_heavy_b.py", "test_heavy_a.py"),
+    )
+
+    assert [[path.name for path in shard.files] for shard in plan] == [
+        ["test_heavy_a.py"],
+        ["test_heavy_b.py"],
+        ["test_regular_a.py", "test_regular_b.py"],
+    ]
+
+
+def test_repository_runtime_registry_is_exact_once_and_leaves_ten_regular_shards() -> None:
+    root = REPO_ROOT / "apps" / "api" / "tests"
+    total_shards = 10 + len(pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES)
+    plan = pytest_shard_plan.build_plan(
+        root,
+        total_shards,
+        isolated_files=pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES,
+    )
+    expected_files = sorted(path.resolve() for path in root.rglob("test_*.py"))
+    planned_files = [path.resolve() for shard in plan for path in shard.files]
+
+    assert tuple(shard.files[0].name for shard in plan[:3]) == tuple(
+        sorted(pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES)
+    )
+    assert all(len(shard.files) == 1 for shard in plan[:3])
+    assert len(plan[3:]) == 10
+    assert all(shard.files for shard in plan[3:])
+    assert sorted(planned_files) == expected_files
+    assert len(planned_files) == len(set(planned_files))
+
+
 @pytest.mark.parametrize("total_shards", [10, 16])
 def test_repository_hybrid_plan_improves_legacy_line_only_peak_cost(
     total_shards: int,
@@ -145,11 +190,13 @@ def test_ci_workflow_keeps_coverage_shards_and_aggregation_fail_closed() -> None
     parsed = yaml.safe_load(workflow)
     shard_job = parsed["jobs"]["api-test-shards"]
     aggregate_job = parsed["jobs"]["api"]
+    total_shards = 10 + len(pytest_shard_plan.RUNTIME_ISOLATED_TEST_FILES)
 
     assert shard_job["timeout-minutes"] == 90
+    assert shard_job["strategy"]["max-parallel"] == 10
     assert shard_job["strategy"]["matrix"] == {
-        "shard": list(range(1, 11)),
-        "total_shards": [10],
+        "shard": list(range(1, total_shards + 1)),
+        "total_shards": [total_shards],
     }
     steps_by_name = {step.get("name"): step for step in shard_job["steps"]}
     prepare = steps_by_name["Prepare coverage shard artifact"]
@@ -199,3 +246,31 @@ def test_plan_rejects_negative_weight_and_invalid_python(tmp_path: Path) -> None
     (root / "test_invalid.py").write_text("def test_broken(:\n", encoding="utf-8")
     with pytest.raises(ValueError, match="invalid Python"):
         pytest_shard_plan.build_plan(root, 1)
+
+
+def test_plan_fails_closed_for_invalid_runtime_isolation_registry(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    _test_file(root, "test_a.py", 2)
+    _test_file(root, "test_b.py", 1)
+
+    with pytest.raises(ValueError, match="duplicate paths"):
+        pytest_shard_plan.build_plan(
+            root,
+            2,
+            isolated_files=("test_a.py", "test_a.py"),
+        )
+    with pytest.raises(ValueError, match="paths are missing"):
+        pytest_shard_plan.build_plan(
+            root,
+            2,
+            isolated_files=("test_missing.py",),
+        )
+    with pytest.raises(ValueError, match="leave at least one regular shard"):
+        pytest_shard_plan.build_plan(
+            root,
+            1,
+            isolated_files=("test_a.py",),
+        )

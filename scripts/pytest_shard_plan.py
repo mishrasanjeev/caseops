@@ -9,20 +9,35 @@ modules: every collected test can repeat expensive application/database fixture
 setup even when its body is only a few lines.  This planner therefore uses a
 deterministic largest-processing-time assignment with a portable hybrid cost:
 source lines plus a fixed weight for every statically declared test.  It keeps
-every file in exactly one shard without importing the test suite.
+every file in exactly one shard without importing the test suite.  A small
+evidence-backed registry can reserve singleton shards before the remaining
+files are balanced.
 """
 from __future__ import annotations
 
 import argparse
 import ast
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Hosted-runner evidence on 2026-08-16 showed database-backed test setup taking
 # roughly the same time as dozens of source lines.  Keep this static and
 # history-independent: it adapts automatically as tests are added, while AST
 # parsing avoids importing test modules or depending on a prior CI artifact.
 TEST_DEFINITION_WEIGHT = 100
+
+# Hosted run 31942321727 at exact head 9fe3e250 timed out after the next
+# collected item entered each file: litigation strategy item 217, matter-file
+# QA item 217, and legal-knowledge graph item 145.  Keep this small, reviewable
+# registry path-based and fail closed if an entry is duplicated, renamed, or
+# removed.  The files run as singleton shards; every other test file continues
+# through the deterministic hybrid balancer.
+RUNTIME_ISOLATED_TEST_FILES = (
+    "test_legal_knowledge_graph.py",
+    "test_litigation_strategy.py",
+    "test_matter_file_qa.py",
+)
 
 
 @dataclass(frozen=True)
@@ -56,11 +71,35 @@ def _test_definition_count(path: Path) -> int:
     )
 
 
+def _resolve_isolated_files(
+    *,
+    test_root: Path,
+    files: Sequence[Path],
+    isolated_files: Sequence[str],
+) -> tuple[Path, ...]:
+    """Resolve a unique, existing set of test-root-relative registry paths."""
+    normalized = tuple(PurePosixPath(item).as_posix() for item in isolated_files)
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("isolated test file registry contains duplicate paths")
+    invalid = sorted(item for item in normalized if item in {"", "."} or item.startswith("../"))
+    if invalid:
+        raise ValueError(f"isolated test file registry contains invalid paths: {invalid}")
+
+    files_by_relative_path = {
+        path.relative_to(test_root).as_posix(): path for path in files
+    }
+    missing = sorted(set(normalized) - files_by_relative_path.keys())
+    if missing:
+        raise ValueError(f"isolated test file registry paths are missing: {missing}")
+    return tuple(files_by_relative_path[item] for item in sorted(normalized))
+
+
 def build_plan(
     test_root: Path,
     total_shards: int,
     *,
     test_definition_weight: int = TEST_DEFINITION_WEIGHT,
+    isolated_files: Sequence[str] = (),
 ) -> tuple[Shard, ...]:
     """Assign every ``test_*.py`` below *test_root* to one balanced shard.
 
@@ -83,6 +122,16 @@ def build_plan(
             f"{len(files)} test files cannot populate {total_shards} non-empty shards"
         )
 
+    isolated_paths = _resolve_isolated_files(
+        test_root=test_root,
+        files=files,
+        isolated_files=isolated_files,
+    )
+    if len(isolated_paths) >= total_shards:
+        raise ValueError(
+            "total_shards must leave at least one regular shard after isolated files"
+        )
+
     weighted_files = sorted(
         (
             (
@@ -102,10 +151,23 @@ def build_plan(
     test_definition_loads = [0 for _ in range(total_shards)]
     cost_loads = [0 for _ in range(total_shards)]
 
+    weighted_by_path = {
+        path: (lines, test_definitions)
+        for path, lines, test_definitions in weighted_files
+    }
+    for index, path in enumerate(isolated_paths):
+        lines, test_definitions = weighted_by_path[path]
+        assignments[index].append(path)
+        line_loads[index] = lines
+        test_definition_loads[index] = test_definitions
+        cost_loads[index] = lines + (test_definitions * test_definition_weight)
+
     for path, lines, test_definitions in weighted_files:
+        if path in isolated_paths:
+            continue
         cost = lines + (test_definitions * test_definition_weight)
         index = min(
-            range(total_shards),
+            range(len(isolated_paths), total_shards),
             key=lambda candidate: (cost_loads[candidate], candidate),
         )
         assignments[index].append(path)
@@ -136,9 +198,14 @@ def write_shard_file(
     total_shards: int,
     shard: int,
     output: Path,
+    isolated_files: Sequence[str] = (),
 ) -> Shard:
     """Write one selected shard as paths relative to the current API root."""
-    plan = build_plan(test_root, total_shards)
+    plan = build_plan(
+        test_root,
+        total_shards,
+        isolated_files=isolated_files,
+    )
     if shard < 1 or shard > len(plan):
         raise ValueError(f"shard must be between 1 and {len(plan)}")
     selected = plan[shard - 1]
@@ -180,6 +247,7 @@ def main() -> None:
         total_shards=args.total_shards,
         shard=args.shard,
         output=args.output,
+        isolated_files=RUNTIME_ISOLATED_TEST_FILES,
     )
 
 
