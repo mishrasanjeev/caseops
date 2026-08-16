@@ -25,6 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -36,6 +37,7 @@ import {
   type TodayTask,
   type TodayView,
   fetchTodayView,
+  type TodayIpCoverageAction,
 } from "@/lib/api/endpoints";
 import { formatLegalDate } from "@/lib/dates";
 
@@ -79,7 +81,8 @@ function TodayBody({ data }: { data: TodayView }) {
     data.tasks_due_or_overdue.length === 0 &&
     data.drafts_in_review.length === 0 &&
     data.overdue_invoices.length === 0 &&
-    data.deadlines_next_7d.length === 0;
+    data.deadlines_next_7d.length === 0 &&
+    (data.ip_coverage_actions ?? []).length === 0;
 
   if (allEmpty) {
     return (
@@ -114,6 +117,11 @@ function TodayBody({ data }: { data: TodayView }) {
         drafts={data.drafts_in_review}
         truncated={!!tr?.drafts_in_review}
         limit={lim?.drafts_in_review}
+      />
+      <IpCoverageActionsCard
+        actions={data.ip_coverage_actions ?? []}
+        truncated={!!tr?.ip_coverage_actions}
+        limit={lim?.ip_coverage_actions}
       />
       <OverdueInvoicesCard
         invoices={data.overdue_invoices}
@@ -498,3 +506,69 @@ function formatAmount(amountMinor: number, currency: string): string {
 // Suppress import-unused warnings for icons used dynamically above.
 const _icons = [FileText];
 void _icons;
+
+/**
+ * IP deadline coverage waiting on this user.
+ *
+ * Both rows are personal and time-bound, and neither reached this page before:
+ * a transfer sat unseen while it blocked the colleague who offered it, and an
+ * unacknowledged deadline could escalate without ever being surfaced here.
+ *
+ * The two kinds are labelled distinctly because they ask for different acts.
+ */
+function IpCoverageActionsCard({
+  actions,
+  truncated,
+  limit,
+}: {
+  actions: TodayIpCoverageAction[];
+  truncated: boolean;
+  limit?: number;
+}) {
+  if (actions.length === 0) return null;
+  const decisions = actions.filter((a) => a.kind === "decide_transfer").length;
+
+  return (
+    <Card className="min-w-0" data-testid="today-ip-coverage-actions">
+      <CardHeader>
+        <CardTitle as="h2">IP deadlines needing you</CardTitle>
+        <CardDescription>
+          {decisions
+            ? `${decisions} colleague${decisions === 1 ? " is" : "s are"} waiting on your decision.`
+            : "Acknowledging is what stops a critical deadline escalating."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-2">
+        {actions.map((action) => (
+          <Link
+            key={action.coverage_id}
+            href="/app/ip/docket"
+            className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 hover:bg-[var(--color-bg-2)]"
+            data-testid={`today-ip-action-${action.coverage_id}`}
+          >
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="break-words font-semibold">{action.docket_title}</span>
+              {action.critical ? <Badge tone="warning">Critical</Badge> : null}
+              <Badge tone={action.kind === "decide_transfer" ? "brand" : "neutral"}>
+                {action.kind === "decide_transfer" ? "Decision needed" : "Acknowledge"}
+              </Badge>
+            </span>
+            <span className="mt-1 block text-sm tabular-nums text-[var(--color-ink-2)]">
+              {action.deadline_title ? `${action.deadline_title} · ` : ""}
+              {action.due_on ? formatDate(action.due_on) : "No due date recorded"}
+              {action.days_until !== null && action.days_until !== undefined
+                ? ` · ${action.days_until < 0 ? `${Math.abs(action.days_until)} days overdue` : `in ${action.days_until} days`}`
+                : ""}
+            </span>
+            <span className="mt-1 block text-sm text-[var(--color-mute)]">
+              {action.kind === "decide_transfer"
+                ? `${action.responsible_label} holds this until you accept.`
+                : "You hold this and have not acknowledged it."}
+            </span>
+          </Link>
+        ))}
+        <TruncationNote truncated={truncated} limit={limit} />
+      </CardContent>
+    </Card>
+  );
+}
