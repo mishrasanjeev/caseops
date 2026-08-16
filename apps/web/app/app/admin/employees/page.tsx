@@ -46,6 +46,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -1262,8 +1263,8 @@ function NewEmployeeDialog() {
           <Field label="Joined on" id="employee-joined">
             <Input id="employee-joined" type="date" value={joinedOn} onChange={(event) => setJoinedOn(event.target.value)} />
           </Field>
-          <Field label="Manager membership ID" id="employee-manager">
-            <Input id="employee-manager" value={managerMembershipId} onChange={(event) => setManagerMembershipId(event.target.value)} />
+          <Field label="Manager" id="employee-manager">
+            <PersonPicker id="employee-manager" value={managerMembershipId} onChange={setManagerMembershipId} placeholder="No manager" />
           </Field>
           <DialogFooter className="md:col-span-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={mutation.isPending}>
@@ -1392,8 +1393,8 @@ function EditEmployeeDialog({
           <Field label="Joined on" id="edit-employee-joined">
             <Input id="edit-employee-joined" type="date" value={joinedOn} onChange={(event) => setJoinedOn(event.target.value)} />
           </Field>
-          <Field label="Manager membership ID" id="edit-employee-manager">
-            <Input id="edit-employee-manager" value={managerMembershipId} onChange={(event) => setManagerMembershipId(event.target.value)} />
+          <Field label="Manager" id="edit-employee-manager">
+            <PersonPicker id="edit-employee-manager" value={managerMembershipId} onChange={setManagerMembershipId} placeholder="No manager" />
           </Field>
           <div className="md:col-span-2 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-mute)]">
             Setup sent {formatDate(employee.setup_sent_at)}. Password reset sent{" "}
