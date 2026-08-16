@@ -382,7 +382,12 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
   await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
   await expect(deadlineWorkspace.getByText("2026-08-18 Â· candidate Â· v1")).toBeVisible();
-  await deadlineWorkspace.getByLabel("Backup membership ID").fill(seeded.backupMembershipId);
+  // 2026-08-16: this was a free-text box taking a membership UUID and is now a
+  // picker, so the colleague is chosen rather than typed. `exact` because the
+  // page also has "Owner / assignee" and similar substring labels.
+  await deadlineWorkspace
+    .getByLabel("Backup", { exact: true })
+    .selectOption(seeded.backupMembershipId);
 
   for (const name of ["Calculate deadline proposal", "Confirm legal deadline"]) {
     const control = deadlineWorkspace.getByRole("button", { name });

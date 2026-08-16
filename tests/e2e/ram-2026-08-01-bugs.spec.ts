@@ -236,7 +236,9 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     await expect(page.getByText(/Evidence review recorded/)).toBeVisible();
 
     await page.getByLabel("Obligation", { exact: true }).fill("Record assignment");
-    await page.getByLabel("Owner membership ID").fill(membershipId);
+    // 2026-08-16: now a picker, not a UUID box. `exact` because the page also
+    // renders an "Owner / assignee" label.
+    await page.getByLabel("Owner", { exact: true }).selectOption(membershipId);
     await page.getByLabel("Obligation evidence").fill("attachment:assignment-deed");
     await page.getByRole("button", { name: "Add recordal obligation" }).click();
     await expect(page.getByText("Record assignment")).toBeVisible();
