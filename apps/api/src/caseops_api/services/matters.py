@@ -123,6 +123,7 @@ from caseops_api.services.matter_access import (
 from caseops_api.services.matter_billing import (
     calculate_invoice_tax,
     default_invoice_due_on,
+    invoice_number_sequence_query,
     next_invoice_number,
     render_invoice_pdf,
     resolve_time_entry_rate,
@@ -4864,11 +4865,31 @@ def create_matter_invoice(
             .order_by(MatterBillingProfile.updated_at.desc())
             .limit(1)
         )
-    invoice_number = (
-        payload.invoice_number.strip()
-        if payload.invoice_number
-        else next_invoice_number(billing_profile)
-    )
+    if payload.invoice_number:
+        invoice_number = payload.invoice_number.strip()
+    else:
+        # EH-SGR-04: allocating from the sequence is a read-modify-write, so the
+        # profile row is re-read under a lock before it is advanced. Without this
+        # two concurrent creations read the same value and the second insert
+        # violates uq_company_invoice_number as an uncaught IntegrityError.
+        if billing_profile is not None:
+            billing_profile = session.scalar(
+                invoice_number_sequence_query(billing_profile.id, context.company.id)
+            )
+        existing_count = 0
+        if billing_profile is None:
+            # No profile: the fallback used to return a constant, so a tenant
+            # could auto-number exactly one invoice ever. Advance it with the
+            # tenant's own invoice count instead.
+            existing_count = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(MatterInvoice)
+                    .where(MatterInvoice.company_id == context.company.id)
+                )
+                or 0
+            )
+        invoice_number = next_invoice_number(billing_profile, existing_count=existing_count)
     existing_invoice = session.scalar(
         select(MatterInvoice).where(
             MatterInvoice.company_id == context.company.id,

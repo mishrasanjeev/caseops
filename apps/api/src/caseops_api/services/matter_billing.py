@@ -610,9 +610,48 @@ def calculate_invoice_tax(
     )
 
 
-def next_invoice_number(profile: MatterBillingProfile | None) -> str:
+def invoice_number_sequence_query(profile_id: str, company_id: str):
+    """Select the billing profile for a locked sequence read.
+
+    EH-SGR-04: allocating an invoice number is a read-modify-write on
+    `next_invoice_sequence`. Without a row lock two concurrent creations read the
+    same value and the second insert violates `uq_company_invoice_number`,
+    surfacing as an uncaught `IntegrityError` - a 500 rather than a retry.
+
+    The lock targets the profile row alone and loads no optional relationship:
+    PostgreSQL rejects `FOR UPDATE` against the nullable side of an outer join.
+    SQLite ignores `FOR UPDATE` entirely, so this is asserted by compiling
+    against the PostgreSQL dialect rather than by a passing local run.
+    """
+    return (
+        select(MatterBillingProfile)
+        .where(
+            MatterBillingProfile.id == profile_id,
+            MatterBillingProfile.company_id == company_id,
+        )
+        .with_for_update()
+    )
+
+
+def next_invoice_number(
+    profile: MatterBillingProfile | None,
+    *,
+    existing_count: int = 0,
+) -> str:
+    """Allocate the next invoice number.
+
+    EH-SGR-04: the no-profile branch previously returned the constant
+    `"INV-0001"`, so a tenant that had not created a billing profile could
+    auto-number exactly one invoice ever - the second collided with the per-company
+    uniqueness constraint and returned a 409 that gave no hint the fix was to
+    create a profile. The fallback now advances with the tenant's existing invoice
+    count.
+
+    Callers holding a locked profile row (see `invoice_number_sequence_query`)
+    get a gapless per-profile sequence.
+    """
     if profile is None:
-        return "INV-0001"
+        return f"INV-{existing_count + 1:04d}"
     value = f"{profile.invoice_prefix}-{profile.next_invoice_sequence:04d}"
     profile.next_invoice_sequence += 1
     return value
