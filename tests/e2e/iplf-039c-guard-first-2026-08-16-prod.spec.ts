@@ -2,6 +2,8 @@
  * IPLF-039C / 2026-08-16 guard-first production acceptance.
  *
  * Safety contract:
+ * - API and web origins are hard-bound to the canonical production hosts, and
+ *   every request context refuses redirects;
  * - both the API and web deployment must report one exact 40-character SHA;
  * - the authenticated company id and slug must match an explicitly acknowledged
  *   dedicated QA tenant before the first write;
@@ -14,6 +16,8 @@
  * - every write has an operator-supplied, non-secret recovery run id. The
  *   independently timed afterEach hook re-discovers exact users, Matters, and
  *   dockets by that id before bounded cleanup calls;
+ * - owner and replacement authentications use distinct request contexts so a
+ *   session cookie can never override another actor's bearer identity;
  * - no billing, provider, integration, delete, or database endpoint is called;
  * - the database constraint is not inspected. This is API guard-first proof and
  *   must run before migration 20260816_0001 is released.
@@ -24,11 +28,14 @@
  */
 import {
   expect,
+  request as playwrightRequest,
   test,
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
 
+const PROD_BASE_URL = "https://caseops.ai";
+const PROD_API_BASE_URL = "https://api.caseops.ai";
 const REQUIRED_CONFLICT_CODE = "ip_coverage_distinct_backup_required";
 const MUTATION_ACK = "dedicated-qa-disposable-fixtures-only";
 const CLEANUP_TIMEOUT_MS = 180_000;
@@ -123,6 +130,7 @@ type FixtureMatter = {
 type CleanupState = {
   run: Runtime;
   owner: AuthContext;
+  ownerApi: APIRequestContext;
   users: Map<string, CompanyUser>;
   matters: Map<string, MatterRecord>;
   dockets: Map<string, DocketRecord>;
@@ -134,7 +142,13 @@ type MatterListPage = {
   next_cursor: string | null;
 };
 
+type CleanupFailure = {
+  phase: string;
+  target: string;
+};
+
 let cleanupState: CleanupState | undefined;
+let requestContexts: APIRequestContext[] = [];
 
 function required(key: string): string {
   const value = (process.env[key] ?? "").trim();
@@ -142,16 +156,27 @@ function required(key: string): string {
   return value;
 }
 
-function httpsUrl(key: string): string {
-  const raw = required(key);
-  const parsed = new URL(raw);
-  if (parsed.protocol !== "https:") {
-    throw new Error(`${key} must be an explicit https production URL.`);
+function assertCanonicalProductionOrigins(): void {
+  for (const [value, expectedOrigin] of [
+    [PROD_BASE_URL, "https://caseops.ai"],
+    [PROD_API_BASE_URL, "https://api.caseops.ai"],
+  ] as const) {
+    const parsed = new URL(value);
+    expect(parsed.origin).toBe(expectedOrigin);
+    expect(parsed.protocol).toBe("https:");
+    expect(parsed.username).toBe("");
+    expect(parsed.password).toBe("");
+    expect(parsed.port).toBe("");
+    expect(parsed.pathname).toBe("/");
+    expect(parsed.search).toBe("");
+    expect(parsed.hash).toBe("");
   }
-  if (["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname.toLowerCase())) {
-    throw new Error(`${key} must not resolve to a loopback host in the production spec.`);
-  }
-  return parsed.toString().replace(/\/$/, "");
+}
+
+async function newNoRedirectContext(): Promise<APIRequestContext> {
+  const api = await playwrightRequest.newContext({ maxRedirects: 0 });
+  requestContexts.push(api);
+  return api;
 }
 
 function runtime(): Runtime {
@@ -178,8 +203,8 @@ function runtime(): Runtime {
     );
   }
   return {
-    webBaseUrl: httpsUrl("PROD_BASE_URL"),
-    apiBaseUrl: httpsUrl("PROD_API_BASE_URL"),
+    webBaseUrl: PROD_BASE_URL,
+    apiBaseUrl: PROD_API_BASE_URL,
     expectedSha,
     companyId,
     companySlug: required("CASEOPS_IP_GUARD_QA_SLUG"),
@@ -241,6 +266,23 @@ function authHeaders(auth: AuthContext): { Authorization: string } {
   return { Authorization: `Bearer ${auth.access_token}` };
 }
 
+async function assertCurrentActor(
+  api: APIRequestContext,
+  run: Runtime,
+  auth: AuthContext,
+): Promise<void> {
+  const response = await api.get(`${run.apiBaseUrl}/api/companies/current`, {
+    headers: authHeaders(auth),
+  });
+  await expectStatus(response, 200, `revalidate current actor ${auth.membership.id}`);
+  const current = await json<AuthContext>(response);
+  expect(current.company.id.toLowerCase()).toBe(run.companyId);
+  expect(current.company.slug).toBe(run.companySlug);
+  expect(current.user.email.toLowerCase()).toBe(auth.user.email.toLowerCase());
+  expect(current.membership).toEqual(auth.membership);
+  expect(current.capabilities).toEqual(auth.capabilities);
+}
+
 async function assertExactRelease(api: APIRequestContext, run: Runtime): Promise<void> {
   const [apiIdentity, webIdentity] = await Promise.all([
     api.get(`${run.apiBaseUrl}/api/build`),
@@ -274,6 +316,19 @@ async function authenticateOwner(
   expect(auth.company.slug).toBe(run.companySlug);
   expect(auth.user.email.toLowerCase()).toBe(run.ownerEmail);
   expect(auth.membership.role).toBe("owner");
+  expect(auth.capabilities).toEqual(
+    expect.arrayContaining([
+      "company:manage_users",
+      "ip:approve",
+      "ip:read",
+      "ip:write",
+      "matters:archive",
+      "matters:create",
+      "matters:write",
+      "workspace:admin",
+    ]),
+  );
+  await assertCurrentActor(api, run, auth);
 
   const workspace = await api.get(`${run.apiBaseUrl}/api/ip/workspace/configuration`, {
     headers: authHeaders(auth),
@@ -325,6 +380,12 @@ async function authenticateUser(
   expect(auth.company.id.toLowerCase()).toBe(run.companyId);
   expect(auth.membership.id).toBe(membershipId);
   expect(auth.user.email.toLowerCase()).toBe(email.toLowerCase());
+  expect(auth.membership.role).toBe("member");
+  expect(auth.capabilities).toEqual(expect.arrayContaining(["ip:read", "ip:write"]));
+  expect(auth.capabilities).not.toContain("ip:approve");
+  expect(auth.capabilities).not.toContain("workspace:admin");
+  expect(auth.capabilities).not.toContain("company:manage_users");
+  await assertCurrentActor(api, run, auth);
   return auth;
 }
 
@@ -778,16 +839,20 @@ async function cleanupReservedRun(
   api: APIRequestContext,
   state: CleanupState,
 ): Promise<void> {
-  const discoveryErrors: unknown[] = [];
-  for (const discover of [recoverReservedUsers, recoverReservedMatters, recoverReservedDockets]) {
+  const discoveryErrors: CleanupFailure[] = [];
+  for (const [phase, discover] of [
+    ["discover_users", recoverReservedUsers],
+    ["discover_matters", recoverReservedMatters],
+    ["discover_dockets", recoverReservedDockets],
+  ] as const) {
     try {
       await discover(api, state);
-    } catch (error) {
-      discoveryErrors.push(error);
+    } catch {
+      discoveryErrors.push({ phase, target: state.run.runId });
     }
   }
 
-  const matterErrors: unknown[] = [];
+  const matterErrors: CleanupFailure[] = [];
   for (const matter of [...state.matters.values()].reverse()) {
     try {
       const docketIds = [...state.dockets.values()]
@@ -799,8 +864,8 @@ async function cleanupReservedRun(
         }
       }
       await disposeTrackedMatter(api, state, matter.id, docketIds, true);
-    } catch (error) {
-      matterErrors.push(error);
+    } catch {
+      matterErrors.push({ phase: "dispose_matter", target: matter.id });
     }
   }
 
@@ -809,13 +874,14 @@ async function cleanupReservedRun(
   );
   if (orphanDockets.length) {
     matterErrors.push(
-      new Error(
-        `Reserved docket recovery found ${orphanDockets.length} docket(s) without a tracked Matter.`,
-      ),
+      {
+        phase: "validate_docket_parent",
+        target: `count:${orphanDockets.length}`,
+      },
     );
   }
 
-  const userErrors: unknown[] = [];
+  const userErrors: CleanupFailure[] = [];
   if (discoveryErrors.length === 0 && matterErrors.length === 0) {
     for (const user of [...state.users.values()].reverse()) {
       try {
@@ -823,45 +889,69 @@ async function cleanupReservedRun(
         if (user.membership_active || user.user_active) {
           await deactivateDisposableUser(api, state, user);
         }
-      } catch (error) {
-        userErrors.push(error);
+      } catch {
+        userErrors.push({ phase: "deactivate_user", target: user.membership_id });
       }
     }
   }
 
   const errors = [...discoveryErrors, ...matterErrors, ...userErrors];
   if (errors.length) {
-    throw new AggregateError(
-      errors,
+    for (const [index, failure] of errors.entries()) {
+      console.error(
+        `[IPLF-039C] cleanup_failure_${index + 1}; phase=${failure.phase}; target=${failure.target}`,
+      );
+    }
+    throw new Error(
       `Cleanup incomplete for non-secret run ${state.run.runId}; follow ${RECOVERY_GUIDE}.`,
     );
   }
 }
 
-test.afterEach(async ({ request: api }, testInfo) => {
+test.afterEach(async ({}, testInfo) => {
   const state = cleanupState;
   cleanupState = undefined;
-  if (!state) return;
+  const contexts = requestContexts;
+  requestContexts = [];
+  if (!state && contexts.length === 0) return;
   testInfo.setTimeout(CLEANUP_TIMEOUT_MS);
-  try {
-    await cleanupReservedRun(api, state);
-    console.log(`[IPLF-039C] cleanup complete; run_id=${state.run.runId}`);
-  } catch (error) {
-    console.error(
-      `[IPLF-039C] MANUAL RECOVERY REQUIRED; run_id=${state.run.runId}; guide=${RECOVERY_GUIDE}`,
+  const teardownFailures: string[] = [];
+  if (state) {
+    try {
+      await cleanupReservedRun(state.ownerApi, state);
+      console.log(`[IPLF-039C] cleanup complete; run_id=${state.run.runId}`);
+    } catch {
+      console.error(
+        `[IPLF-039C] MANUAL RECOVERY REQUIRED; run_id=${state.run.runId}; guide=${RECOVERY_GUIDE}`,
+      );
+      teardownFailures.push("cleanup_reserved_run");
+    }
+  }
+  for (const api of contexts.reverse()) {
+    try {
+      await api.dispose();
+    } catch {
+      teardownFailures.push("dispose_request_context");
+    }
+  }
+  if (teardownFailures.length) {
+    throw new Error(
+      state
+        ? `Teardown incomplete for non-secret run ${state.run.runId}; phases=${teardownFailures.join(",")}; follow ${RECOVERY_GUIDE}.`
+        : `Failed to dispose an isolated no-redirect production request context; phases=${teardownFailures.join(",")}.`,
     );
-    throw error;
   }
 });
 
-test("guard-first writers reject role collapse and preserve disposable QA state", async ({
-  request: api,
-}) => {
+test("guard-first writers reject role collapse and preserve disposable QA state", async () => {
   const run = runtime();
+  assertCanonicalProductionOrigins();
+  const api = await newNoRedirectContext();
   const owner = await authenticateOwner(api, run);
   const state: CleanupState = {
     run,
     owner,
+    ownerApi: api,
     users: new Map(),
     matters: new Map(),
     dockets: new Map(),
@@ -872,13 +962,15 @@ test("guard-first writers reject role collapse and preserve disposable QA state"
 
     const source = await createDisposableUser(api, state, "source");
     const replacement = await createDisposableUser(api, state, "replacement");
+    const replacementApi = await newNoRedirectContext();
     const replacementAuth = await authenticateUser(
-      api,
+      replacementApi,
       run,
       replacement.record.email,
       replacement.password,
       replacement.record.membership_id,
     );
+    await assertCurrentActor(api, run, owner);
 
     const conflictFixture = await createFixtureMatter(api, state, "conflict");
     const conflictDeadline = await createOperationalDeadline(
@@ -1128,7 +1220,7 @@ test("guard-first writers reject role collapse and preserve disposable QA state"
       replacement.record.membership_id,
     );
     expect(pending.replacement_decision).toBe("pending");
-    const accepted = await api.post(
+    const accepted = await replacementApi.post(
       `${run.apiBaseUrl}/api/ip/deadline-coverages/${acceptedCoverage.id}/replacement-decision`,
       {
         headers: authHeaders(replacementAuth),
@@ -1190,7 +1282,7 @@ test("guard-first writers reject role collapse and preserve disposable QA state"
       replacement.record.membership_id,
     );
     expect(immediatePending.replacement_decision).toBe("pending");
-    const rejected = await api.post(
+    const rejected = await replacementApi.post(
       `${run.apiBaseUrl}/api/ip/deadline-coverages/${rejectedCoverage.id}/replacement-decision`,
       {
         headers: authHeaders(replacementAuth),

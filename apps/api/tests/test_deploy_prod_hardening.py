@@ -178,6 +178,34 @@ def test_guard_first_production_acceptance_is_isolated_and_recoverable() -> None
     assert 'required("CASEOPS_IP_GUARD_RUN_ID")' in spec
     assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
     assert 'required("CASEOPS_IP_GUARD_QA_ACK")' in spec
+    assert 'const PROD_BASE_URL = "https://caseops.ai"' in spec
+    assert 'const PROD_API_BASE_URL = "https://api.caseops.ai"' in spec
+    assert "process.env.PROD_BASE_URL" not in spec
+    assert "process.env.PROD_API_BASE_URL" not in spec
+    assert "playwrightRequest.newContext({ maxRedirects: 0 })" in spec
+    assert spec.count("await newNoRedirectContext()") == 2
+    assert "request: api" not in spec
+    test_body = spec.rsplit(
+        'test("guard-first writers reject role collapse and preserve disposable QA state"',
+        maxsplit=1,
+    )[1]
+    assert (
+        test_body.index("assertCanonicalProductionOrigins();")
+        < test_body.index("await newNoRedirectContext()")
+        < test_body.index("await authenticateOwner(api, run)")
+    )
+    assert "ownerApi: api" in test_body
+    assert "await cleanupReservedRun(state.ownerApi, state)" in spec
+    assert "const replacementApi = await newNoRedirectContext()" in test_body
+    assert "authenticateUser(\n      replacementApi," in test_body
+    assert "await assertCurrentActor(api, run, owner)" in test_body
+    assert "await replacementApi.post(" in test_body
+    assert "authHeaders(replacementAuth)" in test_body
+    assert "`${run.apiBaseUrl}/api/companies/current`" in spec
+    assert "await assertCurrentActor(api, run, auth)" in spec
+    assert 'expect(auth.membership.role).toBe("member")' in spec
+    assert 'expect(auth.capabilities).not.toContain("ip:approve")' in spec
+    assert 'expect(auth.capabilities).not.toContain("company:manage_users")' in spec
     assert spec.count("await assertExactRelease(api, run)") == 2
     assert "test.afterEach" in spec
     assert "testInfo.setTimeout(CLEANUP_TIMEOUT_MS)" in spec
@@ -185,6 +213,9 @@ def test_guard_first_production_acceptance_is_isolated_and_recoverable() -> None
     assert "recoverReservedMatters" in spec
     assert "recoverReservedDockets" in spec
     assert "CLEANUP_REQUEST_TIMEOUT_MS" in spec
+    assert "cleanup_failure_${index + 1}; phase=${failure.phase}; target=${failure.target}" in spec
+    assert "error.message" not in spec
+    assert "new AggregateError" not in spec
     assert "/lifecycle/status" in spec
     assert "randomUUID" not in spec
     assert "## Manual recovery" in plan

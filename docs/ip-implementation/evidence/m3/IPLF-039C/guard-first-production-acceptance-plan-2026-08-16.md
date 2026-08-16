@@ -1,9 +1,10 @@
 # IPLF-039C — guard-first production acceptance plan
 
 - **Prepared:** 2026-08-16
-- **Artifact state:** local only; not run against production; not release evidence
-- **Candidate worktree HEAD:** `956154799e6f2657c70634a482d0598db7f3cc30`
+- **Artifact state:** repaired after a safely failed first attempt; not yet release evidence
+- **Released rebase baseline:** `7642366a8cf7efca2a7f61f353aee2c61d80290f`
 - **Required exact deployed guard-first `main` SHA:** pending
+- **Proof-harness branch:** `codex/pr237-guard-proof-20260816` (local, unmerged)
 - **Migration `20260816_0001`:** pending and nondeployable until this acceptance passes
 
 ## Purpose and release order
@@ -28,7 +29,8 @@ The spec refuses its first mutation unless all of the following are explicit:
 1. `CASEOPS_IP_GUARD_PROD_MODE=verify`;
 2. `CASEOPS_IP_GUARD_QA_ACK=dedicated-qa-disposable-fixtures-only`;
 3. exact QA company UUID, slug, owner email, and owner password;
-4. exact API and web HTTPS URLs (loopback and non-HTTPS URLs are rejected);
+4. API and web origins hard-bound in source to `https://api.caseops.ai` and
+   `https://caseops.ai`, with redirects disabled on every request context;
 5. exact deployed API/web SHA equality;
 6. owner authentication resolves to that exact company UUID and slug;
 7. the QA IP workspace is enabled with **no provider keys** and **no enabled
@@ -45,6 +47,13 @@ explicit password and does not invoke the employee mailer. Do not substitute
 SendGrid setup email. The company-user quota check reads an existing
 subscription and user counts; it does not create a billing account, grant or
 expire credits, or contact the payment provider.
+
+Owner and replacement logins use distinct no-redirect request contexts. All
+owner-only writes and cleanup stay on the owner context; the replacement
+context performs only its own accept/reject decisions. This is required because
+the API intentionally gives a session cookie precedence over an Authorization
+header. Reusing one cookie jar for both actors can therefore make an owner
+request execute as the replacement member even when it carries the owner token.
 
 All generated emails end in the reserved `example.com` domain. Generated users
 have no calendar connections. The spec never calls billing, integrations,
@@ -70,7 +79,9 @@ so operational work is not stranded, and the run fails with the cleanup error.
 Cleanup runs in an independently timed `afterEach` hook with a 180-second hook
 budget, at most two 50-row Matter-list pages, and a 10-second timeout on every
 cleanup API call. The hook emits only the non-secret run id and the path to the
-manual recovery procedure; it never prints credentials or bearer tokens.
+manual recovery procedure plus safe phase names and opaque fixture ids when a
+cleanup step fails. It never prints credentials, bearer tokens, raw exception
+messages, or response bodies.
 
 ## Writer and assertion matrix
 
@@ -120,8 +131,6 @@ coverage routes' typed-409 envelope onto offboarding.
 Required environment variables:
 
 ```text
-PROD_BASE_URL
-PROD_API_BASE_URL
 CASEOPS_EXPECTED_RELEASE_SHA
 CASEOPS_IP_GUARD_PROD_MODE=verify
 CASEOPS_IP_GUARD_QA_ACK=dedicated-qa-disposable-fixtures-only
@@ -156,6 +165,28 @@ contain exactly its single test.
 Production output must be retained as redacted text only. The config disables
 trace, screenshot, and video capture because authenticated legal data and
 session-bearing requests must not become CI artifacts.
+
+## Production attempt history
+
+The first harness rehearsal against exact release
+`7642366a8cf7efca2a7f61f353aee2c61d80290f` used run id
+`20260816-p764a1`. It stopped at the first collapsed-coverage assertion: the
+server returned `403 role_required` before creating a coverage because the
+single shared Playwright request context retained the replacement member's
+session cookie and the API correctly preferred that cookie to the owner bearer
+token. This was a proof-harness identity-isolation defect, not product evidence.
+That release also predates the novel schema-free guard implementation from
+`3f2f13b66b1c142ead096da36984162a53dd6d7b`; it is therefore ineligible as the
+`20260816_0001` serving-ancestor anchor regardless of the harness result.
+
+The independently timed cleanup hook also inherited the contaminated cookie
+and reported incomplete cleanup. Manual recovery then revalidated every exact
+reserved marker, disposed the one committed synthetic Matter through the
+supported lifecycle endpoint, confirmed its docket was operationally `404`,
+and deactivated both exact disposable users. No row was deleted and no unrelated
+tenant data was touched. That run id is permanently retired. The repaired spec
+must use a new run id and must pass in full before this document becomes release
+evidence.
 
 ## Manual recovery
 
@@ -195,20 +226,26 @@ retained inactive, so the next acceptance needs a new run id.
 
 ## Local preparation status
 
-The artifact has not been run against production and makes no deployment
-claim. From frozen worktree HEAD
-`956154799e6f2657c70634a482d0598db7f3cc30`:
+The original harness was prepared on
+`956154799e6f2657c70634a482d0598db7f3cc30`; its first production attempt is
+explicitly non-evidence for the reasons above. The repaired harness is being
+validated from exact released-main parent
+`7642366a8cf7efca2a7f61f353aee2c61d80290f` and makes no new deployment claim.
+The schema-free guard implementation must first be semantically replayed onto
+current `main`, pass its full gates, and be deployed at 100% traffic. Only a
+fresh run against that later exact serving SHA can authorize the 0001 anchor.
+Before the replacement run:
 
 - the default Playwright config collected none of this production spec, while
   the dedicated config collected exactly its one test;
 - standalone TypeScript checking of the config and spec passed;
-- the focused production-config safety contract passed all 6 cases;
-- focused Ruff over the guarded services and canonical regressions passed;
-- the 11 exact create/reassign/propose/accept/escalation/confirmation/
-  offboarding/Matter-lifecycle node selectors passed all 13 cases; and
-- canonical web typecheck passed.
+- the focused production/deploy-hardening contract passed all 31 cases; and
+- `git diff --check` passed.
 
-Production execution was not attempted because the exact deployed SHA,
-dedicated-QA credentials/UUID, and rule/calendar prerequisites were not
-provided. Local service evidence cannot substitute for those release
-identities, nor can it authorize replacing the fence's `pending` value.
+The earlier focused service, Ruff, and web evidence belonged to the stale
+`95615479` integration tree. It must be rerun after the schema-free guard is
+replayed onto current `main`; it is not inherited as evidence for the repaired
+harness or the future release candidate. No replacement production execution
+has been attempted because no eligible guard-first SHA is serving. Local
+evidence cannot substitute for exact release identity, nor can it authorize
+replacing the fence's `pending` value.
