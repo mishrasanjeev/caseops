@@ -214,6 +214,105 @@ def _seed_membership(session: Session, company_id: str) -> str:
     return membership_id
 
 
+def _seed_ip_coverage_lifecycle_fixture(session: Session) -> dict[str, str]:
+    """Create the smallest linked Matter -> docket -> deadline -> coverage graph."""
+
+    from caseops_api.db.models import (
+        IpDeadlineCoverage,
+        IpDocketRecord,
+        MatterDeadline,
+        MatterDeadlineStatus,
+    )
+
+    company_id = _seed_company(session)
+    owner_id = _seed_membership(session, company_id)
+    replacement_id = _seed_membership(session, company_id)
+    matter_id = _seed_matter(session, company_id)
+    docket = IpDocketRecord(
+        company_id=company_id,
+        matter_id=matter_id,
+        record_type="trademark_application",
+        title="PostgreSQL lifecycle coverage race",
+        primary_identifier=f"PG-IP-RACE-{str(uuid4())[:8]}",
+        status="ready",
+        is_active=True,
+        restricted=False,
+        created_by_membership_id=owner_id,
+    )
+    deadline = MatterDeadline(
+        company_id=company_id,
+        matter_id=matter_id,
+        source="custom",
+        kind="licence_royalty",
+        title="PostgreSQL coverage race deadline",
+        due_on=date.today() + timedelta(days=30),
+        status=MatterDeadlineStatus.OPEN,
+        assignee_membership_id=owner_id,
+        created_by_membership_id=owner_id,
+    )
+    session.add_all([docket, deadline])
+    session.flush()
+    coverage = IpDeadlineCoverage(
+        company_id=company_id,
+        docket_id=docket.id,
+        matter_deadline_id=deadline.id,
+        responsible_membership_id=owner_id,
+        coverage_status="accepted",
+        calendar_projection_status="pending",
+    )
+    session.add(coverage)
+    session.commit()
+    return {
+        "company_id": company_id,
+        "owner_id": owner_id,
+        "replacement_id": replacement_id,
+        "matter_id": matter_id,
+        "docket_id": docket.id,
+        "deadline_id": deadline.id,
+        "coverage_id": coverage.id,
+    }
+
+
+def _ip_race_context(
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
+):
+    from caseops_api.db.models import Company, CompanyMembership, User
+    from caseops_api.services.session_context import SessionContext
+
+    company = session.get(Company, company_id)
+    membership = session.get(CompanyMembership, membership_id)
+    assert company is not None and membership is not None
+    user = session.get(User, membership.user_id)
+    assert user is not None
+    return SessionContext(company=company, membership=membership, user=user)
+
+
+def _wait_for_postgres_lock_wait(pg_engine, *, application_name: str) -> None:
+    """Wait until the named worker is blocked on a real PostgreSQL lock."""
+
+    deadline = datetime.now(UTC) + timedelta(seconds=5)
+    last_state = None
+    with pg_engine.connect() as connection:
+        while datetime.now(UTC) < deadline:
+            last_state = connection.execute(
+                text(
+                    "SELECT state, wait_event_type, wait_event "
+                    "FROM pg_stat_activity WHERE application_name = :name"
+                ),
+                {"name": application_name},
+            ).mappings().first()
+            if last_state is not None and last_state["wait_event_type"] == "Lock":
+                return
+            Event().wait(0.02)
+    pytest.fail(
+        f"PostgreSQL worker {application_name!r} never waited on a lock; "
+        f"last state was {last_state!r}"
+    )
+
+
 def _seed_notice(
     session: Session,
     company_id: str,
@@ -352,6 +451,456 @@ def test_billing_account_creation_is_idempotent_under_postgres_race(pg_engine) -
         account_count = session.query(BillingAccount).filter_by(company_id=company_id).count()
     assert account_count == 1
     assert len(account_ids) == 1
+
+
+def test_matter_disposal_wins_bulk_ip_coverage_reassignment_race(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bulk reassignment waits on Matter, then sees neutralized children."""
+
+    from caseops_api.db.models import IpDeadlineCoverage, Matter
+    from caseops_api.schemas.ip_operations import IpCoverageBulkReassignRequest
+    from caseops_api.schemas.matters import MatterLifecycleStatusRequest
+    from caseops_api.services import matters as matter_service
+    from caseops_api.services.ip_operations import bulk_reassign_ip_deadline_coverages
+
+    with Session(pg_engine) as seed:
+        fixture = _seed_ip_coverage_lifecycle_fixture(seed)
+
+    disposal_has_parent_lock = Event()
+    release_disposal = Event()
+    original_neutralize = matter_service._neutralize_disposed_matter_operations
+
+    def paused_neutralize(session, *, context, matter):
+        disposal_has_parent_lock.set()
+        if not release_disposal.wait(timeout=10):
+            raise TimeoutError("Bulk coverage race did not release disposal.")
+        return original_neutralize(session, context=context, matter=matter)
+
+    monkeypatch.setattr(
+        matter_service,
+        "_neutralize_disposed_matter_operations",
+        paused_neutralize,
+    )
+    application_name = f"caseops-ip-bulk-{str(uuid4())[:8]}"
+
+    def dispose_matter():
+        with Session(pg_engine) as session:
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            matter = session.get(Matter, fixture["matter_id"])
+            assert matter is not None
+            return matter_service.transition_matter_lifecycle_status(
+                session,
+                context=context,
+                matter_id=matter.id,
+                payload=MatterLifecycleStatusRequest(
+                    to_status="disposed",
+                    expected_from_status="active",
+                    expected_updated_at=matter.updated_at,
+                    reason="PostgreSQL race proves parent lifecycle ownership.",
+                ),
+            )
+
+    def bulk_reassign():
+        with Session(pg_engine) as session:
+            session.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": application_name},
+            )
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            return bulk_reassign_ip_deadline_coverages(
+                session,
+                context=context,
+                payload=IpCoverageBulkReassignRequest(
+                    from_membership_id=fixture["owner_id"],
+                    to_membership_id=fixture["replacement_id"],
+                    reason="Attempted handover while the matter is being disposed.",
+                ),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        disposal = executor.submit(dispose_matter)
+        transfer = None
+        try:
+            assert disposal_has_parent_lock.wait(timeout=10)
+            transfer = executor.submit(bulk_reassign)
+            _wait_for_postgres_lock_wait(pg_engine, application_name=application_name)
+            with pytest.raises(FutureTimeoutError):
+                transfer.result(timeout=0.05)
+        finally:
+            release_disposal.set()
+        disposed = disposal.result(timeout=10)
+        assert transfer is not None
+        transfer_result = transfer.result(timeout=10)
+
+    assert disposed.status == "disposed"
+    assert transfer_result.reassigned_count == 0
+    assert transfer_result.coverage_ids == []
+    with Session(pg_engine) as session:
+        coverage = session.get(IpDeadlineCoverage, fixture["coverage_id"])
+        assert coverage is not None
+        assert coverage.coverage_status == "inactive_lifecycle"
+        assert coverage.calendar_projection_status == "inactive_lifecycle"
+        assert coverage.responsible_membership_id == fixture["owner_id"]
+        assert coverage.pending_replacement_membership_id is None
+        assert coverage.replacement_decision == "none"
+        assert coverage.reassignment_version == 1
+
+
+def test_matter_disposal_wins_ip_coverage_proposal_race(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A proposal waits on Matter and rejects its now-stale preview."""
+
+    from fastapi import HTTPException
+
+    from caseops_api.db.models import IpDeadlineCoverage, Matter
+    from caseops_api.schemas.ip_operations import (
+        IpCoverageReassignPreviewRequest,
+        IpCoverageReassignProposeRequest,
+    )
+    from caseops_api.schemas.matters import MatterLifecycleStatusRequest
+    from caseops_api.services import matters as matter_service
+    from caseops_api.services.ip_operations import (
+        preview_ip_coverage_reassignment,
+        propose_ip_coverage_reassignment,
+    )
+
+    with Session(pg_engine) as seed:
+        fixture = _seed_ip_coverage_lifecycle_fixture(seed)
+    with Session(pg_engine) as preview_session:
+        context = _ip_race_context(
+            preview_session,
+            company_id=fixture["company_id"],
+            membership_id=fixture["owner_id"],
+        )
+        preview = preview_ip_coverage_reassignment(
+            preview_session,
+            context=context,
+            payload=IpCoverageReassignPreviewRequest(
+                from_membership_id=fixture["owner_id"],
+                to_membership_id=fixture["replacement_id"],
+            ),
+        )
+        assert preview.affected_coverage_ids == [fixture["coverage_id"]]
+        preview_token = preview.preview_token
+
+    disposal_has_parent_lock = Event()
+    release_disposal = Event()
+    original_neutralize = matter_service._neutralize_disposed_matter_operations
+
+    def paused_neutralize(session, *, context, matter):
+        disposal_has_parent_lock.set()
+        if not release_disposal.wait(timeout=10):
+            raise TimeoutError("Proposal coverage race did not release disposal.")
+        return original_neutralize(session, context=context, matter=matter)
+
+    monkeypatch.setattr(
+        matter_service,
+        "_neutralize_disposed_matter_operations",
+        paused_neutralize,
+    )
+    application_name = f"caseops-ip-propose-{str(uuid4())[:8]}"
+
+    def dispose_matter():
+        with Session(pg_engine) as session:
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            matter = session.get(Matter, fixture["matter_id"])
+            assert matter is not None
+            return matter_service.transition_matter_lifecycle_status(
+                session,
+                context=context,
+                matter_id=matter.id,
+                payload=MatterLifecycleStatusRequest(
+                    to_status="disposed",
+                    expected_from_status="active",
+                    expected_updated_at=matter.updated_at,
+                    reason="PostgreSQL race proves proposal lifecycle exclusion.",
+                ),
+            )
+
+    def propose_reassignment():
+        with Session(pg_engine) as session:
+            session.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": application_name},
+            )
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            try:
+                propose_ip_coverage_reassignment(
+                    session,
+                    context=context,
+                    payload=IpCoverageReassignProposeRequest(
+                        from_membership_id=fixture["owner_id"],
+                        to_membership_id=fixture["replacement_id"],
+                        preview_token=preview_token,
+                        reason="Attempted proposal while the matter is being disposed.",
+                    ),
+                )
+            except HTTPException as exc:
+                session.rollback()
+                return exc.status_code, exc.detail
+            raise AssertionError("Disposed coverage proposal unexpectedly succeeded.")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        disposal = executor.submit(dispose_matter)
+        proposal = None
+        try:
+            assert disposal_has_parent_lock.wait(timeout=10)
+            proposal = executor.submit(propose_reassignment)
+            _wait_for_postgres_lock_wait(pg_engine, application_name=application_name)
+            with pytest.raises(FutureTimeoutError):
+                proposal.result(timeout=0.05)
+        finally:
+            release_disposal.set()
+        disposed = disposal.result(timeout=10)
+        assert proposal is not None
+        proposal_status, proposal_detail = proposal.result(timeout=10)
+
+    assert disposed.status == "disposed"
+    assert proposal_status == 409
+    assert proposal_detail["code"] == "ip_coverage_preview_stale"
+    with Session(pg_engine) as session:
+        coverage = session.get(IpDeadlineCoverage, fixture["coverage_id"])
+        assert coverage is not None
+        assert coverage.coverage_status == "inactive_lifecycle"
+        assert coverage.calendar_projection_status == "inactive_lifecycle"
+        assert coverage.responsible_membership_id == fixture["owner_id"]
+        assert coverage.pending_replacement_membership_id is None
+        assert coverage.replacement_decision == "none"
+        assert coverage.reassignment_version == 1
+
+
+def test_deadline_completion_wins_bulk_ip_coverage_reassignment_race(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bulk reassignment waits for the deadline lock and then skips DONE work."""
+
+    from caseops_api.db.models import IpDeadlineCoverage, MatterDeadline
+    from caseops_api.schemas.ip_operations import IpCoverageBulkReassignRequest
+    from caseops_api.services import deadlines as deadline_service
+    from caseops_api.services.ip_operations import bulk_reassign_ip_deadline_coverages
+
+    with Session(pg_engine) as seed:
+        fixture = _seed_ip_coverage_lifecycle_fixture(seed)
+
+    deadline_mutated = Event()
+    release_deadline = Event()
+    original_record = deadline_service.record_from_context
+
+    def paused_record(*args, **kwargs):
+        if kwargs.get("action") == "deadline.complete":
+            deadline_mutated.set()
+            if not release_deadline.wait(timeout=10):
+                raise TimeoutError("Bulk race did not release deadline completion.")
+        return original_record(*args, **kwargs)
+
+    monkeypatch.setattr(deadline_service, "record_from_context", paused_record)
+    application_name = f"caseops-ip-bulk-deadline-{str(uuid4())[:8]}"
+
+    def complete_deadline():
+        with Session(pg_engine) as session:
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            return deadline_service.transition_deadline(
+                session,
+                context=context,
+                deadline_id=fixture["deadline_id"],
+                action="complete",
+            )
+
+    def bulk_reassign():
+        with Session(pg_engine) as session:
+            session.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": application_name},
+            )
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            return bulk_reassign_ip_deadline_coverages(
+                session,
+                context=context,
+                payload=IpCoverageBulkReassignRequest(
+                    from_membership_id=fixture["owner_id"],
+                    to_membership_id=fixture["replacement_id"],
+                    reason="Attempted handover while its deadline completes.",
+                ),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        completion = executor.submit(complete_deadline)
+        transfer = None
+        try:
+            assert deadline_mutated.wait(timeout=10)
+            transfer = executor.submit(bulk_reassign)
+            _wait_for_postgres_lock_wait(pg_engine, application_name=application_name)
+            with pytest.raises(FutureTimeoutError):
+                transfer.result(timeout=0.05)
+        finally:
+            release_deadline.set()
+        completed = completion.result(timeout=10)
+        assert transfer is not None
+        transfer_result = transfer.result(timeout=10)
+
+    assert completed.status == "done"
+    assert transfer_result.reassigned_count == 0
+    assert transfer_result.coverage_ids == []
+    with Session(pg_engine) as session:
+        deadline = session.get(MatterDeadline, fixture["deadline_id"])
+        coverage = session.get(IpDeadlineCoverage, fixture["coverage_id"])
+        assert deadline is not None and deadline.status == "done"
+        assert coverage is not None
+        assert coverage.coverage_status == "accepted"
+        assert coverage.responsible_membership_id == fixture["owner_id"]
+        assert coverage.pending_replacement_membership_id is None
+        assert coverage.reassignment_version == 1
+
+
+def test_deadline_cancellation_wins_ip_coverage_proposal_race(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A proposal waits for the deadline lock and rejects its stale preview."""
+
+    from fastapi import HTTPException
+
+    from caseops_api.db.models import IpDeadlineCoverage, MatterDeadline
+    from caseops_api.schemas.ip_operations import (
+        IpCoverageReassignPreviewRequest,
+        IpCoverageReassignProposeRequest,
+    )
+    from caseops_api.services import deadlines as deadline_service
+    from caseops_api.services.ip_operations import (
+        preview_ip_coverage_reassignment,
+        propose_ip_coverage_reassignment,
+    )
+
+    with Session(pg_engine) as seed:
+        fixture = _seed_ip_coverage_lifecycle_fixture(seed)
+    with Session(pg_engine) as preview_session:
+        context = _ip_race_context(
+            preview_session,
+            company_id=fixture["company_id"],
+            membership_id=fixture["owner_id"],
+        )
+        preview = preview_ip_coverage_reassignment(
+            preview_session,
+            context=context,
+            payload=IpCoverageReassignPreviewRequest(
+                from_membership_id=fixture["owner_id"],
+                to_membership_id=fixture["replacement_id"],
+            ),
+        )
+        assert preview.affected_coverage_ids == [fixture["coverage_id"]]
+        preview_token = preview.preview_token
+
+    deadline_mutated = Event()
+    release_deadline = Event()
+    original_record = deadline_service.record_from_context
+
+    def paused_record(*args, **kwargs):
+        if kwargs.get("action") == "deadline.cancel":
+            deadline_mutated.set()
+            if not release_deadline.wait(timeout=10):
+                raise TimeoutError("Proposal race did not release deadline cancellation.")
+        return original_record(*args, **kwargs)
+
+    monkeypatch.setattr(deadline_service, "record_from_context", paused_record)
+    application_name = f"caseops-ip-propose-deadline-{str(uuid4())[:8]}"
+
+    def cancel_deadline():
+        with Session(pg_engine) as session:
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            return deadline_service.transition_deadline(
+                session,
+                context=context,
+                deadline_id=fixture["deadline_id"],
+                action="cancel",
+            )
+
+    def propose_reassignment():
+        with Session(pg_engine) as session:
+            session.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": application_name},
+            )
+            context = _ip_race_context(
+                session,
+                company_id=fixture["company_id"],
+                membership_id=fixture["owner_id"],
+            )
+            try:
+                propose_ip_coverage_reassignment(
+                    session,
+                    context=context,
+                    payload=IpCoverageReassignProposeRequest(
+                        from_membership_id=fixture["owner_id"],
+                        to_membership_id=fixture["replacement_id"],
+                        preview_token=preview_token,
+                        reason="Attempted proposal while its deadline is cancelled.",
+                    ),
+                )
+            except HTTPException as exc:
+                session.rollback()
+                return exc.status_code, exc.detail
+            raise AssertionError("Cancelled-deadline coverage proposal unexpectedly succeeded.")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cancellation = executor.submit(cancel_deadline)
+        proposal = None
+        try:
+            assert deadline_mutated.wait(timeout=10)
+            proposal = executor.submit(propose_reassignment)
+            _wait_for_postgres_lock_wait(pg_engine, application_name=application_name)
+            with pytest.raises(FutureTimeoutError):
+                proposal.result(timeout=0.05)
+        finally:
+            release_deadline.set()
+        cancelled = cancellation.result(timeout=10)
+        assert proposal is not None
+        proposal_status, proposal_detail = proposal.result(timeout=10)
+
+    assert cancelled.status == "cancelled"
+    assert proposal_status == 409
+    assert proposal_detail["code"] == "ip_coverage_preview_stale"
+    with Session(pg_engine) as session:
+        deadline = session.get(MatterDeadline, fixture["deadline_id"])
+        coverage = session.get(IpDeadlineCoverage, fixture["coverage_id"])
+        assert deadline is not None and deadline.status == "cancelled"
+        assert coverage is not None
+        assert coverage.coverage_status == "accepted"
+        assert coverage.responsible_membership_id == fixture["owner_id"]
+        assert coverage.pending_replacement_membership_id is None
+        assert coverage.reassignment_version == 1
 
 
 def test_ip_delivery_holds_docket_lock_during_final_authorization(

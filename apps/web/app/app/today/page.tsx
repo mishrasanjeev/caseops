@@ -542,7 +542,11 @@ function IpCoverageActionsCard({
         {actions.map((action) => (
           <Link
             key={action.coverage_id}
-            href="/app/ip/docket"
+            href={
+              action.kind === "decide_transfer"
+                ? "/app/ip#coverage-decisions"
+                : "/app/ip/docket"
+            }
             className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 hover:bg-[var(--color-bg-2)]"
             data-testid={`today-ip-action-${action.coverage_id}`}
           >

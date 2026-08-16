@@ -18603,7 +18603,7 @@ export interface components {
             /** Coverage Id */
             coverage_id: string;
             /** Reason */
-            reason?: ("acknowledged" | "already_acknowledged" | "not_found" | "not_responsible" | "version_conflict" | "transfer_pending") | null;
+            reason?: ("acknowledged" | "already_acknowledged" | "not_found" | "not_responsible" | "version_conflict" | "transfer_pending" | "inactive_lifecycle") | null;
             /** Reassignment Version */
             reassignment_version?: number | null;
         };

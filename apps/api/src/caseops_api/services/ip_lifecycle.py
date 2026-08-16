@@ -73,30 +73,75 @@ def _authorized_lifecycle_docket(
     context: SessionContext,
     docket_id: str,
     for_update: bool,
+    lock_matter_docket_family: bool = False,
 ) -> IpDocketRecord:
     statement = select(IpDocketRecord).where(
         IpDocketRecord.id == docket_id,
         IpDocketRecord.company_id == context.company.id,
     )
-    docket = session.scalar(statement)
-    if docket is not None and for_update and docket.matter_id:
+    discovered_parent = (
+        session.execute(
+            select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
+                IpDocketRecord.id == docket_id,
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).one_or_none()
+        if for_update
+        else None
+    )
+    docket = session.scalar(statement) if not for_update else None
+    locked_matter: Matter | None = None
+    if discovered_parent is not None and discovered_parent.matter_id:
         # Matter is the access/lifecycle parent. Lock it before the IP child
         # so Matter disposal and direct IP transitions share one lock order.
-        session.scalar(
+        locked_matter = session.scalar(
             select(Matter)
             .where(
-                Matter.id == docket.matter_id,
+                Matter.id == discovered_parent.matter_id,
                 Matter.company_id == context.company.id,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
-    if docket is not None and for_update:
-        docket = session.scalar(statement.with_for_update())
+        if locked_matter is None:
+            raise HTTPException(status_code=404, detail="IP docket record not found.")
+    if discovered_parent is not None:
+        if lock_matter_docket_family and discovered_parent.matter_id:
+            # A Matter deadline can serve more than one IP docket. Terminal
+            # lifecycle must stabilize every sibling before it decides whether
+            # that shared deadline is still operational elsewhere.
+            locked_dockets = list(
+                session.scalars(
+                    select(IpDocketRecord)
+                    .where(
+                        IpDocketRecord.company_id == context.company.id,
+                        IpDocketRecord.matter_id == discovered_parent.matter_id,
+                    )
+                    .order_by(IpDocketRecord.id)
+                    .with_for_update(of=IpDocketRecord)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            docket = next(
+                (candidate for candidate in locked_dockets if candidate.id == docket_id),
+                None,
+            )
+        else:
+            docket = session.scalar(
+                statement.with_for_update().execution_options(populate_existing=True)
+            )
     if docket is None or docket.archived_by_matter_disposal:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
+    if for_update:
+        assert discovered_parent is not None
+        if docket.matter_id != discovered_parent.matter_id:
+            raise HTTPException(
+                status_code=409,
+                detail="The IP docket parent changed; retry the operation.",
+            )
     assert_ip_docket_access(session, context=context, docket=docket)
     if docket.matter_id:
-        matter = session.scalar(
+        matter = locked_matter or session.scalar(
             select(Matter).where(
                 Matter.id == docket.matter_id,
                 Matter.company_id == context.company.id,
@@ -679,16 +724,18 @@ def transition_ip_docket_lifecycle(
 ) -> tuple[IpDocketRecord, IpDocketEvent]:
     """Apply only the legal parent transition; IPLF-022B owns child-impact UI/routes."""
 
+    requested_terminal = payload.to_status in TERMINAL_IP_DOCKET_STATUSES
     docket = _authorized_lifecycle_docket(
         session,
         context=context,
         docket_id=docket_id,
         for_update=True,
+        lock_matter_docket_family=requested_terminal,
     )
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
     was_terminal = docket.status in TERMINAL_IP_DOCKET_STATUSES
-    will_be_terminal = payload.to_status in TERMINAL_IP_DOCKET_STATUSES
+    will_be_terminal = requested_terminal
     if was_terminal == will_be_terminal:
         raise HTTPException(
             status_code=409,
@@ -797,56 +844,229 @@ def transition_ip_docket_lifecycle(
     neutralized_obligations = 0
     cancelled_deadlines = 0
     if will_be_terminal:
-        coverages = list(
-            session.scalars(
-                select(IpDeadlineCoverage).where(
-                    IpDeadlineCoverage.company_id == docket.company_id,
-                    IpDeadlineCoverage.docket_id == docket.id,
-                    IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
+        coverage_refs = session.execute(
+            select(IpDeadlineCoverage.id, IpDeadlineCoverage.matter_deadline_id).where(
+                IpDeadlineCoverage.company_id == docket.company_id,
+                IpDeadlineCoverage.docket_id == docket.id,
+                IpDeadlineCoverage.coverage_status.notin_(
+                    ("inactive_lifecycle", "completed")
+                ),
+            )
+        ).all()
+        obligation_refs = session.execute(
+            select(
+                IpRelatedRightObligation.id,
+                IpRelatedRightObligation.matter_deadline_id,
+            ).where(
+                IpRelatedRightObligation.company_id == docket.company_id,
+                IpRelatedRightObligation.docket_id == docket.id,
+                IpRelatedRightObligation.status.notin_(
+                    ("completed", "cancelled_lifecycle")
+                ),
+            )
+        ).all()
+        deadline_ids = {
+            deadline_id
+            for _row_id, deadline_id in [*coverage_refs, *obligation_refs]
+            if deadline_id is not None
+        }
+        deadline_target_predicates = [
+            MatterDeadline.company_id == docket.company_id,
+        ]
+        if docket.matter_id is not None:
+            deadline_target_predicates.extend(
+                (
+                    MatterDeadline.matter_id == docket.matter_id,
+                    MatterDeadline.ip_docket_id.is_(None),
                 )
             )
+        else:
+            deadline_target_predicates.extend(
+                (
+                    MatterDeadline.ip_docket_id == docket.id,
+                    MatterDeadline.matter_id.is_(None),
+                )
+            )
+        deadlines = (
+            list(
+                session.scalars(
+                    select(MatterDeadline)
+                    .where(
+                        MatterDeadline.id.in_(deadline_ids),
+                        *deadline_target_predicates,
+                    )
+                    .order_by(MatterDeadline.id)
+                    .with_for_update(of=MatterDeadline)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            if deadline_ids
+            else []
         )
+        locked_deadline_ids = {deadline.id for deadline in deadlines}
+        operational_sibling_docket_ids = (
+            set(
+                session.scalars(
+                    select(IpDocketRecord.id).where(
+                        IpDocketRecord.company_id == docket.company_id,
+                        IpDocketRecord.matter_id == docket.matter_id,
+                        IpDocketRecord.id != docket.id,
+                        IpDocketRecord.is_active.is_(True),
+                        IpDocketRecord.archived_by_matter_disposal.is_(False),
+                        IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
+                    )
+                ).all()
+            )
+            if docket.matter_id is not None
+            else set()
+        )
+
+        # Discover sibling child ids only after the whole Matter/docket family
+        # and candidate deadlines are locked. Coverage writers and obligation
+        # writers use the same parent-first order, so no operational sibling
+        # reference can appear or disappear around this decision.
+        sibling_coverage_refs = (
+            session.execute(
+                select(
+                    IpDeadlineCoverage.id,
+                    IpDeadlineCoverage.docket_id,
+                    IpDeadlineCoverage.matter_deadline_id,
+                ).where(
+                    IpDeadlineCoverage.company_id == docket.company_id,
+                    IpDeadlineCoverage.docket_id.in_(operational_sibling_docket_ids),
+                    IpDeadlineCoverage.matter_deadline_id.in_(locked_deadline_ids),
+                    IpDeadlineCoverage.coverage_status.notin_(
+                        ("inactive_lifecycle", "completed")
+                    ),
+                )
+            ).all()
+            if operational_sibling_docket_ids and locked_deadline_ids
+            else []
+        )
+        sibling_obligation_refs = (
+            session.execute(
+                select(
+                    IpRelatedRightObligation.id,
+                    IpRelatedRightObligation.docket_id,
+                    IpRelatedRightObligation.matter_deadline_id,
+                ).where(
+                    IpRelatedRightObligation.company_id == docket.company_id,
+                    IpRelatedRightObligation.docket_id.in_(
+                        operational_sibling_docket_ids
+                    ),
+                    IpRelatedRightObligation.matter_deadline_id.in_(
+                        locked_deadline_ids
+                    ),
+                    IpRelatedRightObligation.status.notin_(
+                        ("completed", "cancelled_lifecycle")
+                    ),
+                )
+            ).all()
+            if operational_sibling_docket_ids and locked_deadline_ids
+            else []
+        )
+
+        target_coverage_ids = {
+            row_id for row_id, _deadline_id in coverage_refs
+        }
+        sibling_coverage_ids = {
+            row_id for row_id, _docket_id, _deadline_id in sibling_coverage_refs
+        }
+        coverage_ids = target_coverage_ids | sibling_coverage_ids
+        locked_coverages = (
+            list(
+                session.scalars(
+                    select(IpDeadlineCoverage)
+                    .where(
+                        IpDeadlineCoverage.id.in_(coverage_ids),
+                        IpDeadlineCoverage.company_id == docket.company_id,
+                    )
+                    .order_by(IpDeadlineCoverage.id)
+                    .with_for_update(of=IpDeadlineCoverage)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            if coverage_ids
+            else []
+        )
+        coverages = [
+            coverage
+            for coverage in locked_coverages
+            if coverage.id in target_coverage_ids
+            and coverage.docket_id == docket.id
+            and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+        ]
+        sibling_coverage_deadline_ids = {
+            coverage.matter_deadline_id
+            for coverage in locked_coverages
+            if coverage.id in sibling_coverage_ids
+            and coverage.docket_id in operational_sibling_docket_ids
+            and coverage.matter_deadline_id in locked_deadline_ids
+            and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+        }
         for coverage in coverages:
             coverage.coverage_status = "inactive_lifecycle"
             coverage.calendar_projection_status = "inactive_lifecycle"
             coverage.updated_at = datetime.now(UTC)
         neutralized_coverages = len(coverages)
 
-        obligations = list(
-            session.scalars(
-                select(IpRelatedRightObligation).where(
-                    IpRelatedRightObligation.company_id == docket.company_id,
-                    IpRelatedRightObligation.docket_id == docket.id,
-                    IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
+        target_obligation_ids = {
+            row_id for row_id, _deadline_id in obligation_refs
+        }
+        sibling_obligation_ids = {
+            row_id for row_id, _docket_id, _deadline_id in sibling_obligation_refs
+        }
+        obligation_ids = target_obligation_ids | sibling_obligation_ids
+        locked_obligations = (
+            list(
+                session.scalars(
+                    select(IpRelatedRightObligation)
+                    .where(
+                        IpRelatedRightObligation.id.in_(obligation_ids),
+                        IpRelatedRightObligation.company_id == docket.company_id,
+                    )
+                    .order_by(IpRelatedRightObligation.id)
+                    .with_for_update(of=IpRelatedRightObligation)
+                    .execution_options(populate_existing=True)
                 )
             )
+            if obligation_ids
+            else []
         )
+        obligations = [
+            obligation
+            for obligation in locked_obligations
+            if obligation.id in target_obligation_ids
+            and obligation.docket_id == docket.id
+            and obligation.status not in ("completed", "cancelled_lifecycle")
+        ]
+        sibling_obligation_deadline_ids = {
+            obligation.matter_deadline_id
+            for obligation in locked_obligations
+            if obligation.id in sibling_obligation_ids
+            and obligation.docket_id in operational_sibling_docket_ids
+            and obligation.matter_deadline_id in locked_deadline_ids
+            and obligation.status not in ("completed", "cancelled_lifecycle")
+        }
         for obligation in obligations:
             obligation.status = "cancelled_lifecycle"
             obligation.updated_at = datetime.now(UTC)
         neutralized_obligations = len(obligations)
 
-        deadline_ids = {
-            row.matter_deadline_id
-            for row in [*coverages, *obligations]
-            if row.matter_deadline_id is not None
-        }
-        deadlines = (
-            list(
-                session.scalars(
-                    select(MatterDeadline).where(
-                        MatterDeadline.id.in_(deadline_ids),
-                        MatterDeadline.status == MatterDeadlineStatus.OPEN,
-                    )
-                )
-            )
-            if deadline_ids
-            else []
+        sibling_deadline_ids = (
+            sibling_coverage_deadline_ids | sibling_obligation_deadline_ids
         )
         for deadline in deadlines:
-            deadline.status = MatterDeadlineStatus.CANCELLED
-            deadline.updated_at = datetime.now(UTC)
-        cancelled_deadlines = len(deadlines)
+            if (
+                deadline.id not in sibling_deadline_ids
+                and deadline.status
+                in (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                and deadline.neutralized_at is None
+                and not deadline.cancelled_by_matter_disposal
+            ):
+                deadline.status = MatterDeadlineStatus.CANCELLED
+                deadline.updated_at = datetime.now(UTC)
+                cancelled_deadlines += 1
 
     docket.status = payload.to_status
     docket.is_active = not will_be_terminal

@@ -9,7 +9,7 @@ import {
   Scale,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -336,10 +336,28 @@ function CoverageDecisionsCard({ onChanged }: { onChanged: () => Promise<void> }
     });
   }, [awaiting.data]);
 
+  // The target is query-backed and usually does not exist when the browser
+  // first processes /app/ip#coverage-decisions. Honor the deep link once the
+  // asynchronous card has actually mounted.
+  useEffect(() => {
+    if (
+      transfers.length > 0 &&
+      window.location.hash === "#coverage-decisions"
+    ) {
+      document.getElementById("coverage-decisions")?.scrollIntoView({
+        block: "start",
+      });
+    }
+  }, [transfers.length]);
+
   if (!transfers.length) return null;
 
   return (
-    <Card className="min-w-0" data-testid="ip-coverage-decisions">
+    <Card
+      id="coverage-decisions"
+      className="min-w-0 scroll-mt-6"
+      data-testid="ip-coverage-decisions"
+    >
       <CardHeader>
         <CardTitle as="h2">Coverage awaiting your decision</CardTitle>
       </CardHeader>

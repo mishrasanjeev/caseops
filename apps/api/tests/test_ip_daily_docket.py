@@ -163,6 +163,50 @@ def test_uj50_normal_triage_daily_docket_and_workload(client: TestClient) -> Non
     assert body["escalations"] == []
 
 
+@pytest.mark.parametrize("terminal_status", ["done", "cancelled"])
+def test_daily_docket_excludes_coverage_for_terminal_operational_deadline(
+    client: TestClient,
+    terminal_status: str,
+) -> None:
+    """DONE/CANCELLED deadlines are history, never assignable daily work."""
+
+    owner_headers, _owner_id, primary_id, _backup_id, matter = _setup(client)
+    docket = _docket(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title=f"Terminal {terminal_status} deadline",
+    )
+    coverages = _coverage(
+        client,
+        owner_headers,
+        docket["id"],
+        matter_id=matter["id"],
+        responsible=primary_id,
+        status="pending",
+    )
+    coverage = coverages[-1]
+
+    before = _docket_view(client, owner_headers).json()
+    assert next(
+        queue for queue in before["queues"] if queue["membership_id"] == primary_id
+    )["assigned_count"] == 1
+
+    transitioned = client.patch(
+        f"/api/matters/{matter['id']}/deadlines/{coverage['matter_deadline_id']}",
+        headers=owner_headers,
+        json={"status": terminal_status},
+    )
+    assert transitioned.status_code == 200, transitioned.text
+
+    after = _docket_view(client, owner_headers)
+    assert after.status_code == 200, after.text
+    body = after.json()
+    assert body["queues"] == []
+    assert body["escalations"] == []
+    assert coverage["id"] not in after.text
+
+
 def test_uj50_exc02_absent_or_disabled_owner_triggers_backup_policy(
     client: TestClient,
 ) -> None:

@@ -5,7 +5,7 @@ import json
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import false, or_, select
+from sqlalchemy import and_, false, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -33,6 +33,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     MatterDeadline,
+    MatterDeadlineStatus,
     MatterInvoice,
     MatterInvoiceLineItem,
     MatterTimeEntry,
@@ -109,6 +110,7 @@ from caseops_api.services.matter_access import (
 from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
     assert_operational_matter,
+    matter_is_operational,
 )
 from caseops_api.services.session_context import SessionContext
 
@@ -120,6 +122,20 @@ def _now() -> datetime:
 CONTROL_REVIEW_QUERY_VERSION = "ip-docket-control-v1"
 CONTROL_REVIEW_SNAPSHOT_SCHEMA_VERSION = 1
 CONTROL_REVIEW_RESTRICTED_COUNT_POLICY = "omit_without_count"
+
+# Lifecycle-neutralized rows remain as immutable history after a controlled
+# reopen. No operational read or write may treat them as live work again.
+_TERMINAL_COVERAGE_STATUSES = ("inactive_lifecycle", "completed")
+_TERMINAL_DOCKET_STATUSES = ("archived", "abandoned", "transferred", "retired", "closed")
+
+
+def _deadline_is_operational(deadline: MatterDeadline | None) -> bool:
+    return bool(
+        deadline is not None
+        and deadline.status in (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+        and deadline.neutralized_at is None
+        and not deadline.cancelled_by_matter_disposal
+    )
 
 
 def _canonical_json(value: object) -> str:
@@ -172,20 +188,54 @@ def _docket_or_404(
     docket_id: str,
     for_update: bool = False,
 ) -> IpDocketRecord:
-    stmt = select(IpDocketRecord).where(
+    statement = select(IpDocketRecord).where(
         IpDocketRecord.id == docket_id,
         IpDocketRecord.company_id == context.company.id,
     )
-    if for_update:
-        stmt = stmt.with_for_update()
-    docket = session.scalar(stmt)
+    discovered_parent = (
+        session.execute(
+            select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
+                IpDocketRecord.id == docket_id,
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).one_or_none()
+        if for_update
+        else None
+    )
+    docket = session.scalar(statement) if not for_update else None
+    locked_matter: Matter | None = None
+    if discovered_parent is not None and discovered_parent.matter_id:
+        # Matter is the lifecycle parent. Match Matter disposal and the IP
+        # lifecycle service's lock order before locking the docket child.
+        locked_matter = session.scalar(
+            select(Matter)
+            .where(
+                Matter.id == discovered_parent.matter_id,
+                Matter.company_id == context.company.id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if locked_matter is None:
+            raise HTTPException(status_code=404, detail="IP docket record not found.")
+    if discovered_parent is not None:
+        docket = session.scalar(
+            statement.with_for_update().execution_options(populate_existing=True)
+        )
     if docket is None:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
+    if for_update:
+        assert discovered_parent is not None
+        if docket.matter_id != discovered_parent.matter_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The IP docket parent changed; retry the operation.",
+            )
     if docket.archived_by_matter_disposal or not docket.is_active:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
     assert_ip_docket_access(session, context=context, docket=docket)
     if docket.matter_id:
-        matter = session.get(Matter, docket.matter_id)
+        matter = locked_matter or session.get(Matter, docket.matter_id)
         if matter is None:
             raise HTTPException(status_code=404, detail="IP docket record not found.")
         try:
@@ -901,6 +951,61 @@ def _deadline_for_docket(
     return deadline
 
 
+def _lock_docket_deadline(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+    deadline_id: str,
+) -> MatterDeadline:
+    """Lock and refresh the linked deadline before any coverage child.
+
+    Operational validation happens after the coverage child is locked. That
+    preserves the canonical lock order while letting callers retain the more
+    specific inactive-child error when a terminal lifecycle has neutralized
+    both rows.
+    """
+
+    target_predicate = (
+        and_(
+            MatterDeadline.matter_id == docket.matter_id,
+            MatterDeadline.ip_docket_id.is_(None),
+        )
+        if docket.matter_id
+        else and_(
+            MatterDeadline.ip_docket_id == docket.id,
+            MatterDeadline.matter_id.is_(None),
+        )
+    )
+    deadline = session.scalar(
+        select(MatterDeadline)
+        .where(
+            MatterDeadline.id == deadline_id,
+            MatterDeadline.company_id == docket.company_id,
+            target_predicate,
+        )
+        .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
+    )
+    if deadline is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Operational deadline is not part of this IP record.",
+        )
+    return deadline
+
+
+def _assert_operational_coverage_deadline(deadline: MatterDeadline) -> None:
+    if _deadline_is_operational(deadline):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "ip_coverage_deadline_inactive",
+            "message": "Completed, cancelled, or neutralized deadlines cannot carry coverage.",
+        },
+    )
+
+
 def add_ip_deadline_coverage(
     session: Session,
     *,
@@ -912,8 +1017,15 @@ def add_ip_deadline_coverage(
         responsible_membership_id=payload.responsible_membership_id,
         backup_membership_id=payload.backup_membership_id,
     )
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
-    _deadline_for_docket(session, docket=docket, deadline_id=payload.matter_deadline_id)
+    docket = _docket_or_404(
+        session, context=context, docket_id=docket_id, for_update=True
+    )
+    deadline = _lock_docket_deadline(
+        session,
+        docket=docket,
+        deadline_id=payload.matter_deadline_id,
+    )
+    _assert_operational_coverage_deadline(deadline)
     _membership_or_404(session, context, payload.responsible_membership_id)
     if payload.backup_membership_id:
         _membership_or_404(session, context, payload.backup_membership_id)
@@ -1065,7 +1177,23 @@ def reassign_ip_deadline_coverage(
         responsible_membership_id=payload.responsible_membership_id,
         backup_membership_id=payload.backup_membership_id,
     )
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    candidate = session.execute(
+        select(IpDeadlineCoverage.docket_id, IpDeadlineCoverage.matter_deadline_id).where(
+            IpDeadlineCoverage.id == coverage_id,
+            IpDeadlineCoverage.docket_id == docket_id,
+            IpDeadlineCoverage.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    docket = _docket_or_404(
+        session, context=context, docket_id=docket_id, for_update=True
+    )
+    deadline = _lock_docket_deadline(
+        session,
+        docket=docket,
+        deadline_id=candidate.matter_deadline_id,
+    )
     coverage = session.scalar(
         select(IpDeadlineCoverage)
         .where(
@@ -1074,9 +1202,37 @@ def reassign_ip_deadline_coverage(
             IpDeadlineCoverage.company_id == context.company.id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if coverage is None:
         raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    matter = session.get(Matter, docket.matter_id) if docket.matter_id else None
+    if not _coverage_lifecycle_is_operational(
+        coverage,
+        docket=docket,
+        matter=matter,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_inactive_lifecycle",
+                "message": "Lifecycle-neutralized coverage cannot be reassigned.",
+            },
+        )
+    _assert_operational_coverage_deadline(deadline)
+    if not _coverage_child_is_operational(
+        coverage,
+        docket=docket,
+        deadline=deadline,
+        matter=matter,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_inactive_lifecycle",
+                "message": "Lifecycle-neutralized coverage cannot be reassigned.",
+            },
+        )
     if coverage.responsible_membership_id != payload.expected_responsible_membership_id:
         raise HTTPException(
             status_code=409,
@@ -1213,36 +1369,24 @@ def bulk_reassign_ip_deadline_coverages(
     if source is None:
         raise HTTPException(status_code=404, detail="Source membership not found.")
     replacement = _membership_or_404(session, context, payload.to_membership_id)
-    rows = list(
-        session.scalars(
-            select(IpDeadlineCoverage)
-            .where(
-                IpDeadlineCoverage.company_id == context.company.id,
-                or_(
-                    IpDeadlineCoverage.responsible_membership_id == source.id,
-                    IpDeadlineCoverage.backup_membership_id == source.id,
-                ),
-            )
-            .order_by(IpDeadlineCoverage.id)
-            .with_for_update()
-        ).all()
+    # Matter lifecycle is authoritative. Lock every affected parent before its
+    # docket and coverage children, then re-read all three levels from the
+    # database. This matches disposal's lock order and prevents a stale ORM row
+    # from being reassigned after disposal has neutralized it.
+    rows, affected_dockets = _lock_operational_coverages_for_member(
+        session,
+        context=context,
+        membership_id=source.id,
     )
     _assert_distinct_backup_replacement(
         rows,
         source_membership_id=source.id,
         replacement_membership_id=replacement.id,
     )
-    affected_dockets = list(
-        session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.id.in_({row.docket_id for row in rows} or {""}),
-                IpDocketRecord.company_id == context.company.id,
-            )
-        ).all()
-    )
     _assert_replacement_can_cover(
         session, context=context, replacement=replacement, dockets=affected_dockets
     )
+    affected_dockets_by_id = {docket.id: docket for docket in affected_dockets}
     escalation = _resolve_escalation(
         session,
         context,
@@ -1320,7 +1464,7 @@ def bulk_reassign_ip_deadline_coverages(
                         sync_status=CalendarEventSyncStatus.PENDING,
                     )
                 )
-        docket = session.get(IpDocketRecord, row.docket_id)
+        docket = affected_dockets_by_id.get(row.docket_id)
         record_from_context(
             session,
             context,
@@ -1510,7 +1654,12 @@ def add_ip_related_right_obligation(
     docket_id: str,
     payload: IpRelatedRightObligationCreateRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+    )
     _membership_or_404(session, context, payload.owner_membership_id)
     if payload.title_interest_id:
         interest = session.scalar(
@@ -1523,11 +1672,22 @@ def add_ip_related_right_obligation(
         if interest is None:
             raise HTTPException(status_code=404, detail="Title interest not found.")
     if payload.matter_deadline_id:
-        _deadline_for_docket(
+        deadline = _lock_docket_deadline(
             session,
             docket=docket,
             deadline_id=payload.matter_deadline_id,
         )
+        if not _deadline_is_operational(deadline):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_obligation_deadline_inactive",
+                    "message": (
+                        "Completed, cancelled, or neutralized deadlines cannot carry "
+                        "an operational obligation."
+                    ),
+                },
+            )
     row = IpRelatedRightObligation(
         company_id=context.company.id,
         docket_id=docket.id,
@@ -2279,6 +2439,50 @@ def ip_daily_docket(
         listing=list_ip_dockets(session, context=context),
         filters=applied_filters,
     )
+    listed_docket_ids = {docket.id for docket in listing.dockets}
+    operational_coverage_ids = set(
+        session.scalars(
+            select(IpDeadlineCoverage.id)
+            .join(
+                IpDocketRecord,
+                and_(
+                    IpDocketRecord.id == IpDeadlineCoverage.docket_id,
+                    IpDocketRecord.company_id == IpDeadlineCoverage.company_id,
+                ),
+            )
+            .join(
+                MatterDeadline,
+                and_(
+                    MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id,
+                    MatterDeadline.company_id == IpDeadlineCoverage.company_id,
+                ),
+            )
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                IpDeadlineCoverage.docket_id.in_(listed_docket_ids or {""}),
+                IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(_TERMINAL_DOCKET_STATUSES),
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+                or_(
+                    and_(
+                        MatterDeadline.ip_docket_id == IpDocketRecord.id,
+                        MatterDeadline.matter_id.is_(None),
+                    ),
+                    and_(
+                        IpDocketRecord.matter_id.is_not(None),
+                        MatterDeadline.matter_id == IpDocketRecord.matter_id,
+                        MatterDeadline.ip_docket_id.is_(None),
+                    ),
+                ),
+            )
+        ).all()
+    )
 
     memberships = {
         row.id: row
@@ -2310,6 +2514,11 @@ def ip_daily_docket(
 
     for docket in listing.dockets:
         for coverage in docket.deadline_coverages:
+            # SQL already verifies the exact linked deadline and its
+            # operational state. Completed/cancelled/neutralized children stay
+            # historical even if their coverage row itself remains nonterminal.
+            if coverage.id not in operational_coverage_ids:
+                continue
             owner_id = coverage.responsible_membership_id
             is_critical = coverage.matter_deadline_id in critical_matter_deadline_ids
             assigned[owner_id] = assigned.get(owner_id, 0) + 1
@@ -2507,20 +2716,211 @@ def _coverages_for_member(
     membership_id: str,
     for_update: bool = False,
 ) -> list[IpDeadlineCoverage]:
-    statement = (
-        select(IpDeadlineCoverage)
+    if for_update:
+        rows, _dockets = _lock_operational_coverages_for_member(
+            session,
+            context=context,
+            membership_id=membership_id,
+        )
+        return rows
+
+    # A preview is an actionable surface too. Filter the parent and deadline
+    # lifecycle in SQL so a legacy non-terminal coverage row under a disposed
+    # parent cannot appear transferable.
+    return list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .join(
+                IpDocketRecord,
+                and_(
+                    IpDocketRecord.id == IpDeadlineCoverage.docket_id,
+                    IpDocketRecord.company_id == IpDeadlineCoverage.company_id,
+                ),
+            )
+            .join(
+                MatterDeadline,
+                and_(
+                    MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id,
+                    MatterDeadline.company_id == IpDeadlineCoverage.company_id,
+                ),
+            )
+            .outerjoin(
+                Matter,
+                and_(
+                    Matter.id == IpDocketRecord.matter_id,
+                    Matter.company_id == IpDocketRecord.company_id,
+                ),
+            )
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                or_(
+                    IpDeadlineCoverage.responsible_membership_id == membership_id,
+                    IpDeadlineCoverage.backup_membership_id == membership_id,
+                ),
+                IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(_TERMINAL_DOCKET_STATUSES),
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.id.is_not(None),
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+                or_(
+                    and_(
+                        MatterDeadline.ip_docket_id == IpDocketRecord.id,
+                        MatterDeadline.matter_id.is_(None),
+                    ),
+                    and_(
+                        IpDocketRecord.matter_id.is_not(None),
+                        MatterDeadline.matter_id == IpDocketRecord.matter_id,
+                        MatterDeadline.ip_docket_id.is_(None),
+                    ),
+                ),
+            )
+            .order_by(IpDeadlineCoverage.id)
+        ).all()
+    )
+
+
+def _lock_operational_coverages_for_member(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership_id: str,
+) -> tuple[list[IpDeadlineCoverage], list[IpDocketRecord]]:
+    """Lock transferable coverage in parent-to-child order and revalidate it.
+
+    Candidate discovery is deliberately lock-free: it finds lifecycle parents
+    without first owning a child lock. The authoritative pass then locks sorted
+    Matter rows, sorted docket rows, sorted operational-deadline rows, and
+    finally sorted coverage rows.
+    ``populate_existing`` discards identity-map snapshots taken by previews or
+    earlier reads. Only refreshed, operational children are returned.
+    """
+
+    candidate_rows = session.execute(
+        select(
+            IpDeadlineCoverage.id,
+            IpDeadlineCoverage.docket_id,
+            IpDeadlineCoverage.matter_deadline_id,
+        )
         .where(
             IpDeadlineCoverage.company_id == context.company.id,
             or_(
                 IpDeadlineCoverage.responsible_membership_id == membership_id,
                 IpDeadlineCoverage.backup_membership_id == membership_id,
             ),
+            IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
         )
         .order_by(IpDeadlineCoverage.id)
+    ).all()
+    if not candidate_rows:
+        return [], []
+
+    candidate_ids = sorted(
+        {coverage_id for coverage_id, _docket_id, _deadline_id in candidate_rows}
     )
-    if for_update:
-        statement = statement.with_for_update()
-    return list(session.scalars(statement).all())
+    docket_ids = sorted(
+        {docket_id for _coverage_id, docket_id, _deadline_id in candidate_rows}
+    )
+    deadline_ids = sorted(
+        {deadline_id for _coverage_id, _docket_id, deadline_id in candidate_rows}
+    )
+    docket_parent_rows = session.execute(
+        select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
+            IpDocketRecord.company_id == context.company.id,
+            IpDocketRecord.id.in_(docket_ids),
+        )
+    ).all()
+    matter_ids = sorted(
+        {matter_id for _docket_id, matter_id in docket_parent_rows if matter_id is not None}
+    )
+
+    locked_matters = (
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == context.company.id,
+                    Matter.id.in_(matter_ids),
+                )
+                .order_by(Matter.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if matter_ids
+        else []
+    )
+    locked_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id.in_(docket_ids),
+            )
+            .order_by(IpDocketRecord.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    locked_deadlines = list(
+        session.scalars(
+            select(MatterDeadline)
+            .where(
+                MatterDeadline.company_id == context.company.id,
+                MatterDeadline.id.in_(deadline_ids),
+            )
+            .order_by(MatterDeadline.id)
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    locked_coverages = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                IpDeadlineCoverage.id.in_(candidate_ids),
+                or_(
+                    IpDeadlineCoverage.responsible_membership_id == membership_id,
+                    IpDeadlineCoverage.backup_membership_id == membership_id,
+                ),
+                IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    matters_by_id = {matter.id: matter for matter in locked_matters}
+    dockets_by_id = {docket.id: docket for docket in locked_dockets}
+    deadlines_by_id = {deadline.id: deadline for deadline in locked_deadlines}
+
+    operational_rows = [
+        row
+        for row in locked_coverages
+        if (docket := dockets_by_id.get(row.docket_id)) is not None
+        and _coverage_child_is_operational(
+            row,
+            docket=docket,
+            deadline=deadlines_by_id.get(row.matter_deadline_id),
+            matter=matters_by_id.get(docket.matter_id) if docket.matter_id else None,
+        )
+    ]
+    operational_docket_ids = {row.docket_id for row in operational_rows}
+    return operational_rows, [
+        docket for docket in locked_dockets if docket.id in operational_docket_ids
+    ]
 
 
 def _queue_scope(row: IpDocketQueue) -> str:
@@ -2678,6 +3078,136 @@ def delete_ip_docket_queue(
     session.commit()
 
 
+def _coverage_lifecycle_is_operational(
+    coverage: IpDeadlineCoverage,
+    *,
+    docket: IpDocketRecord,
+    matter: Matter | None,
+) -> bool:
+    """Check the durable coverage and parent lifecycle state.
+
+    Lifecycle transitions intentionally retain coverage as historical evidence.
+    Reopening a parent only makes the parent available for new work; it must not
+    revive a child neutralized by an earlier terminal transition.
+    """
+
+    if coverage.coverage_status in _TERMINAL_COVERAGE_STATUSES:
+        return False
+    if (
+        not docket.is_active
+        or docket.archived_by_matter_disposal
+        or docket.status in _TERMINAL_DOCKET_STATUSES
+    ):
+        return False
+    if docket.matter_id is not None and (matter is None or not matter_is_operational(matter)):
+        return False
+    return True
+
+
+def _coverage_child_is_operational(
+    coverage: IpDeadlineCoverage,
+    *,
+    docket: IpDocketRecord,
+    deadline: MatterDeadline | None,
+    matter: Matter | None,
+) -> bool:
+    """Fail closed for every read/write that presents coverage as actionable."""
+
+    if not _coverage_lifecycle_is_operational(
+        coverage,
+        docket=docket,
+        matter=matter,
+    ):
+        return False
+    if deadline is None or deadline.id != coverage.matter_deadline_id:
+        return False
+    if docket.matter_id:
+        if deadline.matter_id != docket.matter_id or deadline.ip_docket_id is not None:
+            return False
+    elif deadline.ip_docket_id != docket.id or deadline.matter_id is not None:
+        return False
+    return _deadline_is_operational(deadline)
+
+
+def _coverage_action_statement(session: Session, *, context: SessionContext):
+    """Base query for bounded, access-scoped personal coverage queues.
+
+    Visibility and lifecycle predicates live in SQL so a caller with years of
+    history cannot make Today load every coverage row and issue one access query
+    per docket before the response cap is applied.
+    """
+
+    return (
+        select(
+            IpDeadlineCoverage,
+            IpDocketRecord,
+            MatterDeadline,
+            IpDeadline.is_critical.label("is_critical"),
+        )
+        .select_from(IpDeadlineCoverage)
+        .join(
+            IpDocketRecord,
+            and_(
+                IpDocketRecord.id == IpDeadlineCoverage.docket_id,
+                IpDocketRecord.company_id == IpDeadlineCoverage.company_id,
+            ),
+        )
+        .join(
+            MatterDeadline,
+            and_(
+                MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id,
+                MatterDeadline.company_id == IpDeadlineCoverage.company_id,
+            ),
+        )
+        .outerjoin(
+            Matter,
+            and_(
+                Matter.id == IpDocketRecord.matter_id,
+                Matter.company_id == IpDocketRecord.company_id,
+            ),
+        )
+        .outerjoin(
+            IpDeadline,
+            and_(
+                IpDeadline.matter_deadline_id == MatterDeadline.id,
+                IpDeadline.company_id == IpDeadlineCoverage.company_id,
+            ),
+        )
+        .where(
+            IpDeadlineCoverage.company_id == context.company.id,
+            IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            IpDocketRecord.status.notin_(_TERMINAL_DOCKET_STATUSES),
+            MatterDeadline.status.in_(
+                (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+            ),
+            MatterDeadline.neutralized_at.is_(None),
+            MatterDeadline.cancelled_by_matter_disposal.is_(False),
+            or_(
+                IpDocketRecord.matter_id.is_(None),
+                and_(
+                    Matter.id.is_not(None),
+                    Matter.is_active.is_(True),
+                    Matter.status.notin_(("disposed", "closed")),
+                ),
+            ),
+            or_(
+                and_(
+                    MatterDeadline.ip_docket_id == IpDocketRecord.id,
+                    MatterDeadline.matter_id.is_(None),
+                ),
+                and_(
+                    IpDocketRecord.matter_id.is_not(None),
+                    MatterDeadline.matter_id == IpDocketRecord.matter_id,
+                    MatterDeadline.ip_docket_id.is_(None),
+                ),
+            ),
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+
+
 def bulk_acknowledge_ip_coverage(
     session: Session,
     *,
@@ -2701,6 +3231,71 @@ def bulk_acknowledge_ip_coverage(
     """
 
     requested = list(dict.fromkeys(payload.coverage_ids))
+
+    # Discover ids only, then acquire the shared lifecycle lock order:
+    # Matter -> docket -> MatterDeadline -> coverage. A parent disposal or a
+    # deadline completion therefore either wins and is observed on the refreshed
+    # pass, or waits until this acknowledgement commits.
+    candidate_refs = session.execute(
+        select(
+            IpDeadlineCoverage.id,
+            IpDeadlineCoverage.docket_id,
+            IpDeadlineCoverage.matter_deadline_id,
+        ).where(
+            IpDeadlineCoverage.id.in_(requested),
+            IpDeadlineCoverage.company_id == context.company.id,
+        )
+    ).all()
+    candidate_docket_ids = {row.docket_id for row in candidate_refs}
+    candidate_deadline_ids = {row.matter_deadline_id for row in candidate_refs}
+    discovered_dockets = session.execute(
+        select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
+            IpDocketRecord.id.in_(candidate_docket_ids or {""}),
+            IpDocketRecord.company_id == context.company.id,
+        )
+    ).all()
+    matter_ids = {
+        matter_id for _docket_id, matter_id in discovered_dockets if matter_id
+    }
+    matters = {
+        matter.id: matter
+        for matter in session.scalars(
+            select(Matter)
+            .where(
+                Matter.id.in_(matter_ids or {""}),
+                Matter.company_id == context.company.id,
+            )
+            .order_by(Matter.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+    }
+    dockets = {
+        docket.id: docket
+        for docket in session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.id.in_(candidate_docket_ids or {""}),
+                IpDocketRecord.company_id == context.company.id,
+            )
+            .order_by(IpDocketRecord.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+    }
+    deadlines = {
+        deadline.id: deadline
+        for deadline in session.scalars(
+            select(MatterDeadline)
+            .where(
+                MatterDeadline.id.in_(candidate_deadline_ids or {""}),
+                MatterDeadline.company_id == context.company.id,
+            )
+            .order_by(MatterDeadline.id)
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
+        ).all()
+    }
     rows = {
         row.id: row
         for row in session.scalars(
@@ -2709,18 +3304,20 @@ def bulk_acknowledge_ip_coverage(
                 IpDeadlineCoverage.id.in_(requested),
                 IpDeadlineCoverage.company_id == context.company.id,
             )
+            .order_by(IpDeadlineCoverage.id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
     }
-    dockets = {
-        docket.id: docket
-        for docket in session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.id.in_({row.docket_id for row in rows.values()} or {""}),
+    visible_docket_ids = set(
+        session.scalars(
+            select(IpDocketRecord.id).where(
+                IpDocketRecord.id.in_(candidate_docket_ids or {""}),
                 IpDocketRecord.company_id == context.company.id,
+                visible_ip_dockets_filter(session, context=context),
             )
         ).all()
-    }
+    )
 
     now = _now()
     outcomes: list[IpCoverageAcknowledgeOutcome] = []
@@ -2732,13 +3329,28 @@ def bulk_acknowledge_ip_coverage(
         if (
             row is None
             or docket is None
-            or not can_access_ip_docket(session, context=context, docket=docket)
+            or docket.id not in visible_docket_ids
         ):
             # A record the caller cannot open is reported as absent, never as a
             # record they may not touch — that would confirm it exists.
             outcomes.append(
                 IpCoverageAcknowledgeOutcome(coverage_id=coverage_id, acknowledged=False,
                                              reason="not_found")
+            )
+            continue
+        if not _coverage_child_is_operational(
+            row,
+            docket=docket,
+            deadline=deadlines.get(row.matter_deadline_id),
+            matter=matters.get(docket.matter_id) if docket.matter_id else None,
+        ):
+            outcomes.append(
+                IpCoverageAcknowledgeOutcome(
+                    coverage_id=coverage_id,
+                    acknowledged=False,
+                    reason="inactive_lifecycle",
+                    reassignment_version=row.reassignment_version,
+                )
             )
             continue
         if row.responsible_membership_id != context.membership.id:
@@ -2824,6 +3436,8 @@ def list_ip_assigned_coverage(
     *,
     context: SessionContext,
     unacknowledged_only: bool = False,
+    actionable_only: bool = False,
+    limit: int | None = None,
 ) -> IpAssignedCoverageListResponse:
     """The caller's own deadlines (CAL-OPS-09).
 
@@ -2832,59 +3446,31 @@ def list_ip_assigned_coverage(
     records the caller cannot open are excluded, exactly as the counts are.
     """
 
-    rows = list(
-        session.scalars(
-            select(IpDeadlineCoverage)
-            .where(
-                IpDeadlineCoverage.company_id == context.company.id,
-                IpDeadlineCoverage.responsible_membership_id == context.membership.id,
-            )
-            .order_by(IpDeadlineCoverage.id)
-        ).all()
+    statement = _coverage_action_statement(session, context=context).where(
+        IpDeadlineCoverage.responsible_membership_id == context.membership.id,
     )
-    if not rows:
-        return IpAssignedCoverageListResponse()
-
-    dockets = {
-        docket.id: docket
-        for docket in session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.id.in_({row.docket_id for row in rows}),
-                IpDocketRecord.company_id == context.company.id,
+    if unacknowledged_only:
+        statement = statement.where(
+            or_(
+                IpDeadlineCoverage.coverage_status != "accepted",
+                IpDeadlineCoverage.accepted_at.is_(None),
             )
-        ).all()
-    }
-    deadlines = {
-        deadline.id: deadline
-        for deadline in session.scalars(
-            select(MatterDeadline).where(
-                MatterDeadline.id.in_({row.matter_deadline_id for row in rows} or {""})
-            )
-        ).all()
-    }
-    critical_ids = {
-        value
-        for value in session.scalars(
-            select(IpDeadline.matter_deadline_id).where(
-                IpDeadline.company_id == context.company.id,
-                IpDeadline.is_critical.is_(True),
-                IpDeadline.matter_deadline_id.is_not(None),
-            )
-        ).all()
-        if value
-    }
+        )
+    if actionable_only:
+        statement = statement.where(IpDeadlineCoverage.replacement_decision != "pending")
+    statement = statement.order_by(
+        MatterDeadline.due_on,
+        IpDocketRecord.title,
+        IpDeadlineCoverage.id,
+    )
+    if limit is not None:
+        statement = statement.limit(max(0, limit))
 
     today = _now().date()
     records: list[IpAssignedCoverageRecord] = []
-    for row in rows:
-        docket = dockets.get(row.docket_id)
-        if docket is None or not can_access_ip_docket(session, context=context, docket=docket):
-            continue
+    for row, docket, deadline, is_critical in session.execute(statement).all():
         acknowledged = row.coverage_status == "accepted" and row.accepted_at is not None
-        if unacknowledged_only and acknowledged:
-            continue
-        deadline = deadlines.get(row.matter_deadline_id)
-        due_on = getattr(deadline, "due_on", None)
+        due_on = deadline.due_on
         records.append(
             IpAssignedCoverageRecord(
                 coverage_id=row.id,
@@ -2894,7 +3480,7 @@ def list_ip_assigned_coverage(
                 deadline_title=getattr(deadline, "title", None),
                 due_on=due_on,
                 days_until_due=(due_on - today).days if due_on else None,
-                critical=row.matter_deadline_id in critical_ids,
+                critical=bool(is_critical),
                 acknowledged=acknowledged,
                 coverage_status=row.coverage_status,
                 transfer_pending=row.replacement_decision == "pending",
@@ -2908,6 +3494,7 @@ def list_ip_coverage_transfers_awaiting(
     session: Session,
     *,
     context: SessionContext,
+    limit: int | None = None,
 ) -> IpCoverageTransfersAwaitingResponse:
     """Coverage transfers waiting on the calling member (CAL-OPS-08).
 
@@ -2917,55 +3504,42 @@ def list_ip_coverage_transfers_awaiting(
     the reader may no longer open must not surface here.
     """
 
-    rows = list(
-        session.scalars(
-            select(IpDeadlineCoverage)
-            .where(
-                IpDeadlineCoverage.company_id == context.company.id,
-                IpDeadlineCoverage.pending_replacement_membership_id == context.membership.id,
-                IpDeadlineCoverage.replacement_decision == "pending",
-            )
-            .order_by(IpDeadlineCoverage.id)
-        ).all()
+    statement = (
+        _coverage_action_statement(session, context=context)
+        .where(
+            IpDeadlineCoverage.pending_replacement_membership_id == context.membership.id,
+            IpDeadlineCoverage.replacement_decision == "pending",
+        )
+        .order_by(
+            MatterDeadline.due_on,
+            IpDocketRecord.title,
+            IpDeadlineCoverage.id,
+        )
     )
+    if limit is not None:
+        statement = statement.limit(max(0, limit))
+    rows = list(session.execute(statement).all())
     if not rows:
         return IpCoverageTransfersAwaitingResponse()
 
-    dockets = {
-        docket.id: docket
-        for docket in session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.id.in_({row.docket_id for row in rows}),
-                IpDocketRecord.company_id == context.company.id,
-            )
-        ).all()
+    member_ids = {
+        membership_id
+        for row, _docket, _deadline, _critical in rows
+        for membership_id in (
+            row.responsible_membership_id,
+            row.emergency_escalation_membership_id,
+        )
+        if membership_id
     }
-    deadlines = {
-        deadline.id: deadline
-        for deadline in session.scalars(
-            select(MatterDeadline).where(
-                MatterDeadline.id.in_({row.matter_deadline_id for row in rows} or {""})
-            )
-        ).all()
-    }
-    critical_ids = {
-        value
-        for value in session.scalars(
-            select(IpDeadline.matter_deadline_id).where(
-                IpDeadline.company_id == context.company.id,
-                IpDeadline.is_critical.is_(True),
-                IpDeadline.matter_deadline_id.is_not(None),
-            )
-        ).all()
-        if value
-    }
-
     members = {
         member.id: member
         for member in session.scalars(
             select(CompanyMembership)
             .options(joinedload(CompanyMembership.user))
-            .where(CompanyMembership.company_id == context.company.id)
+            .where(
+                CompanyMembership.company_id == context.company.id,
+                CompanyMembership.id.in_(member_ids or {""}),
+            )
         ).all()
     }
 
@@ -2979,12 +3553,8 @@ def list_ip_coverage_transfers_awaiting(
 
     today = _now().date()
     transfers: list[IpCoverageTransferAwaiting] = []
-    for row in rows:
-        docket = dockets.get(row.docket_id)
-        if docket is None or not can_access_ip_docket(session, context=context, docket=docket):
-            continue
-        deadline = deadlines.get(row.matter_deadline_id)
-        due_on = getattr(deadline, "due_on", None)
+    for row, docket, deadline, is_critical in rows:
+        due_on = deadline.due_on
         transfers.append(
             IpCoverageTransferAwaiting(
                 coverage_id=row.id,
@@ -2994,7 +3564,7 @@ def list_ip_coverage_transfers_awaiting(
                 deadline_title=getattr(deadline, "title", None),
                 due_on=due_on,
                 days_until_due=(due_on - today).days if due_on else None,
-                critical=row.matter_deadline_id in critical_ids,
+                critical=bool(is_critical),
                 # The work has already moved when the responsible member is the
                 # reader; that only happens on an immediate transfer.
                 transfer_kind=(
@@ -3091,8 +3661,10 @@ def propose_ip_coverage_reassignment(
     _membership_or_404(session, context, payload.from_membership_id)
     replacement = _membership_or_404(session, context, payload.to_membership_id)
 
-    rows = _coverages_for_member(
-        session, context=context, membership_id=payload.from_membership_id, for_update=True
+    rows, dockets = _lock_operational_coverages_for_member(
+        session,
+        context=context,
+        membership_id=payload.from_membership_id,
     )
     # UJ-57-EXC-04: the preview must still describe reality.
     if (
@@ -3107,14 +3679,6 @@ def propose_ip_coverage_reassignment(
             },
         )
 
-    dockets = list(
-        session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.id.in_({row.docket_id for row in rows} or {""}),
-                IpDocketRecord.company_id == context.company.id,
-            )
-        ).all()
-    )
     _assert_replacement_can_cover(
         session, context=context, replacement=replacement, dockets=dockets
     )
@@ -3224,17 +3788,66 @@ def decide_ip_coverage_replacement(
 ) -> IpDocketRecordResponse:
     """UJ-57-NORMAL / UJ-57-EXC-03 — the named replacement accepts or rejects."""
 
+    candidate = session.execute(
+        select(
+            IpDeadlineCoverage.docket_id,
+            IpDeadlineCoverage.matter_deadline_id,
+        ).where(
+            IpDeadlineCoverage.id == coverage_id,
+            IpDeadlineCoverage.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    # Match lifecycle's lock order: the parent is authoritative and must win
+    # before a child decision can mutate responsibility or status.
+    docket = _docket_or_404(
+        session, context=context, docket_id=candidate.docket_id, for_update=True
+    )
+    deadline = _lock_docket_deadline(
+        session,
+        docket=docket,
+        deadline_id=candidate.matter_deadline_id,
+    )
     row = session.scalar(
         select(IpDeadlineCoverage)
         .where(
             IpDeadlineCoverage.id == coverage_id,
+            IpDeadlineCoverage.docket_id == docket.id,
             IpDeadlineCoverage.company_id == context.company.id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Deadline coverage not found.")
-    docket = _docket_or_404(session, context=context, docket_id=row.docket_id, for_update=True)
+    matter = session.get(Matter, docket.matter_id) if docket.matter_id else None
+    if not _coverage_lifecycle_is_operational(
+        row,
+        docket=docket,
+        matter=matter,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_inactive_lifecycle",
+                "message": "Lifecycle-neutralized coverage cannot accept a decision.",
+            },
+        )
+    _assert_operational_coverage_deadline(deadline)
+    if not _coverage_child_is_operational(
+        row,
+        docket=docket,
+        deadline=deadline,
+        matter=matter,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_inactive_lifecycle",
+                "message": "Lifecycle-neutralized coverage cannot accept a decision.",
+            },
+        )
     if row.replacement_decision != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

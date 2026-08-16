@@ -2103,6 +2103,23 @@ def _neutralize_disposed_matter_operations(
     matter: Matter,
 ) -> dict[str, int]:
     now = utcnow()
+    # Matter is already locked by the lifecycle command. Acquire every linked
+    # IP child in the shared hierarchy before any operational deadline, then
+    # lock coverage only after all deadlines below. This keeps disposal aligned
+    # with coverage writes: Matter -> docket -> MatterDeadline -> coverage.
+    ip_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.matter_id == matter.id,
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+            )
+            .order_by(IpDocketRecord.id)
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        )
+    )
     open_hearings = list(
         session.scalars(
             select(MatterHearing).where(
@@ -2115,19 +2132,24 @@ def _neutralize_disposed_matter_operations(
         hearing.status = MatterHearingStatus.CANCELLED.value
         hearing.cancelled_by_matter_disposal = True
 
-    open_deadlines = list(
+    locked_deadlines = list(
         session.scalars(
-            select(MatterDeadline).where(
-                MatterDeadline.matter_id == matter.id,
-                MatterDeadline.status.notin_(
-                    (
-                        MatterDeadlineStatus.DONE.value,
-                        MatterDeadlineStatus.CANCELLED.value,
-                    )
-                ),
-            )
+            select(MatterDeadline)
+            .where(MatterDeadline.matter_id == matter.id)
+            .order_by(MatterDeadline.id)
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
         )
     )
+    open_deadlines = [
+        deadline
+        for deadline in locked_deadlines
+        if deadline.status
+        not in (
+            MatterDeadlineStatus.DONE.value,
+            MatterDeadlineStatus.CANCELLED.value,
+        )
+    ]
     for deadline in open_deadlines:
         deadline.status = MatterDeadlineStatus.CANCELLED.value
         deadline.completed_at = now
@@ -2243,15 +2265,6 @@ def _neutralize_disposed_matter_operations(
         suggestion.decided_by_membership_id = context.membership.id
         suggestion.decided_at = now
 
-    ip_dockets = list(
-        session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.company_id == context.company.id,
-                IpDocketRecord.matter_id == matter.id,
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-            ).with_for_update()
-        )
-    )
     neutralized_ip_coverages = 0
     neutralized_ip_obligations = 0
     for docket in ip_dockets:
@@ -2299,13 +2312,17 @@ def _neutralize_disposed_matter_operations(
 
         coverages = list(
             session.scalars(
-                select(IpDeadlineCoverage).where(
+                select(IpDeadlineCoverage)
+                .where(
                     IpDeadlineCoverage.company_id == docket.company_id,
                     IpDeadlineCoverage.docket_id == docket.id,
                     IpDeadlineCoverage.coverage_status.notin_(
                         ("inactive_lifecycle", "completed")
                     ),
                 )
+                .order_by(IpDeadlineCoverage.id)
+                .with_for_update(of=IpDeadlineCoverage)
+                .execution_options(populate_existing=True)
             )
         )
         for coverage in coverages:
