@@ -6,10 +6,10 @@
 **Primary customer:** Indian IP and full-service law firms  
 **Initial product focus:** Indian trademark portfolio, prosecution, opposition, research, and docketing  
 **Program scope:** Trust recovery, legal-data provenance, notifications, court tracking, IP docketing, source-grounded AI, and broader IP expansion  
-**Last updated:** 1 August 2026  
-**Review status:** Six review passes completed and corrections applied on 1 August 2026  
+**Last updated:** 15 August 2026
+**Review status:** Six scope/architecture review passes plus continuous-execution gate review
 
-This PRD converts the 16-item law-firm feedback set into an implementation-ready program. Passes 5 and 6 reassessed it against the current repository at source commit `cadb46d`, removed parallel ownership, then corrected subtler misses around `CompanyNotice`, `TrackedCase`, Matter timeline/next-hearing provenance, billing evidence, the absence of a true generic import owner, and premature M2 migrations. It supersedes no deployed contract and does not authorize production data mutation, scraping, provider enrollment, legal-content publication, or autonomous filing. Each milestone must be implemented, tested, released, and accepted independently.
+This PRD converts the 16-item law-firm feedback set into an implementation-ready program. Passes 5 and 6 reassessed it against the current repository at source commit `cadb46d`, removed parallel ownership, then corrected subtler misses around `CompanyNotice`, `TrackedCase`, Matter timeline/next-hearing provenance, billing evidence, the absence of a true generic import owner, and premature M2 migrations. It supersedes no deployed contract and does not authorize production data mutation, scraping, provider enrollment, legal-content publication, or autonomous filing. Milestone exit criteria remain independently traceable, but repository-controlled implementation runs as one dependency-scheduled program and compatible milestones may share an integration PR and release train.
 
 ## 1. Executive summary
 
@@ -257,7 +257,7 @@ Client portal permissions are explicit record grants. Possession of a client ass
 | 13. Uploaded-case source links do not open | TRUST-RSCH-01 through 14 | UJ-17 | M1 |
 | 14. Keyword research returns no results | TRUST-RSCH-05 through 14 | UJ-16 | M1/M6 |
 | 15. Judge listings lack mapped judgments | JUDGE-01 through 10 | UJ-20 | M1/M6 |
-| 16. Complete IP Law Firm AI | Entire program; IP-SCOPE, AI-GUIDE, AI-REV, IP-DRAFT, SEARCH-ACL | All journeys and domain child PRDs | M1-M10 |
+| 16. Complete IP Law Firm AI | Entire program; IP-SCOPE, AI-GUIDE, AI-REV, IP-DRAFT, SEARCH-ACL | All journeys and domain child PRDs | M0-M10 |
 
 ### 9.1 Review-added control traceability
 
@@ -571,7 +571,7 @@ Across all type-specific workflows:
 - `SRC-04`: Source adapters expose a common search/document/metadata/health contract and capability flags.
 - `SRC-05`: Each imported source document has a stable provider document ID, canonical citation/identifier where available, and immutable source-record identity.
 - `SRC-06`: Provider attribution appears on search results, source views, saved reports, exports, and AI citations wherever provider terms require it.
-- `SRC-07`: Provider licence, permitted uses, retention, redistribution, and expiry are recorded as platform configuration and release gates.
+- `SRC-07`: Provider licence, permitted uses, retention, redistribution, and expiry are recorded as platform configuration and gate live activation and supported-capability claims. Missing approval keeps the adapter default-off but does not block an integrated fail-closed release train.
 - `SRC-08`: Provider outage or quota exhaustion degrades to cached metadata/manual workflow with freshness warning; it never fabricates live coverage.
 - `SRC-09`: Source health distinguishes URL failure, auth failure, removed document, changed content, provider outage, and unsupported access mode.
 - `SRC-10`: User-supplied URLs are normalized and safety checked before storage; redirects are revalidated before browser or backend access.
@@ -939,7 +939,7 @@ Across all type-specific workflows:
 
 ### 13.22 Full-IP scope governance (`IP-SCOPE`)
 
-The shared foundation is necessary but not sufficient for a non-trademark practice. Each domain below requires a versioned specialist source/rule/form pack, data dictionary, lifecycle/transition model, legal fixtures, user-journey exceptions, migration map, provider boundary, and signed child PRD before implementation or sales representation as supported.
+The shared foundation is necessary but not sufficient for a non-trademark practice. Each domain below requires a versioned specialist source/rule/form pack, data dictionary, lifecycle/transition model, legal fixtures, user-journey exceptions, migration map, provider boundary, and signed child PRD before authoritative automation, customer activation, or sales representation as supported. Repository implementation may proceed from a versioned draft behind fail-closed unavailable/intake-only capability states.
 
 | Domain | Minimum domain capability that the child PRD must resolve |
 |---|---|
@@ -963,7 +963,7 @@ The shared foundation is necessary but not sufficient for a non-trademark practi
 - `IP-SCOPE-07`: Cross-right families and ownership chains preserve independent legal identities, territories, effective dates, encumbrances, and sources while enabling a consolidated client view.
 - `IP-SCOPE-08`: Domain-specific confidentiality applies: trade-secret and unpublished patent/invention content is excluded from general portfolio search, AI, exports, and portal views unless explicitly granted.
 - `IP-SCOPE-09`: Sales, UI, API, reporting, and packaging label each domain as unavailable, intake-only, beta, or GA from server-side capability evidence; roadmap rows cannot be marketed as working features.
-- `IP-SCOPE-10`: M8-M10 cannot exit on schema presence. The approved child PRD, journeys, legal/provider evidence, migration, security, performance, support, and pilot acceptance are release-blocking.
+- `IP-SCOPE-10`: M8-M10 cannot exit on schema presence. The approved child PRD, journeys, legal/provider evidence, migration, security, performance, support, and pilot acceptance gate the affected domain's authoritative activation, beta/GA claim, and milestone exit; they do not block deployment of its fail-closed repository implementation.
 
 ### 13.23 Security, privileged actions, and access assurance (`SEC-GOV`)
 
@@ -982,13 +982,13 @@ The shared foundation is necessary but not sufficient for a non-trademark practi
 - `SEC-GOV-13`: Per-user/company/provider rate, concurrency, quota and cost limits protect search, AI, import, export, refresh, replay, notification, source streaming and webhook paths; limit state cannot leak another tenant's use.
 - `SEC-GOV-14`: Audit records use stable action schema, request/operation ID, actor snapshot, company, target, result, reason and safe metadata. Integrity monitoring detects missing sequences/illegal mutation; ordinary application code has no audit-update/delete path.
 - `SEC-GOV-15`: Security alerts cover cross-tenant denial anomalies, repeated unauthorized source/document access, break-glass, bulk export/purge, permission changes, webhook forgery/replay, secret failures and abnormal provider/download volume with safe tenant notification policy.
-- `SEC-GOV-16`: Each milestone updates the threat model and abuse-case tests for its new data flows; security review cannot be deferred to M7 for M2/M3 privileged/client data.
+- `SEC-GOV-16`: Each integrated release updates one consolidated threat model and abuse-case suite with traceable coverage for every affected milestone/data flow; security review must precede activation of privileged or client-data behavior and cannot be deferred to M7.
 
 ### 13.24 Retention, legal hold, export, purge, and offboarding (`DATA-GOV`)
 
 - `DATA-GOV-01`: Maintain a versioned data-class registry covering each SQL table/column class, object prefix/version, search/vector index, cache, queue/outbox/dead letter, log/trace/metric, export, provider-held object and backup.
 - `DATA-GOV-02`: Every class has purpose/legal-policy basis, sensitivity, default/tenant-configurable retention bounds, disposition, hold behavior, source/licence limits, region/subprocessor and owner. `Retain indefinitely` requires explicit approval, not omission.
-- `DATA-GOV-03`: New migrations, object stores, indexes, providers or telemetry labels fail Definition of Ready without a data-map and retention/disposition handler update.
+- `DATA-GOV-03`: New migrations, object stores, indexes, providers, or telemetry labels cannot merge or activate without a data-map and retention/disposition handler update. The update may be implemented in the same integration workstream.
 - `DATA-GOV-04`: Legal hold can target company/client/record/custodian/data class/date range, preserves covered current and future data, records issue/review/release authority and blocks conflicting purge/expiry. Ordinary users see only a safe deletion-blocked state.
 - `DATA-GOV-05`: Hold creation/release and retention-policy activation require step-up and configured dual approval; release never deletes immediately without a new dry-run and waiting/approval policy.
 - `DATA-GOV-06`: Tenant/client/record export is a resumable dry-run then execute operation with point-in-time scope, permission/hold/licence checks, explicit inclusions/exclusions, row/object/index counts, checksums, encrypted expiring artifact, signed manifest and audited downloads.
@@ -1039,7 +1039,7 @@ The shared foundation is necessary but not sufficient for a non-trademark practi
 
 ### 13.27 Architecture and contract governance (`ARCH-OPS`)
 
-- `ARCH-OPS-01`: Before M2-C, approve an ADR naming one durable async/workflow ownership model for outbox consumers, long operations, retries, leases and cancellation using the repository's approved Cloud Run/Temporal capabilities; no third queue/workflow framework.
+- `ARCH-OPS-01`: Record an ADR naming one durable async/workflow ownership model before activating M2-C behavior. Implementation may proceed against the existing canonical Cloud Run/Temporal owner while review is pending; no third queue/workflow framework or competing writer is permitted.
 - `ARCH-OPS-02`: Existing `AuditEvent`, `NotificationDeliveryIntent`, provider-operation, calendar-sync, inbound-email and communication contracts are extended through explicit adapters/migrations; parallel tables are allowed only for typed IP state they cannot represent and must link to the original evidence.
 - `ARCH-OPS-03`: OpenAPI is the backend contract. Changed schemas regenerate/check `apps/web/lib/api/openapi-types.ts`; handwritten endpoint wrappers and Zod schemas have contract tests and CI fails on unexplained drift.
 - `ARCH-OPS-04`: Publish a stable IP audit-action catalogue and domain-event catalogue with versioned payload schemas, owners, confidentiality classification, idempotency key, consumers and retention. Audit events are evidence; domain events drive projections; neither substitutes for the other.
@@ -1051,7 +1051,7 @@ The shared foundation is necessary but not sufficient for a non-trademark practi
 - `ARCH-OPS-10`: Migration compatibility is tested with old and new application revisions concurrently against expanded schema, worker fencing and rollback flags. Contract migration waits until all serving/job revisions are proven off the old path.
 - `ARCH-OPS-11`: Query plans and bounded eager loading are verified for portfolio, docket, access-filtered search, timeline, report and audit paths at representative tenant volumes; no per-row provider calls or unbounded ORM relationship loading.
 - `ARCH-OPS-12`: Server capability, billing entitlement and rollout safety flag are independently observable with reason/owner/expiry. Frontend visibility is derived from the server and never treated as authorization.
-- `ARCH-OPS-13`: Section 11.2 is the mandatory ownership registry. Every epic names its existing owner, decision (`NEW`, `EXTEND`, `LINK`, or `REPLACE`), canonical writer, compatibility adapter, migration phase, and retirement gate before schema/API work begins.
+- `ARCH-OPS-13`: Section 11.2 is the mandatory ownership registry. Before an ownership area is finalized or merged, each affected epic names its existing owner, decision (`NEW`, `EXTEND`, `LINK`, or `REPLACE`), canonical writer, compatibility adapter, migration phase, and retirement gate. Cache this decision across the run; an unresolved owner blocks only changes to that area.
 - `ARCH-OPS-14`: A proposed table/service/page/job with overlapping lifecycle, status, actor, target, or evidence fields requires an ADR with field-by-field gap analysis. Convenience, naming purity, or avoiding an existing refactor is not sufficient justification.
 - `ARCH-OPS-15`: Matter and IP work use one task service, one hearing service/calendar row, and one operational deadline projection. Existing physical table names may remain, but duplicate mutable state or bidirectional synchronization is prohibited.
 - `ARCH-OPS-16`: Intake and firm-conflict review extend existing CaseOps queues/services to IP targets. Trademark clearance remains a distinct legal search product and cannot reuse the conflict label or resolution state.
@@ -1062,7 +1062,7 @@ The shared foundation is necessary but not sufficient for a non-trademark practi
 - `ARCH-OPS-21`: `CompanyNotice` and `/app/notices` own accepted legal notices/reply workflow. IP adds target/evidence links and access/deadline delegation only; the inbox is triage and cannot become a second notice register.
 - `ARCH-OPS-22`: `TrackedCase` and Matter court-sync records remain the court/CNR owner. IP registry snapshots are separate office-register evidence but reuse existing connector readiness, support matrix, provider cost, provider operations, replay and notification controls; neither side copies the other's source records.
 - `ARCH-OPS-23`: Current Matter and Employee import jobs are domain-specific, not a generic owner. New IP import uses neutral `bulk_import_jobs` plus typed `ip_import_rows`; legacy jobs are exposed by adapters and migrated only under an explicit `REPLACE` ADR with one-writer reconciliation.
-- `ARCH-OPS-24`: Shared-owner expansion is just in time: task/hearing/deadline/access foundations may precede M3, intake/conflict/notice/import/report changes ship with M3, drafting with M4, portal/provider registry operations with M5, assistant/private retrieval with M6, and access-review/emergency/purge automation with M7 unless an earlier release gate proves a dependency. M2 cannot claim completion by prebuilding unused nullable targets.
+- `ARCH-OPS-24`: Shared-owner expansion follows real consumer dependencies. Task/hearing/deadline/access, intake/conflict/notice/import/report, drafting, portal/provider, assistant/private retrieval, and access-review/emergency/purge work may be implemented earlier in the continuous program when ownership is clear, but stays default-off until its consuming behavior and direct release gates are ready. M2 cannot claim completion merely from unused nullable targets.
 - `ARCH-OPS-25`: `ip_docket_events` owns IP legal history; `MatterActivity`, Matter court evidence, `AuditEvent`, and domain outbox events keep their existing distinct purposes. Timeline views compose references under access policy and do not copy one event into several mutable histories.
 - `ARCH-OPS-26`: Every cost has one amount/state owner. `ip_cost_evidence_links` are immutable references only; a billable cost requires an approved billing Matter and unique existing invoice-line/spend linkage, while filing payment, client collection and registry acceptance remain separate facts.
 
@@ -2101,6 +2101,8 @@ Metrics are product-health signals, not employee performance or legal-outcome sc
 
 ### 23.1 Schema migration sequence
 
+This is the required production migration/activation order, not a prohibition on parallel code, test, fixture, or documentation development against stable expand-phase contracts.
+
 1. **M2-A, ownership/capability/anchors:** approve the Section 11.2 owner/ADR ledger; add IP capability/entitlement gates, `ip_docket_records`, type-specific parent skeletons, company composite uniqueness/FKs, and lifecycle constraints. No overlapping feature table enters this slice.
 2. **M2-B, legal evidence and control:** add identifiers, parties/roles, relationships, IP docket events, legal deadline calculations, responsibility assignments, IP rule/fee/workflow versions, source links/conflicts, transition commands, audit/domain-event catalogues, state-integrity checks and shared working-calendar versions.
 3. **M2-C, shared reliability:** add `api_idempotency_records`, `domain_outbox_events`, `domain_consumer_effects`, correlation, lease/fencing/retry contracts and mixed-revision proof; adopt them behind existing operator patterns without adding another dashboard.
@@ -2117,7 +2119,7 @@ Metrics are product-health signals, not employee performance or legal-outcome sc
 14. **M6-A, assistant/private retrieval:** add assistant sessions/turns/citations, generalize Recommendation to IP targets, and add private projection generations/tombstones only with M6 permission-scoped Q&A/review.
 15. **M7-A, assurance automation:** add access-review campaigns, emergency-access sessions and automated export/purge/offboarding execution with the GA drills and support owners that consume them.
 
-Do not combine these into one large revision. Each Alembic revision must upgrade from the previous production head, be idempotent under deployment safeguards, and include downgrade or a documented restore/roll-forward procedure where destructive downgrade is unsafe. Production deployment uses expand, backfill, verify, switch, and contract phases; application code does not require a new column before the expand migration is live.
+Do not collapse these changes into one large Alembic revision. Multiple ordered revisions may share one integration branch, PR, and coordinated release. Each revision must upgrade from the previous production head, be idempotent under deployment safeguards, and include downgrade or a documented restore/roll-forward procedure where destructive downgrade is unsafe. Production deployment uses expand, backfill, verify, switch, and contract phases; application code does not require a new column before the expand migration is live.
 
 ### 23.2 Backfill and compatibility rules
 
@@ -2137,7 +2139,7 @@ Do not combine these into one large revision. Each Alembic revision must upgrade
 
 ## 24. Concrete milestones and dates
 
-Dates below are the committed planning baseline for kickoff on 3 August 2026. They assume one dedicated five-engineer squad (one backend/technical lead, one backend/data engineer, two full-stack engineers, and one QA/SDET with platform support), one full-time IP-lawyer product owner, part-time product design/security/SRE, and timely provider/legal decisions. They include integration, migration, UAT, production proof, and remediation capacity, not only feature coding. Missed external dependencies rebaseline affected milestones rather than reducing verification.
+Dates below are planning forecasts for kickoff on 3 August 2026, not required waits or implementation gates. They assume one dedicated five-engineer squad (one backend/technical lead, one backend/data engineer, two full-stack engineers, and one QA/SDET with platform support), one full-time IP-lawyer product owner, part-time product design/security/SRE, and timely provider/legal decisions. They include integration, migration, UAT, production proof, and remediation capacity, not only feature coding. The continuous campaign follows dependency readiness; missed external dependencies rebaseline affected activation and claims rather than reducing verification or stopping independent work.
 
 | Milestone | Target | Deliverable | Exit criteria |
 |---|---|---|---|
@@ -2157,29 +2159,42 @@ Dates below are the committed planning baseline for kickoff on 3 August 2026. Th
 
 - The committed dates assume one squad. Do not present the earlier draft dates as targets.
 - To accelerate M2-M7, fund a second independent five-person squad plus a data/integration engineer, security/SRE capacity and a second trademark legal SME by 4 September 2026. Architecture, migrations, access/data governance, legal rules, provider contracts and release gates remain shared and cannot be skipped.
-- M8-M10 cannot be responsibly accelerated by adding only generalist engineers. Each simultaneous IP domain needs its own specialist legal/product owner and a stable two-to-four-person domain pod after the shared foundation; the 2032 one-squad date assumes sequential delivery. Funding independent domain pods is the only credible path to an earlier Full IP GA schedule.
-- An accelerated plan is valid only after engineering/product owners publish a new dependency-aware schedule. Parallel squads do not edit the same lifecycle/schema slices without an integration owner.
+- M8-M10 customer activation and beta/GA acceptance cannot be responsibly accelerated by adding only generalist engineers. Repository implementation may proceed in parallel behind unavailable/intake-only flags, while each simultaneously activated domain still needs its own specialist legal/product owner and stable domain pod. Funding independent domain pods is the credible path to an earlier Full IP GA claim.
+- Maintain a dependency-aware schedule as a generated planning view while execution advances; publishing that view is not an implementation approval gate. Parallel squads do not edit the same lifecycle/schema owner without an integration owner.
 - Scope added after M0 must replace equivalent capacity, move a milestone, or be assigned to a separately staffed future slice. `Complete IP` is not an exception to capacity planning.
 
-### 24.2 Milestone dependency gates
+### 24.2 Milestone dependency and activation gates
 
-- M1 does not depend on IP schema and starts immediately.
-- M2 requires the law firm's actual document-name list, an IP lawyer's initial rule/workflow/calendar inventory, data-retention/hold policy, security decisions, current backup/object/export evidence, and the signed Section 11.2 ownership/retirement ledger by 14 August 2026. An unresolved shared-owner decision blocks only the affected slice; it does not authorize a parallel implementation.
-- M3 requires approved clearance/filing/fee data and representative portfolio files by 4 September 2026.
-- M4 requires approved Indian trademark opposition/rectification rule/workflow maps and anonymized sample files by 29 January 2027.
-- M5 requires provider/licensing decision by 29 January 2027 and credentials/sandbox by 30 June 2027.
-- M6 requires verified research/source coverage and approved evaluation/security dataset by 29 October 2027.
-- M7 requires at least two pilot teams, production-quality migration data and approved export/purge/offboarding policy by 29 March 2028.
-- M8-M10 each require a separate type-specific legal rule/form/source pack before schema or UI implementation begins.
+These are direct dependency and activation conditions, not milestone-wide implementation stop lines. Build and test every independent node behind fail-closed defaults while a decision or dataset is pending; block only the affected authoritative behavior, production migration or data-operation execution against non-anonymized data, external integration, public claim, or milestone exit.
+
+- M1 trust repair starts immediately and runs in parallel with independent IP implementation.
+- M2 activation requires the law firm's actual document-name list, an IP lawyer's initial rule/workflow/calendar inventory, data-retention/hold policy, security decisions, current backup/object/export evidence, and the signed Section 11.2 ownership/retirement ledger. An unresolved shared-owner decision blocks changes to that owner, not other M2 nodes.
+- M3 authoritative clearance/filing/fee behavior requires approved data and representative portfolio files. Portfolio, workflow, and UI code may be completed with versioned synthetic fixtures and remain disabled/manual until approval.
+- M4 authoritative opposition/rectification automation requires approved Indian trademark rule/workflow maps and anonymized sample files; independent proceeding/document/workspace implementation may proceed.
+- M5 live providers require a provider/licensing decision and credentials/sandbox. Adapter contracts, replay, readiness, manual flows, and disabled UI states proceed without them.
+- M6 authoritative research/AI activation requires verified source coverage and an approved evaluation/security dataset. Permission, citation, abstention, and provider-failure implementation proceeds with deterministic fixtures.
+- M7 production activation requires pilot teams, production-quality migration data, and approved export/purge/offboarding policy; drills and dry-run tooling proceed on anonymized data.
+- M8-M10 require a separate type-specific legal rule/form/source pack before authoritative automation or beta/GA activation. Child PRDs, typed schema, APIs, UI, tests, and intake-only behavior may be implemented earlier and stay default-off.
+
+### 24.3 One-go continuous execution policy
+
+- Execute M0-M10 as one work-conserving dependency DAG. Milestone numbers organize scope and final attestation; they do not require idle time or prohibit later-milestone work whose direct prerequisites are satisfied.
+- Prefer one program integration branch, one reviewable integration PR, and one compatible release train. Slices remain traceability, ownership, test, migration, and rollback units—not mandatory pause or deployment units.
+- Use focused change-aware checks per commit and run the complete applicable sharded CI/security/migration/E2E matrix on each exact integrated candidate. Any code, dependency, runtime configuration, migration, fixture, test, or generated-artifact change creates a new exact candidate and reruns its applicable gates; evidence/prose-only changes use change-aware validators, and administrative handoffs alone do not trigger the full matrix.
+- Implement externally blocked behavior completely behind truthful unavailable/manual states, fail-closed flags, readiness checks, observability, and kill switches. Missing human acceptance blocks activation and final `COMPLETE`, never unrelated repository implementation.
+- Repository protections and automated checks are the routine gates. Ask for human action only when authority cannot be delegated: a real legal/financial/external communication act, unavailable credentials/paid capacity, legally required human acceptance, or an exact irreversible production operation not already approved.
+- One consolidated approval event for an unexpired immutable destructive-operation manifest must contain every policy-required owner, dual-control, or four-eyes identity and remains valid through an immediate unchanged hold/evidence refresh only while that manifest is unexpired. Expiry or any target, exclusion, recovery, or risk drift invalidates it.
 
 ## 25. Implementation backlog by milestone
 
-`IPLF-xxx` entries are epics, not permission to place an entire milestone in one pull request. Each epic is split into reviewable suffix slices (`A`, `B`, and so on) with one primary behavior, migration boundary, and production acceptance path. A normal slice should be independently testable and reversible and should avoid simultaneous unrelated API, provider, AI, and UI changes.
+`IPLF-xxx` entries are epics. Split them into traceable suffix slices (`A`, `B`, and so on) with coherent behavior, ownership, migration, tests, and rollback. Compatible slices may share the program integration PR and release train; use coherent commits and generated traceability instead of forcing a separate PR/deploy per slice.
 
-### 25.1 Mandatory first execution order
+### 25.1 Trust-work dependency chain
+
+Start the following trust work in order where one item directly depends on the prior item. In parallel, execute every independent backlog node permitted by Sections 24.2 and 24.3.
 
 1. `IPLF-001A`: Read-only production/IaC drift audit for all required schedulers, jobs, service accounts, targets, image digests, timezones, and last successes. Produce evidence and exact remediation plan.
-2. `IPLF-001B`: Reconcile scheduler identities/job-level Invoker bindings through the existing deployment helper, add drift/canary verification, deploy exact revision, and prove successful scheduled/manual execution. No IP schema work.
+2. `IPLF-001B`: Reconcile scheduler identities/job-level Invoker bindings through the existing deployment helper, add drift/canary verification, deploy exact revision, and prove successful scheduled/manual execution. IPLF-001B itself performs no IP schema work; this does not block schema work in independent nodes.
 3. `IPLF-003A`: Define/serialize source-state/open contract and source proxy safety tests.
 4. `IPLF-003B`: Render source action on research, uploaded-case, intelligent-review, and judge surfaces with typed failure states and E2E.
 5. `IPLF-006A`: Audit/quarantine corrupt statute records and correct coverage claims without fetching/publishing replacement legal text.
@@ -2187,21 +2202,23 @@ Dates below are the committed planning baseline for kickoff on 3 August 2026. Th
 7. `IPLF-007A`: Model notification schedule-to-intent linkage, recipient/provider events, and status mapping with no dispatcher switch.
 8. `IPLF-007B`: Move external dispatch behind durable intent service, run dual-read/no-dual-send comparison, expose suppression/fallback, then cut over with rollback flag.
 9. `IPLF-005A`: Add typed search outcomes/telemetry and golden-query fixtures; then repair any observed index/query defects as separate slices.
-10. After the deployable M1 technical gates pass, begin M2-A schema/access anchors; continuing natural-run scheduler monitoring is operational evidence and does not impose a fixed waiting period.
+10. Begin M2-A and other independent schema/access anchors as soon as their direct ownership, data, and security inputs exist. M1 technical failures block affected deployment/claims; continuing natural-run scheduler monitoring never idles independent implementation.
 
-### 25.2 Definition of Ready for any slice
+### 25.2 Incremental readiness checklist
+
+Apply this checklist before changing the affected layer or activating the behavior. It is not a requirement to complete a separate document or pause the entire program before coding begins.
 
 - Requirement IDs, journey step/exception, actor/capability, and milestone exit criterion are named.
-- Current `main`, production revision/state, and affected existing models/services are re-audited.
+- Current `main`, production revision/state, and affected existing models/services are established at run start and re-audited when relevant state changes.
 - Every persistence/service/API/UI/job change is classified against Section 11.2 as `NEW`, `EXTEND`, `LINK`, or `REPLACE`; the canonical writer, shared owner, compatibility path, reconciliation, and dated retirement gate are named. A new overlapping component has an approved ADR.
-- Legal rule/source/provider/client policy decisions required by the slice are closed and linked; unresolved decisions narrow/disable scope.
-- API/schema/migration/compatibility, security/tenant, observability, rollback, data operation, test, and production proof are written before editing.
+- Legal rule/source/provider/client policy decisions required for activation are closed and linked; unresolved decisions narrow/disable runtime scope without blocking repository implementation.
+- API/schema/migration/compatibility, security/tenant, observability, rollback, data operation, test, and production proof are defined before the affected layer is finalized; unchanged layers need no ceremonial record.
 - Representative fixtures exist and contain no uncontrolled client secrets.
-- Dependencies are merged/deployed or explicitly mocked at a stable contract boundary.
+- Dependencies are present in the same integration candidate, already merged/deployed, or explicitly mocked at a stable contract boundary.
 
 ### 25.3 Pull-request evidence contract
 
-Every implementation PR includes: requirement/journey mapping; behavior and non-goals; `NEW/EXTEND/LINK/REPLACE` ownership decision; overlap search and forbidden-duplicate attestation; schema/API diff; canonical writer/compatibility retirement; capability/entitlement impact; migration/backfill/reconciliation/rollback; threat/tenant review; tests and exact commands; UI screenshots for changed visible surfaces; provider/legal fixture evidence; expected production image/revision; and dated post-deploy acceptance steps. A green source-tree test without exact deployed-revision proof does not close a production defect.
+The program integration PR includes a generated, per-slice evidence index covering requirement/journey mapping; behavior and non-goals; `NEW/EXTEND/LINK/REPLACE` ownership; overlap/duplicate checks; schema/API changes; canonical writer/compatibility retirement; capability/entitlement impact; migration/backfill/reconciliation/rollback; threat/tenant review; tests; changed-surface screenshots; provider/legal fixture state; and post-deploy acceptance. Do not repeat unchanged boilerplate in every commit. A green source-tree test without exact deployed-revision proof does not close a production defect.
 
 ### M1 tasks
 
@@ -2239,7 +2256,7 @@ Every implementation PR includes: requirement/journey mapping; behavior and non-
 - `IPLF-036`: Document register/classification/version/approval.
 - `IPLF-037`: Renewal terms/instruction/filing/acceptance.
 - `IPLF-038`: Portfolio/deadline/renewal/data-quality report definitions using existing synchronous export patterns; introduce the neutral `report_jobs`/`report_artifacts` contract only for measured large/background needs, with no IP-only scheduler or storage policy.
-- `IPLF-039`: Trademark operations integration: extend existing intake/conflict/promotion, daily task/hearing/docket, CompanyNotice/Communication, billing and report owners; add IP-specific instructions, clearance, filing/service, cost evidence links and controlled lifecycle. Portal is M5. Split into independently reviewable suffix slices before implementation.
+- `IPLF-039`: Trademark operations integration: extend existing intake/conflict/promotion, daily task/hearing/docket, CompanyNotice/Communication, billing and report owners; add IP-specific instructions, clearance, filing/service, cost evidence links and controlled lifecycle. Portal is M5. Track independently reviewable concerns with suffix IDs and coherent commits inside the continuous integration campaign.
 - `IPLF-039A`: Form-versioned trademark particulars, representations, class/specification scopes, use/priority/party/agent data, filing manifest and readiness validation.
 - `IPLF-039B`: Extend existing mailbox/calendar/Drive/Communication evidence and `CompanyNotice` with permission-scoped IP links, IP-aware notice authorization, dedupe/attachment processing, triage projection, correspondence/service/instruction candidates, legal-deadline delegation and accepted-effect boundary; `/app/notices` remains the single accepted-notice register.
 - `IPLF-039C`: Activate the M2 working-calendar/responsibility foundation through coverage acceptance, leave/deactivation reassignment, external calendar projection and reproducible daily docket control report; do not rebuild the records in M3.
@@ -2290,9 +2307,9 @@ Every implementation PR includes: requirement/journey mapping; behavior and non-
 - `IPLF-072`: Current regional/failover, no-dual-send worker recovery, incident and credential-compromise drills with measured RPO/RTO.
 - `IPLF-073`: Add shared access-review campaigns and emergency-access sessions to the existing target-aware access owner; prove expiry, cache/session revocation, independent post-review and no standing-grant residue.
 - `IPLF-079`: Enforce unavailable/intake-only/beta/GA domain labels and child-PRD/source-pack/legal-fixture gates in the server capability catalogue.
-- `IPLF-080`: After approved patent child PRD, implement patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys.
-- `IPLF-090`: After each approved child PRD, implement independent design, copyright, domain, licensing, and enforcement domain slices.
-- `IPLF-091`: After each approved child PRD, implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices.
+- `IPLF-080`: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.
+- `IPLF-090`: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.
+- `IPLF-091`: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.
 - `IPLF-100`: Cross-IP reporting, client operations, migration, security, and full GA.
 
 ## 26. Testing and verification strategy
@@ -2303,7 +2320,7 @@ Every implementation PR includes: requirement/journey mapping; behavior and non-
 2. **Database:** migrations, composite keys/indexes/checks, tenant/access isolation, optimistic concurrency, append-only history, actor deactivation preservation, hold/purge dependencies, state-event reconciliation and mixed-revision rollback/forward compatibility.
 3. **API:** capability/entitlement/flag matrix, step-up/four-eyes/break-glass, cross-tenant/no-existence denial, stale writes, idempotent commit/replay, data-operation manifest expiry, typed errors, OpenAPI/generated-client contract.
 4. **Provider/connector contract:** recorded/synthetic fixtures for existing mailbox/calendar/Drive/communication adapters and new registry/source providers: success, no-change, auth/rotation/disconnect, rate limit, timeout, malformed payload, schema change, duplicate/out-of-order event, webhook forgery/replay and protected download.
-5. **Legal fixture:** lawyer-approved Indian trademark applications and applicant/opponent opposition timelines with expected rules, deadlines, documents, and outcomes.
+5. **Legal fixture:** versioned synthetic/draft Indian trademark applications and applicant/opponent opposition timelines may drive implementation; lawyer-approved golden fixtures with expected rules, deadlines, documents, and outcomes are mandatory before authoritative activation, legal verification, or completion.
 6. **Frontend component:** status/freshness/source rendering, long identifiers/mark names, empty/error/degraded states, keyboard/accessibility.
 7. **End-to-end:** every UJ-01 through UJ-68 normal path and all named critical exceptions appropriate to the milestone; a future child PRD adds rather than replaces its domain journeys.
 8. **Security:** tenant/client/document/index/cache isolation, SSRF/redirect/DNS rebinding, prompt injection, archive/malicious upload/formula, webhook signature/replay, step-up/session expiry, break-glass, export/purge leakage and provider-secret exposure/rotation.
@@ -2364,7 +2381,7 @@ Every implementation PR includes: requirement/journey mapping; behavior and non-
 
 ### 26.3 Repository verification commands
 
-Run focused tests during development, then the complete applicable gate before merge:
+Run focused tests during development, then the complete applicable gate once for the exact integrated release candidate before merge:
 
 ```powershell
 git diff --check
@@ -2412,15 +2429,17 @@ Migration PRs additionally prove upgrade from a sanitized copy/schema at the cur
 
 Engineering test success cannot substitute for legal or pilot acceptance, and a lawyer's content approval cannot substitute for tenant/security/operational gates.
 
+These approvals gate the relevant authoritative activation, customer-data operation, real legal/provider effect, or acceptance claim. They do not block repository implementation behind disabled flags. One dated consolidated approval event may cover an enumerated unexpired immutable release bundle and environment, provided it contains every required approver identity; expiry or a material scope, evidence, or risk change requires renewed approval.
+
 ## 27. Rollout, rollback, and operations
 
-1. Ship each milestone behind tenant and capability flags.
+1. Ship each compatible integrated release train behind tenant and capability flags; milestone scope remains separately traceable within it.
 2. Run schema additions before application activation; prefer additive migrations and dual-read only where explicitly designed.
 3. Before storing non-anonymized pilot IP data, approve the data map/retention/hold policy, prove private projection revocation, complete current database-plus-object application-cutover restore, and exercise tenant-export dry run.
 4. Enable staff tenant, then one anonymized test tenant, then pilot firm allowlist, then staged tenant cohorts.
 5. Registry, AI, inbox, calendar, notification, search projection and each domain require separate server flags/kill switches so manual docketing and existing data remain available during degradation.
 6. Shadow registry normalization, workflow/state materialization, deadline calculations, connector links and private projection generations before accepting changes or reminders.
-7. Publish migration/import/data-operation preview and obtain the required tenant/approver acceptance before commit/execute.
+7. Publish each exact migration/import/data-operation preview and obtain the required tenant/approver acceptance before commit/execute against non-anonymized tenant data. One consolidated approval event containing every required approver covers an unchanged unexpired immutable operation manifest through immediate pre-execution revalidation; expiry or material drift requires renewed acceptance.
 8. Worker/dispatcher ownership switches only after old/new revision inventory and fencing proof. Dual-read/shadow compare is allowed; duplicate send/provider mutation is not.
 9. Rollback disables feature behavior without deleting new legal history. Provider polling/reminders/indexing/retention execution can be paused independently; restore/roll-forward handles committed data.
 10. Maintain runbooks for scheduler permission, provider auth/rotation/rate limit, stale source, corrupt snapshot, notification suppression, private-index revocation, deadline rule/workflow error, export/purge/hold, restore/failover/no-dual-send and cross-tenant incident.
@@ -2485,13 +2504,13 @@ Engineering test success cannot substitute for legal or pilot acceptance, and a 
 | AI model/provider/retention policy for privileged work | Security/Legal | 29 Oct 2027 | M6 |
 | Automated export/purge/offboarding scope, waiting period, dual approval, backup tombstone and exception policy | Records/Privacy/Security | 29 Oct 2027 | M7 |
 | Packaging and provider-cost pass-through | Finance/Product | 29 Mar 2028 | M7 |
-| Approved child PRD, source/rule/form pack, pilot and legal reviewers for each M8-M10 IP domain | Product/Specialist IP SME | Before domain implementation | M8-M10 |
+| Approved child PRD, source/rule/form pack, pilot and legal reviewers for each M8-M10 IP domain | Product/Specialist IP SME | Before authoritative automation or beta/GA activation | M8-M10 |
 
-If an open decision is not resolved by its due date, the affected automated feature remains disabled or manual; Codex must not invent a legal rule, provider permission, or client-sharing policy.
+If an open decision is not resolved by its due date, the affected automated feature remains disabled or manual; Codex must not invent a legal rule, provider permission, or client-sharing policy. Continue its safe repository implementation and all independent work using versioned synthetic fixtures and explicit unavailable/manual states.
 
 ## 30. Definition of done
 
-The program or milestone is done only when:
+The program or milestone is done only when the following final attestation criteria hold. These criteria govern activation, milestone exit, and completion claims; they are not prerequisites for starting or continuing independent repository implementation:
 
 - Its named user journeys and exception paths pass automated and lawyer-led UAT.
 - API, schema, audit events, permissions, operational runbooks, product help, and migration notes are updated.
@@ -2519,30 +2538,30 @@ The milestone evidence pack includes a live requirement-to-journey-to-test-to-re
 
 When this PRD is handed to Codex:
 
-1. Implement one milestone or a smaller task group at a time. Do not attempt the whole program in one branch.
-2. Re-read current code, migrations, tests, deployment manifests, and production state before each task; this PRD records a 1 August 2026 baseline that may age.
-3. Start M1 with production reliability and source truth. Do not begin IP feature breadth while known legal-data jobs remain unhealthy.
-4. Treat Section 11.2 as binding architecture. Before editing, classify every component as `NEW`, `EXTEND`, `LINK`, or `REPLACE`, search current models/services/routes/pages/jobs, and name the canonical writer plus compatibility/retirement path.
+1. Implement the entire repository-controlled program as one continuous dependency-DAG run. Prefer one integration branch/PR and one compatible release train; keep coherent slice/commit boundaries for ownership, tests, migrations, traceability, and rollback.
+2. Establish current code, migrations, tests, deployment manifests, and production state at run start; re-read affected facts when relevant state changes rather than before every task.
+3. Start M1 production reliability and source truth immediately while building independent IP feature breadth behind fail-closed flags and truthful unavailable/manual states. A trust defect fences only affected activation or release claims.
+4. Treat Section 11.2 as binding architecture. Before changing an ownership area, classify its components as `NEW`, `EXTEND`, `LINK`, or `REPLACE`, search current models/services/routes/pages/jobs once, and name the canonical writer plus compatibility/retirement path.
 5. Do not create IP-owned task, hearing, next-hearing, intake, conflict, notice/reply, internal-access, ethical-wall, portal-grant, time/expense/payment-ledger, legal-source-master, model-run, draft/extraction, recommendation, import-control, provider-operations/readiness/support/cost, report-engine, connector, credential, tracked-court, or notification-delivery subsystems. Implement the extension/link/replacement contracts in Sections 11, 13, 16, and 23.
 6. Use `company_id`, composite tenant constraints, `expected_updated_at`, `lifecycle_version`, RFC 7807 errors, request IDs, capability catalogs, and deployment patterns exactly as the current repository does unless the slice explicitly migrates them.
 7. Never overwrite unrelated or user-created work in a dirty tree.
-8. Every implementation PR must name requirement IDs, journeys, tests, migration/rollback impact, security impact, and production verification steps.
-9. Any ambiguous legal rule, provider term, document taxonomy, or client policy is a blocker for that feature, not permission to guess.
+8. The program integration PR must contain a generated per-slice index of requirement IDs, journeys, tests, migration/rollback impact, security impact, and production verification steps; do not require repetitive boilerplate in each commit.
+9. Any ambiguous legal rule, provider term, document taxonomy, or client policy blocks authoritative activation for that feature, not repository implementation and not independent work. Never guess.
 10. Extend existing task/hearing/next-hearing/deadline/calendar, intake/conflict, access/portal, `CompanyNotice`, Microsoft 365/mailbox/Drive/Communication, billing, drafting/extraction/AI audit, tracked-case/court, provider-readiness/cost/operations, and report/export owners through typed IP adapters in their assigned milestone. For imports, follow the neutral `REPLACE` contract because Matter/Employee import jobs are domain-specific; do not alias one as generic or create synchronized mutable copies.
 11. Do not claim backup, restore, export, purge, legal hold, residency or deletion complete from repository prose. Reinspect deployed configuration and dated evidence, then implement/test the exact missing operation for the current schema.
 12. High-risk routes reuse existing MFA recent-step-up and server capability services. Never accept actor/approver/company identity from a request body to satisfy authorization or four-eyes policy.
-13. If the requested slice conflicts with the ownership ledger, stop that slice and produce an ADR/gap analysis. Passing local tests is not permission to add a duplicate subsystem.
+13. If a change conflicts with the ownership ledger, park that ownership-conflicting node, produce an ADR/gap analysis, and continue every independent node. Passing local tests is not permission to add a duplicate subsystem.
 
-Suggested first execution prompt:
+Suggested continuous execution prompt:
 
 ```text
-Implement only IPLF-001A from
-docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md.
-Perform the read-only production/IaC drift audit for every required Cloud Scheduler
-and Cloud Run Job path. Compare current main, infra/cloudrun/deploy.ps1, deployed
-scheduler identity/target/timezone/status, job IAM/image/last executions, and logs.
-Produce an evidence-backed remediation plan and acceptance commands. Do not mutate
-production, do not implement IPLF-001B, and do not start any IP schema or UI work.
+Implement every repository-controlled requirement in
+docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md as one continuous dependency-DAG run.
+Start the Phase 0/M1 trust workstream and every independent M2-M10 node in parallel.
+Use focused checks per change, one complete applicable matrix per exact integrated
+candidate, and the smallest practical number of PRs and release trains. Keep external
+or unapproved behavior fail-closed and continue working. Pause only for authority that
+cannot be delegated or an exact irreversible production action not already approved.
 ```
 
 ## 32. Source and benchmark references
@@ -2658,7 +2677,19 @@ production, do not implement IPLF-001B, and do not start any IP schema or UI wor
 - Drafting reuse now explicitly includes `DraftingDataExtractionField` and existing template/format validation. Provider reuse now explicitly includes the connector registry, `CaseTrackingSupportMatrix` and `ProviderCostProfile`, not only the provider-operations page.
 - M2 was not credible as a foundation: it pre-migrated intake, conflicts, portal, drafting, reports, provider operations, assistant/private retrieval, access reviews, emergency access and registry state before their milestones. Migration slices are now just in time, independently deployable and assigned to M3-M7 consumers.
 
-### 33.7 Review validation result
+### 33.7 Pass 7: Continuous execution and gate consolidation
+
+**Completed:** 15 August 2026.
+**Lens:** Manual approval frequency, milestone waterfall, per-slice PR/release repetition, test/evidence duplication, external-acceptance blocking, and safe one-go delivery.
+**Primary corrections:**
+
+- Replaced the global M1-to-M10 waterfall with a work-conserving dependency DAG while preserving direct schema, ownership, legal, data, and security dependencies.
+- Kept suffix slices as traceability/rollback units but allowed compatible slices to share one integration branch, PR, full test matrix, evidence pack, and release train.
+- Moved human legal/provider/product/pilot approval to authoritative activation, public claims, and final acceptance; complete repository implementation proceeds behind fail-closed defaults.
+- Consolidated full regression, render, migration, release, and production verification at exact integrated candidates instead of repeating them at every administrative boundary.
+- Retained mandatory human authority for real legal/financial/external acts and irreversible production operations, while allowing one unchanged exact-scope approval to survive immediate hold-evidence refresh.
+
+### 33.8 Review validation result
 
 - All 16 feedback items retain requirement, journey, and milestone traceability.
 - All 68 journey catalogue entries have one matching detailed journey section with actor, preconditions, main flow, exceptions, audit/postcondition and acceptance.

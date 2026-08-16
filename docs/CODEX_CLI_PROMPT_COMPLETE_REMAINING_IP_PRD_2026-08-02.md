@@ -1,7 +1,8 @@
 # Codex CLI Completion Prompt: Finish the Entire CaseOps IP Law Firm PRD
 
-**Prompt version:** 1.0
+**Prompt version:** 1.1
 **Issued:** 2 August 2026
+**Execution-policy revision:** 15 August 2026
 **Repository:** `mishrasanjeev/caseops`
 **PRD:** `docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md`
 **Master execution contract:** `docs/CODEX_MASTER_PROMPT_IMPLEMENT_IP_LAW_FIRM_PRD.md`
@@ -13,7 +14,7 @@ Run Codex CLI from the CaseOps repository root and give it the complete text bel
 
 ## Begin Codex CLI Prompt
 
-You are the principal engineering lead and hands-on implementation agent responsible for completing the entire CaseOps IP Law Firm program. Start work immediately. Do not respond with only a plan, gap summary, or request for broad confirmation. Inspect the repository, repair the program controls, implement the next dependency-ready slice, test it, document it, release it when its gates pass, and continue through the remaining program.
+You are the principal engineering lead and hands-on implementation agent responsible for completing the entire CaseOps IP Law Firm program. Start work immediately. Do not respond with only a plan, gap summary, or request for broad confirmation. Inspect the repository once, build the dependency DAG, run every ready implementation node, integrate compatible work, test and document continuously, and release the smallest practical number of complete candidates without pausing between slices.
 
 Your objective is to implement every pending repository-controlled requirement in:
 
@@ -25,7 +26,7 @@ Do not reinterpret the previously deployed five implementation tails as completi
 
 ## Binding Sources and Precedence
 
-Read these completely before editing application behavior:
+Establish these sources at run start and cache their relevant decisions. Read the complete scope/ownership/safety contracts, use mechanical extraction for exhaustive inventories, and load detailed sections progressively before changing the behavior they govern; do not repeat a full-document reread for every slice:
 
 1. System and user instructions, the nearest `AGENTS.md`, repository security requirements, and platform approval controls.
 2. This completion directive, including the production authorization and exclusions below.
@@ -37,7 +38,7 @@ Read these completely before editing application behavior:
 
 The PRD controls product scope and acceptance. Current code controls what already exists and how it should be extended. Existing code cannot silently waive a requirement. A stale manifest cannot make missing work disappear. A generated document cannot override code, tests, deployed truth, or required human evidence.
 
-If two instructions conflict, follow the stricter security, legal-integrity, data-protection, verification, and truthful-completion rule. Do not weaken the PRD to fit current code.
+If two instructions conflict on substantive security, legal integrity, data protection, verification quality, or truthful completion, follow the stricter rule. For scheduling, branch/PR/release granularity, checkpoint frequency, and whether missing external acceptance pauses repository work, the One-Go Continuous Execution Policy below controls.
 
 ## Explicit User Authorization
 
@@ -66,6 +67,22 @@ This authorization does not waive platform safety controls and does not authoriz
 - Manufacture legal, provider, security, privacy, pilot, or UAT approval. Codex-authored signatures and generated checkboxes are not human approval.
 
 Implement blocked external behavior completely behind fail-closed configuration, manual fallback, observable readiness, and kill switches. Continue all independent repository work. Record genuine external gates precisely and never call them complete.
+
+## One-Go Continuous Execution Policy
+
+This program is intended to run as one continuous implementation and delivery effort. This section overrides any narrower instruction below that would otherwise require a routine pause, a separate human confirmation, or a full release cycle for every slice.
+
+- Continue automatically from discovery through implementation, focused testing, integration, documentation, CI, merge, deployment, and production verification. A failed automated check is an instruction to diagnose, fix, and rerun it, not a reason to stop for routine user direction.
+- Use the dependency graph, not milestone numbers, as the execution scheduler. Work on dependency-independent slices in parallel, including later-milestone code, tests, fixtures, documentation, and disabled integrations, while earlier prerequisites are being completed.
+- Batch compatible slices into one integration branch and one release train. Run focused checks during development; run the full applicable regression, security, migration, build, and production evidence suite once for the exact integrated release candidate. Any code, dependency, runtime configuration, migration, fixture, test, or generated-artifact change creates a new exact candidate and reruns its applicable gates; evidence/prose-only changes use change-aware validators.
+- Do not require a separate PR, owner checkpoint, evidence review, canary approval, or deployment approval for each slice. Use repository protections and automated checks as the routine gates. Split work only when there is a real ownership conflict, incompatible migration/release boundary, platform limit, or independently reversible high-risk change.
+- Missing legal, provider, product, pilot, or UAT approval blocks only activation and public claims for the affected behavior. Implement and merge the complete behavior behind default-off configuration, truthful unavailable/manual states, observable readiness, and a kill switch, then continue with all other work.
+- Child PRDs and specialist decisions may be drafted, implemented, and tested in the same run. Named human approval is required before activating domain-specific legal automation or claiming acceptance, not before repository-controlled implementation begins.
+- Prefer machine-verifiable controls over bespoke human gates. Do not introduce a manual checkpoint when an exact scope, immutable revision, dry run, invariant, automated test, fail-closed flag, audit record, or rollback check can enforce the same safety property.
+- For an exact irreversible production plan, use one consolidated approval event that contains every policy-required owner, dual-control, or four-eyes identity and authorizes the unexpired immutable operation manifest, target list, and operation. Refreshing hold evidence immediately before execution does not require another approval event while that manifest is unexpired and scope, targets, exclusions, recovery path, and risk are unchanged; expiry or any material drift invalidates it and stops the operation.
+- Never turn ordinary progress reporting, context compaction, CI polling, reviewer availability, or evidence regeneration into an approval gate. Persist state automatically and keep working.
+
+The only mandatory human pauses are for authority that cannot be delegated by this prompt: a real-world legal/financial/external communication act, activation of unapproved legal or provider content, access to unavailable credentials or paid capacity, acceptance that must legally or contractually be human, or an irreversible production action whose exact scope has not already been approved.
 
 ## Known Starting State: Revalidate, Do Not Assume
 
@@ -114,13 +131,13 @@ If external human/provider/legal evidence is still missing after every repositor
 
 ## Phase 0: Repair Trust Before More Feature Breadth
 
-Perform this phase first.
+Start this phase immediately. Run all dependency-independent implementation, test, documentation, and fixture work in parallel; Phase 0 blocks only integration or activation that depends on an unresolved trust defect.
 
 ### 0.1 Re-establish current truth
 
 - Preserve unrelated user changes in a dirty worktree.
 - Fetch/prune the remote and inspect `HEAD`, current branch, `main`, `origin/main`, tags, open PRs, and unpushed commits.
-- Read all PRD, prompt, manifest, generated views, evidence, migration, CI, deployment, scheduler, provider, and production-verification files.
+- Mechanically inventory all PRD, prompt, manifest, generated-view, evidence, migration, CI, deployment, scheduler, provider, and production-verification files; read the governing and currently affected material in full and process the rest progressively without blocking independent work.
 - Inspect current Alembic heads and deployed database head.
 - Inspect latest GitHub Actions results, including scheduled production Playwright, CI, Security, and CodeQL.
 - Read current API/web revisions, image digests, worker/job images, scheduler configuration, flags/entitlements, and public health.
@@ -142,7 +159,7 @@ Keep `docs/ip-implementation/PROGRAM_MANIFEST.yaml` as the sole manually maintai
 - Decompose every one of the 65 epics into small suffix slices with a primary behavior, parent epic, dependency order, ownership decision, migration/release boundary, requirement/path coverage, and acceptance evidence. Preserve every explicitly ordered PRD slice.
 - Permit derived implementation slices that are not written verbatim in the PRD backlog when they are a pure decomposition of an existing epic. The validator must require a valid parent epic and unchanged PRD scope instead of incorrectly requiring the slice list to equal only the few suffix slices explicitly named in the PRD.
 - Mechanically generate the initial requirement/path-to-epic/slice allocation from PRD mappings and review every conflict. Do not spend days hand-decorating rows or infer completion from the generated allocation.
-- Map every requirement ID to its owning epic and at least one implementation slice before that requirement can be implemented.
+- Map every requirement ID to its owning epic and at least one implementation slice before claiming or releasing that requirement; mapping work may proceed in parallel with implementation whose ownership is already clear.
 - Map all 317 current journey normal/exception paths to one or more slices and stable automated/UAT test IDs.
 - Require the union of slice mappings to cover all 436 requirements and all 317 paths with no orphan; allow intentional many-to-many mappings but reject unexplained duplicate ownership.
 - Require reciprocal consistency: slice-to-requirement/path references and requirement/path-to-slice references must agree.
@@ -157,18 +174,18 @@ Keep `docs/ip-implementation/PROGRAM_MANIFEST.yaml` as the sole manually maintai
 
 ### 0.4 Reconcile existing delivered work without duplication
 
-- Audit every existing IP model, route, service, migration, UI, job, test, and document against exact requirement and journey rows.
+- Audit existing IP models, routes, services, migrations, UI, jobs, tests, and documents mechanically and incrementally against exact requirement/journey rows; do not make completion claims for unaudited scope.
 - Map and evidence genuinely delivered behavior from `IPLF-001A/B`, `IPLF-003A/B`, `IPLF-005A`, `IPLF-006A/B`, `IPLF-007A/B`, and `IPLF-039A-F`.
 - Do not mark an entire requirement implemented when the existing slice covers only one field, state, or exception.
 - Split partial requirements into traceable acceptance facets without changing the PRD requirement ID or weakening its text.
 - Preserve current source actions, statute quarantine, typed research outcomes, notification dispatcher, IP docket/evidence/coverage/title/obligation/cost work, scheduler convergence, and their canonical shared owners.
 - Remove no behavior merely to make the manifest easier to reconcile.
 
-Phase 0 exits only when the latest production regression suite is green, program controls fail false completion, and current delivered scope is accurately mapped.
+Phase 0 is complete when the latest production regression suite is green, program controls fail false completion, and current delivered scope is accurately mapped. Until then, do not activate or claim affected behavior, but do not stop independent program work.
 
 ## Program Execution Order
 
-After Phase 0, follow PRD Section 25.1 and all milestone dependencies exactly. Do not jump to attractive UI work while trust, ownership, schema, migration, or legal-source prerequisites are red.
+Use PRD Section 25.1 as a dependency graph rather than a milestone-wide stop line. Honor real trust, ownership, schema, migration, and legal-source dependencies, while building independent UI and domain work behind truthful disabled or unavailable states.
 
 ### Phase 1: Close M0 and M1 trust recovery
 
@@ -184,11 +201,11 @@ Complete and verify all remaining M0/M1 epics and requirements, including:
 - One durable notification delivery owner, schedule-to-intent lineage, recipient/channel outcomes, suppression recovery, fallback, idempotency, webhook evidence, and no dual send.
 - Complete M1 production smoke and release evidence.
 
-Do not proceed to M2 until every M1 exit criterion passes or an explicitly approved PRD change says otherwise.
+M2 work may proceed in parallel when its actual data, ownership, and security prerequisites are satisfied. An unresolved M1 item blocks only dependent activation, release claims, or verification; it does not freeze unrelated M2 implementation.
 
 ### Phase 2: M2 IP foundation
 
-Implement the full M2 foundation before broad trademark UX:
+Implement the full M2 foundation as the canonical dependency layer. Build broad trademark UX in parallel against stable contracts and truthful disabled states; do not activate paths whose direct M2 persistence, ownership, or security dependency is unresolved:
 
 - IP capability/entitlement/rollout model through existing catalogues.
 - Company-scoped docket, asset, application, proceeding, identifier, party/role, event, responsibility, relationship, legal-deadline, rule, fee, workflow, source-conflict, document-version/link, idempotency/outbox, and audit foundations required by the PRD.
@@ -222,11 +239,11 @@ Implement every M3 requirement and journey, not a thin docket card:
 - Store opposition number on the proceeding, visibly separate from the trademark application number, with raw/normalized/effective history and registry search.
 - Support applicant and opponent sides, partial/multi-class scope, service, counterstatement, evidence elections, affidavits/exhibits, translations, extensions, hearings, adjournment, non-appearance, orders, appeal, settlement, withdrawal, and linked Matter independence.
 - Extend the existing drafting/template/extraction/ModelRun owners for trademark pleadings, approved forms/templates, source manifests, consistency/placeholders/exhibits, lawyer review, filing readiness, and immutable versions.
-- Test every applicant/opponent normal and exception path using lawyer-approved anonymized fixtures.
+- Build and test every applicant/opponent normal and exception path with versioned anonymized synthetic or draft fixtures; require lawyer-approved golden fixtures before authoritative activation, legal verification, or completion is claimed.
 
 ### Phase 5: M5 registry, Madrid, watch, and client operations
 
-- Implement approved IP registry and WIPO boundaries, raw snapshots, normalized views, diffs, correction/reconciliation, freshness, provider operation, replay, quota/cost, support matrix, circuit breakers, and kill switches.
+- Implement IP registry and WIPO adapter boundaries, raw snapshots, normalized views, diffs, correction/reconciliation, freshness, provider operation, replay, quota/cost, support matrix, circuit breakers, and kill switches with deterministic contract fixtures. Provider/licensing approval and credentials gate live activation, not adapter implementation.
 - Keep court/CNR tracking in `TrackedCase`/Matter court owners and IP-office snapshots separate without copied source records.
 - Implement journal/watch profiles and hits, explainable word/device similarity candidates, review/disposition, false-positive controls, source links, and enforcement handoff.
 - Implement Madrid designation and post-registration flows, foreign associates, instructions, reports, and existing portal publication/grant integration.
@@ -254,11 +271,11 @@ Implement every M3 requirement and journey, not a thin docket card:
 - Obtain the named specialist/product/legal approval required before activating domain-specific legal automation.
 - Implement patents, designs, copyright, geographical indications, plant varieties, semiconductor layout designs, trade secrets, domains, customs/enforcement, licensing/technology transactions, and other PRD-listed domains as distinct typed behavior where required.
 - Reuse shared IP foundations only where semantics match. Trademark fixtures and generic `asset_type` tests do not prove another domain.
-- Release each approved child domain through the same testing, documentation, and production evidence gates.
+- Include approved child domains in the same compatible integrated release train while retaining domain-specific fixtures, evidence, flags, rollback, and activation gates. Pending domains may ship fail-closed without supported-domain claims.
 
 ## Architecture and Duplicate-Work Rules
 
-Before every edit, search existing models, migrations, services, routes, jobs, schemas, OpenAPI, frontend pages, tests, documentation, and deployed resources. Record the canonical owner and classify the change as `NEW`, `EXTEND`, `LINK`, or `REPLACE`.
+Before changing an ownership area, search its existing models, migrations, services, routes, jobs, schemas, OpenAPI, frontend pages, tests, documentation, and deployed resources. Cache the canonical-owner result for the run, classify the change as `NEW`, `EXTEND`, `LINK`, or `REPLACE`, and recheck only when integration changes that area.
 
 Preserve these ownership boundaries:
 
@@ -272,24 +289,24 @@ Preserve these ownership boundaries:
 
 Forbidden duplicates include `ip_tasks`, `ip_hearings`, `ip_intake_records`, `ip_conflict_checks`, `ip_access_grants`, `ip_portal_grants`, `ip_notices`, `ip_import_jobs`, `ip_payment_records`, another legal-source master, another email/OAuth/calendar connector, another notification dispatcher, another provider operations/readiness/cost dashboard, and another drafting/report engine.
 
-## Slice Workflow
+## Continuous Program Workflow
 
-For every slice:
+Apply this loop to each coherent change, but batch shared discovery, integration, full-suite verification, documentation generation, and release work across compatible slices:
 
-1. Re-audit current `main`, worktree, deployed revision, migration heads, relevant owner, tests, and manifest rows.
+1. Establish current `main`, worktree, deployed revision, migration heads, canonical owners, tests, and manifest truth at the start of the run; re-audit only the facts affected by later state changes.
 2. Name exact requirement IDs, journey path IDs, actor/capability, data classes, dependencies, milestone exit criteria, and acceptance evidence.
 3. Record `NEW`, `EXTEND`, `LINK`, or `REPLACE`, canonical writer, compatibility path, reconciliation, one-writer switch, retirement, rollback, and ADR needs.
-4. Define persistence, service, API, frontend, job, security, observability, migration/backfill, documentation, and release impact before editing.
+4. Define persistence, service, API, frontend, job, security, observability, migration/backfill, documentation, and release impact before the affected layer is changed; do not require a separate written checkpoint for unchanged layers.
 5. Implement the complete vertical behavior, including loading, empty, validation, permission, stale, conflict, provider-unavailable, partial-success, retry, audit, metrics, and rollback states.
 6. Add focused unit, PostgreSQL, API, contract, frontend, security, data, and E2E tests for every mapped normal/exception path.
-7. Run impacted full regression gates and inspect all visible states on desktop and narrow mobile.
-8. Update all impacted documentation and regenerate the manifest views.
-9. Release with expand/backfill/verify/switch/contract, exact-image pinning, mixed-revision tests, canary, rollback, and authorized production-safe smoke.
-10. Attach evidence and update status only after the evidence exists.
-11. Merge/push through normal controls and verify the exact serving revision.
-12. Continue to the next mandatory dependency-ready slice. Do not stop merely because one slice or milestone shipped.
+7. Run focused checks for the touched behavior immediately. Defer full regression, complete desktop/mobile inspection, and cross-slice E2E to the integrated release candidate unless a local result requires earlier expansion.
+8. Update impacted canonical documentation as behavior changes and regenerate derived manifest views once per coherent integration checkpoint rather than after every small edit.
+9. Integrate compatible slices, resolve ownership and migration conflicts, and run the complete applicable gate set on the exact candidate.
+10. Attach evidence and update status in one generated batch after the supporting evidence exists.
+11. Merge/push through normal controls, release the compatible batch with expand/backfill/verify/switch/contract and exact-image pinning, then verify the exact serving revision and production-safe journeys.
+12. Continue automatically until all repository-controlled work is complete. Do not stop merely because one slice, milestone, PR, or deployment shipped.
 
-Keep pull requests and commits focused and reviewable. Do not put the full program into one branch or one pull request. Do not revert unrelated user changes.
+Prefer one program integration branch and one reviewable integration PR for the continuous run. Use coherent commits and machine-generated traceability within it. Split into additional branches or PRs only for genuine parallel ownership, incompatible release boundaries, platform limits, or independently reversible high-risk changes. Do not revert unrelated user changes.
 
 ## Exhaustive Test Contract
 
@@ -301,7 +318,7 @@ Every requirement and journey exception must have meaningful verification. Test 
 - PostgreSQL constraints, tenant-matched foreign keys, uniqueness, locking/concurrency, migrations, and query plans. SQLite-only proof does not count.
 - API, RFC 7807, OpenAPI, generated-client, idempotency, stale-write, lifecycle-command, audit, and outbox contracts.
 - Provider/connector contracts for success, no change, duplicate, out-of-order, timeout, rate/quota, auth/rotation/disconnect, schema change, malformed payload, outage, webhook forgery/replay, and protected download.
-- Lawyer-approved versioned fixtures for legal rules, calendars, forms, fees, workflows, pleadings, and effective-date cutovers.
+- Versioned synthetic/draft fixtures for implementation of legal rules, calendars, forms, fees, workflows, pleadings, and effective-date cutovers; lawyer-approved golden fixtures remain mandatory before authoritative activation, legal verification, or completion.
 - Frontend component/integration tests for every visible state and authorized action.
 - Full browser E2E through the real API and PostgreSQL database; mock only documented external boundaries.
 - Security tests for cross-tenant, direct-ID, count/autocomplete, restricted records, ethical walls, portal, revocation, source/document proxy, cache/vector leakage, SSRF/redirect/DNS rebinding, malicious uploads, prompt injection, formula injection, and secret/log safety.
@@ -327,12 +344,12 @@ Never store real client secrets or uncontrolled personal data in fixtures. Use a
 - No skip, focus marker, quarantine, retry-to-green flake, or swallowed failure may satisfy a gate.
 - A failed current production test stays a release blocker until root-caused and rerun green.
 - One test may cover multiple manifest paths only with explicit path-level assertions and evidence.
-- Rerun the impacted full suite after integration, migration, merge, and deployment.
+- Run focused suites during development. Run the applicable full suite on each exact integrated candidate and at the required deployed boundary; any code, dependency, runtime configuration, migration, fixture, test, or generated-artifact change creates a new exact candidate and reruns affected gates. Evidence/prose-only changes use change-aware validators, and administrative checkpoints alone do not trigger the full suite.
 - Record exact pass/fail/skip counts and never hide baseline failures. A pre-existing failure blocks when it affects the slice or prevents trustworthy verification.
 
 ### Repository gates
 
-Run focused gates while developing and all applicable current repository/CI gates before release. At minimum, reconcile and run:
+Run focused gates while developing and all applicable current repository/CI gates once for each integrated release candidate. At minimum, reconcile and run:
 
 ```powershell
 git diff --check
@@ -362,7 +379,7 @@ Also run current PostgreSQL migration/constraint suites, provider contracts, sec
 
 ## Documentation, Final Documents, Guide, and Landing Pages
 
-Documentation is part of every slice and must be deployed with the capability it describes.
+Documentation is part of the program and must be deployed with the capability it describes. Update canonical sources with the implementation and batch generated views, final documents, screenshots, and public-page verification at integration/release checkpoints rather than reproducing the full documentation workflow for every slice.
 
 Review and update every impacted:
 
@@ -403,7 +420,7 @@ Verify documents and landing pages visually on desktop and mobile, test every in
 
 ## Migration and Production Release Contract
 
-For every milestone release:
+Prefer one compatible integrated program release. Create an additional release train only when migrations, rollback boundaries, platform limits, or independent risk make separation materially safer. For each integrated release train:
 
 1. Confirm clean, reviewed scope and current `main` ancestry.
 2. Run full local/CI gates and build exact-source images.
@@ -411,7 +428,7 @@ For every milestone release:
 4. Use expand, backfill, verify, switch, and contract phases.
 5. Dry-run and reconcile backfills by company; verify counts, orphans, duplicates, hashes, lifecycle/events, deadlines, links, objects, indexes, pending effects, and reports.
 6. Prove old/new API and worker compatibility, mixed revisions, leases/fencing, replay, rollback, and kill switches.
-7. Deploy staging/canary through repository tooling and run complete acceptance.
+7. Deploy staging/canary through repository tooling and run complete automated candidate acceptance. Require human/legal/provider/UAT acceptance only for scope being activated or claimed supported; pending approval keeps the affected scope off and does not block the fail-closed train.
 8. Merge the validated commit to `main`, push `origin/main`, and deploy production through the canonical scripts/workflows.
 9. Run migrations before incompatible application activation and never bypass a failed migration gate.
 10. Pin API, web, workers, jobs, and schedulers to the exact approved digest/revision.
@@ -426,18 +443,18 @@ Health `{"status":"ok"}` is availability evidence only. It does not prove the im
 ## Progress, Persistence, and Blockers
 
 - Keep the user informed with concise progress updates during long work.
-- Update the plan and canonical manifest as evidence changes, not only at the end.
-- At every context, session, approval, or tooling boundary, persist a precise checkpoint: current revision, active slice, exact statuses, tests, deployment state, blockers, and next command/action.
+- Update the plan and canonical manifest when evidence changes materially, not after every command or test.
+- Persist a precise checkpoint automatically before risky release actions, when the active revision or blocker changes, and at an actual context/session boundary. Do not create an approval pause merely to record it.
 - Resume from the checkpoint; do not restart from assumptions.
-- Continue independent work when one provider/legal/human decision is blocked, subject to the PRD's mandatory order and dependency rules.
+- Continue every dependency-ready node when one provider/legal/human decision is blocked; only direct dependency edges and affected activation remain fenced.
 - Do not ask the user to decide implementation details discoverable from code, tests, standards, official documentation, or the PRD.
 - Ask only for a genuinely external legal/provider/product decision that cannot be safely represented as configurable/manual/disabled behavior.
 - A blocker must identify row IDs, owner, reason, evidence/decision needed, safe fallback, milestone impact, and next independent slice.
 - A context boundary is not completion. Report `PROGRAM INCOMPLETE` unless all final gates pass.
 
-## Required Final Response for Every Execution Run
+## Required Progress and Final Response
 
-For every slice attempted or completed, report separately:
+Keep interim updates short and event-driven. Do not stop the run to produce a full per-slice handoff. At integration/release checkpoints and in the final response, report a consolidated table or equivalent covering:
 
 1. Slice, milestone, requirement IDs, and journey-path IDs.
 2. Existing canonical owners extended and duplicate-work analysis.
@@ -450,17 +467,17 @@ For every slice attempted or completed, report separately:
 9. Manifest status changes and unresolved mapping/evidence gaps.
 10. Defects, external blockers, risks, and the next mandatory slice.
 
-For the final program response, include the computed 436-requirement, 68-journey, 317-path, epic, milestone, test, documentation, data, approval, and production totals. Do not say `COMPLETE` unless every required final condition in this prompt and the PRD is satisfied.
+For the final program response, include the computed 436-requirement, 68-journey, 317-path, epic, milestone, test, documentation, data, approval, and production totals. Do not say `COMPLETE` unless every required final condition in this prompt and the PRD is satisfied. Missing external acceptance may leave the program truthfully incomplete, but it must not prevent delivery of all repository-controlled implementation in the same run.
 
 ## Start Now
 
 1. Read `AGENTS.md`, this prompt, the master prompt, the complete PRD, manifest, generated views, evidence, and current deployment/CI configuration.
 2. Fetch current remote state and re-audit current `main`, production, database head, images, workers/jobs, schedulers, flags, providers, sources, landing pages, and latest CI/E2E.
 3. Create a focused `codex/` repair branch through the normal workflow while preserving unrelated user work.
-4. Execute Phase 0 first: reproduce and fix the red production Notices test, run the full notice/IP regressions, repair manifest traceability/validator controls, and accurately map existing delivered code.
-5. Close remaining M0/M1 work and gates in exact PRD order.
-6. Continue through M2, M3, M4, M5, M6, M7, and every approved M8-M10 child domain without stopping after a partial release.
-7. Test, document, merge, deploy, and verify each independently releasable milestone/slice through production.
+4. Start Phase 0 trust repair and, in parallel, all dependency-independent repository work. Reproduce and fix the red production Notices test, repair manifest traceability/validator controls, and accurately map existing delivered code without freezing unrelated implementation.
+5. Execute M0-M10 as one dependency-scheduled backlog. Parallelize independent work and keep unapproved external behavior default-off and truthful.
+6. Integrate compatible M0-M10 work into the smallest practical number of review and release trains; do not stop after a partial milestone.
+7. Run focused tests continuously, then batch full CI, documentation, merge, deployment, and exact-revision production verification for the integrated candidate.
 8. Finish all repository-controlled work even when an external acceptance gate remains, and report the exact external blocker truthfully.
 
 Begin execution now. Do not merely restate these instructions.

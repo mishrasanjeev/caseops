@@ -237,6 +237,70 @@ def test_validator_rejects_any_journey_projection_drift() -> None:
         )
 
 
+def test_validator_rejects_one_go_and_prd_source_drift() -> None:
+    manifest = _manifest()
+    manifest["program"].pop("execution_policy")
+    manifest["requirements"][0]["text"] = "Changed requirement text"
+    manifest["milestones"][0]["exit_criteria"] = "Changed milestone exit"
+    manifest["epics"][0]["title"] = "Changed epic title"
+
+    derived = next(
+        row
+        for row in manifest["slices"]
+        if row["source_kind"] == "derived"
+        and row["title"].startswith("Remaining PRD behavior")
+    )
+    derived["title"] = "Completely unrelated derived title"
+    canonical_owner = next(
+        owner
+        for owner in derived["ownership"]
+        if owner["component"].startswith(f"{derived['epic_id']} canonical scope:")
+    )
+    canonical_owner["component"] = "Completely unrelated ownership scope"
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("one-go execution_policy is missing or changed" in error for error in errors)
+    assert any("requirement source fields" in error for error in errors)
+    assert any("milestone source fields" in error for error in errors)
+    assert any("epic source fields" in error for error in errors)
+    assert any("derived title does not match parent epic" in error for error in errors)
+    assert any("expected canonical ownership snapshot" in error for error in errors)
+
+
+def test_validator_rejects_missing_generated_canonical_owner() -> None:
+    manifest = _manifest()
+    derived = next(
+        row
+        for row in manifest["slices"]
+        if row["id"] == "IPLF-002A"
+    )
+    derived["ownership"] = []
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("expected canonical ownership snapshot" in error for error in errors)
+
+
+def test_validator_rejects_unknown_self_duplicate_and_cyclic_dependencies() -> None:
+    manifest = _manifest()
+    slices = {row["id"]: row for row in manifest["slices"]}
+    slices["IPLF-002A"]["dependencies"] = ["IPLF-002B"]
+    slices["IPLF-002B"]["dependencies"] = ["IPLF-002A"]
+    slices["IPLF-003A"]["dependencies"] = [
+        "IPLF-003A",
+        "IPLF-NOPE",
+        "IPLF-NOPE",
+    ]
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any("unknown dependencies ['IPLF-NOPE']" in error for error in errors)
+    assert any("duplicate dependencies ['IPLF-NOPE']" in error for error in errors)
+    assert any("self dependency" in error for error in errors)
+    assert any("dependency graph contains a cycle" in error for error in errors)
+
+
 def test_validator_rejects_passed_row_citing_unwritten_planned_test() -> None:
     """A `planned:` reference names a test that does not exist yet.
 

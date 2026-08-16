@@ -26,6 +26,70 @@ GENERATED_ROOT = CONTROL_ROOT / "generated"
 EXPECTED_REQUIREMENTS = 436
 EXPECTED_FAMILIES = 50
 EXPECTED_JOURNEYS = 68
+EXPECTED_EXECUTION_POLICY = (
+    "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the "
+    "current safety-critical fence lane, never an exclusive program scheduler"
+)
+GENERATED_DERIVED_PHASES = {
+    "Foundation, ownership, and backend contract",
+    "User workflow, exceptions, and release proof",
+    "Remaining PRD behavior and exception coverage",
+    "Integrated workflow, reconciliation, and production proof",
+}
+CUSTOM_DERIVED_CONTRACTS = {
+    "IPLF-001C": (
+        "Reconcile and codify scheduler delivery and workload-outcome audit without an "
+        "elapsed-time gate.",
+        "Prove canonical scheduler-to-job delivery and report the latest workload outcome "
+        "separately, preserving fail-closed cost controls and continuous SLO monitoring "
+        "without an arbitrary duration blocker.",
+    ),
+    "IPLF-028C": (
+        "Repository-wide data inventory and Definition-of-Ready enforcement for the "
+        "data-map foundation: snapshot every current SQL table/column/index and known "
+        "object/cache/queue/telemetry/export/provider/backup class without enabling a data "
+        "operation.",
+        "Repository data-map inventory and fail-closed Definition-of-Ready enforcement",
+    ),
+    "IPLF-019A": (
+        "Foundation, ownership, and backend contract: Publish the repository-backed "
+        "ownership ledger and ADRs; prove no proposed M2/M3 table/service/page/job "
+        "duplicates the Section 11.2 owners.",
+        "Publish the exact Section 11.2 ownership matrix as a repository-backed M2/M3 "
+        "Definition-of-Ready contract, record the import and durable-workflow ADRs, and "
+        "fail CI on an uncovered or forbidden duplicate "
+        "table/service/route/page/job/control plane.",
+    ),
+    "IPLF-027C": (
+        "Legal rule-version governance completion: effective-range collision control, "
+        "supersession-scoped impact preview, stale-preview fencing on activation, "
+        "fail-closed emergency disable, and tenant selection of an approved rule version.",
+        "Rule-version governance lifecycle and tenant selection",
+    ),
+    "IPLF-027D": (
+        "Rule reproducibility proof, emergency-disable alerting through the existing "
+        "notification dispatcher, and fee/form rule-kind lifecycle coverage.",
+        "Rule governance reproducibility, alerting, and non-deadline rule kinds",
+    ),
+    "IPLF-027E": (
+        "Mixed-revision deployment and rollback journey proof: old and new producer "
+        "revisions coexist on the expanded schema, an unadmitted contract fails closed, "
+        "and rollback after a committed event preserves it without a duplicate consumer.",
+        "Mixed-revision coexistence and rollback journey proof",
+    ),
+}
+SPECIALIZED_DERIVED_OWNER_SLICES = {
+    "IPLF-019A",
+    "IPLF-024A",
+    "IPLF-024B",
+    "IPLF-030A",
+    "IPLF-031A",
+    "IPLF-032A",
+    "IPLF-033A",
+    "IPLF-034A",
+    "IPLF-035A",
+    "IPLF-036A",
+}
 
 IMPLEMENTATION_STATUSES = {"not_started", "in_progress", "implemented", "blocked"}
 VERIFICATION_STATUSES = {"not_run", "failed", "passed", "blocked"}
@@ -202,7 +266,7 @@ def parse_backlog(prd: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
             }
 
     mandatory = re.search(
-        r"### 25\.1 Mandatory first execution order\s+(.*?)(?=\n### 25\.2)",
+        r"### 25\.1 Trust-work dependency chain\s+(.*?)(?=\n### 25\.2)",
         prd,
         re.DOTALL,
     )
@@ -516,7 +580,8 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     if manifest.get("schema_version") != 2:
         errors.append("manifest schema_version must be 2 after Phase 0 reconciliation")
 
-    requirement_ids = [row.get("id") for row in manifest.get("requirements", [])]
+    manifest_requirements = manifest.get("requirements", [])
+    requirement_ids = [row.get("id") for row in manifest_requirements]
     parsed_requirement_ids = [row["id"] for row in parsed_requirements]
     duplicate_requirements = sorted(key for key, count in Counter(requirement_ids).items() if count > 1)
     if duplicate_requirements:
@@ -528,23 +593,63 @@ def validate(manifest: dict[str, Any]) -> list[str]:
         errors.append(f"PRD family count drift: expected {EXPECTED_FAMILIES}, found {len(parsed_families)}")
     if requirement_ids != parsed_requirement_ids:
         errors.append("manifest requirement IDs/order do not exactly match the PRD")
+    requirement_source_fields = ("id", "family", "text", "text_sha256")
+    if [
+        tuple(row.get(field) for field in requirement_source_fields)
+        for row in manifest_requirements
+    ] != [
+        tuple(row.get(field) for field in requirement_source_fields)
+        for row in parsed_requirements
+    ]:
+        errors.append("manifest requirement source fields do not exactly match the PRD")
 
-    journey_ids = [row.get("id") for row in manifest.get("journeys", [])]
+    manifest_journeys = manifest.get("journeys", [])
+    journey_ids = [row.get("id") for row in manifest_journeys]
     parsed_journey_ids = [row["id"] for row in parsed_journeys]
     if len(parsed_journey_ids) != EXPECTED_JOURNEYS:
         errors.append(f"PRD journey count drift: expected {EXPECTED_JOURNEYS}, found {len(parsed_journey_ids)}")
     if journey_ids != parsed_journey_ids:
         errors.append("manifest journey IDs/order do not exactly match the PRD")
+    journey_source_fields = (
+        "id",
+        "title",
+        "actor",
+        "preconditions",
+        "acceptance",
+        "exception_source_sha256",
+        "path_ids",
+    )
+    if [
+        tuple(row.get(field) for field in journey_source_fields)
+        for row in manifest_journeys
+    ] != [
+        tuple(row.get(field) for field in journey_source_fields)
+        for row in parsed_journeys
+    ]:
+        errors.append("manifest journey source fields do not exactly match the PRD")
 
-    if [row.get("id") for row in manifest.get("milestones", [])] != [
-        row["id"] for row in parsed_milestones
+    manifest_milestones = manifest.get("milestones", [])
+    milestone_source_fields = ("id", "name", "target", "deliverable", "exit_criteria")
+    if [
+        tuple(row.get(field) for field in milestone_source_fields)
+        for row in manifest_milestones
+    ] != [
+        tuple(row.get(field) for field in milestone_source_fields)
+        for row in parsed_milestones
     ]:
+        errors.append("manifest milestone source fields do not exactly match the PRD")
+    if [row.get("id") for row in manifest_milestones] != [row["id"] for row in parsed_milestones]:
         errors.append("manifest milestone IDs/order do not exactly match the PRD")
-    if [row.get("id") for row in manifest.get("epics", [])] != [
-        row["id"] for row in parsed_epics
-    ]:
+    manifest_epics = manifest.get("epics", [])
+    epic_source_fields = ("id", "title", "milestone_id")
+    if [
+        tuple(row.get(field) for field in epic_source_fields) for row in manifest_epics
+    ] != [tuple(row.get(field) for field in epic_source_fields) for row in parsed_epics]:
+        errors.append("manifest epic source fields do not exactly match the PRD backlog")
+    if [row.get("id") for row in manifest_epics] != [row["id"] for row in parsed_epics]:
         errors.append("manifest epic IDs/order do not exactly match the PRD backlog")
     manifest_slices = manifest.get("slices", [])
+    epics_by_id = {row.get("id"): row for row in manifest_epics}
     slices_by_id = {row.get("id"): row for row in manifest_slices}
     for parsed_slice in parsed_slices:
         row = slices_by_id.get(parsed_slice["id"])
@@ -566,14 +671,55 @@ def validate(manifest: dict[str, Any]) -> list[str]:
                 errors.append(f"slice/{row_id}: invalid derived slice ID")
             if row.get("scope_source") != row.get("epic_id"):
                 errors.append(f"slice/{row_id}: derived scope_source must equal parent epic")
+            parent_epic = epics_by_id.get(row.get("epic_id"))
+            custom_contract = CUSTOM_DERIVED_CONTRACTS.get(row_id)
+            if custom_contract:
+                expected_title, expected_behavior = custom_contract
+                if (
+                    row.get("title") != expected_title
+                    or row.get("primary_behavior") != expected_behavior
+                ):
+                    errors.append(f"slice/{row_id}: custom derived contract was changed")
+            elif parent_epic:
+                phase = row.get("primary_behavior")
+                if phase not in GENERATED_DERIVED_PHASES:
+                    errors.append(f"slice/{row_id}: invalid generated derived phase")
+                else:
+                    expected_title = f"{phase}: {parent_epic['title']}"
+                    if row.get("title") != expected_title:
+                        errors.append(f"slice/{row_id}: derived title does not match parent epic")
+                if row_id not in SPECIALIZED_DERIVED_OWNER_SLICES:
+                    expected_component = (
+                        f"{row.get('epic_id')} canonical scope: {parent_epic['title']}"
+                    )
+                    canonical_owners = [
+                        owner
+                        for owner in row.get("ownership", [])
+                        if owner.get("component") == expected_component
+                    ]
+                    if len(canonical_owners) != 1:
+                        errors.append(
+                            f"slice/{row_id}: expected canonical ownership snapshot "
+                            "is missing or duplicated"
+                        )
 
-    def comparable_path(row: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
-        return row.get("id"), row.get("journey_id"), row.get("kind"), row.get("source_text")
+    def comparable_path(row: dict[str, Any]) -> tuple[Any, ...]:
+        fields = (
+            "id",
+            "journey_id",
+            "kind",
+            "source_text",
+            "source_sha256",
+            "test_id",
+        )
+        return tuple(row.get(field) for field in fields)
 
     if [comparable_path(row) for row in manifest.get("journey_paths", [])] != [comparable_path(row) for row in parsed_paths]:
         errors.append("manifest atomic normal/exception journey paths do not exactly match the PRD")
 
     program = manifest.get("program", {})
+    if program.get("execution_policy") != EXPECTED_EXECUTION_POLICY:
+        errors.append("manifest one-go execution_policy is missing or changed")
     if program.get("prd_sha256") != sha256_text(prd):
         errors.append("manifest PRD hash is stale")
     baseline = program.get("baseline", {})
@@ -607,6 +753,53 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     valid_paths = {row.get("id") for row in manifest.get("journey_paths", [])}
     valid_epics = {row.get("id") for row in manifest.get("epics", [])}
     valid_slices = {row.get("id") for row in manifest.get("slices", [])}
+    dependency_graph: dict[str, set[str]] = {}
+    for row in manifest_slices:
+        row_id = row.get("id", "<missing>")
+        dependencies = row.get("dependencies")
+        if not isinstance(dependencies, list) or any(
+            not isinstance(dependency, str) or not dependency for dependency in dependencies
+        ):
+            errors.append(f"slice/{row_id}: dependencies must be a list of slice IDs")
+            dependency_graph[row_id] = set()
+            continue
+        duplicate_dependencies = sorted(
+            dependency
+            for dependency, count in Counter(dependencies).items()
+            if count > 1
+        )
+        if duplicate_dependencies:
+            errors.append(f"slice/{row_id}: duplicate dependencies {duplicate_dependencies}")
+        unknown_dependencies = sorted(set(dependencies) - valid_slices)
+        if unknown_dependencies:
+            errors.append(f"slice/{row_id}: unknown dependencies {unknown_dependencies}")
+        if row_id in dependencies:
+            errors.append(f"slice/{row_id}: self dependency")
+        dependency_graph[row_id] = set(dependencies) & valid_slices
+        external_preconditions = row.get("external_preconditions", [])
+        if not isinstance(external_preconditions, list) or any(
+            not isinstance(precondition, str) or not precondition.strip()
+            for precondition in external_preconditions
+        ):
+            errors.append(f"slice/{row_id}: external_preconditions must be non-empty strings")
+
+    indegree = {slice_id: len(dependencies) for slice_id, dependencies in dependency_graph.items()}
+    dependents: dict[str, set[str]] = defaultdict(set)
+    for slice_id, dependencies in dependency_graph.items():
+        for dependency in dependencies:
+            dependents[dependency].add(slice_id)
+    ready = [slice_id for slice_id, count in indegree.items() if count == 0]
+    visited = 0
+    while ready:
+        slice_id = ready.pop()
+        visited += 1
+        for dependent in dependents[slice_id]:
+            indegree[dependent] -= 1
+            if indegree[dependent] == 0:
+                ready.append(dependent)
+    if visited != len(dependency_graph):
+        cyclic = sorted(slice_id for slice_id, count in indegree.items() if count > 0)
+        errors.append(f"slice dependency graph contains a cycle: {cyclic}")
     for collection, row in all_rows:
         row_id = row.get("id", "<missing>")
         if row.get("implementation_status") not in IMPLEMENTATION_STATUSES:
@@ -719,7 +912,16 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             if not row.get("evidence_refs"):
                 errors.append(f"slice/{row_id}: passed slice lacks evidence refs")
         for owner in row.get("ownership", []):
-            component = owner.get("component", "").lower()
+            raw_component = owner.get("component", "")
+            component = raw_component.lower()
+            parent_epic = epics_by_id.get(row.get("epic_id"))
+            canonical_scope_prefix = f"{row.get('epic_id')} canonical scope:"
+            if raw_component.startswith(canonical_scope_prefix) and parent_epic:
+                expected_component = f"{canonical_scope_prefix} {parent_epic['title']}"
+                if raw_component != expected_component:
+                    errors.append(
+                        f"slice/{row_id}: canonical ownership scope does not match parent epic"
+                    )
             if owner.get("classification") not in {"NEW", "EXTEND", "LINK", "REPLACE"}:
                 errors.append(f"slice/{row_id}: invalid ownership classification")
             for required_field in ("component", "canonical_writer", "compatibility_path", "retirement_gate"):
