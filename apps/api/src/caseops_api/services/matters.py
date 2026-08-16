@@ -4890,6 +4890,20 @@ def create_matter_invoice(
                 or 0
             )
         invoice_number = next_invoice_number(billing_profile, existing_count=existing_count)
+        if billing_profile is None:
+            # EH-SGR-04: the profile-less fallback numbers from the tenant's
+            # invoice COUNT, which can collide when historical numbering has
+            # gaps - two invoices numbered 0002 and 0003 give a count of 2 and
+            # would re-propose 0003. Advance past anything already taken rather
+            # than 409 the user out of an auto-numbered invoice.
+            while session.scalar(
+                select(MatterInvoice.id).where(
+                    MatterInvoice.company_id == context.company.id,
+                    MatterInvoice.invoice_number == invoice_number,
+                )
+            ):
+                existing_count += 1
+                invoice_number = next_invoice_number(None, existing_count=existing_count)
     existing_invoice = session.scalar(
         select(MatterInvoice).where(
             MatterInvoice.company_id == context.company.id,

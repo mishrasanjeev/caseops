@@ -120,6 +120,30 @@ _CREDITED_ATTEMPT_STATUSES: frozenset[str] = frozenset(
 )
 
 
+def _attempt_collected_minor(attempt: MatterInvoicePaymentAttempt) -> int:
+    """What an attempt actually collected, tolerating pre-fix rows.
+
+    Before EH-SGR-03 the webhook wrote its paid-with-no-amount fallback to the
+    INVOICE and left ``attempt.amount_received_minor`` at 0, because the adjacent
+    line only ever took ``max(attempt.amount_received_minor, result.amount)``.
+    Production therefore holds settled invoices whose attempts record zero.
+
+    Deriving naively from those rows recomputes a paid invoice to nothing and
+    re-opens the full balance - corrupting stored accounting data rather than
+    merely displaying it wrongly. A ``paid`` attempt reporting zero collected is
+    self-contradictory, so it is read as having collected its full amount.
+
+    ``partially_paid`` gets no such treatment: a partial genuinely can be zero so
+    far, and inflating it would mark an unpaid invoice as settled.
+    """
+    status = str(attempt.status)
+    if status not in _CREDITED_ATTEMPT_STATUSES:
+        return 0
+    if attempt.amount_received_minor == 0 and status == PaymentAttemptStatus.PAID.value:
+        return attempt.amount_minor
+    return attempt.amount_received_minor
+
+
 def recalculate_invoice_collection(invoice: MatterInvoice) -> None:
     """Recompute the invoice's collected total from its payment attempts.
 
@@ -135,11 +159,14 @@ def recalculate_invoice_collection(invoice: MatterInvoice) -> None:
     replaying a webhook, or receiving one out of order, converges on the same
     answer rather than depending on arrival sequence.
     """
-    collected = sum(
-        attempt.amount_received_minor
-        for attempt in invoice.payment_attempts
-        if str(attempt.status) in _CREDITED_ATTEMPT_STATUSES
-    )
+    attempts = list(invoice.payment_attempts)
+    if not attempts:
+        # Nothing to derive from. An invoice may carry a receipt recorded
+        # outside the attempt flow, and zeroing it here would re-open a
+        # settled balance against a client who has already paid.
+        return
+
+    collected = sum(_attempt_collected_minor(attempt) for attempt in attempts)
     invoice.amount_received_minor = collected
     invoice.balance_due_minor = max(
         invoice.total_amount_minor
