@@ -32,11 +32,13 @@ Stable manifest test IDs:
 from __future__ import annotations
 
 import ast
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import IpDeadlineCoverage
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _member
@@ -268,6 +270,104 @@ def test_uj57_recon03_declining_an_immediate_transfer_escalates(
     assert row["responsible_membership_id"] == escalation_id
     assert row["responsible_membership_id"] != owner_id
     assert row["coverage_status"] == "escalated"
+
+
+def test_uj57_recon03_initial_writers_refuse_backup_as_decline_escalation(
+    client: TestClient,
+) -> None:
+    """An immediate decline must be able to reach a distinct responsible owner."""
+
+    (
+        owner_headers,
+        owner_id,
+        successor_id,
+        successor_headers,
+        escalation_id,
+        matter,
+    ) = _setup(client)
+    docket_id, coverage = _docket_with_coverage(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title="Recon Distinct Escalation Mark",
+        responsible=owner_id,
+    )
+    with get_session_factory()() as session:
+        row = session.get(IpDeadlineCoverage, coverage["id"])
+        assert row is not None
+        row.backup_membership_id = escalation_id
+        session.commit()
+
+    before = client.get(f"/api/ip/dockets/{docket_id}", headers=owner_headers).json()[
+        "deadline_coverages"
+    ][0]
+    direct = client.post(
+        f"/api/ip/dockets/{docket_id}/deadline-coverages/{coverage['id']}/reassign",
+        headers=owner_headers,
+        json={
+            "expected_responsible_membership_id": owner_id,
+            "responsible_membership_id": successor_id,
+            "backup_membership_id": escalation_id,
+            "reason": "Immediate departure cover with an unusable fallback.",
+            "transfer_mode": "immediate",
+            "escalation_membership_id": escalation_id,
+        },
+    )
+    assert direct.status_code == 409, direct.text
+    assert direct.json()["code"] == "ip_coverage_distinct_backup_required"
+
+    # The invalid immediate transfer never becomes a pending decision that can
+    # strand the successor when they decline it.
+    declined = client.post(
+        f"/api/ip/deadline-coverages/{coverage['id']}/replacement-decision",
+        headers=successor_headers,
+        json={"decision": "rejected", "reason": "I cannot cover this deadline."},
+    )
+    assert declined.status_code == 409, declined.text
+    assert "no replacement decision is pending" in declined.text.lower()
+
+    bulk = client.post(
+        "/api/ip/deadline-coverages/bulk-reassign",
+        headers=owner_headers,
+        json={
+            "from_membership_id": owner_id,
+            "to_membership_id": successor_id,
+            "reason": "Immediate portfolio departure cover.",
+            "transfer_mode": "immediate",
+            "escalation_membership_id": escalation_id,
+        },
+    )
+    assert bulk.status_code == 409, bulk.text
+    assert bulk.json()["code"] == "ip_coverage_distinct_backup_required"
+
+    preview = client.post(
+        "/api/ip/deadline-coverages/reassign-preview",
+        headers=owner_headers,
+        json={
+            "from_membership_id": owner_id,
+            "to_membership_id": successor_id,
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    emergency = client.post(
+        "/api/ip/deadline-coverages/reassign-propose",
+        headers=owner_headers,
+        json={
+            "from_membership_id": owner_id,
+            "to_membership_id": successor_id,
+            "preview_token": preview.json()["preview_token"],
+            "reason": "Emergency portfolio cover with an unusable fallback.",
+            "emergency_until": (datetime.now(UTC) + timedelta(days=2)).isoformat(),
+            "emergency_escalation_membership_id": escalation_id,
+        },
+    )
+    assert emergency.status_code == 409, emergency.text
+    assert emergency.json()["code"] == "ip_coverage_distinct_backup_required"
+
+    after = client.get(f"/api/ip/dockets/{docket_id}", headers=owner_headers).json()[
+        "deadline_coverages"
+    ][0]
+    assert after == before
 
 
 def test_uj57_recon05_only_the_decision_path_may_record_an_acceptance() -> None:

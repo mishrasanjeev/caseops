@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.password_policy import WeakPasswordError, enforce_password_policy
@@ -748,16 +748,30 @@ def _build_offboarding_preview(
             session.scalar(
                 select(func.count(IpDeadlineCoverage.id)).where(
                     IpDeadlineCoverage.company_id == context.company.id,
-                    IpDeadlineCoverage.backup_membership_id == target.id,
-                    IpDeadlineCoverage.responsible_membership_id == reassign_to.id,
+                    or_(
+                        and_(
+                            IpDeadlineCoverage.backup_membership_id == target.id,
+                            IpDeadlineCoverage.responsible_membership_id
+                            == reassign_to.id,
+                        ),
+                        and_(
+                            IpDeadlineCoverage.responsible_membership_id == target.id,
+                            IpDeadlineCoverage.backup_membership_id == reassign_to.id,
+                        ),
+                        and_(
+                            IpDeadlineCoverage.responsible_membership_id == target.id,
+                            IpDeadlineCoverage.backup_membership_id
+                            == context.membership.id,
+                        ),
+                    ),
                 )
             )
             or 0
         )
         if backup_conflicts:
             blockers.append(
-                "Choose a distinct IP deadline backup; the replacement already owns "
-                "affected deadlines."
+                "Choose a distinct IP deadline backup; the replacement or "
+                "decline-escalation owner already holds the other coverage role."
             )
         conflicts = _ethical_wall_conflict_count(
             session,

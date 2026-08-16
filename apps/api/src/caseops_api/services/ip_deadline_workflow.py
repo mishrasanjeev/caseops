@@ -71,6 +71,7 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.deadlines import create_deadline, update_deadline
 from caseops_api.services.ip_deadlines import (
     assert_critical_deadline_coverage,
+    assert_distinct_deadline_coverage,
     assert_rule_can_activate,
     calculate_ip_deadline,
     operational_projection_reference,
@@ -1249,6 +1250,18 @@ def _validate_responsibilities(
             status_code=409,
             detail="Exactly one primary responsibility is required.",
         )
+    primary_membership_id = next(
+        item.membership_id for item in values if item.role == "primary"
+    )
+    for item in values:
+        if item.role in {"backup", "supervisor", "docketing"}:
+            # This check precedes membership resolution and every write in
+            # ``_confirm_row``. A critical date cannot acquire apparent cover
+            # that is actually the same person as its responsible owner.
+            assert_distinct_deadline_coverage(
+                responsible_membership_id=primary_membership_id,
+                backup_membership_id=item.membership_id,
+            )
     resolved: list[tuple[IpResponsibilityInput, CompanyMembership]] = []
     for item in values:
         member = _membership(session, context=context, membership_id=item.membership_id)

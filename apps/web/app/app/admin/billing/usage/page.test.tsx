@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -62,5 +62,21 @@ describe("TenantBillingUsagePage", () => {
         }),
       ).toBe(true),
     );
+  });
+
+  it("announces a layout-preserving loader before usage breakdowns resolve", () => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => undefined));
+
+    renderWithQuery(<TenantBillingUsagePage />);
+
+    const loading = screen.getByTestId("billing-usage-loading");
+    expect(loading).toHaveAttribute("role", "status");
+    expect(loading).toHaveAttribute("aria-live", "polite");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(within(loading).getByText("Loading usage and spend report.")).toHaveClass(
+      "sr-only",
+    );
+    expect(loading.querySelectorAll(".animate-pulse")).toHaveLength(7);
+    expect(screen.queryByText("No usage in this period.")).not.toBeInTheDocument();
   });
 });

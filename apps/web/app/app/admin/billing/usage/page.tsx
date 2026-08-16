@@ -80,6 +80,35 @@ function BreakdownTable({
   );
 }
 
+function BillingUsageLoading() {
+  return (
+    <div
+      className="flex flex-col gap-6"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-testid="billing-usage-loading"
+    >
+      <span className="sr-only">Loading usage and spend report.</span>
+      <div className="grid gap-4 md:grid-cols-3" aria-hidden="true">
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+      </div>
+      <Card aria-hidden="true">
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-14 w-full" />
+        </CardContent>
+      </Card>
+      <div className="grid gap-6 xl:grid-cols-2" aria-hidden="true">
+        <Skeleton className="h-44 w-full" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    </div>
+  );
+}
+
 export default function TenantBillingUsagePage() {
   const [downloading, setDownloading] = useState(false);
   const usageQuery = useQuery({
@@ -150,12 +179,7 @@ export default function TenantBillingUsagePage() {
       />
 
       {usageQuery.isPending || spendQuery.isPending ? (
-        <Card>
-          <CardContent className="flex flex-col gap-3" aria-busy="true" aria-label="Loading usage">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-28 w-full" />
-          </CardContent>
-        </Card>
+        <BillingUsageLoading />
       ) : null}
 
       {snapshot ? (

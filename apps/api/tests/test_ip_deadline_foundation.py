@@ -141,6 +141,19 @@ def test_critical_deadline_requires_acknowledged_primary_and_escalation_coverage
         assert_critical_deadline_coverage(
             [ResponsibilityEvidence(membership_id="primary", role="primary", accepted=True)]
         )
+    with pytest.raises(HTTPException) as collapsed:
+        assert_critical_deadline_coverage(
+            [
+                ResponsibilityEvidence(
+                    membership_id="same-person", role="primary", accepted=True
+                ),
+                ResponsibilityEvidence(
+                    membership_id="same-person", role="backup", accepted=True
+                ),
+            ]
+        )
+    assert collapsed.value.status_code == 409
+    assert collapsed.value.detail["code"] == "ip_coverage_distinct_backup_required"
 
     assert_critical_deadline_coverage(
         [

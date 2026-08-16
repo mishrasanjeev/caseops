@@ -86,6 +86,45 @@ function dueLabel(row: IpAssignedCoverage) {
   return `Due ${on} · in ${row.days_until_due} ${row.days_until_due === 1 ? "day" : "days"}`;
 }
 
+function acknowledgementLabel(row: IpAssignedCoverage) {
+  const docket = row.docket_identifier
+    ? `${row.docket_title} (${row.docket_identifier})`
+    : row.docket_title;
+  const deadline = row.deadline_title?.trim() || "Untitled deadline";
+  const due = row.due_on
+    ? `due ${DUE.format(new Date(`${row.due_on}T00:00:00`))}`
+    : "no due date recorded";
+  return `${docket} · ${deadline} · ${due}`;
+}
+
+type AcknowledgementSelection = {
+  expectedVersion: number;
+  label: string;
+};
+
+type AcknowledgementSubmission = {
+  coverageIds: readonly string[];
+  expectedVersions: Readonly<Record<string, number>>;
+  labels: Readonly<Record<string, string>>;
+};
+
+function acknowledgementSubmission(
+  selected: ReadonlyMap<string, AcknowledgementSelection>,
+): AcknowledgementSubmission {
+  const entries = [...selected.entries()];
+  return Object.freeze({
+    coverageIds: Object.freeze(entries.map(([coverageId]) => coverageId)),
+    expectedVersions: Object.freeze(
+      Object.fromEntries(
+        entries.map(([coverageId, snapshot]) => [coverageId, snapshot.expectedVersion]),
+      ),
+    ),
+    labels: Object.freeze(
+      Object.fromEntries(entries.map(([coverageId, snapshot]) => [coverageId, snapshot.label])),
+    ),
+  });
+}
+
 export default function IpDailyDocketPage() {
   // These mirror the API exactly: the daily docket needs ip:read, acting on
   // coverage or queues needs ip:write, and signing off needs ip:approve.
@@ -352,9 +391,16 @@ function EscalationsCard({
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-2">
         {isLoading ? (
-          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-escalations-loading"
+          >
+            <span className="sr-only">Loading deadline escalations.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
           </div>
         ) : escalations.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
@@ -395,10 +441,10 @@ function EscalationsCard({
  * acknowledge must never look like one that did.
  */
 function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  // The label is captured at submit time, while the row is still in hand: after
-  // the refetch an acknowledged or vanished row is gone from `rows`, and the
-  // failure report would have nothing to name it by.
+  const [selected, setSelected] = useState<Map<string, AcknowledgementSelection>>(new Map());
+  // Each selection retains the label and concurrency version the user saw. The
+  // submit handler freezes an id-to-label map before the mutation starts, so a
+  // pending refetch, rename or removal cannot turn the outcome back into an id.
   const [rejected, setRejected] = useState<
     { coverage_id: string; reason: string | null; label: string }[]
   >([]);
@@ -419,31 +465,24 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
   }, [mine.data]);
 
   const acknowledge = useMutation({
-    mutationFn: (ids: string[]) =>
+    mutationFn: (submission: AcknowledgementSubmission) =>
       bulkAcknowledgeIpCoverage({
-        coverageIds: ids,
-        expectedVersions: Object.fromEntries(
-          rows
-            .filter((row) => ids.includes(row.coverage_id))
-            .map((row) => [row.coverage_id, row.reassignment_version]),
-        ),
+        coverageIds: [...submission.coverageIds],
+        expectedVersions: { ...submission.expectedVersions },
       }),
-    onSuccess: async (result) => {
+    onSuccess: async (result, submission) => {
       setRejected(
         result.outcomes
           .filter((outcome) => !outcome.acknowledged)
-          .map((outcome) => {
-            const row = rows.find((candidate) => candidate.coverage_id === outcome.coverage_id);
-            return {
-              coverage_id: outcome.coverage_id,
-              reason: outcome.reason,
-              label: row
-                ? [row.docket_title, row.deadline_title].filter(Boolean).join(" · ")
-                : outcome.coverage_id,
-            };
-          }),
+          .map((outcome, index) => ({
+            coverage_id: outcome.coverage_id,
+            reason: outcome.reason,
+            label:
+              submission.labels[outcome.coverage_id] ??
+              `Deadline ${index + 1} from this acknowledgement request`,
+          })),
       );
-      setSelected(new Set());
+      setSelected(new Map());
       if (result.acknowledged_count) {
         toast.success(
           `${result.acknowledged_count} deadline${result.acknowledged_count === 1 ? "" : "s"} acknowledged.`,
@@ -461,6 +500,11 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
       toast.error(apiErrorMessage(error, "Could not acknowledge these deadlines.")),
   });
 
+  function submitSelected() {
+    const submission = acknowledgementSubmission(selected);
+    acknowledge.mutate(submission);
+  }
+
   const selectable = rows.filter((row) => !row.transfer_pending);
 
   return (
@@ -470,9 +514,16 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {mine.isLoading ? (
-          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-acknowledgements-loading"
+          >
+            <span className="sr-only">Loading your unacknowledged deadlines.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
           </div>
         ) : rows.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
@@ -496,9 +547,15 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
                     disabled={row.transfer_pending}
                     checked={selected.has(row.coverage_id)}
                     onChange={(event) => {
-                      const next = new Set(selected);
-                      if (event.target.checked) next.add(row.coverage_id);
-                      else next.delete(row.coverage_id);
+                      const next = new Map(selected);
+                      if (event.target.checked) {
+                        next.set(row.coverage_id, {
+                          expectedVersion: row.reassignment_version,
+                          label: acknowledgementLabel(row),
+                        });
+                      } else {
+                        next.delete(row.coverage_id);
+                      }
                       setSelected(next);
                     }}
                   />
@@ -531,7 +588,7 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
               <Button
                 size="sm"
                 disabled={selected.size === 0 || acknowledge.isPending}
-                onClick={() => acknowledge.mutate([...selected])}
+                onClick={submitSelected}
               >
                 Acknowledge selected
               </Button>
@@ -539,7 +596,19 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
                 size="sm"
                 variant="ghost"
                 disabled={selectable.length === 0 || acknowledge.isPending}
-                onClick={() => setSelected(new Set(selectable.map((row) => row.coverage_id)))}
+                onClick={() =>
+                  setSelected(
+                    new Map(
+                      selectable.map((row) => [
+                        row.coverage_id,
+                        {
+                          expectedVersion: row.reassignment_version,
+                          label: acknowledgementLabel(row),
+                        },
+                      ]),
+                    ),
+                  )
+                }
               >
                 Select all {selectable.length}
               </Button>

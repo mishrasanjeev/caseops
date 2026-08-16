@@ -6,13 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   applyIpAccessChangeMock,
   fetchIpAccessPanelMock,
-  listEmployeesMock,
+  listCompanyUsersMock,
   listTeamsMock,
   previewIpAccessChangeMock,
 } = vi.hoisted(() => ({
   applyIpAccessChangeMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
-  listEmployeesMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
   listTeamsMock: vi.fn(),
   previewIpAccessChangeMock: vi.fn(),
 }));
@@ -21,7 +21,7 @@ vi.mock("@/lib/api/endpoints", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/endpoints")>()),
   applyIpAccessChange: applyIpAccessChangeMock,
   fetchIpAccessPanel: fetchIpAccessPanelMock,
-  listEmployees: listEmployeesMock,
+  listCompanyUsers: listCompanyUsersMock,
   listTeams: listTeamsMock,
   previewIpAccessChange: previewIpAccessChangeMock,
 }));
@@ -62,14 +62,19 @@ function withClient(children: ReactNode) {
 describe("IpAccessWorkspace", () => {
   beforeEach(() => {
     fetchIpAccessPanelMock.mockReset().mockResolvedValue(panel);
-    listEmployeesMock.mockReset().mockResolvedValue({
-      employees: [
+    listCompanyUsersMock.mockReset().mockResolvedValue({
+      company_id: "company-1",
+      company_slug: "firm",
+      users: [
         {
           membership_id: "membership-2",
           full_name: "Priya Reviewer",
           email: "priya@example.test",
+          role: "member",
           membership_active: true,
+          user_id: "user-2",
           user_active: true,
+          created_at: "2026-08-16T00:00:00Z",
         },
       ],
     });

@@ -24,7 +24,7 @@ const {
   proposeIpLegalDeadlineMock,
   createIpSharedHearingMock,
   fetchIpAccessPanelMock,
-  listEmployeesMock,
+  listCompanyUsersMock,
   listTeamsMock,
   previewIpAccessChangeMock,
   applyIpAccessChangeMock,
@@ -52,7 +52,7 @@ const {
   proposeIpLegalDeadlineMock: vi.fn(),
   createIpSharedHearingMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
-  listEmployeesMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
   listTeamsMock: vi.fn(),
   previewIpAccessChangeMock: vi.fn(),
   applyIpAccessChangeMock: vi.fn(),
@@ -113,7 +113,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   activateIpDeadlineRule: vi.fn(),
   transitionIpDeadlineRule: vi.fn(),
   fetchIpAccessPanel: fetchIpAccessPanelMock,
-  listEmployees: listEmployeesMock,
+  listCompanyUsers: listCompanyUsersMock,
   listTeams: listTeamsMock,
   previewIpAccessChange: previewIpAccessChangeMock,
   applyIpAccessChange: applyIpAccessChangeMock,
@@ -161,7 +161,7 @@ describe("IpDocketPage", () => {
     proposeIpLegalDeadlineMock.mockReset();
     createIpSharedHearingMock.mockReset();
     fetchIpAccessPanelMock.mockReset();
-    listEmployeesMock.mockReset();
+    listCompanyUsersMock.mockReset();
     listTeamsMock.mockReset();
     previewIpAccessChangeMock.mockReset();
     applyIpAccessChangeMock.mockReset();
@@ -210,30 +210,31 @@ describe("IpDocketPage", () => {
     });
     fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [] });
     listCalendarConnectionsMock.mockResolvedValue({ connections: [] });
-    listEmployeesMock.mockResolvedValue({
-      employees: [
+    listCompanyUsersMock.mockResolvedValue({
+      company_id: "company-1",
+      company_slug: "firm",
+      users: [
         {
           membership_id: "member-1",
           full_name: "Priya Raghavan",
           email: "priya@example.com",
-          designation: "Partner",
-          department: "IP",
+          role: "partner",
           membership_active: true,
+          user_id: "user-1",
           user_active: true,
-          employment_status: "active",
+          created_at: "2026-08-16T00:00:00Z",
         },
         {
           membership_id: "member-2",
           full_name: "Anand Rao",
           email: "anand@example.com",
-          designation: "Associate",
-          department: "IP",
+          role: "member",
           membership_active: true,
+          user_id: "user-2",
           user_active: true,
-          employment_status: "active",
+          created_at: "2026-08-16T00:00:00Z",
         },
       ],
-      total: 2,
     });
     listTeamsMock.mockResolvedValue({ teams: [], total: 0 });
     fetchIpAccessPanelMock.mockResolvedValue({
@@ -490,6 +491,20 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    const continuityHeading = await screen.findByRole("heading", {
+      name: "Deadline continuity",
+    });
+    const continuityCard = continuityHeading.parentElement?.parentElement;
+    expect(continuityCard).not.toBeNull();
+    expect(
+      await within(continuityCard!).findByText((_content, element) =>
+        Boolean(
+          element?.classList.contains("font-semibold") &&
+            element.textContent ===
+              "Responsible: Priya Raghavan — priya@example.com",
+        ),
+      ),
+    ).toBeVisible();
     expect(await screen.findByRole("button", { name: "Discover Matter evidence" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Accept and link" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reject" })).toBeVisible();

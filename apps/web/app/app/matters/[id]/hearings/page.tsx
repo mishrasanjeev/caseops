@@ -989,62 +989,104 @@ export function NextHearingProvenanceSection({
         <CardTitle>Next hearing provenance</CardTitle>
         <CardDescription>Review automatic hearing-date suggestions and source history.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4 lg:grid-cols-2">
-        <div>
-          <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">Suggestions</div>
-          {isLoading ? (
-            <p className="text-sm text-[var(--color-mute)]">Loading suggestions...</p>
-          ) : pending.length === 0 ? (
-            <p className="text-sm text-[var(--color-mute)]">No pending suggestions.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {pending.map((suggestion) => (
-                <li key={suggestion.id} className="rounded-lg border border-[var(--color-line)] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+      <CardContent>
+        {isLoading ? (
+          <div
+            className="grid gap-4 lg:grid-cols-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="next-hearing-provenance-loading"
+          >
+            <span className="sr-only">Loading hearing suggestions and source history.</span>
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">
+                Suggestions
+              </div>
+              {pending.length === 0 ? (
+                <p className="text-sm text-[var(--color-mute)]">No pending suggestions.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {pending.map((suggestion) => (
+                    <li
+                      key={suggestion.id}
+                      className="rounded-lg border border-[var(--color-line)] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-[var(--color-ink)]">
+                            {formatDateTime(suggestion.suggested_date)}
+                          </div>
+                          <div className="text-xs text-[var(--color-mute)]">
+                            {suggestion.source} - {suggestion.reason ?? "review required"}
+                          </div>
+                        </div>
+                        <StatusBadge status={suggestion.confidence_label} />
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => onDecide(suggestion.id, "accept")}
+                          disabled={isPending}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onDecide(suggestion.id, "reject")}
+                          disabled={isPending}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">
+                History
+              </div>
+              {history.length === 0 ? (
+                <p className="text-sm text-[var(--color-mute)]">No history recorded yet.</p>
+              ) : (
+                <ul className="flex max-h-64 flex-col gap-2 overflow-auto">
+                  {history.slice(0, 8).map((row) => (
+                    <li
+                      key={row.id}
+                      className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm"
+                    >
                       <div className="font-medium text-[var(--color-ink)]">
-                        {formatDateTime(suggestion.suggested_date)}
+                        {row.old_date ? formatDateTime(row.old_date) : "Not set"}
+                        {" -> "}
+                        {row.new_date ? formatDateTime(row.new_date) : "Not set"}
                       </div>
                       <div className="text-xs text-[var(--color-mute)]">
-                        {suggestion.source} - {suggestion.reason ?? "review required"}
+                        {row.source} - {row.change_reason ?? "updated"}{" "}
+                        {row.manual_lock ? "- manual lock" : ""}
                       </div>
-                    </div>
-                    <StatusBadge status={suggestion.confidence_label} />
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => onDecide(suggestion.id, "accept")} disabled={isPending}>
-                      Accept
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => onDecide(suggestion.id, "reject")} disabled={isPending}>
-                      Reject
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">History</div>
-          {history.length === 0 ? (
-            <p className="text-sm text-[var(--color-mute)]">No history recorded yet.</p>
-          ) : (
-            <ul className="flex max-h-64 flex-col gap-2 overflow-auto">
-              {history.slice(0, 8).map((row) => (
-                <li key={row.id} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
-                  <div className="font-medium text-[var(--color-ink)]">
-                    {row.old_date ? formatDateTime(row.old_date) : "Not set"}
-                    {" -> "}
-                    {row.new_date ? formatDateTime(row.new_date) : "Not set"}
-                  </div>
-                  <div className="text-xs text-[var(--color-mute)]">
-                    {row.source} - {row.change_reason ?? "updated"} {row.manual_lock ? "- manual lock" : ""}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1080,9 +1122,16 @@ export function ComplianceReviewSection({
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading compliance items">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="matter-compliance-loading"
+          >
+            <span className="sr-only">Loading compliance items.</span>
+            <Skeleton className="h-12 w-full" aria-hidden="true" />
+            <Skeleton className="h-12 w-full" aria-hidden="true" />
           </div>
         ) : (
           <div className="flex flex-col gap-4">

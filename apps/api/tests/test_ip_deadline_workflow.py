@@ -374,6 +374,19 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         },
     )
     assert incomplete_coverage.status_code == 409
+    collapsed_coverage = client.post(
+        f"/api/ip/deadlines/{deadline['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": deadline["version"],
+            "responsibilities": _responsibilities(owner_id, owner_id),
+        },
+    )
+    assert collapsed_coverage.status_code == 409, collapsed_coverage.text
+    assert (
+        collapsed_coverage.json()["code"]
+        == "ip_coverage_distinct_backup_required"
+    )
     stale = client.post(
         f"/api/ip/deadlines/{deadline['id']}/confirm",
         headers=legal_headers,

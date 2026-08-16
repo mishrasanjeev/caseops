@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -196,6 +196,30 @@ describe("IpDailyDocketPage", () => {
     expect(within(provenance).getByText(/1 stale source — counts unavailable/)).toBeVisible();
   });
 
+  it("announces structured docket loaders without premature empty states", () => {
+    fetchIpDailyDocketMock.mockReturnValue(new Promise(() => undefined));
+    fetchIpAssignedCoverageMock.mockReturnValue(new Promise(() => undefined));
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const escalations = screen.getByTestId("ip-docket-escalations-loading");
+    expect(escalations).toHaveAttribute("role", "status");
+    expect(escalations).toHaveAttribute("aria-live", "polite");
+    expect(escalations).toHaveAttribute("aria-busy", "true");
+    expect(within(escalations).getByText("Loading deadline escalations.")).toHaveClass(
+      "sr-only",
+    );
+
+    const acknowledgements = screen.getByTestId("ip-docket-acknowledgements-loading");
+    expect(acknowledgements).toHaveAttribute("role", "status");
+    expect(acknowledgements).toHaveAttribute("aria-live", "polite");
+    expect(
+      within(acknowledgements).getByText("Loading your unacknowledged deadlines."),
+    ).toHaveClass("sr-only");
+    expect(screen.queryByText(/Nothing is escalating/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/acknowledged every deadline/)).not.toBeInTheDocument();
+  });
+
   it("acknowledges selected deadlines and names every one it could not", async () => {
     fetchIpAssignedCoverageMock.mockResolvedValue({
       coverages: [
@@ -262,9 +286,206 @@ describe("IpDailyDocketPage", () => {
     const rejected = await screen.findByTestId("ip-docket-ack-rejected");
     // The user saw these deadlines by name a moment ago; a failure report that
     // refers to them by UUID cannot be matched up against that list.
-    expect(within(rejected).getByText("BETA DEVICE · Renewal")).toBeVisible();
+    expect(
+      within(rejected).getByText("BETA DEVICE · Renewal · due 1 Sept 2026"),
+    ).toBeVisible();
     expect(within(rejected).queryByText(/cov-2/)).toBeNull();
     expect(within(rejected).getByText(/Changed since you loaded this page/)).toBeVisible();
+  });
+
+  it("keeps unique human labels for every rejection after selected rows become stale", async () => {
+    const rows = [
+      {
+        coverage_id: "11111111-1111-4111-8111-111111111111",
+        docket_id: "ip-1",
+        docket_title: "SHARED MARK",
+        docket_identifier: "TM 1001",
+        deadline_title: "Renewal",
+        due_on: "2026-08-20",
+        days_until_due: 5,
+        critical: false,
+        acknowledged: false,
+        coverage_status: "pending",
+        transfer_pending: false,
+        reassignment_version: 1,
+      },
+      {
+        coverage_id: "22222222-2222-4222-8222-222222222222",
+        docket_id: "ip-2",
+        docket_title: "SHARED MARK",
+        docket_identifier: "TM 1002",
+        deadline_title: "Renewal",
+        due_on: "2026-08-21",
+        days_until_due: 6,
+        critical: false,
+        acknowledged: false,
+        coverage_status: "pending",
+        transfer_pending: false,
+        reassignment_version: 2,
+      },
+      {
+        coverage_id: "33333333-3333-4333-8333-333333333333",
+        docket_id: "ip-3",
+        docket_title: "SHARED MARK",
+        docket_identifier: "TM 1003",
+        deadline_title: "Renewal",
+        due_on: "2026-08-22",
+        days_until_due: 7,
+        critical: false,
+        acknowledged: false,
+        coverage_status: "pending",
+        transfer_pending: false,
+        reassignment_version: 3,
+      },
+      {
+        coverage_id: "44444444-4444-4444-8444-444444444444",
+        docket_id: "ip-4",
+        docket_title: "SHARED MARK",
+        docket_identifier: "TM 1004",
+        deadline_title: "Renewal",
+        due_on: "2026-08-23",
+        days_until_due: 8,
+        critical: false,
+        acknowledged: false,
+        coverage_status: "pending",
+        transfer_pending: false,
+        reassignment_version: 4,
+      },
+      {
+        coverage_id: "55555555-5555-4555-8555-555555555555",
+        docket_id: "ip-5",
+        docket_title: "SHARED MARK",
+        docket_identifier: "TM 1005",
+        deadline_title: "Renewal",
+        due_on: "2026-08-24",
+        days_until_due: 9,
+        critical: false,
+        acknowledged: false,
+        coverage_status: "pending",
+        transfer_pending: false,
+        reassignment_version: 5,
+      },
+    ];
+    fetchIpAssignedCoverageMock.mockResolvedValue({ coverages: rows });
+
+    let resolveBulk!: (value: {
+      acknowledged_count: number;
+      rejected_count: number;
+      outcomes: {
+        coverage_id: string;
+        acknowledged: boolean;
+        reason: string;
+        reassignment_version: number | null;
+      }[];
+    }) => void;
+    bulkAcknowledgeIpCoverageMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveBulk = resolve;
+        }),
+    );
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <IpDailyDocketPage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByTestId(`ip-docket-ack-${rows[4].coverage_id}`);
+    const card = screen.getByTestId("ip-docket-acknowledge");
+    fireEvent.click(within(card).getByRole("button", { name: "Select all 5" }));
+
+    // Four selected ids disappear and the remaining row is renamed before
+    // submit. The selection snapshots must remain authoritative.
+    act(() => {
+      client.setQueryData(["ip-assigned-coverage"], {
+        coverages: [{ ...rows[0], docket_title: "RENAMED AFTER SELECTION" }],
+      });
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId(`ip-docket-ack-${rows[1].coverage_id}`)).toBeNull(),
+    );
+
+    fireEvent.click(within(card).getByRole("button", { name: "Acknowledge selected" }));
+    await waitFor(() => expect(bulkAcknowledgeIpCoverageMock).toHaveBeenCalledTimes(1));
+    expect(bulkAcknowledgeIpCoverageMock).toHaveBeenCalledWith({
+      coverageIds: rows.map((row) => row.coverage_id),
+      expectedVersions: {
+        [rows[0].coverage_id]: 1,
+        [rows[1].coverage_id]: 2,
+        [rows[2].coverage_id]: 3,
+        [rows[3].coverage_id]: 4,
+        [rows[4].coverage_id]: 5,
+      },
+    });
+
+    // The last visible row also disappears while the request is pending, and
+    // the success refetch returns no rows.
+    fetchIpAssignedCoverageMock.mockResolvedValue({ coverages: [] });
+    act(() => {
+      client.setQueryData(["ip-assigned-coverage"], { coverages: [] });
+    });
+    act(() => {
+      resolveBulk({
+        acknowledged_count: 0,
+        rejected_count: 5,
+        outcomes: [
+          {
+            coverage_id: rows[0].coverage_id,
+            acknowledged: false,
+            reason: "already_acknowledged",
+            reassignment_version: 1,
+          },
+          {
+            coverage_id: rows[1].coverage_id,
+            acknowledged: false,
+            reason: "not_found",
+            reassignment_version: null,
+          },
+          {
+            coverage_id: rows[2].coverage_id,
+            acknowledged: false,
+            reason: "not_responsible",
+            reassignment_version: 3,
+          },
+          {
+            coverage_id: rows[3].coverage_id,
+            acknowledged: false,
+            reason: "version_conflict",
+            reassignment_version: 5,
+          },
+          {
+            coverage_id: rows[4].coverage_id,
+            acknowledged: false,
+            reason: "transfer_pending",
+            reassignment_version: 5,
+          },
+        ],
+      });
+    });
+
+    const rejected = await screen.findByTestId("ip-docket-ack-rejected");
+    for (const [index, row] of rows.entries()) {
+      expect(
+        within(rejected).getByText(
+          `SHARED MARK (${row.docket_identifier}) · Renewal · due ${20 + index} Aug 2026`,
+        ),
+      ).toBeVisible();
+    }
+    for (const reason of [
+      "Already acknowledged",
+      "No longer available to you",
+      "You are not the responsible member",
+      "Changed since you loaded this page",
+      "A transfer decision is outstanding",
+    ]) {
+      expect(rejected).toHaveTextContent(reason);
+    }
+    expect(rejected).not.toHaveTextContent(/[0-9a-f]{8}-[0-9a-f-]{27,}/i);
+    expect(rejected).not.toHaveTextContent("RENAMED AFTER SELECTION");
   });
 
   it("does not offer to acknowledge a deadline with an outstanding transfer", async () => {

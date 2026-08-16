@@ -130,6 +130,67 @@ function planPrice(plan: BillingPlanRecord, interval: "month" | "year") {
   return plan.prices.find((price) => price.interval === interval) ?? null;
 }
 
+function BillingPageLoading() {
+  return (
+    <div
+      className="flex flex-col gap-6"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-testid="billing-page-loading"
+    >
+      <span className="sr-only">Loading plan, usage, invoices, and credits.</span>
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]" aria-hidden="true">
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-9 w-36" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]" aria-hidden="true">
+        <Card>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-9 w-44" />
+          </CardContent>
+        </Card>
+      </div>
+      <Card aria-hidden="true">
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-44" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+      <Card aria-hidden="true">
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function checkoutMessage(checkout: BillingCheckoutResponse) {
   if (checkout.status === "paid" || checkout.status === "completed") {
     return "Payment verified by backend. Subscription or credits are active.";
@@ -281,7 +342,13 @@ export default function TenantBillingPage() {
     }
   }
 
-  const isPending = currentQuery.isPending || plansQuery.isPending;
+  const isPending =
+    currentQuery.isPending ||
+    plansQuery.isPending ||
+    addOnsQuery.isPending ||
+    invoicesQuery.isPending ||
+    ledgerQuery.isPending ||
+    (Boolean(checkoutId) && checkoutQuery.isPending);
 
   return (
     <div className="flex flex-col gap-6">
@@ -313,16 +380,10 @@ export default function TenantBillingPage() {
       ) : null}
 
       {isPending ? (
-        <Card>
-          <CardContent className="flex flex-col gap-3" aria-busy="true" aria-label="Loading billing state">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {current ? (
+        <BillingPageLoading />
+      ) : (
+        <>
+          {current ? (
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <Card>
             <CardHeader className="flex-row items-start justify-between gap-4">
@@ -554,7 +615,7 @@ export default function TenantBillingPage() {
         </Card>
       </div>
 
-      <Card>
+          <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div>
             <CardTitle as="h2">Invoices and downloads</CardTitle>
@@ -705,7 +766,9 @@ export default function TenantBillingPage() {
             </table>
           </div>
         </CardContent>
-      </Card>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

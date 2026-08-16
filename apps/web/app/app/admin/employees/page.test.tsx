@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ const {
   createEmployeeMock,
   downloadEmployeeImportTemplateMock,
   listEmployeeAuditMock,
+  listCompanyUsersMock,
   listEmployeesMock,
   previewEmployeeOffboardingMock,
   previewEmployeeImportMock,
@@ -28,6 +29,7 @@ const {
   createEmployeeMock: vi.fn(),
   downloadEmployeeImportTemplateMock: vi.fn(),
   listEmployeeAuditMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
   listEmployeesMock: vi.fn(),
   previewEmployeeOffboardingMock: vi.fn(),
   previewEmployeeImportMock: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   createEmployee: createEmployeeMock,
   downloadEmployeeImportTemplate: downloadEmployeeImportTemplateMock,
   listEmployeeAudit: listEmployeeAuditMock,
+  listCompanyUsers: listCompanyUsersMock,
   listEmployees: listEmployeesMock,
   previewEmployeeOffboarding: previewEmployeeOffboardingMock,
   previewEmployeeImport: previewEmployeeImportMock,
@@ -225,6 +228,22 @@ describe("EmployeesAdminPage", () => {
     createEmployeeMock.mockReset();
     downloadEmployeeImportTemplateMock.mockReset();
     listEmployeeAuditMock.mockReset();
+    listCompanyUsersMock.mockReset().mockResolvedValue({
+      company_id: "c1",
+      company_slug: "firm",
+      users: [
+        {
+          membership_id: "m1",
+          user_id: "u1",
+          email: "asha@example.com",
+          full_name: "Asha Rao",
+          role: "member",
+          membership_active: true,
+          user_active: true,
+          created_at: "2026-05-06T00:00:00Z",
+        },
+      ],
+    });
     listEmployeesMock.mockReset();
     previewEmployeeOffboardingMock.mockReset();
     previewEmployeeImportMock.mockReset();
@@ -498,6 +517,61 @@ describe("EmployeesAdminPage", () => {
           membershipId: "m1",
           fullName: "Asha Rao",
           department: "Strategy",
+        }),
+      ),
+    );
+  });
+
+  it("preserves an inactive historical manager during an unrelated employee edit", async () => {
+    const user = userEvent.setup();
+    listEmployeesMock.mockResolvedValue({
+      employees: [
+        employee({
+          manager_membership_id: "m-historical-manager",
+          manager_name: "Former Manager",
+        }),
+      ],
+    });
+    listCompanyUsersMock.mockResolvedValue({
+      company_id: "c1",
+      company_slug: "firm",
+      users: [
+        {
+          membership_id: "m-historical-manager",
+          user_id: "u-historical-manager",
+          email: "former.manager@example.com",
+          full_name: "Former Manager",
+          role: "member",
+          membership_active: false,
+          user_active: false,
+          created_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<EmployeesAdminPage />));
+    await screen.findByText("Asha Rao");
+    await user.click(screen.getByTestId("employee-edit-asha@example.com"));
+
+    const manager = await screen.findByLabelText("Manager");
+    expect(manager).toHaveValue("m-historical-manager");
+    expect(
+      within(manager).getByRole("option", {
+        name: /Former Manager.*current; unavailable for new assignments/,
+      }),
+    ).toBeDisabled();
+
+    const department = screen.getByTestId("edit-employee-department");
+    await user.clear(department);
+    await user.type(department, "Strategy");
+    await user.click(screen.getByTestId("edit-employee-submit"));
+
+    await waitFor(() =>
+      expect(updateEmployeeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          membershipId: "m1",
+          department: "Strategy",
+          managerMembershipId: "m-historical-manager",
         }),
       ),
     );

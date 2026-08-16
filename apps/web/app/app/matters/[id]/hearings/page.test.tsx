@@ -300,6 +300,33 @@ describe("MatterHearingsPage", () => {
     } as unknown;
   });
 
+  it("announces structured hearing loaders without simultaneous empty states", async () => {
+    fetchNextHearingHistoryMock.mockReturnValue(new Promise(() => undefined));
+    fetchMatterComplianceMock.mockReturnValue(new Promise(() => undefined));
+
+    render(withClient(<MatterHearingsPage />));
+
+    const provenance = await screen.findByTestId("next-hearing-provenance-loading");
+    expect(provenance).toHaveAttribute("role", "status");
+    expect(provenance).toHaveAttribute("aria-live", "polite");
+    expect(provenance).toHaveAttribute("aria-busy", "true");
+    expect(
+      within(provenance).getByText("Loading hearing suggestions and source history."),
+    ).toHaveClass("sr-only");
+    expect(provenance.querySelectorAll(".animate-pulse")).toHaveLength(6);
+    expect(screen.queryByText("No pending suggestions.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No history recorded yet.")).not.toBeInTheDocument();
+
+    const compliance = screen.getByTestId("matter-compliance-loading");
+    expect(compliance).toHaveAttribute("role", "status");
+    expect(compliance).toHaveAttribute("aria-live", "polite");
+    expect(compliance).toHaveAttribute("aria-busy", "true");
+    expect(within(compliance).getByText("Loading compliance items.")).toHaveClass(
+      "sr-only",
+    );
+    expect(screen.queryByText("No compliance items")).not.toBeInTheDocument();
+  });
+
   it("renders Outlook sync action and per-hearing status for calendar sync users", async () => {
     useCapabilityMock.mockImplementation((cap: string) => cap === "calendar:sync");
     workspaceData.current = {
