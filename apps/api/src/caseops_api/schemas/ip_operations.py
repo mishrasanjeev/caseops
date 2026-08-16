@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -173,6 +174,11 @@ class IpDeadlineCoverageReassignRequest(BaseModel):
     responsible_membership_id: str
     backup_membership_id: str | None = None
     reason: str = Field(min_length=5, max_length=500)
+    # Same reconciliation as the bulk path: responsibility for a filing date is
+    # taken, not assigned. Backup naming stays immediate — a backup is not the
+    # accountable party until responsibility actually moves to them.
+    transfer_mode: Literal["proposed", "immediate"] = "proposed"
+    escalation_membership_id: str | None = None
 
 
 class IpDeadlineCoverageRecord(BaseModel):
@@ -183,6 +189,12 @@ class IpDeadlineCoverageRecord(BaseModel):
     responsible_membership_id: str
     backup_membership_id: str | None
     coverage_status: str
+    pending_replacement_membership_id: str | None = None
+    replacement_decision: str = "none"
+    replacement_decided_at: datetime | None = None
+    replacement_decision_reason: str | None = None
+    emergency_until: datetime | None = None
+    emergency_escalation_membership_id: str | None = None
     calendar_projection_status: str
     accepted_at: datetime | None
     reassignment_version: int
@@ -195,6 +207,12 @@ class IpCoverageBulkReassignRequest(BaseModel):
     to_membership_id: str
     reason: str = Field(min_length=5, max_length=500)
     expected_versions: dict[str, int] = Field(default_factory=dict)
+    # CAL-OPS-08 requires an *accepted* replacement, so a routine transfer is a
+    # proposal. `immediate` exists only for departure and emergency, where the
+    # outgoing person cannot be waited on; it still requires acknowledgement and
+    # an escalation owner, and it never records an acceptance nobody gave.
+    transfer_mode: Literal["proposed", "immediate"] = "proposed"
+    escalation_membership_id: str | None = None
 
 
 class IpCoverageBulkReassignResponse(BaseModel):
@@ -202,6 +220,10 @@ class IpCoverageBulkReassignResponse(BaseModel):
     responsible_count: int
     backup_count: int
     coverage_ids: list[str]
+    transfer_mode: Literal["proposed", "immediate"] = "proposed"
+    # Rows awaiting the replacement's decision. In `proposed` mode responsibility
+    # has not moved for these; in `immediate` mode it has, pending acknowledgement.
+    pending_count: int = 0
 
 
 class IpDeadlineIncidentCreateRequest(BaseModel):
@@ -417,3 +439,316 @@ __all__ = [
     for name in globals()
     if name.startswith("Ip") or name.startswith("Trademark") or name == "FilingManifestItem"
 ]
+
+
+class IpControlExceptionRecord(BaseModel):
+    """A critical exception that a filter or dismissal cannot hide (CAL-OPS-13)."""
+
+    docket_id: str
+    kind: Literal["uncovered", "inactive_owner", "unprojected_calendar", "open_incident"]
+    critical: bool = True
+
+
+class IpControlReviewIncludedRecord(BaseModel):
+    """One access-filtered docket row frozen into a control-review manifest."""
+
+    docket_id: str
+    current_version: int = Field(ge=1)
+    sha256: str = Field(min_length=64, max_length=64)
+
+
+class IpControlReviewSnapshot(BaseModel):
+    """Canonical, hash-bound input and output of one control-report query."""
+
+    schema_version: Literal[1] = 1
+    query_version: str
+    generated_at: datetime
+    timezone: str
+    filters: dict[str, Any]
+    freshness: dict[str, Any]
+    hidden_restricted_count_policy: Literal["omit_without_count"]
+    included_records: list[IpControlReviewIncludedRecord] = Field(default_factory=list)
+    report: IpDocketControlReport
+    mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
+    incompleteness_reasons: list[str] = Field(default_factory=list)
+
+
+class IpControlReviewFilters(BaseModel):
+    """The complete, versioned filter vocabulary for a control review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Team is an exact company-scoped team ID or slug, never a fuzzy label.
+    team: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$",
+    )
+    exclude_docket_ids: list[UUID] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def reject_duplicate_exclusions(self) -> IpControlReviewFilters:
+        if len(self.exclude_docket_ids) != len(set(self.exclude_docket_ids)):
+            raise ValueError("exclude_docket_ids must not contain duplicates")
+        return self
+
+
+class IpControlReviewCreateRequest(BaseModel):
+    """Filters and observed source freshness for one control review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    filters: IpControlReviewFilters = Field(default_factory=IpControlReviewFilters)
+    stale_sources: list[str] = Field(default_factory=list, max_length=40)
+    failed_queries: list[str] = Field(default_factory=list, max_length=40)
+
+
+class IpControlReviewExportRequest(BaseModel):
+    outcome: Literal["generated", "failed"]
+    error_redacted: str | None = Field(default=None, max_length=500)
+
+
+class IpControlReviewSignOffRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    attestation: str = Field(min_length=5, max_length=2000)
+
+
+class IpControlReviewRecord(BaseModel):
+    id: str
+    generated_at: datetime
+    filters: dict[str, Any]
+    freshness: dict[str, Any]
+    completeness_status: str
+    incompleteness_reasons: list[str] = Field(default_factory=list)
+    mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
+    query_version: str
+    manifest_sha256: str
+    export_status: str
+    export_error_redacted: str | None = None
+    signer_label_snapshot: str | None = None
+    signed_off_at: datetime | None = None
+    version: int
+    report: IpDocketControlReport
+    snapshot: IpControlReviewSnapshot
+
+
+class IpDailyDocketQueue(BaseModel):
+    """Workload and capacity for one responsible member (CAL-OPS-09)."""
+
+    membership_id: str
+    label: str
+    active: bool
+    capacity_state: Literal["available", "unavailable"]
+    assigned_count: int | None = None
+    critical_count: int | None = None
+    unacknowledged_count: int | None = None
+
+
+class IpDailyDocketEscalation(BaseModel):
+    """A critical item that must not be lost (CAL-OPS-13)."""
+
+    coverage_id: str
+    docket_id: str
+    reason: Literal["owner_inactive", "unacknowledged_critical", "unowned"]
+    critical: bool
+    escalate_to_membership_id: str | None = None
+
+
+class IpDailyDocketResponse(BaseModel):
+    """The daily docket a manager triages.
+
+    When a source is stale the affected counts are ``null`` rather than ``0``:
+    unknown work must never render as no work (UJ-50-EXC-03).
+    """
+
+    generated_at: datetime
+    filters: dict[str, Any] = Field(default_factory=dict)
+    stale_sources: list[str] = Field(default_factory=list)
+    counts_are_complete: bool = True
+    queues: list[IpDailyDocketQueue] = Field(default_factory=list)
+    escalations: list[IpDailyDocketEscalation] = Field(default_factory=list)
+
+
+class IpDocketQueueSaveRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    # A queue is either shared with a team or personal to the caller. There is
+    # no company-wide tier: a queue everyone can edit is a queue nobody owns.
+    team_id: str | None = None
+
+
+class IpDocketQueueRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: str | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+    team_id: str | None = None
+    owner_membership_id: str | None = None
+    scope: Literal["team", "personal"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class IpDocketQueueListResponse(BaseModel):
+    queues: list[IpDocketQueueRecord] = Field(default_factory=list)
+
+
+class IpCoverageBulkAcknowledgeRequest(BaseModel):
+    coverage_ids: list[str] = Field(min_length=1, max_length=500)
+    # Optional per-record fencing: a row that moved since the queue was read is
+    # reported rather than silently acknowledged at its new state.
+    expected_versions: dict[str, int] = Field(default_factory=dict)
+
+
+class IpCoverageAcknowledgeOutcome(BaseModel):
+    """Per-record validation result (CAL-OPS-09).
+
+    Every requested id gets a row, so a caller can never mistake "silently
+    dropped" for "acknowledged".
+    """
+
+    coverage_id: str
+    acknowledged: bool
+    reason: (
+        Literal[
+            "acknowledged",
+            "already_acknowledged",
+            "not_found",
+            "not_responsible",
+            "version_conflict",
+            "transfer_pending",
+        ]
+        | None
+    ) = None
+    reassignment_version: int | None = None
+
+
+class IpCoverageBulkAcknowledgeResponse(BaseModel):
+    acknowledged_count: int
+    rejected_count: int
+    outcomes: list[IpCoverageAcknowledgeOutcome] = Field(default_factory=list)
+
+
+class IpCalendarDriftRecord(BaseModel):
+    """A projected calendar event that no longer matches CaseOps (UJ-62-EXC-03)."""
+
+    sync_id: str
+    connection_id: str
+    membership_id: str | None = None
+    source_type: str
+    source_id: str
+    ip_docket_id: str | None = None
+    # `unknown` is a real outcome: the provider could not be read, so the
+    # projection is unverified rather than confirmed correct.
+    drift_status: Literal["moved", "missing", "unknown"]
+    detail: str
+
+
+class IpCalendarDriftResponse(BaseModel):
+    checked_at: datetime
+    findings: list[IpCalendarDriftRecord] = Field(default_factory=list)
+
+
+class IpAssignedCoverageRecord(BaseModel):
+    """One deadline the calling member is responsible for (CAL-OPS-09).
+
+    The daily docket reports how much work each member holds; this is the work
+    itself, so a member can acknowledge it rather than only be counted.
+    """
+
+    coverage_id: str
+    docket_id: str
+    docket_title: str
+    docket_identifier: str | None = None
+    deadline_title: str | None = None
+    due_on: date | None = None
+    days_until_due: int | None = None
+    critical: bool = False
+    acknowledged: bool
+    coverage_status: str
+    transfer_pending: bool = False
+    reassignment_version: int
+
+
+class IpAssignedCoverageListResponse(BaseModel):
+    coverages: list[IpAssignedCoverageRecord] = Field(default_factory=list)
+
+
+class IpCoverageTransferAwaiting(BaseModel):
+    """One coverage transfer awaiting the calling member's decision.
+
+    Carries what a lawyer needs in order to answer "can I hold this date?" —
+    which record, which deadline, when it falls, who asked and why — so the
+    decision does not require opening each docket in turn.
+    """
+
+    coverage_id: str
+    docket_id: str
+    docket_title: str
+    docket_identifier: str | None = None
+    deadline_title: str | None = None
+    due_on: date | None = None
+    days_until_due: int | None = None
+    critical: bool = False
+    # `proposed`: responsibility has not moved and stays with `responsible_...`
+    # until this is accepted. `immediate`: it already moved because the outgoing
+    # person could not be waited on, and declining escalates rather than
+    # returning it.
+    transfer_kind: Literal["proposed", "immediate"]
+    responsible_membership_id: str
+    responsible_label: str
+    escalation_membership_id: str | None = None
+    escalation_label: str | None = None
+    reason: str | None = None
+    reassignment_version: int
+
+
+class IpCoverageTransfersAwaitingResponse(BaseModel):
+    transfers: list[IpCoverageTransferAwaiting] = Field(default_factory=list)
+
+
+class IpCoverageReassignPreviewRequest(BaseModel):
+    from_membership_id: str
+    to_membership_id: str
+
+
+class IpCoverageReassignPreviewResponse(BaseModel):
+    """Atomic snapshot of a proposed transfer (CAL-OPS-08)."""
+
+    from_membership_id: str
+    to_membership_id: str
+    preview_token: str
+    affected_coverage_ids: list[str] = Field(default_factory=list)
+    affected_roles: dict[str, list[Literal["responsible", "backup"]]] = Field(
+        default_factory=dict
+    )
+    affected_docket_ids: list[str] = Field(default_factory=list)
+    blocked_docket_ids: list[str] = Field(default_factory=list)
+    transfer_allowed: bool
+
+
+class IpCoverageReassignProposeRequest(BaseModel):
+    from_membership_id: str
+    to_membership_id: str
+    preview_token: str
+    reason: str = Field(min_length=5, max_length=2000)
+    emergency_until: datetime | None = None
+    emergency_escalation_membership_id: str | None = None
+
+
+class IpCoverageReplacementDecisionRequest(BaseModel):
+    decision: Literal["accepted", "rejected"]
+    # Accepting needs no justification — the act itself is the record, and
+    # forcing prose to click accept produces "ok" in an audit trail. Declining
+    # sends work back or escalates it, so it must be explained.
+    reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _require_reason_when_declining(self) -> IpCoverageReplacementDecisionRequest:
+        if self.decision == "rejected" and len((self.reason or "").strip()) < 5:
+            raise ValueError("Declining a transfer requires a reason.")
+        return self

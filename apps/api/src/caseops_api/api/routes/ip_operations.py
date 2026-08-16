@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import (
@@ -29,14 +30,20 @@ from caseops_api.schemas.ip_access import (
     RecordAccessReconciliationReport,
 )
 from caseops_api.schemas.ip_deadlines import (
+    IpCompanyRulePolicyRecord,
+    IpCompanyRuleSelectionRequest,
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
+    IpDeadlineDependencyResponse,
     IpDeadlineImpactResponse,
     IpDeadlineOverrideRequest,
     IpDeadlineProposalRequest,
     IpDeadlineRecalculateRequest,
     IpDeadlineRecord,
     IpDeadlineWorkspaceResponse,
+    IpNotificationPreviewRequest,
+    IpNotificationPreviewResponse,
+    IpNotificationStatusResponse,
     IpRuleActivationRequest,
     IpRuleImpactResponse,
     IpRuleTransitionRequest,
@@ -69,6 +76,12 @@ from caseops_api.schemas.ip_documents import (
     IpDocumentUploadMetadata,
     IpDocumentUploadResponse,
 )
+from caseops_api.schemas.ip_imports import (
+    IpImportCommitRequest,
+    IpImportCommitResponse,
+    IpImportJobCreateRequest,
+    IpImportPreviewResponse,
+)
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
     IpDocketEventPreviewResponse,
@@ -79,10 +92,25 @@ from caseops_api.schemas.ip_lifecycle import (
     IpProsecutionWorkspaceResponse,
 )
 from caseops_api.schemas.ip_operations import (
+    IpAssignedCoverageListResponse,
+    IpCalendarDriftRecord,
+    IpCalendarDriftResponse,
+    IpControlReviewCreateRequest,
+    IpControlReviewExportRequest,
+    IpControlReviewRecord,
+    IpControlReviewSignOffRequest,
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
+    IpCoverageBulkAcknowledgeRequest,
+    IpCoverageBulkAcknowledgeResponse,
     IpCoverageBulkReassignRequest,
     IpCoverageBulkReassignResponse,
+    IpCoverageReassignPreviewRequest,
+    IpCoverageReassignPreviewResponse,
+    IpCoverageReassignProposeRequest,
+    IpCoverageReplacementDecisionRequest,
+    IpCoverageTransfersAwaitingResponse,
+    IpDailyDocketResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
     IpDeadlineIncidentCreateRequest,
@@ -90,6 +118,9 @@ from caseops_api.schemas.ip_operations import (
     IpDocketControlReport,
     IpDocketCreateRequest,
     IpDocketListResponse,
+    IpDocketQueueListResponse,
+    IpDocketQueueRecord,
+    IpDocketQueueSaveRequest,
     IpDocketRecordResponse,
     IpDocketVersionCreateRequest,
     IpEvidenceCandidateReviewRequest,
@@ -100,10 +131,18 @@ from caseops_api.schemas.ip_operations import (
     IpTitleInterestCreateRequest,
     IpWorkspaceReadinessResponse,
 )
+from caseops_api.schemas.ip_portfolio import (
+    IpPortfolioFamilyResponse,
+    IpPortfolioFilters,
+    IpPortfolioListResponse,
+)
 from caseops_api.schemas.ip_records import (
     IpAssetCreateRequest,
     IpAssetResponse,
     IpCoreRecordResponse,
+    IpDuplicatePreviewResponse,
+    IpDuplicateResolutionRequest,
+    IpDuplicateResolutionResponse,
     IpIdentifierCorrectionCreate,
     IpIdentifierCreate,
     IpIdentifierMutationResponse,
@@ -145,14 +184,19 @@ from caseops_api.services.ip_deadline_workflow import (
     activate_rule_version,
     complete_deadline,
     confirm_deadline,
+    deadline_dependencies,
     deadline_impact,
+    deadline_notification_status,
     deadline_workspace,
+    list_company_rule_policies,
     override_deadline,
+    preview_deadline_notifications,
     propose_calendar_version,
     propose_deadline,
     propose_rule_version,
     recalculate_deadline,
     rule_impact,
+    select_company_rule_version,
     transition_rule_version,
 )
 from caseops_api.services.ip_document_workflow import (
@@ -176,6 +220,12 @@ from caseops_api.services.ip_documents import (
     seed_ip_document_taxonomy,
     upsert_ip_document_taxonomy_entry,
 )
+from caseops_api.services.ip_imports import (
+    commit_ip_import_job,
+    create_ip_import_job,
+    preview_ip_import_job,
+    revalidate_ip_import_job,
+)
 from caseops_api.services.ip_lifecycle import (
     append_ip_docket_event,
     get_ip_prosecution_workspace,
@@ -192,17 +242,35 @@ from caseops_api.services.ip_operations import (
     add_ip_related_right_obligation,
     add_ip_title_interest,
     append_ip_docket_version,
+    bulk_acknowledge_ip_coverage,
     bulk_reassign_ip_deadline_coverages,
     complete_ip_related_right_obligation,
+    create_ip_control_review,
     create_ip_docket,
+    decide_ip_coverage_replacement,
+    delete_ip_docket_queue,
     discover_ip_evidence_candidates,
+    get_ip_control_review,
     get_ip_docket,
+    ip_daily_docket,
     ip_docket_control_report,
+    list_ip_assigned_coverage,
+    list_ip_coverage_transfers_awaiting,
+    list_ip_docket_queues,
     list_ip_dockets,
+    preview_ip_coverage_reassignment,
+    propose_ip_coverage_reassignment,
     reassign_ip_deadline_coverage,
     reconcile_ip_cost_items,
+    record_ip_control_review_export,
     review_ip_evidence_candidate,
+    save_ip_docket_queue,
+    sign_off_ip_control_review,
     verify_ip_deadline_incident,
+)
+from caseops_api.services.ip_portfolio import (
+    list_ip_portfolio,
+    list_ip_portfolio_families,
 )
 from caseops_api.services.ip_records import (
     correct_ip_identifier,
@@ -211,6 +279,8 @@ from caseops_api.services.ip_records import (
     create_ip_proceeding,
     create_trademark_application,
     list_ip_core_records,
+    preview_ip_identifier_duplicates,
+    resolve_ip_identifier_duplicate,
     search_ip_identifiers,
     update_trademark_application_phase,
 )
@@ -809,6 +879,29 @@ async def post_ip_deadline_rule_transition(
     )
 
 
+@router.get(
+    "/rule-policies",
+    response_model=list[IpCompanyRulePolicyRecord],
+)
+async def get_ip_rule_policies(
+    context: IpRuleProposer,
+    session: DbSession,
+) -> list[IpCompanyRulePolicyRecord]:
+    return list_company_rule_policies(session, context=context)
+
+
+@router.put(
+    "/rule-policies",
+    response_model=IpCompanyRulePolicyRecord,
+)
+async def put_ip_rule_policy(
+    payload: IpCompanyRuleSelectionRequest,
+    context: IpRuleActivator,
+    session: DbSession,
+) -> IpCompanyRulePolicyRecord:
+    return select_company_rule_version(session, context=context, payload=payload)
+
+
 @router.post(
     "/working-calendars",
     response_model=LegalCalendarVersionRecord,
@@ -864,6 +957,45 @@ async def get_ip_deadline_impact(
     session: DbSession,
 ) -> IpDeadlineImpactResponse:
     return deadline_impact(session, context=context, deadline_id=deadline_id)
+
+
+@router.get(
+    "/deadlines/{deadline_id}/dependencies",
+    response_model=IpDeadlineDependencyResponse,
+)
+async def get_ip_deadline_dependencies(
+    deadline_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDeadlineDependencyResponse:
+    return deadline_dependencies(session, context=context, deadline_id=deadline_id)
+
+
+@router.post(
+    "/deadlines/{deadline_id}/notification-preview",
+    response_model=IpNotificationPreviewResponse,
+)
+async def post_ip_deadline_notification_preview(
+    deadline_id: str,
+    payload: IpNotificationPreviewRequest,
+    context: IpViewer,
+    session: DbSession,
+) -> IpNotificationPreviewResponse:
+    return preview_deadline_notifications(
+        session, context=context, deadline_id=deadline_id, payload=payload
+    )
+
+
+@router.get(
+    "/deadlines/{deadline_id}/notifications",
+    response_model=IpNotificationStatusResponse,
+)
+async def get_ip_deadline_notifications(
+    deadline_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpNotificationStatusResponse:
+    return deadline_notification_status(session, context=context, deadline_id=deadline_id)
 
 
 @router.post("/deadlines/{deadline_id}/confirm", response_model=IpDeadlineRecord)
@@ -1054,9 +1186,309 @@ async def get_ip_identifier_search(
     ]
 
 
+@router.post(
+    "/imports",
+    response_model=IpImportPreviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_import_job(
+    payload: IpImportJobCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return create_ip_import_job(session, context=context, payload=payload)
+
+
+@router.get("/imports/{job_id}", response_model=IpImportPreviewResponse)
+async def get_ip_import_job(
+    job_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return preview_ip_import_job(session, context=context, job_id=job_id)
+
+
+@router.post("/imports/{job_id}/revalidate", response_model=IpImportPreviewResponse)
+async def post_ip_import_revalidation(
+    job_id: str,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return revalidate_ip_import_job(session, context=context, job_id=job_id)
+
+
+@router.post("/imports/{job_id}/commit", response_model=IpImportCommitResponse)
+async def post_ip_import_commit(
+    job_id: str,
+    payload: IpImportCommitRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportCommitResponse:
+    return commit_ip_import_job(session, context=context, job_id=job_id, payload=payload)
+
+
+@router.get("/portfolio/families", response_model=IpPortfolioFamilyResponse)
+async def get_ip_portfolio_families(
+    context: IpViewer,
+    session: DbSession,
+    grouping: Annotated[str, Query(pattern="^(mark|client)$")] = "mark",
+    matter_id: Annotated[str | None, Query(max_length=36)] = None,
+    jurisdiction: Annotated[list[str] | None, Query()] = None,
+    filing_phase: Annotated[list[str] | None, Query()] = None,
+    include_inactive: bool = False,
+) -> IpPortfolioFamilyResponse:
+    filters = IpPortfolioFilters(
+        matter_id=matter_id,
+        jurisdiction=jurisdiction or [],
+        filing_phase=filing_phase or [],
+        include_inactive=include_inactive,
+    )
+    return list_ip_portfolio_families(
+        session, context=context, grouping=grouping, filters=filters
+    )
+
+
+@router.post("/docket-queues", response_model=IpDocketQueueRecord, status_code=201)
+async def post_ip_docket_queue(
+    payload: IpDocketQueueSaveRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketQueueRecord:
+    return save_ip_docket_queue(session, context=context, payload=payload)
+
+
+@router.get("/docket-queues", response_model=IpDocketQueueListResponse)
+async def get_ip_docket_queues(
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketQueueListResponse:
+    return list_ip_docket_queues(session, context=context)
+
+
+@router.delete("/docket-queues/{queue_id}", status_code=204)
+async def delete_ip_docket_queue_route(
+    queue_id: str,
+    context: IpWriter,
+    session: DbSession,
+) -> None:
+    delete_ip_docket_queue(session, context=context, queue_id=queue_id)
+
+
+@router.post(
+    "/deadline-coverages/bulk-acknowledge",
+    response_model=IpCoverageBulkAcknowledgeResponse,
+)
+async def post_ip_coverage_bulk_acknowledge(
+    payload: IpCoverageBulkAcknowledgeRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageBulkAcknowledgeResponse:
+    return bulk_acknowledge_ip_coverage(session, context=context, payload=payload)
+
+
+@router.post(
+    "/calendar-projections/drift-check",
+    response_model=IpCalendarDriftResponse,
+)
+async def post_ip_calendar_drift_check(
+    context: IpWriter,
+    session: DbSession,
+) -> IpCalendarDriftResponse:
+    from caseops_api.services.calendar_sync import check_ip_calendar_projection_drift
+
+    decision = next(
+        item
+        for item in ip_workspace_readiness(
+            session,
+            context=context,
+            settings=get_settings(),
+        )
+        if item.feature_id == "manual_docketing"
+    )
+    if not decision.available:
+        # Authorization, entitlement and rollout are independent. `IpWriter`
+        # proves authorization; this server-side check prevents a direct API
+        # caller from bypassing a disabled, unentitled or expired rollout and
+        # triggering provider reads or drift-state writes.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ip_manual_docketing_unavailable",
+                "feature_id": decision.feature_id,
+                "reason": decision.reason,
+                "rollout_flag": decision.rollout_flag,
+            },
+        )
+
+    findings = check_ip_calendar_projection_drift(session, context=context)
+    return IpCalendarDriftResponse(
+        checked_at=datetime.now(UTC),
+        findings=[IpCalendarDriftRecord(**vars(finding)) for finding in findings],
+    )
+
+
+@router.get(
+    "/deadline-coverages/mine",
+    response_model=IpAssignedCoverageListResponse,
+)
+async def get_ip_assigned_coverage(
+    context: IpWriter,
+    session: DbSession,
+    unacknowledged_only: bool = False,
+) -> IpAssignedCoverageListResponse:
+    return list_ip_assigned_coverage(
+        session, context=context, unacknowledged_only=unacknowledged_only
+    )
+
+
+@router.get(
+    "/deadline-coverages/awaiting-me",
+    response_model=IpCoverageTransfersAwaitingResponse,
+)
+async def get_ip_coverage_transfers_awaiting(
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageTransfersAwaitingResponse:
+    return list_ip_coverage_transfers_awaiting(session, context=context)
+
+
+@router.post(
+    "/deadline-coverages/reassign-preview",
+    response_model=IpCoverageReassignPreviewResponse,
+)
+async def post_ip_coverage_reassign_preview(
+    payload: IpCoverageReassignPreviewRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageReassignPreviewResponse:
+    return preview_ip_coverage_reassignment(session, context=context, payload=payload)
+
+
+@router.post(
+    "/deadline-coverages/reassign-propose",
+    response_model=IpCoverageReassignPreviewResponse,
+)
+async def post_ip_coverage_reassign_propose(
+    payload: IpCoverageReassignProposeRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpCoverageReassignPreviewResponse:
+    return propose_ip_coverage_reassignment(session, context=context, payload=payload)
+
+
+@router.post(
+    "/deadline-coverages/{coverage_id}/replacement-decision",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_coverage_replacement_decision(
+    coverage_id: str,
+    payload: IpCoverageReplacementDecisionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return decide_ip_coverage_replacement(
+        session, context=context, coverage_id=coverage_id, payload=payload
+    )
+
+
+@router.get("/daily-docket", response_model=IpDailyDocketResponse)
+async def get_ip_daily_docket(
+    context: IpViewer,
+    session: DbSession,
+    team: Annotated[str | None, Query(max_length=120)] = None,
+    stale_source: Annotated[list[str] | None, Query()] = None,
+) -> IpDailyDocketResponse:
+    return ip_daily_docket(
+        session,
+        context=context,
+        filters={"team": team} if team else {},
+        stale_sources=stale_source or [],
+    )
+
+
+@router.post(
+    "/control-reviews",
+    response_model=IpControlReviewRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_control_review(
+    payload: IpControlReviewCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return create_ip_control_review(session, context=context, payload=payload)
+
+
+@router.get("/control-reviews/{review_id}", response_model=IpControlReviewRecord)
+async def get_ip_control_review_detail(
+    review_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return get_ip_control_review(session, context=context, review_id=review_id)
+
+
+@router.post("/control-reviews/{review_id}/export", response_model=IpControlReviewRecord)
+async def post_ip_control_review_export(
+    review_id: str,
+    payload: IpControlReviewExportRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return record_ip_control_review_export(
+        session, context=context, review_id=review_id, payload=payload
+    )
+
+
+@router.post("/control-reviews/{review_id}/sign-off", response_model=IpControlReviewRecord)
+async def post_ip_control_review_sign_off(
+    review_id: str,
+    payload: IpControlReviewSignOffRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return sign_off_ip_control_review(
+        session, context=context, review_id=review_id, payload=payload
+    )
+
+
 @router.get("/dockets", response_model=IpDocketListResponse)
 async def get_ip_dockets(context: IpViewer, session: DbSession) -> IpDocketListResponse:
     return list_ip_dockets(session, context=context)
+
+
+@router.get("/portfolio", response_model=IpPortfolioListResponse)
+async def get_ip_portfolio(
+    context: IpViewer,
+    session: DbSession,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    matter_id: Annotated[str | None, Query(max_length=36)] = None,
+    asset_kind: Annotated[list[str] | None, Query()] = None,
+    jurisdiction: Annotated[list[str] | None, Query()] = None,
+    office: Annotated[list[str] | None, Query()] = None,
+    filing_phase: Annotated[list[str] | None, Query()] = None,
+    docket_status: Annotated[list[str] | None, Query()] = None,
+    include_inactive: bool = False,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: str | None = None,
+) -> IpPortfolioListResponse:
+    filters = IpPortfolioFilters(
+        query=query,
+        matter_id=matter_id,
+        asset_kind=asset_kind or [],
+        jurisdiction=jurisdiction or [],
+        office=office or [],
+        filing_phase=filing_phase or [],
+        docket_status=docket_status or [],
+        include_inactive=include_inactive,
+    )
+    return list_ip_portfolio(
+        session,
+        context=context,
+        filters=filters,
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.post(
@@ -1361,6 +1793,44 @@ async def post_ip_identifier_correction(
     return IpIdentifierMutationResponse(
         identifier=IpIdentifierResponse.model_validate(identifier),
         duplicate_candidates=[IpIdentifierResponse.model_validate(row) for row in duplicates],
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/identifiers/{identifier_id}/duplicates",
+    response_model=IpDuplicatePreviewResponse,
+)
+async def get_ip_identifier_duplicates(
+    docket_id: str,
+    identifier_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDuplicatePreviewResponse:
+    return preview_ip_identifier_duplicates(
+        session,
+        context=context,
+        docket_id=docket_id,
+        identifier_id=identifier_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/identifiers/{identifier_id}/reconcile",
+    response_model=IpDuplicateResolutionResponse,
+)
+async def post_ip_identifier_reconciliation(
+    docket_id: str,
+    identifier_id: str,
+    payload: IpDuplicateResolutionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDuplicateResolutionResponse:
+    return resolve_ip_identifier_duplicate(
+        session,
+        context=context,
+        docket_id=docket_id,
+        identifier_id=identifier_id,
+        payload=payload,
     )
 
 

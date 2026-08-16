@@ -17,7 +17,6 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PRD_PATH = REPO_ROOT / "docs" / "PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md"
 CONTROL_ROOT = REPO_ROOT / "docs" / "ip-implementation"
@@ -472,6 +471,40 @@ def write_views(manifest: dict[str, Any]) -> None:
         path.write_text(content, encoding="utf-8", newline="\n")
 
 
+JOURNEY_PROJECTION_FIELDS = ("slice_ids", "test_refs", "evidence_refs")
+
+
+def journey_child_projection(
+    journey: dict[str, Any],
+    paths_by_id: dict[str, dict[str, Any]],
+) -> dict[str, list[str]]:
+    """Return the exact set-valued projection of a journey's atomic paths."""
+
+    children = [
+        paths_by_id[path_id]
+        for path_id in journey.get("path_ids", [])
+        if path_id in paths_by_id
+    ]
+    return {
+        field: sorted(
+            {
+                value
+                for child in children
+                for value in child.get(field, [])
+            }
+        )
+        for field in JOURNEY_PROJECTION_FIELDS
+    }
+
+
+def reconcile_journey_projections(manifest: dict[str, Any]) -> None:
+    """Normalize cached journey references from their canonical child paths."""
+
+    paths_by_id = {row["id"]: row for row in manifest.get("journey_paths", [])}
+    for journey in manifest.get("journeys", []):
+        journey.update(journey_child_projection(journey, paths_by_id))
+
+
 def validate(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     prd = PRD_PATH.read_text(encoding="utf-8")
@@ -602,6 +635,20 @@ def validate(manifest: dict[str, Any]) -> list[str]:
                 errors.append(f"{collection}/{row_id}: unapproved not_required status")
         if row.get("acceptance_status") == "approved" and row.get("verification_status") != "passed":
             errors.append(f"{collection}/{row_id}: approved acceptance requires passed verification")
+        # A `planned:` reference names a test that does not exist yet. A row may
+        # cite one while it is still being built, but it can never be evidence
+        # for a passed or deployment-verified claim.
+        if row.get("verification_status") == "passed" or row.get("release_status") == "deployment_verified":
+            unwritten = sorted(
+                str(reference)
+                for reference in row.get("test_refs", [])
+                if str(reference).startswith("planned:")
+            )
+            if unwritten:
+                errors.append(
+                    f"{collection}/{row_id}: passed/deployment_verified row cites unwritten "
+                    f"tests {unwritten}"
+                )
         for evidence_ref in row.get("evidence_refs", []):
             evidence_path = REPO_ROOT / evidence_ref
             if not evidence_path.is_file() or evidence_path.stat().st_size < 32:
@@ -717,6 +764,7 @@ def validate(manifest: dict[str, Any]) -> list[str]:
         for slice_id in slice_ids:
             if row["id"] not in slices_by_id.get(slice_id, {}).get("requirement_ids", []):
                 errors.append(f"requirement/{row['id']}: reverse mapping missing from {slice_id}")
+    paths_by_id = {row["id"]: row for row in manifest.get("journey_paths", [])}
     for row in manifest.get("journeys", []):
         unknown = sorted(set(row.get("path_ids", [])) - valid_paths)
         if unknown:
@@ -726,8 +774,15 @@ def validate(manifest: dict[str, Any]) -> list[str]:
         if not row.get("test_refs"):
             errors.append(f"journey/{row['id']}: no stable test references")
 
+        projection = journey_child_projection(row, paths_by_id)
+        for field, expected in projection.items():
+            if row.get(field, []) != expected:
+                errors.append(
+                    f"journey/{row['id']}: {field} must exactly project child paths; "
+                    f"expected {expected}, found {row.get(field, [])}"
+                )
+
     requirements_by_id = {row["id"]: row for row in manifest.get("requirements", [])}
-    paths_by_id = {row["id"]: row for row in manifest.get("journey_paths", [])}
     for row in manifest.get("journey_paths", []):
         slice_ids = row.get("slice_ids", [])
         unknown_slices = sorted(set(slice_ids) - valid_slices)
@@ -846,6 +901,7 @@ def main(argv: list[str] | None = None) -> int:
     bootstrap_parser = subparsers.add_parser("bootstrap")
     bootstrap_parser.add_argument("--force", action="store_true")
     subparsers.add_parser("generate")
+    subparsers.add_parser("reconcile-journey-projections")
     subparsers.add_parser("validate")
     args = parser.parse_args(argv)
 
@@ -860,6 +916,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     manifest = load_manifest()
+    if args.command == "reconcile-journey-projections":
+        reconcile_journey_projections(manifest)
+        MANIFEST_PATH.write_text(
+            json.dumps(manifest, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        write_views(manifest)
+        print(f"reconciled {len(manifest['journeys'])} journey projections")
+        return 0
+
     if args.command == "generate":
         write_views(manifest)
         print(f"generated {len(render_views(manifest))} views")

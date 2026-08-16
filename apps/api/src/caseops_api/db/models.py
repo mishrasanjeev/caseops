@@ -2903,6 +2903,10 @@ class CalendarEventSync(Base):
             name="ck_calendar_event_sync_ip_lifecycle_terminal_state",
         ),
         CheckConstraint(
+            "drift_status IN ('unchecked', 'matches', 'moved', 'missing', 'unknown')",
+            name="ck_calendar_event_sync_drift_status",
+        ),
+        CheckConstraint(
             "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
             "neutralized_ip_docket_id IS NULL) OR "
             "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
@@ -2944,6 +2948,17 @@ class CalendarEventSync(Base):
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dead_letter_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # UJ-62-EXC-03: whether the projected copy still matches the CaseOps source.
+    # `unknown` exists on purpose — when the provider cannot be read we must not
+    # report `matches`, because unverified is not verified.
+    drift_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unchecked", server_default="unchecked"
+    )
+    drift_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Content-free: a reason, never a title or a date from the record.
+    drift_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -14433,6 +14448,18 @@ class IpIdentifier(Base):
             name="fk_ip_identifier_proceeding_company",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["supersedes_identifier_id", "company_id"],
+            ["ip_identifiers.id", "ip_identifiers.company_id"],
+            name="fk_ip_identifier_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["superseded_by_identifier_id", "company_id"],
+            ["ip_identifiers.id", "ip_identifiers.company_id"],
+            name="fk_ip_identifier_superseded_by_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "(application_id IS NOT NULL AND proceeding_id IS NULL) OR "
             "(application_id IS NULL AND proceeding_id IS NOT NULL)",
@@ -14441,6 +14468,10 @@ class IpIdentifier(Base):
         CheckConstraint(
             "effective_until IS NULL OR effective_until >= effective_from",
             name="ck_ip_identifier_effective_range",
+        ),
+        CheckConstraint(
+            "superseded_by_identifier_id IS NULL OR superseded_by_identifier_id <> id",
+            name="ck_ip_identifier_superseded_by_not_self",
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_identifier_id_company"),
         Index(
@@ -14471,6 +14502,12 @@ class IpIdentifier(Base):
     )
     supersedes_identifier_id: Mapped[str | None] = mapped_column(
         ForeignKey("ip_identifiers.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    # Direction matters: ``supersedes_identifier_id`` belongs on a new
+    # correction and points backward. This field belongs on the retired row
+    # and points forward to the surviving identifier selected by reconciliation.
+    superseded_by_identifier_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
     )
     correction_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -15103,11 +15140,39 @@ class IpEvidenceCandidate(Base):
 class IpDeadlineCoverage(Base):
     __tablename__ = "ip_deadline_coverages"
     __table_args__ = (
+        CheckConstraint(
+            "replacement_decision IN ('none', 'pending', 'accepted', 'rejected')",
+            name="ck_ip_coverage_replacement_decision",
+        ),
+        CheckConstraint(
+            "replacement_decision <> 'pending' OR pending_replacement_membership_id IS NOT NULL",
+            name="ck_ip_coverage_pending_has_subject",
+        ),
+        CheckConstraint(
+            "emergency_until IS NULL OR emergency_escalation_membership_id IS NOT NULL",
+            name="ck_ip_coverage_emergency_is_time_boxed",
+        ),
         ForeignKeyConstraint(
             ["docket_id", "company_id"],
             ["ip_docket_records.id", "ip_docket_records.company_id"],
             name="fk_ip_deadline_coverage_docket_company",
             ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["pending_replacement_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_coverage_pending_replacement_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["emergency_escalation_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_coverage_emergency_escalation_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint("docket_id", "matter_deadline_id", name="uq_ip_deadline_coverage"),
     )
@@ -15127,6 +15192,25 @@ class IpDeadlineCoverage(Base):
         String(24), nullable=False, default="pending"
     )
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # CAL-OPS-08: a transfer is proposed, then accepted or rejected. Ownership
+    # does not move until it is accepted, or until time-boxed emergency cover
+    # is approved.
+    pending_replacement_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    replacement_decision: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="none"
+    )
+    replacement_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    replacement_decision_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    emergency_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    emergency_escalation_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     reassignment_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -16212,4 +16296,273 @@ class TenantDataOperationItem(Base):
     detail_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class BulkImportJob(Base):
+    """Neutral, domain-tagged bulk import owner (ARCH-OPS-23).
+
+    Deliberately not IP-specific: `domain` selects the typed row table. The
+    legacy `matter_bulk_import_jobs` and `employee_bulk_import_jobs` owners stay
+    canonical for their domains and are not migrated here.
+    """
+
+    __tablename__ = "bulk_import_jobs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_bulk_import_job_creator_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_bulk_import_job_company"),
+        UniqueConstraint(
+            "company_id", "domain", "idempotency_key", name="uq_bulk_import_job_idempotency"
+        ),
+        CheckConstraint("domain IN ('ip_trademark')", name="ck_bulk_import_job_domain"),
+        CheckConstraint(
+            "status IN ('staged', 'preview_ready', 'committed', "
+            "'committed_with_errors', 'failed', 'cancelled')",
+            name="ck_bulk_import_job_status",
+        ),
+        CheckConstraint("total_rows >= 0", name="ck_bulk_import_job_total_rows"),
+        Index("ix_bulk_import_jobs_company_domain", "company_id", "domain"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    domain: Mapped[str] = mapped_column(String(32), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="staged")
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    committed_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    preview_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    preview_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpImportRow(Base):
+    """Typed IP staging row for one `bulk_import_jobs` entry."""
+
+    __tablename__ = "ip_import_rows"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "company_id"],
+            ["bulk_import_jobs.id", "bulk_import_jobs.company_id"],
+            name="fk_ip_import_row_job_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_import_row_created_docket_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        UniqueConstraint("job_id", "row_number", name="uq_ip_import_row_number"),
+        CheckConstraint("row_number > 0", name="ck_ip_import_row_number_positive"),
+        CheckConstraint(
+            "validation_status IN ('valid', 'invalid')",
+            name="ck_ip_import_row_validation_status",
+        ),
+        CheckConstraint(
+            "commit_status IN ('pending', 'committed', 'failed', 'skipped')",
+            name="ck_ip_import_row_commit_status",
+        ),
+        Index("ix_ip_import_rows_job_commit", "job_id", "commit_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    job_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    normalized_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    validation_status: Mapped[str] = mapped_column(String(16), nullable=False, default="valid")
+    errors_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    commit_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    commit_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_docket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_docket_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpDocketControlReview(Base):
+    """A daily docket control report that can be signed off (CAL-OPS-09).
+
+    The report is materialized as a hash-bound canonical snapshot: query/schema
+    versions, timezone and hidden-count policy, included record IDs/hashes,
+    freshness, exceptions and aggregate output all remain exactly as reviewed.
+    Check constraints refuse a sign-off on an incomplete or export-failed
+    review so the database enforces the same rule as the service.
+    """
+
+    __tablename__ = "ip_docket_control_reviews"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["signed_off_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_review_signer_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_review_creator_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "completeness_status IN ('complete', 'incomplete')",
+            name="ck_ip_control_review_completeness",
+        ),
+        CheckConstraint(
+            "export_status IN ('not_requested', 'generated', 'failed')",
+            name="ck_ip_control_review_export_status",
+        ),
+        CheckConstraint(
+            "signed_off_at IS NULL OR "
+            "(completeness_status = 'complete' AND export_status <> 'failed')",
+            name="ck_ip_control_review_signoff_requires_clean",
+        ),
+        CheckConstraint(
+            "signed_off_at IS NULL OR signed_off_by_membership_id IS NOT NULL",
+            name="ck_ip_control_review_signoff_has_signer",
+        ),
+        Index("ix_ip_docket_control_reviews_company_generated", "company_id", "generated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    filters_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    freshness_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    completeness_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="complete"
+    )
+    incompleteness_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    mandatory_exception_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    query_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    report_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    export_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="not_requested"
+    )
+    export_error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signed_off_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    signer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signed_off_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpDocketQueue(Base):
+    """A saved daily-docket queue (CAL-OPS-09).
+
+    A queue is a named, reusable set of daily-docket filters. Scoping is
+    explicit: a queue with ``team_id`` is shared with that team, and one
+    without it belongs to the member who saved it. There is no company-wide
+    tier, because a queue that everyone can edit is a queue nobody owns.
+    """
+
+    __tablename__ = "ip_docket_queues"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["team_id", "company_id"],
+            ["teams.id", "teams.company_id"],
+            name="fk_ip_docket_queue_team_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["owner_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_queue_owner_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_docket_queue_creator_company",
+            match="SIMPLE",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        UniqueConstraint("company_id", "name", name="uq_ip_docket_queue_company_name"),
+        CheckConstraint(
+            "team_id IS NOT NULL OR owner_membership_id IS NOT NULL",
+            name="ck_ip_docket_queue_has_scope",
+        ),
+        Index("ix_ip_docket_queues_company_team", "company_id", "team_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    filters_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    owner_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

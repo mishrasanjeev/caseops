@@ -206,6 +206,8 @@ class IpRuleActivationRequest(BaseModel):
     reviewer_membership_id: str
     impact_acknowledged: bool = False
     impact_reason: str = Field(default="", max_length=1000)
+    impact_token: str | None = None
+    supersede_overlapping: bool = False
     select_for_company: bool = True
     auto_confirm_eligible: bool = False
     internal_target_policy: dict[str, Any] = Field(default_factory=dict)
@@ -224,6 +226,31 @@ class IpRuleImpactResponse(BaseModel):
     open_deadline_count: int
     candidate_deadline_count: int
     confirmed_deadlines_preserved: bool = True
+
+
+class IpCompanyRuleSelectionRequest(BaseModel):
+    """Tenant selection of an already-approved platform rule version."""
+
+    rule_version_id: str
+    auto_confirm_eligible: bool = False
+    internal_target_policy: dict[str, Any] = Field(default_factory=dict)
+    expected_policy_version: int | None = None
+
+
+class IpCompanyRulePolicyRecord(BaseModel):
+    id: str
+    rule_set_id: str
+    rule_set_key: str
+    rule_kind: RuleKind
+    active_rule_version_id: str
+    active_rule_version: int
+    active_rule_status: RuleStatus
+    auto_confirm_eligible: bool
+    auto_confirm_suspended_reason: str | None = None
+    internal_target_policy: dict[str, Any]
+    version: int
+    updater_label_snapshot: str
+    updated_at: datetime
 
 
 class LegalCalendarVersionProposalRequest(BaseModel):
@@ -425,3 +452,103 @@ class IpDeadlineWorkspaceResponse(BaseModel):
     deadlines: list[IpDeadlineRecord]
     exceptions: list[IpDeadlineExceptionRecord]
     automation_state: Literal["explicit_confirmation_only"] = "explicit_confirmation_only"
+
+
+class IpDeadlineDependencyNode(BaseModel):
+    """One input that contributed to a deadline's current date."""
+
+    kind: Literal[
+        "trigger_event",
+        "rule_version",
+        "calendar_version",
+        "predecessor_deadline",
+        "extension",
+        "override",
+    ]
+    reference_id: str | None = None
+    label: str
+    detail: str | None = None
+    available: bool = True
+
+
+class IpDeadlineDependencyResponse(BaseModel):
+    """CAL-OPS-06 dependency graph for one legal deadline.
+
+    Read-only provenance derived from the stored calculation evidence. It never
+    recomputes the date; a missing input is reported as unavailable rather than
+    silently dropped, so the chain cannot look complete when it is not.
+    """
+
+    deadline_id: str
+    docket_id: str
+    state: str
+    result_on: date | None
+    certainty: str
+    is_critical: bool
+    engine_version: str
+    source_version: str
+    rule_citation: str
+    explanation: str
+    nodes: list[IpDeadlineDependencyNode] = Field(default_factory=list)
+    calculation_trace: list[dict[str, Any]] = Field(default_factory=list)
+    unavailable_inputs: list[str] = Field(default_factory=list)
+    superseded_chain: list[str] = Field(default_factory=list)
+
+
+class IpNotificationPlanEntry(BaseModel):
+    """One reminder intent that confirmation would create."""
+
+    recipient_membership_id: str
+    recipient_label: str
+    role: str
+    channel: str
+    event_type: str
+    offset_days: int
+    scheduled_for: datetime
+    critical: bool
+    would_deliver: bool
+    withheld_reason: str | None = None
+
+
+class IpNotificationPreviewRequest(BaseModel):
+    """Same shape as the confirmation payload, minus anything that writes."""
+
+    responsibilities: list[IpResponsibilityInput] = Field(min_length=1)
+    reminder_offsets_days: list[int] = Field(default_factory=list)
+
+
+class IpNotificationPreviewResponse(BaseModel):
+    """NOTIF preview: the delivery plan before any intent exists.
+
+    ``external_delivery_enabled`` is always ``False``: this slice plans in-app
+    intents only and no external channel is dispatched.
+    """
+
+    deadline_id: str
+    result_on: date | None
+    planned: list[IpNotificationPlanEntry] = Field(default_factory=list)
+    withheld_count: int = 0
+    external_delivery_enabled: Literal[False] = False
+    plan_is_proposal_only: Literal[True] = True
+
+
+class IpNotificationStatusEntry(BaseModel):
+    intent_id: str
+    recipient_membership_id: str | None
+    channel: str
+    event_type: str
+    status: str
+    scheduled_for: datetime | None
+    delivered_at: datetime | None
+    attempts: int
+    critical: bool
+    suppression_reason: str | None = None
+    superseded_by_intent_id: str | None = None
+
+
+class IpNotificationStatusResponse(BaseModel):
+    deadline_id: str
+    intents: list[IpNotificationStatusEntry] = Field(default_factory=list)
+    pending_count: int = 0
+    delivered_count: int = 0
+    suppressed_count: int = 0

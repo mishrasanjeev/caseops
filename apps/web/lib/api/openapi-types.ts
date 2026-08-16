@@ -3811,6 +3811,159 @@ export interface paths {
         patch: operations["patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch"];
         trace?: never;
     };
+    "/api/ip/calendar-projections/drift-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Calendar Drift Check */
+        post: operations["post_ip_calendar_drift_check_api_ip_calendar_projections_drift_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review */
+        post: operations["post_ip_control_review_api_ip_control_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Control Review Detail */
+        get: operations["get_ip_control_review_detail_api_ip_control_reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review Export */
+        post: operations["post_ip_control_review_export_api_ip_control_reviews__review_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}/sign-off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review Sign Off */
+        post: operations["post_ip_control_review_sign_off_api_ip_control_reviews__review_id__sign_off_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/daily-docket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Daily Docket */
+        get: operations["get_ip_daily_docket_api_ip_daily_docket_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/{coverage_id}/replacement-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Replacement Decision */
+        post: operations["post_ip_coverage_replacement_decision_api_ip_deadline_coverages__coverage_id__replacement_decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/awaiting-me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Coverage Transfers Awaiting */
+        get: operations["get_ip_coverage_transfers_awaiting_api_ip_deadline_coverages_awaiting_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/bulk-acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Bulk Acknowledge */
+        post: operations["post_ip_coverage_bulk_acknowledge_api_ip_deadline_coverages_bulk_acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadline-coverages/bulk-reassign": {
         parameters: {
             query?: never;
@@ -3822,6 +3975,57 @@ export interface paths {
         put?: never;
         /** Post Ip Deadline Coverage Bulk Reassignment */
         post: operations["post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Assigned Coverage */
+        get: operations["get_ip_assigned_coverage_api_ip_deadline_coverages_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/reassign-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Reassign Preview */
+        post: operations["post_ip_coverage_reassign_preview_api_ip_deadline_coverages_reassign_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadline-coverages/reassign-propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Coverage Reassign Propose */
+        post: operations["post_ip_coverage_reassign_propose_api_ip_deadline_coverages_reassign_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3930,6 +4134,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/deadlines/{deadline_id}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Dependencies */
+        get: operations["get_ip_deadline_dependencies_api_ip_deadlines__deadline_id__dependencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/deadlines/{deadline_id}/impact": {
         parameters: {
             query?: never;
@@ -3939,6 +4160,40 @@ export interface paths {
         };
         /** Get Ip Deadline Impact */
         get: operations["get_ip_deadline_impact_api_ip_deadlines__deadline_id__impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/notification-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Notification Preview */
+        post: operations["post_ip_deadline_notification_preview_api_ip_deadlines__deadline_id__notification_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/deadlines/{deadline_id}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Deadline Notifications */
+        get: operations["get_ip_deadline_notifications_api_ip_deadlines__deadline_id__notifications_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3976,6 +4231,41 @@ export interface paths {
         /** Post Ip Deadline Recalculation */
         post: operations["post_ip_deadline_recalculation_api_ip_deadlines__deadline_id__recalculate_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/docket-queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Queues */
+        get: operations["get_ip_docket_queues_api_ip_docket_queues_get"];
+        put?: never;
+        /** Post Ip Docket Queue */
+        post: operations["post_ip_docket_queue_api_ip_docket_queues_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/docket-queues/{queue_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Ip Docket Queue Route */
+        delete: operations["delete_ip_docket_queue_route_api_ip_docket_queues__queue_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4368,6 +4658,40 @@ export interface paths {
         put?: never;
         /** Post Ip Identifier Correction */
         post: operations["post_ip_identifier_correction_api_ip_dockets__docket_id__identifiers__identifier_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/identifiers/{identifier_id}/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Identifier Duplicates */
+        get: operations["get_ip_identifier_duplicates_api_ip_dockets__docket_id__identifiers__identifier_id__duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/identifiers/{identifier_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Identifier Reconciliation */
+        post: operations["post_ip_identifier_reconciliation_api_ip_dockets__docket_id__identifiers__identifier_id__reconcile_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4868,6 +5192,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Job */
+        post: operations["post_ip_import_job_api_ip_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Import Job */
+        get: operations["get_ip_import_job_api_ip_imports__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Commit */
+        post: operations["post_ip_import_commit_api_ip_imports__job_id__commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}/revalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Revalidation */
+        post: operations["post_ip_import_revalidation_api_ip_imports__job_id__revalidate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/operational-deadlines": {
         parameters: {
             query?: never;
@@ -4903,6 +5295,40 @@ export interface paths {
         patch: operations["patch_ip_operational_deadline_api_ip_operational_deadlines__deadline_id__patch"];
         trace?: never;
     };
+    "/api/ip/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio */
+        get: operations["get_ip_portfolio_api_ip_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio Families */
+        get: operations["get_ip_portfolio_families_api_ip_portfolio_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/readiness": {
         parameters: {
             query?: never;
@@ -4930,6 +5356,24 @@ export interface paths {
         /** Get Ip Docket Control Report */
         get: operations["get_ip_docket_control_report_api_ip_reports_docket_control_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/rule-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Rule Policies */
+        get: operations["get_ip_rule_policies_api_ip_rule_policies_get"];
+        /** Put Ip Rule Policy */
+        put: operations["put_ip_rule_policy_api_ip_rule_policies_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -17696,6 +18140,85 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** IpAssignedCoverageListResponse */
+        IpAssignedCoverageListResponse: {
+            /** Coverages */
+            coverages?: components["schemas"]["IpAssignedCoverageRecord"][];
+        };
+        /**
+         * IpAssignedCoverageRecord
+         * @description One deadline the calling member is responsible for (CAL-OPS-09).
+         *
+         *     The daily docket reports how much work each member holds; this is the work
+         *     itself, so a member can acknowledge it rather than only be counted.
+         */
+        IpAssignedCoverageRecord: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Coverage Id */
+            coverage_id: string;
+            /** Coverage Status */
+            coverage_status: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Days Until Due */
+            days_until_due?: number | null;
+            /** Deadline Title */
+            deadline_title?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Identifier */
+            docket_identifier?: string | null;
+            /** Docket Title */
+            docket_title: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Reassignment Version */
+            reassignment_version: number;
+            /**
+             * Transfer Pending
+             * @default false
+             */
+            transfer_pending: boolean;
+        };
+        /**
+         * IpCalendarDriftRecord
+         * @description A projected calendar event that no longer matches CaseOps (UJ-62-EXC-03).
+         */
+        IpCalendarDriftRecord: {
+            /** Connection Id */
+            connection_id: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Drift Status
+             * @enum {string}
+             */
+            drift_status: "moved" | "missing" | "unknown";
+            /** Ip Docket Id */
+            ip_docket_id?: string | null;
+            /** Membership Id */
+            membership_id?: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Sync Id */
+            sync_id: string;
+        };
+        /** IpCalendarDriftResponse */
+        IpCalendarDriftResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Findings */
+            findings?: components["schemas"]["IpCalendarDriftRecord"][];
+        };
         /** IpChecklistItem */
         IpChecklistItem: {
             /**
@@ -17713,6 +18236,214 @@ export interface components {
             required: boolean;
             /** Satisfied */
             satisfied: boolean;
+        };
+        /** IpCompanyRulePolicyRecord */
+        IpCompanyRulePolicyRecord: {
+            /**
+             * Active Rule Status
+             * @enum {string}
+             */
+            active_rule_status: "candidate" | "approved" | "active" | "retired" | "disabled";
+            /** Active Rule Version */
+            active_rule_version: number;
+            /** Active Rule Version Id */
+            active_rule_version_id: string;
+            /** Auto Confirm Eligible */
+            auto_confirm_eligible: boolean;
+            /** Auto Confirm Suspended Reason */
+            auto_confirm_suspended_reason?: string | null;
+            /** Id */
+            id: string;
+            /** Internal Target Policy */
+            internal_target_policy: {
+                [key: string]: unknown;
+            };
+            /**
+             * Rule Kind
+             * @enum {string}
+             */
+            rule_kind: "deadline" | "form" | "fee";
+            /** Rule Set Id */
+            rule_set_id: string;
+            /** Rule Set Key */
+            rule_set_key: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updater Label Snapshot */
+            updater_label_snapshot: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * IpCompanyRuleSelectionRequest
+         * @description Tenant selection of an already-approved platform rule version.
+         */
+        IpCompanyRuleSelectionRequest: {
+            /**
+             * Auto Confirm Eligible
+             * @default false
+             */
+            auto_confirm_eligible: boolean;
+            /** Expected Policy Version */
+            expected_policy_version?: number | null;
+            /** Internal Target Policy */
+            internal_target_policy?: {
+                [key: string]: unknown;
+            };
+            /** Rule Version Id */
+            rule_version_id: string;
+        };
+        /**
+         * IpControlExceptionRecord
+         * @description A critical exception that a filter or dismissal cannot hide (CAL-OPS-13).
+         */
+        IpControlExceptionRecord: {
+            /**
+             * Critical
+             * @default true
+             */
+            critical: boolean;
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "uncovered" | "inactive_owner" | "unprojected_calendar" | "open_incident";
+        };
+        /**
+         * IpControlReviewCreateRequest
+         * @description Filters and observed source freshness for one control review.
+         */
+        IpControlReviewCreateRequest: {
+            /** Failed Queries */
+            failed_queries?: string[];
+            filters?: components["schemas"]["IpControlReviewFilters"];
+            /** Stale Sources */
+            stale_sources?: string[];
+        };
+        /** IpControlReviewExportRequest */
+        IpControlReviewExportRequest: {
+            /** Error Redacted */
+            error_redacted?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "generated" | "failed";
+        };
+        /**
+         * IpControlReviewFilters
+         * @description The complete, versioned filter vocabulary for a control review.
+         */
+        IpControlReviewFilters: {
+            /** Exclude Docket Ids */
+            exclude_docket_ids?: string[];
+            /** Team */
+            team?: string | null;
+        };
+        /**
+         * IpControlReviewIncludedRecord
+         * @description One access-filtered docket row frozen into a control-review manifest.
+         */
+        IpControlReviewIncludedRecord: {
+            /** Current Version */
+            current_version: number;
+            /** Docket Id */
+            docket_id: string;
+            /** Sha256 */
+            sha256: string;
+        };
+        /** IpControlReviewRecord */
+        IpControlReviewRecord: {
+            /** Completeness Status */
+            completeness_status: string;
+            /** Export Error Redacted */
+            export_error_redacted?: string | null;
+            /** Export Status */
+            export_status: string;
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /** Freshness */
+            freshness: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Id */
+            id: string;
+            /** Incompleteness Reasons */
+            incompleteness_reasons?: string[];
+            /** Mandatory Exceptions */
+            mandatory_exceptions?: components["schemas"]["IpControlExceptionRecord"][];
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Query Version */
+            query_version: string;
+            report: components["schemas"]["IpDocketControlReport"];
+            /** Signed Off At */
+            signed_off_at?: string | null;
+            /** Signer Label Snapshot */
+            signer_label_snapshot?: string | null;
+            snapshot: components["schemas"]["IpControlReviewSnapshot"];
+            /** Version */
+            version: number;
+        };
+        /** IpControlReviewSignOffRequest */
+        IpControlReviewSignOffRequest: {
+            /** Attestation */
+            attestation: string;
+            /** Expected Version */
+            expected_version: number;
+        };
+        /**
+         * IpControlReviewSnapshot
+         * @description Canonical, hash-bound input and output of one control-report query.
+         */
+        IpControlReviewSnapshot: {
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /** Freshness */
+            freshness: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Hidden Restricted Count Policy
+             * @constant
+             */
+            hidden_restricted_count_policy: "omit_without_count";
+            /** Included Records */
+            included_records?: components["schemas"]["IpControlReviewIncludedRecord"][];
+            /** Incompleteness Reasons */
+            incompleteness_reasons?: string[];
+            /** Mandatory Exceptions */
+            mandatory_exceptions?: components["schemas"]["IpControlExceptionRecord"][];
+            /** Query Version */
+            query_version: string;
+            report: components["schemas"]["IpDocketControlReport"];
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Timezone */
+            timezone: string;
         };
         /** IpCoreRecordResponse */
         IpCoreRecordResponse: {
@@ -17830,8 +18561,45 @@ export interface components {
              */
             status: "matched" | "mismatch" | "missing" | "unlinked";
         };
+        /**
+         * IpCoverageAcknowledgeOutcome
+         * @description Per-record validation result (CAL-OPS-09).
+         *
+         *     Every requested id gets a row, so a caller can never mistake "silently
+         *     dropped" for "acknowledged".
+         */
+        IpCoverageAcknowledgeOutcome: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Coverage Id */
+            coverage_id: string;
+            /** Reason */
+            reason?: ("acknowledged" | "already_acknowledged" | "not_found" | "not_responsible" | "version_conflict" | "transfer_pending") | null;
+            /** Reassignment Version */
+            reassignment_version?: number | null;
+        };
+        /** IpCoverageBulkAcknowledgeRequest */
+        IpCoverageBulkAcknowledgeRequest: {
+            /** Coverage Ids */
+            coverage_ids: string[];
+            /** Expected Versions */
+            expected_versions?: {
+                [key: string]: number;
+            };
+        };
+        /** IpCoverageBulkAcknowledgeResponse */
+        IpCoverageBulkAcknowledgeResponse: {
+            /** Acknowledged Count */
+            acknowledged_count: number;
+            /** Outcomes */
+            outcomes?: components["schemas"]["IpCoverageAcknowledgeOutcome"][];
+            /** Rejected Count */
+            rejected_count: number;
+        };
         /** IpCoverageBulkReassignRequest */
         IpCoverageBulkReassignRequest: {
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
             /** Expected Versions */
             expected_versions?: {
                 [key: string]: number;
@@ -17842,6 +18610,12 @@ export interface components {
             reason: string;
             /** To Membership Id */
             to_membership_id: string;
+            /**
+             * Transfer Mode
+             * @default proposed
+             * @enum {string}
+             */
+            transfer_mode: "proposed" | "immediate";
         };
         /** IpCoverageBulkReassignResponse */
         IpCoverageBulkReassignResponse: {
@@ -17849,10 +18623,199 @@ export interface components {
             backup_count: number;
             /** Coverage Ids */
             coverage_ids: string[];
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
             /** Reassigned Count */
             reassigned_count: number;
             /** Responsible Count */
             responsible_count: number;
+            /**
+             * Transfer Mode
+             * @default proposed
+             * @enum {string}
+             */
+            transfer_mode: "proposed" | "immediate";
+        };
+        /** IpCoverageReassignPreviewRequest */
+        IpCoverageReassignPreviewRequest: {
+            /** From Membership Id */
+            from_membership_id: string;
+            /** To Membership Id */
+            to_membership_id: string;
+        };
+        /**
+         * IpCoverageReassignPreviewResponse
+         * @description Atomic snapshot of a proposed transfer (CAL-OPS-08).
+         */
+        IpCoverageReassignPreviewResponse: {
+            /** Affected Coverage Ids */
+            affected_coverage_ids?: string[];
+            /** Affected Docket Ids */
+            affected_docket_ids?: string[];
+            /** Affected Roles */
+            affected_roles?: {
+                [key: string]: ("responsible" | "backup")[];
+            };
+            /** Blocked Docket Ids */
+            blocked_docket_ids?: string[];
+            /** From Membership Id */
+            from_membership_id: string;
+            /** Preview Token */
+            preview_token: string;
+            /** To Membership Id */
+            to_membership_id: string;
+            /** Transfer Allowed */
+            transfer_allowed: boolean;
+        };
+        /** IpCoverageReassignProposeRequest */
+        IpCoverageReassignProposeRequest: {
+            /** Emergency Escalation Membership Id */
+            emergency_escalation_membership_id?: string | null;
+            /** Emergency Until */
+            emergency_until?: string | null;
+            /** From Membership Id */
+            from_membership_id: string;
+            /** Preview Token */
+            preview_token: string;
+            /** Reason */
+            reason: string;
+            /** To Membership Id */
+            to_membership_id: string;
+        };
+        /** IpCoverageReplacementDecisionRequest */
+        IpCoverageReplacementDecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * IpCoverageTransferAwaiting
+         * @description One coverage transfer awaiting the calling member's decision.
+         *
+         *     Carries what a lawyer needs in order to answer "can I hold this date?" —
+         *     which record, which deadline, when it falls, who asked and why — so the
+         *     decision does not require opening each docket in turn.
+         */
+        IpCoverageTransferAwaiting: {
+            /** Coverage Id */
+            coverage_id: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Days Until Due */
+            days_until_due?: number | null;
+            /** Deadline Title */
+            deadline_title?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Identifier */
+            docket_identifier?: string | null;
+            /** Docket Title */
+            docket_title: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Escalation Label */
+            escalation_label?: string | null;
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reassignment Version */
+            reassignment_version: number;
+            /** Responsible Label */
+            responsible_label: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /**
+             * Transfer Kind
+             * @enum {string}
+             */
+            transfer_kind: "proposed" | "immediate";
+        };
+        /** IpCoverageTransfersAwaitingResponse */
+        IpCoverageTransfersAwaitingResponse: {
+            /** Transfers */
+            transfers?: components["schemas"]["IpCoverageTransferAwaiting"][];
+        };
+        /**
+         * IpDailyDocketEscalation
+         * @description A critical item that must not be lost (CAL-OPS-13).
+         */
+        IpDailyDocketEscalation: {
+            /** Coverage Id */
+            coverage_id: string;
+            /** Critical */
+            critical: boolean;
+            /** Docket Id */
+            docket_id: string;
+            /** Escalate To Membership Id */
+            escalate_to_membership_id?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "owner_inactive" | "unacknowledged_critical" | "unowned";
+        };
+        /**
+         * IpDailyDocketQueue
+         * @description Workload and capacity for one responsible member (CAL-OPS-09).
+         */
+        IpDailyDocketQueue: {
+            /** Active */
+            active: boolean;
+            /** Assigned Count */
+            assigned_count?: number | null;
+            /**
+             * Capacity State
+             * @enum {string}
+             */
+            capacity_state: "available" | "unavailable";
+            /** Critical Count */
+            critical_count?: number | null;
+            /** Label */
+            label: string;
+            /** Membership Id */
+            membership_id: string;
+            /** Unacknowledged Count */
+            unacknowledged_count?: number | null;
+        };
+        /**
+         * IpDailyDocketResponse
+         * @description The daily docket a manager triages.
+         *
+         *     When a source is stale the affected counts are ``null`` rather than ``0``:
+         *     unknown work must never render as no work (UJ-50-EXC-03).
+         */
+        IpDailyDocketResponse: {
+            /**
+             * Counts Are Complete
+             * @default true
+             */
+            counts_are_complete: boolean;
+            /** Escalations */
+            escalations?: components["schemas"]["IpDailyDocketEscalation"][];
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Queues */
+            queues?: components["schemas"]["IpDailyDocketQueue"][];
+            /** Stale Sources */
+            stale_sources?: string[];
         };
         /** IpDeadlineCalculationRequest */
         IpDeadlineCalculationRequest: {
@@ -17960,12 +18923,20 @@ export interface components {
         IpDeadlineCoverageReassignRequest: {
             /** Backup Membership Id */
             backup_membership_id?: string | null;
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
             /** Expected Responsible Membership Id */
             expected_responsible_membership_id: string;
             /** Reason */
             reason: string;
             /** Responsible Membership Id */
             responsible_membership_id: string;
+            /**
+             * Transfer Mode
+             * @default proposed
+             * @enum {string}
+             */
+            transfer_mode: "proposed" | "immediate";
         };
         /** IpDeadlineCoverageRecord */
         IpDeadlineCoverageRecord: {
@@ -17982,12 +18953,27 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Emergency Escalation Membership Id */
+            emergency_escalation_membership_id?: string | null;
+            /** Emergency Until */
+            emergency_until?: string | null;
             /** Id */
             id: string;
             /** Matter Deadline Id */
             matter_deadline_id: string;
+            /** Pending Replacement Membership Id */
+            pending_replacement_membership_id?: string | null;
             /** Reassignment Version */
             reassignment_version: number;
+            /** Replacement Decided At */
+            replacement_decided_at?: string | null;
+            /**
+             * Replacement Decision
+             * @default none
+             */
+            replacement_decision: string;
+            /** Replacement Decision Reason */
+            replacement_decision_reason?: string | null;
             /** Responsible Membership Id */
             responsible_membership_id: string;
             /**
@@ -17995,6 +18981,68 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * IpDeadlineDependencyNode
+         * @description One input that contributed to a deadline's current date.
+         */
+        IpDeadlineDependencyNode: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "trigger_event" | "rule_version" | "calendar_version" | "predecessor_deadline" | "extension" | "override";
+            /** Label */
+            label: string;
+            /** Reference Id */
+            reference_id?: string | null;
+        };
+        /**
+         * IpDeadlineDependencyResponse
+         * @description CAL-OPS-06 dependency graph for one legal deadline.
+         *
+         *     Read-only provenance derived from the stored calculation evidence. It never
+         *     recomputes the date; a missing input is reported as unavailable rather than
+         *     silently dropped, so the chain cannot look complete when it is not.
+         */
+        IpDeadlineDependencyResponse: {
+            /** Calculation Trace */
+            calculation_trace?: {
+                [key: string]: unknown;
+            }[];
+            /** Certainty */
+            certainty: string;
+            /** Deadline Id */
+            deadline_id: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Engine Version */
+            engine_version: string;
+            /** Explanation */
+            explanation: string;
+            /** Is Critical */
+            is_critical: boolean;
+            /** Nodes */
+            nodes?: components["schemas"]["IpDeadlineDependencyNode"][];
+            /** Result On */
+            result_on: string | null;
+            /** Rule Citation */
+            rule_citation: string;
+            /** Source Version */
+            source_version: string;
+            /** State */
+            state: string;
+            /** Superseded Chain */
+            superseded_chain?: string[];
+            /** Unavailable Inputs */
+            unavailable_inputs?: string[];
         };
         /** IpDeadlineExceptionRecord */
         IpDeadlineExceptionRecord: {
@@ -18479,6 +19527,56 @@ export interface components {
             count: number;
             /** Dockets */
             dockets: components["schemas"]["IpDocketRecordResponse"][];
+        };
+        /** IpDocketQueueListResponse */
+        IpDocketQueueListResponse: {
+            /** Queues */
+            queues?: components["schemas"]["IpDocketQueueRecord"][];
+        };
+        /** IpDocketQueueRecord */
+        IpDocketQueueRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Owner Membership Id */
+            owner_membership_id?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "team" | "personal";
+            /** Team Id */
+            team_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IpDocketQueueSaveRequest */
+        IpDocketQueueSaveRequest: {
+            /** Description */
+            description?: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Team Id */
+            team_id?: string | null;
         };
         /** IpDocketRecordResponse */
         IpDocketRecordResponse: {
@@ -19052,6 +20150,84 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * IpDuplicateCandidate
+         * @description One competing identifier that blocks reconciliation.
+         */
+        IpDuplicateCandidate: {
+            /** Application Id */
+            application_id: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Is Active */
+            docket_is_active: boolean;
+            /** Docket Restricted */
+            docket_restricted: boolean;
+            /** Docket Status */
+            docket_status: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Identifier Id */
+            identifier_id: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Normalized Value */
+            normalized_value: string;
+            /** Proceeding Id */
+            proceeding_id: string | null;
+            /** Raw Value */
+            raw_value: string;
+            /** Reconciliation Status */
+            reconciliation_status: string;
+            /** Source */
+            source: string;
+        };
+        /**
+         * IpDuplicatePreviewResponse
+         * @description IP-ID-07 reconciliation preview; never merges anything by itself.
+         */
+        IpDuplicatePreviewResponse: {
+            /** Allowed Decisions */
+            allowed_decisions?: string[];
+            /** Automatic Merge Blocked */
+            automatic_merge_blocked: boolean;
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /** Candidates */
+            candidates: components["schemas"]["IpDuplicateCandidate"][];
+            /** Decision Token */
+            decision_token: string;
+            identifier: components["schemas"]["IpDuplicateCandidate"];
+            /** Identifier Id */
+            identifier_id: string;
+        };
+        /**
+         * IpDuplicateResolutionRequest
+         * @description Explicit operator decision on a flagged duplicate identifier.
+         */
+        IpDuplicateResolutionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "distinct" | "supersede";
+            /** Decision Token */
+            decision_token: string;
+            /** Reason */
+            reason: string;
+            /** Superseded By Identifier Id */
+            superseded_by_identifier_id?: string | null;
+        };
+        /** IpDuplicateResolutionResponse */
+        IpDuplicateResolutionResponse: {
+            /** Decision */
+            decision: string;
+            identifier: components["schemas"]["IpIdentifierResponse"];
+            /** Resolved Candidate Ids */
+            resolved_candidate_ids?: string[];
+        };
         /** IpEthicalWallRecord */
         IpEthicalWallRecord: {
             /**
@@ -19348,8 +20524,119 @@ export interface components {
             reconciliation_status: string;
             /** Source */
             source: string;
+            /** Superseded By Identifier Id */
+            superseded_by_identifier_id: string | null;
             /** Supersedes Identifier Id */
             supersedes_identifier_id: string | null;
+        };
+        /** IpImportCommitRequest */
+        IpImportCommitRequest: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Preview Token */
+            preview_token: string;
+        };
+        /** IpImportCommitResponse */
+        IpImportCommitResponse: {
+            job: components["schemas"]["IpImportJobRecord"];
+            /**
+             * Replayed
+             * @default false
+             */
+            replayed: boolean;
+            /** Rows */
+            rows: components["schemas"]["IpImportRowRecord"][];
+        };
+        /** IpImportJobCreateRequest */
+        IpImportJobCreateRequest: {
+            /** Filename */
+            filename: string;
+            /** Rows */
+            rows: components["schemas"]["IpImportRowInput"][];
+        };
+        /** IpImportJobRecord */
+        IpImportJobRecord: {
+            /** Committed At */
+            committed_at: string | null;
+            /** Committed Rows */
+            committed_rows: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Creator Label Snapshot */
+            creator_label_snapshot: string;
+            /** Domain */
+            domain: string;
+            /** Failed Rows */
+            failed_rows: number;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /** Invalid Rows */
+            invalid_rows: number;
+            /** Preview Expires At */
+            preview_expires_at: string | null;
+            /** Preview Token */
+            preview_token: string | null;
+            /** Source Sha256 */
+            source_sha256: string;
+            /** Status */
+            status: string;
+            /** Total Rows */
+            total_rows: number;
+            /** Valid Rows */
+            valid_rows: number;
+            /** Version */
+            version: number;
+        };
+        /** IpImportPreviewResponse */
+        IpImportPreviewResponse: {
+            job: components["schemas"]["IpImportJobRecord"];
+            /**
+             * Preview Expired
+             * @default false
+             */
+            preview_expired: boolean;
+            /** Rows */
+            rows: components["schemas"]["IpImportRowRecord"][];
+        };
+        /**
+         * IpImportRowInput
+         * @description One staged portfolio row as supplied by the operator.
+         */
+        IpImportRowInput: {
+            /** Row Number */
+            row_number: number;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
+        };
+        /** IpImportRowRecord */
+        IpImportRowRecord: {
+            /** Commit Error Code */
+            commit_error_code?: string | null;
+            /** Commit Status */
+            commit_status: string;
+            /** Created Docket Id */
+            created_docket_id?: string | null;
+            /** Errors */
+            errors?: {
+                [key: string]: unknown;
+            }[];
+            /** Id */
+            id: string;
+            /** Normalized */
+            normalized?: {
+                [key: string]: unknown;
+            };
+            /** Row Number */
+            row_number: number;
+            /** Validation Status */
+            validation_status: string;
         };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
@@ -19474,6 +20761,124 @@ export interface components {
             /** Notice Id */
             notice_id: string;
         };
+        /**
+         * IpNotificationPlanEntry
+         * @description One reminder intent that confirmation would create.
+         */
+        IpNotificationPlanEntry: {
+            /** Channel */
+            channel: string;
+            /** Critical */
+            critical: boolean;
+            /** Event Type */
+            event_type: string;
+            /** Offset Days */
+            offset_days: number;
+            /** Recipient Label */
+            recipient_label: string;
+            /** Recipient Membership Id */
+            recipient_membership_id: string;
+            /** Role */
+            role: string;
+            /**
+             * Scheduled For
+             * Format: date-time
+             */
+            scheduled_for: string;
+            /** Withheld Reason */
+            withheld_reason?: string | null;
+            /** Would Deliver */
+            would_deliver: boolean;
+        };
+        /**
+         * IpNotificationPreviewRequest
+         * @description Same shape as the confirmation payload, minus anything that writes.
+         */
+        IpNotificationPreviewRequest: {
+            /** Reminder Offsets Days */
+            reminder_offsets_days?: number[];
+            /** Responsibilities */
+            responsibilities: components["schemas"]["IpResponsibilityInput"][];
+        };
+        /**
+         * IpNotificationPreviewResponse
+         * @description NOTIF preview: the delivery plan before any intent exists.
+         *
+         *     ``external_delivery_enabled`` is always ``False``: this slice plans in-app
+         *     intents only and no external channel is dispatched.
+         */
+        IpNotificationPreviewResponse: {
+            /** Deadline Id */
+            deadline_id: string;
+            /**
+             * External Delivery Enabled
+             * @default false
+             * @constant
+             */
+            external_delivery_enabled: false;
+            /**
+             * Plan Is Proposal Only
+             * @default true
+             * @constant
+             */
+            plan_is_proposal_only: true;
+            /** Planned */
+            planned?: components["schemas"]["IpNotificationPlanEntry"][];
+            /** Result On */
+            result_on: string | null;
+            /**
+             * Withheld Count
+             * @default 0
+             */
+            withheld_count: number;
+        };
+        /** IpNotificationStatusEntry */
+        IpNotificationStatusEntry: {
+            /** Attempts */
+            attempts: number;
+            /** Channel */
+            channel: string;
+            /** Critical */
+            critical: boolean;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Intent Id */
+            intent_id: string;
+            /** Recipient Membership Id */
+            recipient_membership_id: string | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Status */
+            status: string;
+            /** Superseded By Intent Id */
+            superseded_by_intent_id?: string | null;
+            /** Suppression Reason */
+            suppression_reason?: string | null;
+        };
+        /** IpNotificationStatusResponse */
+        IpNotificationStatusResponse: {
+            /** Deadline Id */
+            deadline_id: string;
+            /**
+             * Delivered Count
+             * @default 0
+             */
+            delivered_count: number;
+            /** Intents */
+            intents?: components["schemas"]["IpNotificationStatusEntry"][];
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /**
+             * Suppressed Count
+             * @default 0
+             */
+            suppressed_count: number;
+        };
         /** IpOperationalDeadlineCreateRequest */
         IpOperationalDeadlineCreateRequest: {
             /** Assignee Membership Id */
@@ -19574,6 +20979,197 @@ export interface components {
             status?: ("open" | "done" | "cancelled" | "missed") | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * IpPortfolioCounts
+         * @description Data-quality split for the current filter scope.
+         *
+         *     ``registry_sync_state`` is deliberately ``unavailable`` rather than zero:
+         *     IP-office synchronisation is an M5 capability, so a sync-failure count
+         *     cannot be reported truthfully yet.
+         */
+        IpPortfolioCounts: {
+            /** Complete Records */
+            complete_records: number;
+            /** Incomplete Records */
+            incomplete_records: number;
+            /** Overdue Records */
+            overdue_records: number;
+            /**
+             * Registry Sync State
+             * @default unavailable
+             */
+            registry_sync_state: string;
+            /** Total */
+            total: number;
+            /** Unconfirmed Deadline Records */
+            unconfirmed_deadline_records: number;
+        };
+        /**
+         * IpPortfolioFamily
+         * @description A grouping of related applications.
+         *
+         *     Grouping is presentational only. IP-PROS-11 requires each member to keep
+         *     independent identifiers, events, rules and lifecycle, so a family exposes no
+         *     shared phase, deadline, or identifier of its own.
+         */
+        IpPortfolioFamily: {
+            /** Distinct Filing Phases */
+            distinct_filing_phases?: string[];
+            /** Distinct Jurisdictions */
+            distinct_jurisdictions?: string[];
+            /** Family Key */
+            family_key: string;
+            /** Grouping */
+            grouping: string;
+            /** Label */
+            label: string;
+            /** Member Count */
+            member_count: number;
+            /** Members */
+            members?: components["schemas"]["IpPortfolioFamilyMember"][];
+        };
+        /**
+         * IpPortfolioFamilyMember
+         * @description One jurisdiction/application inside a family, with its own identity.
+         */
+        IpPortfolioFamilyMember: {
+            /** Application Id */
+            application_id: string;
+            /** Asset Id */
+            asset_id: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Office */
+            office: string | null;
+            /**
+             * Open Deadline Count
+             * @default 0
+             */
+            open_deadline_count: number;
+            /**
+             * Overdue Deadline Count
+             * @default 0
+             */
+            overdue_deadline_count: number;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+        };
+        /** IpPortfolioFamilyResponse */
+        IpPortfolioFamilyResponse: {
+            /** Families */
+            families?: components["schemas"]["IpPortfolioFamily"][];
+            /** Grouping */
+            grouping: string;
+            /**
+             * Ungrouped Member Count
+             * @default 0
+             */
+            ungrouped_member_count: number;
+        };
+        /**
+         * IpPortfolioFilters
+         * @description Server-owned filter scope for one portfolio query (IP-PORT-02).
+         */
+        IpPortfolioFilters: {
+            /** Asset Kind */
+            asset_kind?: string[];
+            /** Docket Status */
+            docket_status?: string[];
+            /** Filing Phase */
+            filing_phase?: string[];
+            /**
+             * Include Inactive
+             * @default false
+             */
+            include_inactive: boolean;
+            /** Jurisdiction */
+            jurisdiction?: string[];
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Office */
+            office?: string[];
+            /** Query */
+            query?: string | null;
+        };
+        /** IpPortfolioListResponse */
+        IpPortfolioListResponse: {
+            counts: components["schemas"]["IpPortfolioCounts"];
+            filters: components["schemas"]["IpPortfolioFilters"];
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Rows */
+            rows: components["schemas"]["IpPortfolioRow"][];
+        };
+        /**
+         * IpPortfolioRow
+         * @description One jurisdiction/application record with its owning mark.
+         */
+        IpPortfolioRow: {
+            /** Application Id */
+            application_id: string;
+            /** Asset Id */
+            asset_id: string | null;
+            /** Asset Jurisdiction */
+            asset_jurisdiction: string | null;
+            /** Asset Kind */
+            asset_kind: string | null;
+            /** Asset Title */
+            asset_title: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Status */
+            docket_status: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Incomplete Reasons */
+            incomplete_reasons?: string[];
+            /** Is Active */
+            is_active: boolean;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Office */
+            office: string | null;
+            /**
+             * Open Deadline Count
+             * @default 0
+             */
+            open_deadline_count: number;
+            /**
+             * Overdue Deadline Count
+             * @default 0
+             */
+            overdue_deadline_count: number;
+            /** Pending Identifier Allocation */
+            pending_identifier_allocation: boolean;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Record Complete */
+            record_complete: boolean;
+            /**
+             * Unconfirmed Deadline Count
+             * @default 0
+             */
+            unconfirmed_deadline_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** IpProceedingCreateRequest */
         IpProceedingCreateRequest: {
@@ -19771,6 +21367,8 @@ export interface components {
              * @default
              */
             impact_reason: string;
+            /** Impact Token */
+            impact_token?: string | null;
             /** Internal Target Policy */
             internal_target_policy?: {
                 [key: string]: unknown;
@@ -19782,6 +21380,11 @@ export interface components {
              * @default true
              */
             select_for_company: boolean;
+            /**
+             * Supersede Overlapping
+             * @default false
+             */
+            supersede_overlapping: boolean;
         };
         /** IpRuleFixture */
         IpRuleFixture: {
@@ -38285,6 +39888,280 @@ export interface operations {
             };
         };
     };
+    post_ip_calendar_drift_check_api_ip_calendar_projections_drift_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCalendarDriftResponse"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_api_ip_control_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_control_review_detail_api_ip_control_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_export_api_ip_control_reviews__review_id__export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_sign_off_api_ip_control_reviews__review_id__sign_off_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewSignOffRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_daily_docket_api_ip_daily_docket_get: {
+        parameters: {
+            query?: {
+                stale_source?: string[] | null;
+                team?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDailyDocketResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_replacement_decision_api_ip_deadline_coverages__coverage_id__replacement_decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                coverage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageReplacementDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_coverage_transfers_awaiting_api_ip_deadline_coverages_awaiting_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageTransfersAwaitingResponse"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_bulk_acknowledge_api_ip_deadline_coverages_bulk_acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageBulkAcknowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageBulkAcknowledgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_deadline_coverage_bulk_reassignment_api_ip_deadline_coverages_bulk_reassign_post: {
         parameters: {
             query?: never;
@@ -38305,6 +40182,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpCoverageBulkReassignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_assigned_coverage_api_ip_deadline_coverages_mine_get: {
+        parameters: {
+            query?: {
+                unacknowledged_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpAssignedCoverageListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_reassign_preview_api_ip_deadline_coverages_reassign_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageReassignPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageReassignPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_coverage_reassign_propose_api_ip_deadline_coverages_reassign_propose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCoverageReassignProposeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCoverageReassignPreviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38522,6 +40496,37 @@ export interface operations {
             };
         };
     };
+    get_ip_deadline_dependencies_api_ip_deadlines__deadline_id__dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDeadlineDependencyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_deadline_impact_api_ip_deadlines__deadline_id__impact_get: {
         parameters: {
             query?: never;
@@ -38540,6 +40545,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDeadlineImpactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_notification_preview_api_ip_deadlines__deadline_id__notification_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpNotificationPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpNotificationPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_deadline_notifications_api_ip_deadlines__deadline_id__notifications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpNotificationStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38611,6 +40682,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IpDeadlineRecord"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_queues_api_ip_docket_queues_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketQueueListResponse"];
+                };
+            };
+        };
+    };
+    post_ip_docket_queue_api_ip_docket_queues_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocketQueueSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketQueueRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ip_docket_queue_route_api_ip_docket_queues__queue_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                queue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -39443,6 +41596,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpIdentifierMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_identifier_duplicates_api_ip_dockets__docket_id__identifiers__identifier_id__duplicates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                identifier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDuplicatePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_identifier_reconciliation_api_ip_dockets__docket_id__identifiers__identifier_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                identifier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDuplicateResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDuplicateResolutionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -40413,6 +42634,136 @@ export interface operations {
             };
         };
     };
+    post_ip_import_job_api_ip_imports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpImportJobCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_import_job_api_ip_imports__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_commit_api_ip_imports__job_id__commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportCommitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_revalidation_api_ip_imports__job_id__revalidate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_operational_deadlines_api_ip_operational_deadlines_get: {
         parameters: {
             query: {
@@ -40513,6 +42864,81 @@ export interface operations {
             };
         };
     };
+    get_ip_portfolio_api_ip_portfolio_get: {
+        parameters: {
+            query?: {
+                asset_kind?: string[] | null;
+                cursor?: string | null;
+                docket_status?: string[] | null;
+                filing_phase?: string[] | null;
+                include_inactive?: boolean;
+                jurisdiction?: string[] | null;
+                limit?: number;
+                matter_id?: string | null;
+                office?: string[] | null;
+                query?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portfolio_families_api_ip_portfolio_families_get: {
+        parameters: {
+            query?: {
+                filing_phase?: string[] | null;
+                grouping?: string;
+                include_inactive?: boolean;
+                jurisdiction?: string[] | null;
+                matter_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioFamilyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_workspace_readiness_api_ip_readiness_get: {
         parameters: {
             query?: never;
@@ -40549,6 +42975,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketControlReport"];
+                };
+            };
+        };
+    };
+    get_ip_rule_policies_api_ip_rule_policies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCompanyRulePolicyRecord"][];
+                };
+            };
+        };
+    };
+    put_ip_rule_policy_api_ip_rule_policies_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCompanyRuleSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCompanyRulePolicyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

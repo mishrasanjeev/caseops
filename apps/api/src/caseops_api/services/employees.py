@@ -32,6 +32,7 @@ from caseops_api.db.models import (
     HearingPack,
     HearingReminder,
     IpDeadlineCoverage,
+    IpDocketQueue,
     Matter,
     MatterAccessGrant,
     MatterDeadline,
@@ -77,6 +78,7 @@ OFFBOARDING_SUPPORTED_TYPES = (
     "matter_tasks",
     "matter_deadlines",
     "ip_deadline_coverages",
+    "ip_docket_queues",
     "hearing_reminders",
 )
 OFFBOARDING_UNSUPPORTED_TYPES = (
@@ -563,6 +565,28 @@ def _collect_offboarding_objects(
             )
         )
 
+    personal_queues = list(
+        session.scalars(
+            select(IpDocketQueue)
+            .where(
+                IpDocketQueue.company_id == company_id,
+                IpDocketQueue.team_id.is_(None),
+                IpDocketQueue.owner_membership_id == target.id,
+            )
+            .order_by(IpDocketQueue.name.asc(), IpDocketQueue.id.asc())
+        )
+    )
+    for queue in personal_queues:
+        supported.append(
+            _offboarding_object(
+                "ip_docket_queues",
+                queue.id,
+                label=queue.name,
+                relation="personal docket queue owner",
+                supported=True,
+            )
+        )
+
     reminder_rows = list(
         session.execute(
             select(HearingReminder, Matter)
@@ -720,6 +744,21 @@ def _build_offboarding_preview(
             blockers.append("Replacement employee must belong to this company.")
         if not reassign_to.is_active or not reassign_to.user.is_active:
             blockers.append("Replacement employee must be active.")
+        backup_conflicts = int(
+            session.scalar(
+                select(func.count(IpDeadlineCoverage.id)).where(
+                    IpDeadlineCoverage.company_id == context.company.id,
+                    IpDeadlineCoverage.backup_membership_id == target.id,
+                    IpDeadlineCoverage.responsible_membership_id == reassign_to.id,
+                )
+            )
+            or 0
+        )
+        if backup_conflicts:
+            blockers.append(
+                "Choose a distinct IP deadline backup; the replacement already owns "
+                "affected deadlines."
+            )
         conflicts = _ethical_wall_conflict_count(
             session,
             reassign_to_membership_id=reassign_to.id,
@@ -1512,10 +1551,29 @@ def _reassign_offboarding_objects(
             from_membership_id=target_id,
             to_membership_id=replacement_id,
             reason="Employee offboarding coverage transfer",
+            # The departing person cannot be waited on, so responsibility moves
+            # now. It is still recorded as awaiting the replacement's
+            # acknowledgement rather than as an acceptance they never gave, and
+            # the admin running the offboarding is who a decline escalates to.
+            transfer_mode="immediate",
+            escalation_membership_id=context.membership.id,
         ),
         commit=False,
     )
     counts["ip_deadline_coverages"] = ip_reassignment.reassigned_count
+
+    personal_queues = list(
+        session.scalars(
+            select(IpDocketQueue).where(
+                IpDocketQueue.company_id == company_id,
+                IpDocketQueue.team_id.is_(None),
+                IpDocketQueue.owner_membership_id == target_id,
+            )
+        )
+    )
+    for queue in personal_queues:
+        queue.owner_membership_id = replacement_id
+    counts["ip_docket_queues"] = len(personal_queues)
 
     reminders = list(
         session.scalars(

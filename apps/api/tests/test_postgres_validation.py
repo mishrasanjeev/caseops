@@ -1998,6 +1998,445 @@ def test_notice_direction_and_reply_checks_on_postgres(pg_engine):
                 )
 
 
+@pytest.mark.postgres
+def test_iplf039c_batch_altered_constraints_enforce_on_postgres(pg_engine):
+    """IPLF-039C — the two `batch_alter_table` migrations behave on the real dialect.
+
+    `20260815_0002` (coverage replacement decision) and `20260815_0004`
+    (calendar drift) both use `op.batch_alter_table`, which exists as a SQLite
+    workaround: it rebuilds the table by copy-and-move. On Postgres alembic
+    takes a different path entirely, so a constraint proven under SQLite is not
+    proven here.
+
+    This asserts the constraints exist **and fire**. A constraint that exists
+    but does not refuse is worse than none, because it reads as protection.
+    """
+
+    expected = {
+        "ip_deadline_coverages": {
+            "ck_ip_coverage_replacement_decision",
+            "ck_ip_coverage_pending_has_subject",
+            "ck_ip_coverage_emergency_is_time_boxed",
+        },
+        "calendar_event_syncs": {"ck_calendar_event_sync_drift_status"},
+        "ip_docket_queues": {"ck_ip_docket_queue_has_scope"},
+    }
+    with pg_engine.connect() as conn:
+        for table, names in expected.items():
+            found = {
+                row[0]
+                for row in conn.execute(
+                    text(
+                        # cast(...) rather than `:t::regclass`: the `::` cast
+                        # collides with SQLAlchemy's `:param` binding syntax.
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = cast(:t AS regclass) AND contype = 'c'"
+                    ),
+                    {"t": table},
+                )
+            }
+            missing = names - found
+            assert not missing, f"{table} lost check constraints on Postgres: {missing}"
+
+        queue_owner_delete_action = conn.scalar(
+            text(
+                "SELECT confdeltype FROM pg_constraint "
+                "WHERE conrelid = cast('ip_docket_queues' AS regclass) "
+                "AND contype = 'f' "
+                "AND pg_get_constraintdef(oid) LIKE "
+                "'FOREIGN KEY (owner_membership_id)%'"
+            )
+        )
+        # PostgreSQL encodes ON DELETE CASCADE as `c`. SET NULL (`n`) would
+        # collide with ck_ip_docket_queue_has_scope for a personal queue.
+        assert queue_owner_delete_action == "c"
+
+    with pg_engine.begin() as conn:
+        company_id = _seed_company(Session(bind=conn))
+
+    # A queue belonging to neither a team nor a member is refused.
+    with pytest.raises(IntegrityError) as scope_error:
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ip_docket_queues "
+                    "(id, company_id, name, filters_json, team_id, "
+                    " owner_membership_id, created_by_membership_id, "
+                    " created_at, updated_at) "
+                    "VALUES (:id, :co, 'Orphan', '{}', NULL, NULL, NULL, :ts, :ts)"
+                ),
+                {"id": str(uuid4()), "co": company_id, "ts": datetime.now(UTC)},
+            )
+    # Name the rule, so this cannot pass on an unrelated integrity error.
+    assert "ck_ip_docket_queue_has_scope" in str(scope_error.value)
+
+    # An out-of-vocabulary drift status is refused.
+    with pytest.raises(IntegrityError) as drift_error:
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO calendar_event_syncs "
+                    "(id, company_id, calendar_connection_id, source_type, "
+                    " source_id, sync_status, drift_status, attempts, "
+                    " max_attempts, created_at, updated_at) "
+                    "VALUES (:id, :co, :conn, 'matter_deadline', :src, "
+                    " 'pending', 'definitely_fine', 0, 3, :ts, :ts)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "co": company_id,
+                    "conn": str(uuid4()),
+                    "src": str(uuid4()),
+                    "ts": datetime.now(UTC),
+                },
+            )
+    assert "ck_calendar_event_sync_drift_status" in str(drift_error.value)
+
+
+@pytest.mark.postgres
+def test_iplf039c_drift_status_server_default_lands_on_postgres(pg_engine):
+    """`drift_status` must default to `unchecked`, never NULL.
+
+    The column was added with `server_default="unchecked"` so pre-existing rows
+    read truthfully as *not yet checked*. If the default failed to apply they
+    would be NULL, and the honesty rule this slice is built on — unverified is
+    never reported as verified — would be silently broken for every projection
+    that existed before the migration.
+    """
+
+    with pg_engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT column_default, is_nullable FROM information_schema.columns "
+                "WHERE table_name = 'calendar_event_syncs' "
+                "AND column_name = 'drift_status'"
+            )
+        ).one()
+
+    default, nullable = row
+    assert default is not None and "unchecked" in default, (
+        f"drift_status server_default did not apply on Postgres: {default!r}. "
+        "Migration 20260815_0004 would leave existing projections unlabelled."
+    )
+    assert nullable == "NO"
+
+
+@pytest.mark.postgres
+def test_iplf039c_queue_name_is_unique_per_company_on_postgres(pg_engine):
+    """A saved queue name cannot be shadowed inside one workspace.
+
+    Composite UNIQUE has looser NULL semantics on SQLite, so per-tenant
+    uniqueness is only meaningfully proven here. The second half matters as
+    much as the first: the name must stay free in a *different* workspace, so
+    one firm cannot deny another a queue name.
+    """
+
+    def _insert_queue(company_id: str, name: str, owner_id: str) -> None:
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ip_docket_queues "
+                    "(id, company_id, name, filters_json, team_id, "
+                    " owner_membership_id, created_by_membership_id, "
+                    " created_at, updated_at) "
+                    "VALUES (:id, :co, :name, '{}', NULL, :owner, NULL, :ts, :ts)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "co": company_id,
+                    "name": name,
+                    "owner": owner_id,
+                    "ts": datetime.now(UTC),
+                },
+            )
+
+    with pg_engine.begin() as conn:
+        session = Session(bind=conn)
+        company_id = _seed_company(session)
+        other_company_id = _seed_company(session)
+        owner_id = _seed_membership(session, company_id)
+        other_owner_id = _seed_membership(session, other_company_id)
+
+    _insert_queue(company_id, "Critical this week", owner_id)
+    with pytest.raises(IntegrityError) as excinfo:
+        _insert_queue(company_id, "Critical this week", owner_id)
+    assert "uq_ip_docket_queue_company_name" in str(excinfo.value)
+
+    # Per-tenant, not global.
+    _insert_queue(other_company_id, "Critical this week", other_owner_id)
+
+
+@pytest.mark.postgres
+def test_new_ip_foreign_keys_are_tenant_matched_and_preserve_delete_actions(pg_engine):
+    expected = {
+        "bulk_import_jobs": {
+            "fk_bulk_import_job_creator_company": (
+                ["created_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            )
+        },
+        "ip_import_rows": {
+            "fk_ip_import_row_created_docket_company": (
+                ["created_docket_id", "company_id"],
+                "ip_docket_records",
+                ["id", "company_id"],
+            )
+        },
+        "ip_docket_control_reviews": {
+            "fk_ip_control_review_signer_company": (
+                ["signed_off_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+            "fk_ip_control_review_creator_company": (
+                ["created_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+        },
+        "ip_deadline_coverages": {
+            "fk_ip_coverage_pending_replacement_company": (
+                ["pending_replacement_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+            "fk_ip_coverage_emergency_escalation_company": (
+                ["emergency_escalation_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+        },
+        "ip_docket_queues": {
+            "fk_ip_docket_queue_team_company": (
+                ["team_id", "company_id"],
+                "teams",
+                ["id", "company_id"],
+            ),
+            "fk_ip_docket_queue_owner_company": (
+                ["owner_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+            "fk_ip_docket_queue_creator_company": (
+                ["created_by_membership_id", "company_id"],
+                "company_memberships",
+                ["id", "company_id"],
+            ),
+        },
+        "ip_identifiers": {
+            "fk_ip_identifier_supersedes_company": (
+                ["supersedes_identifier_id", "company_id"],
+                "ip_identifiers",
+                ["id", "company_id"],
+            ),
+            "fk_ip_identifier_superseded_by_company": (
+                ["superseded_by_identifier_id", "company_id"],
+                "ip_identifiers",
+                ["id", "company_id"],
+            ),
+        },
+    }
+    # pg_constraint action codes: a=NO ACTION, c=CASCADE, r=RESTRICT;
+    # confmatchtype s=MATCH SIMPLE. Deferred NO ACTION companions allow the
+    # original single-column SET NULL FK to null only its nullable ID.
+    deferred_set_null_companions = {
+        "fk_bulk_import_job_creator_company",
+        "fk_ip_import_row_created_docket_company",
+        "fk_ip_control_review_signer_company",
+        "fk_ip_control_review_creator_company",
+        "fk_ip_coverage_pending_replacement_company",
+        "fk_ip_coverage_emergency_escalation_company",
+        "fk_ip_docket_queue_creator_company",
+    }
+    cascade_companions = {
+        "fk_ip_docket_queue_team_company",
+        "fk_ip_docket_queue_owner_company",
+    }
+    restrict_constraints = {
+        "fk_ip_identifier_supersedes_company",
+        "fk_ip_identifier_superseded_by_company",
+    }
+    schema = inspect(pg_engine)
+    for table, expected_by_name in expected.items():
+        actual_by_name = {
+            foreign_key["name"]: (
+                foreign_key["constrained_columns"],
+                foreign_key["referred_table"],
+                foreign_key["referred_columns"],
+            )
+            for foreign_key in schema.get_foreign_keys(table)
+            if foreign_key.get("name")
+        }
+        for name, shape in expected_by_name.items():
+            assert actual_by_name[name] == shape
+
+    with pg_engine.connect() as connection:
+        for name in deferred_set_null_companions:
+            assert connection.execute(
+                text(
+                    "SELECT confdeltype, condeferrable, condeferred, confmatchtype "
+                    "FROM pg_constraint WHERE conname = :name"
+                ),
+                {"name": name},
+            ).one() == ("a", True, True, "s")
+        for name in cascade_companions:
+            assert connection.execute(
+                text(
+                    "SELECT confdeltype, condeferrable, condeferred, confmatchtype "
+                    "FROM pg_constraint WHERE conname = :name"
+                ),
+                {"name": name},
+            ).one() == ("c", False, False, "s")
+        for name in restrict_constraints:
+            assert connection.execute(
+                text(
+                    "SELECT confdeltype, condeferrable, condeferred, confmatchtype "
+                    "FROM pg_constraint WHERE conname = :name"
+                ),
+                {"name": name},
+            ).one() == ("r", False, False, "s")
+
+    with pg_engine.begin() as connection:
+        session = Session(bind=connection)
+        company_a = _seed_company(session)
+        company_b = _seed_company(session)
+        membership_a = _seed_membership(session, company_a)
+        membership_b = _seed_membership(session, company_b)
+        team_b = str(uuid4())
+        now = datetime.now(UTC)
+        connection.execute(
+            text(
+                "INSERT INTO teams "
+                "(id, company_id, name, slug, kind, is_active, created_at, updated_at) "
+                "VALUES (:id, :company, 'Foreign Team', :slug, 'team', true, :now, :now)"
+            ),
+            {
+                "id": team_b,
+                "company": company_b,
+                "slug": f"foreign-team-{team_b[:8]}",
+                "now": now,
+            },
+        )
+
+    invalid_writes = [
+        (
+            "fk_bulk_import_job_creator_company",
+            "INSERT INTO bulk_import_jobs "
+            "(id, company_id, domain, filename, source_sha256, "
+            " created_by_membership_id, creator_label_snapshot, created_at, updated_at) "
+            "VALUES (:id, :company, 'ip_trademark', 'tenant.csv', :sha, "
+            " :membership, 'Wrong tenant', :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "sha": "a" * 64,
+                "membership": membership_b,
+                "now": now,
+            },
+        ),
+        (
+            "fk_ip_control_review_signer_company",
+            "INSERT INTO ip_docket_control_reviews "
+            "(id, company_id, generated_at, filters_json, freshness_json, "
+            " incompleteness_reasons_json, mandatory_exception_ids_json, "
+            " query_version, report_snapshot_json, manifest_sha256, "
+            " signed_off_by_membership_id, created_at, updated_at) "
+            "VALUES (:id, :company, :now, '{}', '{}', '[]', '[]', "
+            " 'daily-docket-v1', '{}', :sha, :membership, :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "membership": membership_b,
+                "sha": "b" * 64,
+                "now": now,
+            },
+        ),
+        (
+            "fk_ip_docket_queue_owner_company",
+            "INSERT INTO ip_docket_queues "
+            "(id, company_id, name, filters_json, owner_membership_id, "
+            " created_at, updated_at) "
+            "VALUES (:id, :company, :name, '{}', :membership, :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "name": f"Foreign owner {uuid4()}",
+                "membership": membership_b,
+                "now": now,
+            },
+        ),
+        (
+            "fk_ip_docket_queue_team_company",
+            "INSERT INTO ip_docket_queues "
+            "(id, company_id, name, filters_json, team_id, created_at, updated_at) "
+            "VALUES (:id, :company, :name, '{}', :team, :now, :now)",
+            {
+                "id": str(uuid4()),
+                "company": company_a,
+                "name": f"Foreign team {uuid4()}",
+                "team": team_b,
+                "now": now,
+            },
+        ),
+    ]
+    for constraint_name, statement, parameters in invalid_writes:
+        with pytest.raises(IntegrityError) as excinfo:
+            with pg_engine.begin() as connection:
+                connection.execute(text(statement), parameters)
+        assert constraint_name in str(excinfo.value)
+
+    import_id = str(uuid4())
+    queue_id = str(uuid4())
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO bulk_import_jobs "
+                "(id, company_id, domain, filename, source_sha256, "
+                " created_by_membership_id, creator_label_snapshot, created_at, updated_at) "
+                "VALUES (:id, :company, 'ip_trademark', 'valid.csv', :sha, "
+                " :membership, 'Ephemeral Member', :now, :now)"
+            ),
+            {
+                "id": import_id,
+                "company": company_a,
+                "sha": "c" * 64,
+                "membership": membership_a,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ip_docket_queues "
+                "(id, company_id, name, filters_json, owner_membership_id, "
+                " created_at, updated_at) "
+                "VALUES (:id, :company, :name, '{}', :membership, :now, :now)"
+            ),
+            {
+                "id": queue_id,
+                "company": company_a,
+                "name": f"Ephemeral queue {queue_id[:8]}",
+                "membership": membership_a,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text("DELETE FROM company_memberships WHERE id = :id"),
+            {"id": membership_a},
+        )
+        assert connection.execute(
+            text(
+                "SELECT company_id, created_by_membership_id "
+                "FROM bulk_import_jobs WHERE id = :id"
+            ),
+            {"id": import_id},
+        ).one() == (company_a, None)
+        assert connection.scalar(
+            text("SELECT count(*) FROM ip_docket_queues WHERE id = :id"),
+            {"id": queue_id},
+        ) == 0
+
+
 def test_ip_rule_governance_fingerprint_uses_real_postgres_read_only_snapshot(
     pg_engine,
 ) -> None:

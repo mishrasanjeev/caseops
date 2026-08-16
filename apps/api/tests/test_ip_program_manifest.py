@@ -171,3 +171,108 @@ def test_validator_rejects_missing_epic_decomposition_and_changed_prd_slice() ->
 
     assert any("changed PRD-explicit title" in error for error in errors)
     assert any("slice_ids are not reciprocal" in error for error in errors)
+
+
+def test_uj67_path_partition_and_parent_projection_are_reciprocal() -> None:
+    manifest = _manifest()
+    slices = {row["id"]: row for row in manifest["slices"]}
+    paths = {row["id"]: row for row in manifest["journey_paths"]}
+    journey = next(row for row in manifest["journeys"] if row["id"] == "UJ-67")
+
+    residual_paths = {
+        "UJ-67-EXC-01",
+        "UJ-67-EXC-03",
+        "UJ-67-EXC-04",
+        "UJ-67-EXC-06",
+    }
+    proved_paths = {
+        "UJ-67-NORMAL",
+        "UJ-67-EXC-02",
+        "UJ-67-EXC-05",
+    }
+    assert set(slices["IPLF-027B"]["journey_path_ids"]) == residual_paths
+    assert set(slices["IPLF-027E"]["journey_path_ids"]) == proved_paths
+    assert residual_paths.isdisjoint(proved_paths)
+    assert residual_paths | proved_paths == set(journey["path_ids"])
+
+    for path_id in residual_paths:
+        assert paths[path_id]["slice_ids"] == ["IPLF-027B"]
+        assert paths[path_id]["implementation_status"] == "in_progress"
+        assert paths[path_id]["verification_status"] == "not_run"
+    for path_id in proved_paths:
+        assert paths[path_id]["slice_ids"] == ["IPLF-027E"]
+        assert paths[path_id]["implementation_status"] == "implemented"
+        assert paths[path_id]["verification_status"] == "passed"
+
+    child_rows = [paths[path_id] for path_id in journey["path_ids"]]
+    assert journey["slice_ids"] == sorted(
+        {slice_id for row in child_rows for slice_id in row["slice_ids"]}
+    )
+    assert journey["test_refs"] == sorted(
+        {reference for row in child_rows for reference in row["test_refs"]}
+    )
+    assert journey["evidence_refs"] == sorted(
+        {reference for row in child_rows for reference in row["evidence_refs"]}
+    )
+    assert journey["implementation_status"] == "in_progress"
+    assert journey["verification_status"] == "not_run"
+
+
+def test_validator_rejects_any_journey_projection_drift() -> None:
+    manifest = _manifest()
+    journey = next(row for row in manifest["journeys"] if row["id"] == "UJ-11")
+    journey["slice_ids"] = [*journey["slice_ids"], "IPLF-999Z"]
+    journey["test_refs"] = [*journey["test_refs"], "planned:stale-parent-only-test"]
+    journey["evidence_refs"] = [
+        *journey["evidence_refs"],
+        "docs/ip-implementation/evidence/does-not-exist.md",
+    ]
+
+    errors = ip_program_manifest.validate(manifest)
+
+    for field in ("slice_ids", "test_refs", "evidence_refs"):
+        assert any(
+            f"journey/UJ-11: {field} must exactly project child paths" in error
+            for error in errors
+        )
+
+
+def test_validator_rejects_passed_row_citing_unwritten_planned_test() -> None:
+    """A `planned:` reference names a test that does not exist yet.
+
+    It is legitimate on an unverified row, but it can never be evidence for a
+    passed or deployment-verified claim. Before this rule, 80 rows claimed
+    passed/deployment_verified while citing only planned placeholders.
+    """
+
+    manifest = _manifest()
+    row = next(
+        item for item in manifest["slices"] if item["verification_status"] == "passed"
+    )
+    row["test_refs"] = [*row.get("test_refs", []), "planned:IPLF-UJ-99-NORMAL"]
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any(
+        "passed/deployment_verified row cites unwritten tests" in error
+        for error in errors
+    )
+
+
+def test_validator_allows_planned_test_reference_on_an_unverified_row() -> None:
+    """The rule must not punish honest work in progress."""
+
+    manifest = _manifest()
+    row = next(
+        item
+        for item in manifest["slices"]
+        if item["verification_status"] == "not_run"
+        and item["release_status"] != "deployment_verified"
+    )
+    row["test_refs"] = [*row.get("test_refs", []), "planned:IPLF-UJ-99-NORMAL"]
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert not any(
+        "cites unwritten tests" in error and row["id"] in error for error in errors
+    )

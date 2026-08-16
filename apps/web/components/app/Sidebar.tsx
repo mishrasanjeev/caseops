@@ -6,6 +6,7 @@ import {
   BookOpenCheck,
   BookOpenText,
   Briefcase,
+  CalendarClock,
   CalendarDays,
   ChevronsRight,
   Contact,
@@ -62,6 +63,15 @@ const NAV: NavItem[] = [
     href: "/app/ip",
     label: "IP docket",
     icon: BookOpenCheck,
+    section: "work",
+    requiresCapability: "ip:read",
+  },
+  // CAL-OPS-09 / CAL-OPS-13 — deadline control: who holds what, what is
+  // unacknowledged, what is escalating, and the signed daily control review.
+  {
+    href: "/app/ip/docket",
+    label: "Deadline control",
+    icon: CalendarClock,
     section: "work",
     requiresCapability: "ip:read",
   },

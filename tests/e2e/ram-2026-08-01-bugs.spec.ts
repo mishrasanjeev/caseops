@@ -260,7 +260,11 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     await expect(page.getByText("Prosecution event recorded in the immutable timeline.")).toBeVisible();
     await expect(prosecution.getByRole("list", { name: "Prosecution event timeline" })).toContainText("formalities");
 
-    for (const name of ["Discover Matter evidence", "Transfer covered deadlines", "Add recordal obligation", "Reconcile with Matter billing", "Preview prosecution event", "Record prosecution event", "Preview lifecycle impact", "Apply lifecycle transition"]) {
+    // 2026-08-15 (IPLF-039C): "Transfer covered deadlines" is now "Offer covered
+    // deadlines". A routine coverage transfer became a proposal that the named
+    // replacement must accept, so a control labelled "transfer" was claiming an
+    // act it no longer performs.
+    for (const name of ["Discover Matter evidence", "Offer covered deadlines", "Add recordal obligation", "Reconcile with Matter billing", "Preview prosecution event", "Record prosecution event", "Preview lifecycle impact", "Apply lifecycle transition"]) {
       const control = page.getByRole("button", { name });
       await expect(control).toBeVisible();
       const box = await control.boundingBox();

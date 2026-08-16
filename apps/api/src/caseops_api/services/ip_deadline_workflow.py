@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     IpDeadline,
     IpDeadlineCoverage,
     IpDocketEvent,
+    IpDocketRecord,
     IpResponsibilityAssignment,
     IpRuleSet,
     IpRuleVersion,
@@ -33,9 +34,13 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
 )
 from caseops_api.schemas.ip_deadlines import (
+    IpCompanyRulePolicyRecord,
+    IpCompanyRuleSelectionRequest,
     IpDeadlineCalculationRequest,
     IpDeadlineCompleteRequest,
     IpDeadlineConfirmRequest,
+    IpDeadlineDependencyNode,
+    IpDeadlineDependencyResponse,
     IpDeadlineExceptionRecord,
     IpDeadlineImpactResponse,
     IpDeadlineOverrideRequest,
@@ -44,6 +49,11 @@ from caseops_api.schemas.ip_deadlines import (
     IpDeadlineRecord,
     IpDeadlineRuleDefinition,
     IpDeadlineWorkspaceResponse,
+    IpNotificationPlanEntry,
+    IpNotificationPreviewRequest,
+    IpNotificationPreviewResponse,
+    IpNotificationStatusEntry,
+    IpNotificationStatusResponse,
     IpResponsibilityInput,
     IpRuleActivationRequest,
     IpRuleImpactResponse,
@@ -68,6 +78,7 @@ from caseops_api.services.ip_deadlines import (
 from caseops_api.services.ip_operations import _docket_or_404
 from caseops_api.services.matter_access import can_access
 from caseops_api.services.notification_delivery import (
+    _recipient_context,
     cancel_pending_notification_intents,
     enqueue_notification_delivery_intent,
 )
@@ -337,6 +348,60 @@ def propose_rule_version(
     return _rule_record(rule_set, row)
 
 
+def _ranges_overlap(
+    left_from: date,
+    left_until: date | None,
+    right_from: date,
+    right_until: date | None,
+) -> bool:
+    """Half-open-free inclusive overlap; ``None`` means open ended."""
+
+    if left_until is not None and right_from > left_until:
+        return False
+    if right_until is not None and left_from > right_until:
+        return False
+    return True
+
+
+def _overlapping_active_versions(
+    session: Session,
+    *,
+    row: IpRuleVersion,
+    company_id: str,
+) -> list[IpRuleVersion]:
+    """Tenant-owned active siblings whose effective range collides with ``row``.
+
+    ``IpRuleSet`` is a shared legal-scope identity, while each version is owned
+    by the company of its proposer.  Joining that ownership here is essential:
+    otherwise a tenant activating its own version can retire another tenant's
+    active version merely because both use the same platform rule key.
+    """
+
+    siblings = session.scalars(
+        select(IpRuleVersion)
+        .join(
+            CompanyMembership,
+            CompanyMembership.id == IpRuleVersion.proposed_by_membership_id,
+        )
+        .where(
+            IpRuleVersion.rule_set_id == row.rule_set_id,
+            IpRuleVersion.status == "active",
+            IpRuleVersion.id != row.id,
+            CompanyMembership.company_id == company_id,
+        )
+    ).all()
+    return [
+        sibling
+        for sibling in siblings
+        if _ranges_overlap(
+            row.effective_from,
+            row.effective_until,
+            sibling.effective_from,
+            sibling.effective_until,
+        )
+    ]
+
+
 def _rule_fixture_results(row: IpRuleVersion, rule_set: IpRuleSet) -> tuple[list[str], list[str]]:
     fixture_ids: list[str] = []
     passed_ids: list[str] = []
@@ -371,11 +436,30 @@ def rule_impact(
     if row is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
     _assert_rule_governance_access(session, context=context, row=row)
+
+    # RULE-GOV-05: the preview must describe what acting on this version will
+    # affect.  Activating a candidate supersedes the active versions whose
+    # effective range it collides with, so their open records are in scope.
+    # Retiring or disabling an already-active version affects only itself.
+    scoped_ids = [row.id]
+    if row.status == "candidate":
+        scoped_ids.extend(
+            item.id
+            for item in _overlapping_active_versions(
+                session,
+                row=row,
+                company_id=context.company.id,
+            )
+        )
+
     policy_count = int(
         session.scalar(
             select(func.count())
             .select_from(CompanyIpRulePolicy)
-            .where(CompanyIpRulePolicy.active_rule_version_id == row.id)
+            .where(
+                CompanyIpRulePolicy.company_id == context.company.id,
+                CompanyIpRulePolicy.active_rule_version_id.in_(scoped_ids),
+            )
         )
         or 0
     )
@@ -384,7 +468,8 @@ def rule_impact(
             select(func.count())
             .select_from(IpDeadline)
             .where(
-                IpDeadline.rule_version_id == row.id,
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.rule_version_id.in_(scoped_ids),
                 IpDeadline.state.in_(["confirmed", "overdue"]),
             )
         )
@@ -395,14 +480,24 @@ def rule_impact(
             select(func.count())
             .select_from(IpDeadline)
             .where(
-                IpDeadline.rule_version_id == row.id,
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.rule_version_id.in_(scoped_ids),
                 IpDeadline.state.in_(["candidate", "provisional"]),
             )
         )
         or 0
     )
     token = sha256(
-        f"{row.id}|{row.status}|{policy_count}|{open_count}|{candidate_count}".encode()
+        "|".join(
+            [
+                row.id,
+                row.status,
+                ",".join(sorted(scoped_ids)),
+                str(policy_count),
+                str(open_count),
+                str(candidate_count),
+            ]
+        ).encode()
     ).hexdigest()
     return IpRuleImpactResponse(
         rule_version_id=row.id,
@@ -443,6 +538,23 @@ def activate_rule_version(
         fixture_ids=fixture_ids,
         passed_fixture_ids=passed_ids,
     )
+    overlapping = _overlapping_active_versions(
+        session,
+        row=row,
+        company_id=context.company.id,
+    )
+    if overlapping and not payload.supersede_overlapping:
+        collided = ", ".join(
+            str(item.version) for item in sorted(overlapping, key=lambda x: x.version)
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Effective range overlaps active version(s) {collided}; "
+                "confirm supersession or correct the effective range."
+            ),
+        )
+
     impact = rule_impact(session, context=context, rule_version_id=row.id)
     if (impact.company_policy_count or impact.open_deadline_count) and not (
         payload.impact_acknowledged and len(payload.impact_reason.strip()) >= 5
@@ -451,18 +563,13 @@ def activate_rule_version(
             status_code=409,
             detail="Rule impact must be reviewed before activation.",
         )
+    if (
+        impact.company_policy_count or impact.open_deadline_count
+    ) and payload.impact_token != impact.impact_token:
+        raise HTTPException(status_code=409, detail="Rule impact changed; preview again.")
 
     now = _now()
-    prior_active = list(
-        session.scalars(
-            select(IpRuleVersion).where(
-                IpRuleVersion.rule_set_id == row.rule_set_id,
-                IpRuleVersion.status == "active",
-                IpRuleVersion.id != row.id,
-            )
-        ).all()
-    )
-    for prior in prior_active:
+    for prior in overlapping:
         prior.status = "retired"
     row.status = "active"
     row.reviewed_by_membership_id = reviewer.id
@@ -512,6 +619,8 @@ def activate_rule_version(
             "fixture_ids": fixture_ids,
             "impact_token": impact.impact_token,
             "auto_confirm_eligible": payload.auto_confirm_eligible,
+            "superseded_version_ids": [item.id for item in overlapping],
+            "confirmed_deadlines_preserved": True,
         },
     )
     session.commit()
@@ -540,6 +649,34 @@ def transition_rule_version(
         raise HTTPException(status_code=409, detail="Rule version is not active or approved.")
     row.status = "disabled" if payload.emergency_disable else "retired"
     row.disabled_at = _now() if payload.emergency_disable else None
+
+    # RULE-GOV-07: disabling must stop future auto-confirmation for every tenant
+    # that selected this version.  Confirmed legal evidence is never rewritten;
+    # dependent candidates surface as a ``rule_disabled`` workspace exception.
+    suspended_company_ids: list[str] = []
+    alerted_membership_ids: list[str] = []
+    if payload.emergency_disable:
+        affected_policies = list(
+            session.scalars(
+                select(CompanyIpRulePolicy)
+                .where(
+                    CompanyIpRulePolicy.company_id == context.company.id,
+                    CompanyIpRulePolicy.active_rule_version_id == row.id,
+                )
+                .with_for_update()
+            ).all()
+        )
+        for policy in affected_policies:
+            suspended_company_ids.append(policy.company_id)
+            if policy.auto_confirm_eligible:
+                policy.auto_confirm_eligible = False
+                policy.version += 1
+                policy.updated_by_membership_id = context.membership.id
+                policy.updater_label_snapshot = _actor_label(context)
+        alerted_membership_ids = _alert_rule_disable(
+            session, context=context, row=row, reason=payload.reason
+        )
+
     record_from_context(
         session,
         context,
@@ -548,13 +685,212 @@ def transition_rule_version(
         ),
         target_type="ip_rule_version",
         target_id=row.id,
-        metadata={"reason": payload.reason, "impact_token": impact.impact_token},
+        metadata={
+            "reason": payload.reason,
+            "impact_token": impact.impact_token,
+            "auto_confirm_suspended_company_ids": suspended_company_ids,
+            "alerted_membership_ids": alerted_membership_ids,
+            "open_deadline_count": impact.open_deadline_count,
+            "candidate_deadline_count": impact.candidate_deadline_count,
+            "confirmed_deadlines_preserved": True,
+        },
     )
     session.commit()
     session.refresh(row)
     rule_set = session.get(IpRuleSet, row.rule_set_id)
     assert rule_set is not None
     return _rule_record(rule_set, row)
+
+
+def _alert_rule_disable(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: IpRuleVersion,
+    reason: str,
+) -> list[str]:
+    """RULE-GOV-07: alert the owners of every record the disabled rule produced.
+
+    This reuses the existing notification dispatcher; it does not create a second
+    delivery owner.  Intents are in-app only and keyed by rule/deadline/member so
+    a repeated disable cannot duplicate a send.
+    """
+
+    affected = list(
+        session.scalars(
+            select(IpDeadline).where(
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.rule_version_id == row.id,
+                IpDeadline.state.in_(["candidate", "provisional", "confirmed", "overdue"]),
+            )
+        ).all()
+    )
+    alerted: list[str] = []
+    for deadline in affected:
+        matter_id = session.scalar(
+            select(IpDocketRecord.matter_id).where(IpDocketRecord.id == deadline.docket_id)
+        )
+        matter = session.get(Matter, matter_id) if matter_id else None
+        assignments = list(
+            session.scalars(
+                select(IpResponsibilityAssignment).where(
+                    IpResponsibilityAssignment.deadline_id == deadline.id,
+                    IpResponsibilityAssignment.effective_until.is_(None),
+                )
+            ).all()
+        )
+        recipient_ids = {item.membership_id for item in assignments if item.membership_id}
+        if not recipient_ids:
+            # Nobody owns the record yet; alert the actor so it is not lost.
+            recipient_ids = {context.membership.id}
+        for membership_id in sorted(recipient_ids):
+            member = session.get(CompanyMembership, membership_id)
+            if member is None or member.company_id != context.company.id:
+                continue
+            intent = enqueue_notification_delivery_intent(
+                session,
+                context=context,
+                recipient_membership=member,
+                channel="in_app",
+                event_type="ip_rule_version_disabled",
+                source_type="ip_rule_version",
+                source_id=f"{row.id}:{deadline.id}:{member.id}",
+                matter=matter,
+                title="Legal rule disabled",
+                body=(
+                    f"The rule version behind '{deadline.title}' was disabled and "
+                    f"auto-confirmation is suspended. Reason: {reason}"
+                ),
+                critical=deadline.is_critical,
+                confidentiality_mode="minimal",
+                schedule_source_type="ip_rule_version",
+                schedule_source_id=row.id,
+            )
+            if intent is not None:
+                alerted.append(member.id)
+    return alerted
+
+
+def _policy_record(
+    policy: CompanyIpRulePolicy,
+    rule_set: IpRuleSet,
+    version: IpRuleVersion,
+) -> IpCompanyRulePolicyRecord:
+    return IpCompanyRulePolicyRecord(
+        id=policy.id,
+        rule_set_id=rule_set.id,
+        rule_set_key=rule_set.key,
+        rule_kind=rule_set.rule_kind,
+        active_rule_version_id=version.id,
+        active_rule_version=version.version,
+        active_rule_status=version.status,
+        auto_confirm_eligible=policy.auto_confirm_eligible,
+        auto_confirm_suspended_reason=(
+            "rule_disabled"
+            if version.status == "disabled"
+            else ("rule_retired" if version.status == "retired" else None)
+        ),
+        internal_target_policy=policy.internal_target_policy_json,
+        version=policy.version,
+        updater_label_snapshot=policy.updater_label_snapshot,
+        updated_at=policy.updated_at,
+    )
+
+
+def select_company_rule_version(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpCompanyRuleSelectionRequest,
+) -> IpCompanyRulePolicyRecord:
+    """RULE-GOV-04: select an approved platform rule version for this company.
+
+    A tenant policy can only point at a version the platform already activated;
+    it can never make a candidate, retired, or disabled version authoritative.
+    """
+
+    version = session.get(IpRuleVersion, payload.rule_version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Rule version not found.")
+    _assert_rule_governance_access(session, context=context, row=version)
+    if version.status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail="Only an active approved rule version can be selected by a company.",
+        )
+    rule_set = session.get(IpRuleSet, version.rule_set_id)
+    assert rule_set is not None
+
+    policy = session.scalar(
+        select(CompanyIpRulePolicy)
+        .where(
+            CompanyIpRulePolicy.company_id == context.company.id,
+            CompanyIpRulePolicy.rule_set_id == version.rule_set_id,
+        )
+        .with_for_update()
+    )
+    if policy is None:
+        if payload.expected_policy_version is not None:
+            raise HTTPException(status_code=409, detail="Company policy no longer matches.")
+        policy = CompanyIpRulePolicy(
+            company_id=context.company.id,
+            rule_set_id=version.rule_set_id,
+            active_rule_version_id=version.id,
+            auto_confirm_eligible=payload.auto_confirm_eligible,
+            internal_target_policy_json=payload.internal_target_policy,
+            version=1,
+            updated_by_membership_id=context.membership.id,
+            updater_label_snapshot=_actor_label(context),
+        )
+        session.add(policy)
+    else:
+        if (
+            payload.expected_policy_version is not None
+            and payload.expected_policy_version != policy.version
+        ):
+            raise HTTPException(status_code=409, detail="Company policy no longer matches.")
+        policy.active_rule_version_id = version.id
+        policy.auto_confirm_eligible = payload.auto_confirm_eligible
+        policy.internal_target_policy_json = payload.internal_target_policy
+        policy.version += 1
+        policy.updated_by_membership_id = context.membership.id
+        policy.updater_label_snapshot = _actor_label(context)
+
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="ip.rule_policy.selected",
+        target_type="company_ip_rule_policy",
+        target_id=policy.id,
+        metadata={
+            "rule_set_id": rule_set.id,
+            "rule_version_id": version.id,
+            "rule_version": version.version,
+            "auto_confirm_eligible": policy.auto_confirm_eligible,
+            "policy_version": policy.version,
+        },
+    )
+    session.commit()
+    session.refresh(policy)
+    return _policy_record(policy, rule_set, version)
+
+
+def list_company_rule_policies(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> list[IpCompanyRulePolicyRecord]:
+    rows = list(
+        session.execute(
+            select(CompanyIpRulePolicy, IpRuleSet, IpRuleVersion)
+            .join(IpRuleSet, IpRuleSet.id == CompanyIpRulePolicy.rule_set_id)
+            .join(IpRuleVersion, IpRuleVersion.id == CompanyIpRulePolicy.active_rule_version_id)
+            .where(CompanyIpRulePolicy.company_id == context.company.id)
+            .order_by(IpRuleSet.key)
+        ).all()
+    )
+    return [_policy_record(policy, rule_set, version) for policy, rule_set, version in rows]
 
 
 def propose_calendar_version(
@@ -1150,6 +1486,37 @@ def _confirm_row(
     row.confirmed_at = now
 
 
+def _lock_deadline_ancestor_chain(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: IpDeadline,
+) -> list[IpDeadline]:
+    """Lock every predecessor so confirmation cuts over the whole live chain."""
+
+    ancestors: list[IpDeadline] = []
+    seen = {row.id}
+    ancestor_id = row.supersedes_deadline_id
+    while ancestor_id is not None:
+        if ancestor_id in seen:
+            raise HTTPException(status_code=409, detail="Deadline predecessor chain is cyclic.")
+        seen.add(ancestor_id)
+        ancestor = session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == ancestor_id,
+                IpDeadline.company_id == context.company.id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if ancestor is None:
+            raise HTTPException(status_code=409, detail="Superseded deadline is unavailable.")
+        ancestors.append(ancestor)
+        ancestor_id = ancestor.supersedes_deadline_id
+    return ancestors
+
+
 def confirm_deadline(
     session: Session,
     *,
@@ -1168,20 +1535,48 @@ def confirm_deadline(
     rule = session.get(IpRuleVersion, row.rule_version_id)
     if rule is None or rule.status != "active":
         raise HTTPException(status_code=409, detail="The governing rule is not active.")
-    if row.supersedes_deadline_id:
-        prior = session.scalar(
-            select(IpDeadline).where(IpDeadline.id == row.supersedes_deadline_id).with_for_update()
-        )
-        if prior and prior.state in {"confirmed", "overdue"}:
-            impact = deadline_impact(session, context=context, deadline_id=prior.id)
+    ancestors = _lock_deadline_ancestor_chain(session, context=context, row=row)
+    live_states = {"candidate", "provisional", "confirmed", "overdue"}
+    if ancestors:
+        if ancestors[0].state not in live_states:
+            raise HTTPException(
+                status_code=409,
+                detail="The predecessor is no longer current; recalculate again.",
+            )
+
+        effect_ancestors = [
+            ancestor for ancestor in ancestors if ancestor.state in {"confirmed", "overdue"}
+        ]
+        if len(effect_ancestors) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Multiple active predecessors require reconciliation before confirmation.",
+            )
+        if effect_ancestors:
+            impact = deadline_impact(
+                session,
+                context=context,
+                deadline_id=effect_ancestors[0].id,
+            )
             if payload.impact_token != impact.impact_token:
                 raise HTTPException(
                     status_code=409,
                     detail="Deadline impact changed; preview again.",
                 )
-            _cancel_deadline_impacts(session, context=context, row=prior)
-            prior.state = "superseded"
-            prior.version += 1
+            _cancel_deadline_impacts(
+                session,
+                context=context,
+                row=effect_ancestors[0],
+            )
+
+        # Recalculation creates a successor without destroying its source
+        # evidence. Confirmation is the atomic cut-over point for the complete
+        # chain, including older candidates that an intermediate recalculation
+        # never retired.
+        for ancestor in ancestors:
+            if ancestor.state in live_states:
+                ancestor.state = "superseded"
+                ancestor.version += 1
     if payload.corrected_result_on and payload.corrected_result_on != row.result_on:
         corrected = _copy_deadline(
             row,
@@ -1548,18 +1943,336 @@ def deadline_workspace(
     )
 
 
+def deadline_dependencies(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+) -> IpDeadlineDependencyResponse:
+    """CAL-OPS-06 - explain which inputs produced this deadline's current date.
+
+    Pure read over stored evidence. It never recomputes the date, so a rule or
+    calendar that has since changed cannot silently rewrite the explanation. An
+    input that can no longer be resolved is reported as unavailable rather than
+    omitted, so an incomplete chain is visible instead of looking complete.
+    """
+
+    row = session.scalar(
+        select(IpDeadline).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline not found.")
+    _docket_or_404(session, context=context, docket_id=row.docket_id)
+
+    nodes: list[IpDeadlineDependencyNode] = []
+    unavailable: list[str] = []
+
+    def add(kind: str, reference_id, label: str, detail: str | None, available: bool) -> None:
+        nodes.append(
+            IpDeadlineDependencyNode(
+                kind=kind,
+                reference_id=reference_id,
+                label=label,
+                detail=detail,
+                available=available,
+            )
+        )
+        if not available:
+            unavailable.append(kind)
+
+    # Trigger event
+    if row.trigger_event_id:
+        event = session.get(IpDocketEvent, row.trigger_event_id)
+        if event is None:
+            add("trigger_event", row.trigger_event_id, "Trigger event", None, False)
+        else:
+            add(
+                "trigger_event",
+                event.id,
+                f"{event.event_kind} ({event.source})",
+                f"effective {event.effective_at.date().isoformat()}",
+                True,
+            )
+    else:
+        add(
+            "trigger_event",
+            None,
+            f"Manual base date ({row.trigger_kind})",
+            row.base_date.isoformat() if row.base_date else "no base date recorded",
+            row.base_date is not None,
+        )
+
+    # Rule version
+    rule = session.get(IpRuleVersion, row.rule_version_id)
+    if rule is None:
+        add("rule_version", row.rule_version_id, "Rule version", None, False)
+    else:
+        rule_set = session.get(IpRuleSet, rule.rule_set_id)
+        add(
+            "rule_version",
+            rule.id,
+            f"{rule_set.key} v{rule.version}" if rule_set else f"rule v{rule.version}",
+            f"status {rule.status}; {row.rule_citation}",
+            True,
+        )
+
+    # Calendar version
+    calendar = session.get(LegalWorkingCalendarVersion, row.calendar_version_id)
+    if calendar is None:
+        add("calendar_version", row.calendar_version_id, "Working calendar", None, False)
+    else:
+        add(
+            "calendar_version",
+            calendar.id,
+            f"calendar v{calendar.version} ({calendar.timezone})",
+            f"status {calendar.status}; {len(calendar.holidays_json or [])} holidays",
+            True,
+        )
+
+    # Extension, when the stored inputs recorded one
+    inputs = row.calculation_inputs_json or {}
+    extension_days = inputs.get("extension_days") or 0
+    if extension_days:
+        add(
+            "extension",
+            None,
+            f"Extension of {extension_days} day(s)",
+            "recorded in the stored calculation inputs",
+            True,
+        )
+
+    # Predecessor deadline chain
+    chain: list[str] = []
+    seen: set[str] = {row.id}
+    cursor = row.supersedes_deadline_id
+    while cursor and cursor not in seen:
+        seen.add(cursor)
+        predecessor = session.get(IpDeadline, cursor)
+        if predecessor is None or predecessor.company_id != context.company.id:
+            add("predecessor_deadline", cursor, "Superseded deadline", None, False)
+            break
+        chain.append(predecessor.id)
+        add(
+            "predecessor_deadline",
+            predecessor.id,
+            f"Superseded: {predecessor.title}",
+            (
+                f"was {predecessor.result_on.isoformat()}"
+                if predecessor.result_on
+                else "no date"
+            ),
+            True,
+        )
+        cursor = predecessor.supersedes_deadline_id
+
+    if row.override_reason:
+        add(
+            "override",
+            None,
+            "Manual override",
+            row.override_reason,
+            True,
+        )
+
+    return IpDeadlineDependencyResponse(
+        deadline_id=row.id,
+        docket_id=row.docket_id,
+        state=row.state,
+        result_on=row.result_on,
+        certainty=row.certainty,
+        is_critical=row.is_critical,
+        engine_version=row.engine_version,
+        source_version=row.source_version,
+        rule_citation=row.rule_citation,
+        explanation=row.explanation,
+        nodes=nodes,
+        calculation_trace=list(row.calculation_trace_json or []),
+        unavailable_inputs=sorted(set(unavailable)),
+        superseded_chain=chain,
+    )
+
+
+def preview_deadline_notifications(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+    payload: IpNotificationPreviewRequest,
+) -> IpNotificationPreviewResponse:
+    """NOTIF preview - show the reminder plan without creating any intent.
+
+    The schedule mirrors ``confirm_deadline`` exactly (09:00 in the deadline's
+    timezone, ``offset`` days before the result date) so the preview cannot
+    drift from what confirmation would actually enqueue. Recipient eligibility
+    is re-derived here rather than assumed, so a member who has lost access
+    shows as withheld before anyone relies on the reminder.
+    """
+
+    row = session.scalar(
+        select(IpDeadline).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline not found.")
+    docket = _docket_or_404(session, context=context, docket_id=row.docket_id)
+
+    matter = session.get(Matter, docket.matter_id) if docket.matter_id else None
+    zone = ZoneInfo(row.timezone)
+    offsets = sorted({int(value) for value in payload.reminder_offsets_days if value >= 0})
+
+    planned: list[IpNotificationPlanEntry] = []
+    withheld = 0
+    for item in payload.responsibilities:
+        member = session.scalar(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.id == item.membership_id,
+                CompanyMembership.company_id == context.company.id,
+            )
+        )
+        label = ""
+        withheld_reason: str | None = None
+        if member is None:
+            withheld_reason = "membership_not_found"
+        else:
+            label = member.user.full_name or member.user.email
+            if not member.is_active or not member.user.is_active:
+                withheld_reason = "membership_inactive"
+            elif not item.accepted:
+                withheld_reason = "responsibility_not_acknowledged"
+            elif matter is not None and not can_access(
+                session,
+                context=_recipient_context(actor_context=context, membership=member),
+                matter=matter,
+            ):
+                # UJ-10-EXC-03: a permission change is visible before dispatch.
+                withheld_reason = "recipient_lost_access"
+
+        for offset in offsets:
+            if row.result_on is None:
+                continue
+            scheduled = datetime.combine(
+                row.result_on - timedelta(days=offset), time(hour=9), tzinfo=zone
+            ).astimezone(UTC)
+            planned.append(
+                IpNotificationPlanEntry(
+                    recipient_membership_id=item.membership_id,
+                    recipient_label=label,
+                    role=item.role,
+                    channel="in_app",
+                    event_type="ip_deadline_reminder",
+                    offset_days=offset,
+                    scheduled_for=scheduled,
+                    critical=row.is_critical,
+                    would_deliver=withheld_reason is None,
+                    withheld_reason=withheld_reason,
+                )
+            )
+            if withheld_reason is not None:
+                withheld += 1
+
+    planned.sort(key=lambda entry: (entry.scheduled_for, entry.recipient_membership_id))
+    return IpNotificationPreviewResponse(
+        deadline_id=row.id,
+        result_on=row.result_on,
+        planned=planned,
+        withheld_count=withheld,
+    )
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    """Normalize a persisted timestamp to aware UTC.
+
+    ``DateTime(timezone=True)`` round-trips naive on SQLite, so without this the
+    status surface would emit a different shape from the preview for the same
+    instant. The API contract should not leak backend timezone behaviour.
+    """
+
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def deadline_notification_status(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+) -> IpNotificationStatusResponse:
+    """NOTIF status - the intents that exist for this deadline and their state."""
+
+    row = session.scalar(
+        select(IpDeadline).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deadline not found.")
+    _docket_or_404(session, context=context, docket_id=row.docket_id)
+
+    intents = list(
+        session.scalars(
+            select(NotificationDeliveryIntent)
+            .where(
+                NotificationDeliveryIntent.company_id == context.company.id,
+                NotificationDeliveryIntent.schedule_source_type == "ip_deadline",
+                NotificationDeliveryIntent.schedule_source_id == row.id,
+            )
+            .order_by(
+                NotificationDeliveryIntent.scheduled_for,
+                NotificationDeliveryIntent.id,
+            )
+        ).all()
+    )
+    entries = [
+        IpNotificationStatusEntry(
+            intent_id=intent.id,
+            recipient_membership_id=intent.recipient_membership_id,
+            channel=intent.channel,
+            event_type=intent.event_type,
+            status=intent.status,
+            scheduled_for=_utc(intent.scheduled_for),
+            delivered_at=_utc(intent.delivered_at),
+            attempts=intent.attempts,
+            critical=bool(intent.critical),
+            suppression_reason=intent.suppression_reason,
+            superseded_by_intent_id=intent.superseded_by_intent_id,
+        )
+        for intent in intents
+    ]
+    return IpNotificationStatusResponse(
+        deadline_id=row.id,
+        intents=entries,
+        pending_count=sum(1 for e in entries if e.status in {"pending", "queued", "scheduled"}),
+        delivered_count=sum(1 for e in entries if e.delivered_at is not None),
+        suppressed_count=sum(1 for e in entries if e.suppression_reason),
+    )
+
+
 __all__ = [
     "activate_calendar_version",
     "activate_rule_version",
     "complete_deadline",
     "confirm_deadline",
     "deadline_impact",
+    "deadline_dependencies",
+    "deadline_notification_status",
     "deadline_workspace",
+    "list_company_rule_policies",
     "override_deadline",
+    "preview_deadline_notifications",
     "propose_calendar_version",
     "propose_deadline",
     "propose_rule_version",
     "recalculate_deadline",
     "rule_impact",
+    "select_company_rule_version",
     "transition_rule_version",
 ]
