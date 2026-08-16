@@ -27,6 +27,7 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   cancelBillingSubscription,
@@ -663,7 +664,14 @@ export default function TenantBillingPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {invoicesQuery.isError ? (
+            <QueryErrorState
+              error={invoicesQuery.error}
+              title="Could not load invoices"
+              onRetry={() => invoicesQuery.refetch()}
+            />
+          ) : invoicesQuery.isSuccess ? (
+            <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>
@@ -724,7 +732,8 @@ export default function TenantBillingPage() {
                 ) : null}
               </tbody>
             </table>
-          </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -734,7 +743,14 @@ export default function TenantBillingPage() {
           <CardDescription>Tenant-visible credit grants, debits, refunds, and expiry.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {ledgerQuery.isError ? (
+            <QueryErrorState
+              error={ledgerQuery.error}
+              title="Could not load credit activity"
+              onRetry={() => ledgerQuery.refetch()}
+            />
+          ) : ledgerQuery.isSuccess ? (
+            <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>
@@ -764,7 +780,8 @@ export default function TenantBillingPage() {
                 ) : null}
               </tbody>
             </table>
-          </div>
+            </div>
+          ) : null}
         </CardContent>
           </Card>
         </>

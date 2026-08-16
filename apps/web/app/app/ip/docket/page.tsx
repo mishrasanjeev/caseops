@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
@@ -174,10 +175,21 @@ export default function IpDailyDocketPage() {
       />
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
-        <CapacityCard queues={docket.data?.queues ?? []} />
+        <CapacityCard
+          queues={docket.data?.queues ?? []}
+          isLoading={docket.isPending}
+          isError={docket.isError}
+          error={docket.error}
+          isSuccess={docket.isSuccess}
+          onRetry={() => docket.refetch()}
+        />
         <EscalationsCard
           escalations={docket.data?.escalations ?? []}
-          isLoading={docket.isLoading}
+          isLoading={docket.isPending}
+          isError={docket.isError}
+          error={docket.error}
+          isSuccess={docket.isSuccess}
+          onRetry={() => docket.refetch()}
         />
       </div>
 
@@ -305,19 +317,51 @@ function ProvenanceCard({
   );
 }
 
-function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
+function CapacityCard({
+  queues,
+  isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
+}: {
+  queues: IpDailyDocketQueue[];
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
+}) {
   return (
     <Card className="min-w-0" data-testid="ip-docket-capacity">
       <CardHeader>
         <CardTitle as="h2">Workload and capacity</CardTitle>
       </CardHeader>
       <CardContent className="min-w-0 overflow-x-auto">
-        {queues.length === 0 ? (
+        {isLoading ? (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-capacity-loading"
+          >
+            <span className="sr-only">Loading workload and capacity.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+          </div>
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load workload and capacity"
+            onRetry={onRetry}
+          />
+        ) : isSuccess && queues.length === 0 ? (
           <p className="text-sm text-[var(--color-mute)]">
             No deadline coverage is assigned in this view. Coverage appears here once a deadline
             has a responsible member.
           </p>
-        ) : (
+        ) : isSuccess ? (
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
               <tr className="border-b border-[var(--color-line)] text-left text-xs uppercase tracking-wide text-[var(--color-mute)]">
@@ -365,7 +409,7 @@ function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -374,6 +418,10 @@ function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
 function EscalationsCard({
   escalations,
   isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
 }: {
   escalations: {
     coverage_id: string;
@@ -383,6 +431,10 @@ function EscalationsCard({
     escalate_to_membership_id: string | null;
   }[];
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
 }) {
   return (
     <Card className="min-w-0" data-testid="ip-docket-escalations">
@@ -402,12 +454,18 @@ function EscalationsCard({
             <Skeleton className="h-16 w-full" aria-hidden="true" />
             <Skeleton className="h-16 w-full" aria-hidden="true" />
           </div>
-        ) : escalations.length === 0 ? (
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load deadline escalations"
+            onRetry={onRetry}
+          />
+        ) : isSuccess && escalations.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             Nothing is escalating. Items appear here when a deadline has no active owner, or when a
             critical deadline has not been acknowledged — they cannot be filtered away.
           </p>
-        ) : (
+        ) : isSuccess ? (
           escalations.map((row) => (
             <div
               key={row.coverage_id}
@@ -427,7 +485,7 @@ function EscalationsCard({
               </p>
             </div>
           ))
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -513,7 +571,7 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
         <CardTitle as="h2">Your unacknowledged deadlines</CardTitle>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
-        {mine.isLoading ? (
+        {mine.isPending ? (
           <div
             className="flex flex-col gap-2"
             role="status"
@@ -525,12 +583,18 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
             <Skeleton className="h-16 w-full" aria-hidden="true" />
             <Skeleton className="h-16 w-full" aria-hidden="true" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : mine.isError ? (
+          <QueryErrorState
+            error={mine.error}
+            title="Could not load your unacknowledged deadlines"
+            onRetry={() => mine.refetch()}
+          />
+        ) : mine.isSuccess && rows.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             You have acknowledged every deadline you hold. Acknowledging is what stops a critical
             deadline escalating, so this list is meant to reach empty.
           </p>
-        ) : (
+        ) : mine.isSuccess ? (
           <>
             {rows.map((row) => {
               const checkboxId = `ack-${row.coverage_id}`;
@@ -614,7 +678,7 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
               </Button>
             </div>
           </>
-        )}
+        ) : null}
 
         {rejected.length ? (
           <div
@@ -773,12 +837,30 @@ function SavedQueuesCard({
         <CardTitle as="h2">Saved queues</CardTitle>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
-        {rows.length === 0 ? (
+        {queues.isPending ? (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-saved-queues-loading"
+          >
+            <span className="sr-only">Loading saved queues.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+          </div>
+        ) : queues.isError ? (
+          <QueryErrorState
+            error={queues.error}
+            title="Could not load saved queues"
+            onRetry={() => queues.refetch()}
+          />
+        ) : queues.isSuccess && rows.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             No saved queues yet. Save the filters you triage with each morning so the same view is
             one click away, and share it with a team so everyone triages the same list.
           </p>
-        ) : (
+        ) : queues.isSuccess ? (
           rows.map((queue) => (
             <div
               key={queue.id}
@@ -813,9 +895,9 @@ function SavedQueuesCard({
               </div>
             </div>
           ))
-        )}
+        ) : null}
 
-        <form
+        {queues.isSuccess ? <form
           className="flex min-w-0 flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
@@ -834,7 +916,7 @@ function SavedQueuesCard({
           <Button size="sm" type="submit" variant="secondary" disabled={name.trim().length < 2 || save.isPending}>
             Save queue
           </Button>
-        </form>
+        </form> : null}
       </CardContent>
     </Card>
   );

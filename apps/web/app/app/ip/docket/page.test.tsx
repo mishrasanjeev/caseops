@@ -199,8 +199,17 @@ describe("IpDailyDocketPage", () => {
   it("announces structured docket loaders without premature empty states", () => {
     fetchIpDailyDocketMock.mockReturnValue(new Promise(() => undefined));
     fetchIpAssignedCoverageMock.mockReturnValue(new Promise(() => undefined));
+    fetchIpDocketQueuesMock.mockReturnValue(new Promise(() => undefined));
 
     render(withClient(<IpDailyDocketPage />));
+
+    const capacity = screen.getByTestId("ip-docket-capacity-loading");
+    expect(capacity).toHaveAttribute("role", "status");
+    expect(capacity).toHaveAttribute("aria-live", "polite");
+    expect(capacity).toHaveAttribute("aria-busy", "true");
+    expect(within(capacity).getByText("Loading workload and capacity.")).toHaveClass(
+      "sr-only",
+    );
 
     const escalations = screen.getByTestId("ip-docket-escalations-loading");
     expect(escalations).toHaveAttribute("role", "status");
@@ -216,8 +225,56 @@ describe("IpDailyDocketPage", () => {
     expect(
       within(acknowledgements).getByText("Loading your unacknowledged deadlines."),
     ).toHaveClass("sr-only");
+
+    const savedQueues = screen.getByTestId("ip-docket-saved-queues-loading");
+    expect(savedQueues).toHaveAttribute("role", "status");
+    expect(savedQueues).toHaveAttribute("aria-live", "polite");
+    expect(savedQueues).toHaveAttribute("aria-busy", "true");
+    expect(within(savedQueues).getByText("Loading saved queues.")).toHaveClass("sr-only");
+
+    expect(screen.queryByText(/No deadline coverage is assigned/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nothing is escalating/)).not.toBeInTheDocument();
     expect(screen.queryByText(/acknowledged every deadline/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No saved queues yet/)).not.toBeInTheDocument();
+  });
+
+  it("shows retryable query errors without rendering any docket empty state", async () => {
+    fetchIpDailyDocketMock.mockRejectedValue(new Error("Daily docket unavailable"));
+    fetchIpAssignedCoverageMock.mockRejectedValue(new Error("Coverage unavailable"));
+    fetchIpDocketQueuesMock.mockRejectedValue(new Error("Saved queues unavailable"));
+
+    render(withClient(<IpDailyDocketPage />));
+
+    expect(await screen.findByText("Could not load workload and capacity")).toBeVisible();
+    expect(screen.getByText("Could not load deadline escalations")).toBeVisible();
+    expect(screen.getByText("Could not load your unacknowledged deadlines")).toBeVisible();
+    expect(screen.getByText("Could not load saved queues")).toBeVisible();
+
+    expect(
+      within(screen.getByTestId("ip-docket-capacity")).getByRole("button", {
+        name: "Try again",
+      }),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-docket-escalations")).getByRole("button", {
+        name: "Try again",
+      }),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-docket-acknowledge")).getByRole("button", {
+        name: "Try again",
+      }),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-docket-queues")).getByRole("button", {
+        name: "Try again",
+      }),
+    ).toBeVisible();
+
+    expect(screen.queryByText(/No deadline coverage is assigned/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing is escalating/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/acknowledged every deadline/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No saved queues yet/)).not.toBeInTheDocument();
   });
 
   it("acknowledges selected deadlines and names every one it could not", async () => {

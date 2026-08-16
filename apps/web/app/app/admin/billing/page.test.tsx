@@ -140,4 +140,26 @@ describe("TenantBillingPage", () => {
     expect(screen.queryByText("No SaaS invoices yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("No credit activity yet.")).not.toBeInTheDocument();
   });
+
+  it("shows retryable invoice and ledger errors without rendering success empties", async () => {
+    const successfulFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (
+        url.includes("/api/billing/invoices") ||
+        url.includes("/api/billing/credit-ledger")
+      ) {
+        return Promise.reject(new Error("Billing history unavailable"));
+      }
+      return successfulFetch?.(input, init);
+    });
+
+    renderWithQuery(<TenantBillingPage />);
+
+    expect(await screen.findByText("Could not load invoices")).toBeVisible();
+    expect(screen.getByText("Could not load credit activity")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Try again" })).toHaveLength(2);
+    expect(screen.queryByText("No SaaS invoices yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No credit activity yet.")).not.toBeInTheDocument();
+  });
 });

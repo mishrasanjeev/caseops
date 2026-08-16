@@ -103,7 +103,7 @@ jobs:
           # later files into a different shard.  On 2026-08-13 that put
           # several large suites in one shard and it exceeded the 60-minute
           # cap. Keep whole files isolated, but spread a stable source-size
-          # estimate across ten shards so every file runs once without that
+          # estimate across the configured shards so every file runs once without that
           # concentration.
           python ../../scripts/pytest_shard_plan.py \
             --test-root tests \

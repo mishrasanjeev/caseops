@@ -327,6 +327,32 @@ describe("MatterHearingsPage", () => {
     expect(screen.queryByText("No compliance items")).not.toBeInTheDocument();
   });
 
+  it("shows retryable hearing query errors without rendering success empties", async () => {
+    fetchNextHearingHistoryMock.mockRejectedValue(new Error("Hearing history unavailable"));
+    fetchMatterComplianceMock.mockRejectedValue(new Error("Compliance unavailable"));
+
+    render(withClient(<MatterHearingsPage />));
+
+    await screen.findByText("Could not load hearing suggestions and history");
+    const provenance = screen.getByTestId("next-hearing-provenance");
+    expect(
+      within(provenance).getByText("Could not load hearing suggestions and history"),
+    ).toBeVisible();
+    expect(
+      within(provenance).getByRole("button", { name: "Try again" }),
+    ).toBeVisible();
+
+    const compliance = screen.getByTestId("matter-compliance-panel");
+    expect(within(compliance).getByText("Could not load compliance review")).toBeVisible();
+    expect(
+      within(compliance).getByRole("button", { name: "Try again" }),
+    ).toBeVisible();
+
+    expect(screen.queryByText("No pending suggestions.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No history recorded yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No compliance items")).not.toBeInTheDocument();
+  });
+
   it("renders Outlook sync action and per-hearing status for calendar sync users", async () => {
     useCapabilityMock.mockImplementation((cap: string) => cap === "calendar:sync");
     workspaceData.current = {

@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
@@ -518,6 +519,10 @@ export default function MatterHearingsPage() {
       <NextHearingProvenanceSection
         response={nextHearingHistoryQuery.data}
         isLoading={nextHearingHistoryQuery.isPending}
+        isError={nextHearingHistoryQuery.isError}
+        error={nextHearingHistoryQuery.error}
+        isSuccess={nextHearingHistoryQuery.isSuccess}
+        onRetry={() => nextHearingHistoryQuery.refetch()}
         onDecide={(suggestionId, action) =>
           nextHearingSuggestionMutation.mutate({ suggestionId, action })
         }
@@ -527,6 +532,10 @@ export default function MatterHearingsPage() {
       <ComplianceReviewSection
         response={complianceQuery.data}
         isLoading={complianceQuery.isPending}
+        isError={complianceQuery.isError}
+        error={complianceQuery.error}
+        isSuccess={complianceQuery.isSuccess}
+        onRetry={() => complianceQuery.refetch()}
         onAction={(itemId, action) => complianceMutation.mutate({ itemId, action })}
         isPending={complianceMutation.isPending}
         canRetryAttachmentProcessing={canManageDocuments && !isDisposedMatter}
@@ -973,11 +982,19 @@ function signalDueText(signal: ProceedingSignal): string | null {
 export function NextHearingProvenanceSection({
   response,
   isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
   onDecide,
   isPending,
 }: {
   response: NextHearingHistoryResponse | undefined;
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
   onDecide: (suggestionId: string, action: "accept" | "reject") => void;
   isPending: boolean;
 }) {
@@ -1010,7 +1027,13 @@ export function NextHearingProvenanceSection({
               <Skeleton className="h-14 w-full" />
             </div>
           </div>
-        ) : (
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load hearing suggestions and history"
+            onRetry={onRetry}
+          />
+        ) : isSuccess ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
               <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">
@@ -1086,7 +1109,7 @@ export function NextHearingProvenanceSection({
               )}
             </div>
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -1095,6 +1118,10 @@ export function NextHearingProvenanceSection({
 export function ComplianceReviewSection({
   response,
   isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
   onAction,
   isPending,
   canRetryAttachmentProcessing,
@@ -1103,6 +1130,10 @@ export function ComplianceReviewSection({
 }: {
   response: MatterComplianceListResponse | undefined;
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
   onAction: (itemId: string, action: "confirm" | "reject" | "waive" | "complete") => void;
   isPending: boolean;
   canRetryAttachmentProcessing: boolean;
@@ -1133,7 +1164,13 @@ export function ComplianceReviewSection({
             <Skeleton className="h-12 w-full" aria-hidden="true" />
             <Skeleton className="h-12 w-full" aria-hidden="true" />
           </div>
-        ) : (
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load compliance review"
+            onRetry={onRetry}
+          />
+        ) : isSuccess ? (
           <div className="flex flex-col gap-4">
             <ComplianceExtractionRuns
               runs={recentRuns}
@@ -1188,7 +1225,7 @@ export function ComplianceReviewSection({
               </ul>
             )}
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

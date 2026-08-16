@@ -119,7 +119,13 @@ export default function TenantBillingUsagePage() {
     queryKey: ["billing", "spend-report"],
     queryFn: fetchBillingSpendReport,
   });
-  const report = spendQuery.data ?? usageQuery.data;
+  // Do not render a faster query's fallback as final state while the other
+  // initial request is still unresolved. In particular, an empty usage
+  // fallback beside an announced loader tells the user both "loading" and
+  // "there is no usage" at once. `isPending` is false during background
+  // refetches with retained data, so already-valid reports stay visible.
+  const isPending = usageQuery.isPending || spendQuery.isPending;
+  const report = isPending ? undefined : spendQuery.data ?? usageQuery.data;
 
   async function exportSpend() {
     setDownloading(true);
@@ -178,7 +184,7 @@ export default function TenantBillingUsagePage() {
         }
       />
 
-      {usageQuery.isPending || spendQuery.isPending ? (
+      {isPending ? (
         <BillingUsageLoading />
       ) : null}
 
