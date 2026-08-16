@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "pytest_shard_plan.py"
@@ -37,6 +38,8 @@ def test_plan_is_deterministic_balanced_and_covers_each_file_once(tmp_path: Path
 
     assert first == second
     assert [item.estimated_lines for item in first] == [100, 100, 100]
+    assert [item.estimated_test_definitions for item in first] == [0, 0, 0]
+    assert [item.estimated_cost for item in first] == [100, 100, 100]
     assert sorted(path.name for item in first for path in item.files) == sorted(
         path.name for path in root.glob("test_*.py")
     )
@@ -61,6 +64,113 @@ def test_write_shard_file_uses_test_root_relative_paths(tmp_path: Path) -> None:
     assert output.read_text(encoding="utf-8") == "tests/nested/test_beta.py\n"
 
 
+def test_dense_test_modules_are_balanced_by_static_runtime_cost(tmp_path: Path) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    _test_file(root, "test_long_but_sparse.py", 220)
+    for name in ("test_dense_a.py", "test_dense_b.py"):
+        (root / name).write_text(
+            "\n".join(f"def test_case_{index}(): pass" for index in range(10)) + "\n",
+            encoding="utf-8",
+        )
+
+    plan = pytest_shard_plan.build_plan(root, 2)
+
+    assert sorted(item.estimated_test_definitions for item in plan) == [10, 10]
+    assert all(len(item.files) >= 1 for item in plan)
+    assert sorted(path.name for item in plan for path in item.files) == [
+        "test_dense_a.py",
+        "test_dense_b.py",
+        "test_long_but_sparse.py",
+    ]
+
+
+def test_nested_class_and_async_tests_contribute_to_cost(tmp_path: Path) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    (root / "test_shapes.py").write_text(
+        "class TestShapes:\n"
+        "    def test_method(self): pass\n"
+        "\n"
+        "async def test_async(): pass\n",
+        encoding="utf-8",
+    )
+
+    shard = pytest_shard_plan.build_plan(root, 1)[0]
+
+    assert shard.estimated_test_definitions == 2
+    assert shard.estimated_cost == (
+        shard.estimated_lines + 2 * pytest_shard_plan.TEST_DEFINITION_WEIGHT
+    )
+
+
+@pytest.mark.parametrize("total_shards", [10, 16])
+def test_repository_hybrid_plan_improves_legacy_line_only_peak_cost(
+    total_shards: int,
+) -> None:
+    root = REPO_ROOT / "apps" / "api" / "tests"
+    hybrid = pytest_shard_plan.build_plan(root, total_shards)
+    legacy = pytest_shard_plan.build_plan(
+        root,
+        total_shards,
+        test_definition_weight=0,
+    )
+
+    def hybrid_cost(shard: object) -> int:
+        return shard.estimated_lines + (
+            shard.estimated_test_definitions
+            * pytest_shard_plan.TEST_DEFINITION_WEIGHT
+        )
+
+    hybrid_peak_cost = max(map(hybrid_cost, hybrid))
+    legacy_peak_cost = max(map(hybrid_cost, legacy))
+    hybrid_peak_tests = max(item.estimated_test_definitions for item in hybrid)
+    legacy_peak_tests = max(item.estimated_test_definitions for item in legacy)
+    expected_files = sorted(path.resolve() for path in root.rglob("test_*.py"))
+    planned_files = [path.resolve() for shard in hybrid for path in shard.files]
+
+    # "Materially" is intentional: a cosmetic reshuffle must not replace the
+    # observed line-only plan.  The checked-in suite currently improves both
+    # peaks by more than ten percent for the old and failed matrix sizes.
+    assert hybrid_peak_cost * 100 <= legacy_peak_cost * 90
+    assert hybrid_peak_tests * 100 <= legacy_peak_tests * 90
+    assert sorted(planned_files) == expected_files
+    assert len(planned_files) == len(set(planned_files))
+
+
+def test_ci_workflow_keeps_coverage_shards_and_aggregation_fail_closed() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    parsed = yaml.safe_load(workflow)
+    shard_job = parsed["jobs"]["api-test-shards"]
+    aggregate_job = parsed["jobs"]["api"]
+
+    assert shard_job["timeout-minutes"] == 90
+    assert shard_job["strategy"]["matrix"] == {
+        "shard": list(range(1, 11)),
+        "total_shards": [10],
+    }
+    steps_by_name = {step.get("name"): step for step in shard_job["steps"]}
+    prepare = steps_by_name["Prepare coverage shard artifact"]
+    upload = steps_by_name["Upload coverage shard data"]
+    assert prepare["if"] == "always()"
+    assert upload["if"] == "always()"
+    assert upload["with"]["name"] == "api-coverage-shard-${{ matrix.shard }}"
+
+    assert aggregate_job["needs"] == ["api-ruff", "api-test-shards"]
+    assert aggregate_job["if"] == "always()"
+    prerequisite = aggregate_job["steps"][0]
+    assert prerequisite["name"] == "Fail if API prerequisites failed"
+    assert "needs['api-test-shards'].result != 'success'" in prerequisite["if"]
+    combine = next(
+        step
+        for step in aggregate_job["steps"]
+        if step.get("name") == "Combine coverage reports"
+    )
+    assert "coverage combine coverage-parts/coverage-shard-*" in combine["run"]
+
+
 @pytest.mark.parametrize(
     ("total_shards", "message"),
     [(0, "at least 1"), (3, "cannot populate")],
@@ -76,3 +186,16 @@ def test_plan_rejects_invalid_or_empty_shard_shapes(
 
     with pytest.raises(ValueError, match=message):
         pytest_shard_plan.build_plan(root, total_shards)
+
+
+def test_plan_rejects_negative_weight_and_invalid_python(tmp_path: Path) -> None:
+    root = tmp_path / "tests"
+    root.mkdir()
+    _test_file(root, "test_valid.py", 1)
+
+    with pytest.raises(ValueError, match="must not be negative"):
+        pytest_shard_plan.build_plan(root, 1, test_definition_weight=-1)
+
+    (root / "test_invalid.py").write_text("def test_broken(:\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid Python"):
+        pytest_shard_plan.build_plan(root, 1)
