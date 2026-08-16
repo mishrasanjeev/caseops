@@ -191,11 +191,15 @@ rather than folded in:
 
 - `GET /api/ip/documents` returns **every tenant document unpaginated** with an
   N+1 access check per row. Recorded as an enterprise-hardening gap.
-- The IP identifier uniqueness rule is currently **two different rules on two
-  fields**: `ip_identifiers` flags duplicates for review, while
-  `docket.primary_identifier` is hard-unique per company (`uq_ip_docket_company_identifier`,
-  `models.py:14012-14016`) returning 409. The document lists the uniqueness rule
-  as TBC — this needs one answer, not two behaviours.
+- The IP identifier uniqueness rule was **two different rules on two fields**:
+  `ip_identifiers` flags duplicates for review, while `docket.primary_identifier`
+  is hard-unique per company (`uq_ip_docket_company_identifier`,
+  `models.py:14012-14016`) returning 409. **Resolved** in
+  `docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md` §3: both layers stand because they
+  answer different questions, and `primary_identifier` becomes *derived* from the
+  confirmed current ledger row — so the 409 fires only after reconciliation
+  confirms a true duplicate. That also closes `EH-SGR-13`, the disagreeing
+  normalisations.
 
 ---
 
@@ -319,8 +323,14 @@ undocumented.
 Kumar**, 2026-08-16. The approval act itself is a runtime action against a seeded
 version 1, applied through the existing approval path so the approver snapshot is
 persisted; naming the approver in a document does not by itself produce an
-approved workflow version. One scope call remains open and blocks nothing: non-Indian
-registries.
+approved workflow version.
+
+**Non-Indian registries — decided 2026-08-16: India-only for v1**, foreign
+registries deferred to a later stage. The `jurisdiction` column and seeded-master
+pattern stay, so adding them later is a seed rather than a migration.
+
+**No open items remain.** Every requirement in the source document is now either
+implemented, planned, tracked as `FMB-01`…`FMB-10`, or decided.
 
 **One consequence flagged, not assumed:** the licence decision answers *display
 of licensed content*, not *corpus acquisition*. If no publisher licence is taken

@@ -176,10 +176,21 @@ version resolved in §1. A dependency, not a blocker.
 - Fix **D-1** as part of this: normalise `office` before it is used as a
   duplicate-detection key.
 
-**Residual sign-off:** whether non-Indian registries (Madrid/WIPO, EUIPO, USPTO)
-are in v1 scope. A market decision, not an engineering blocker — the
-`jurisdiction` column and the seeded-master pattern already accommodate them, so
-the India-only seed ships now.
+**DECIDED 2026-08-16 — India-only for v1; non-Indian registries deferred to a
+later stage.** Seed the five Indian offices and stop there.
+
+Consequences to implement:
+
+- Seed **Delhi, Mumbai, Kolkata, Chennai, Ahmedabad** only. Do not seed
+  Madrid/WIPO, EUIPO or USPTO rows.
+- **Keep the `jurisdiction` column and the seeded-master pattern as-is.** They
+  already accommodate foreign registries, so deferring costs nothing now and
+  adding later is a seed, not a migration. Do not "simplify" by hard-coding an
+  India assumption anywhere — that would convert a cheap future addition into a
+  schema change.
+- Class rules are unaffected: the Nice Classification is international, so the
+  45-class bound and the `CHECK (class_number BETWEEN 1 AND 45)` hold for any
+  registry added later.
 
 ---
 
@@ -385,8 +396,12 @@ Sign-off status:
    (§1). No decision outstanding. The approval act itself still has to be applied
    at runtime against a seeded version 1, through the existing approval path, so
    the approver snapshot is persisted and auditable.
-2. **Non-Indian registries scope** (§5) — still open, blocks nothing. The
-   India-only seed ships either way.
+2. **Non-Indian registries scope** (§5) — **decided 2026-08-16: India-only for
+   v1**, foreign registries deferred to a later stage. The `jurisdiction` column
+   and seeded-master pattern stay in place so adding them later is a seed, not a
+   migration.
+
+**No open items remain in this document.**
 
 One consequence flagged rather than assumed: the "no publisher licence" decision
 answers *display*, not *corpus acquisition*. See §7.
