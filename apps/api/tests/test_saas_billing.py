@@ -5,8 +5,12 @@ import hashlib
 import hmac
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, datetime
+from threading import Event
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -15,6 +19,7 @@ from caseops_api.core.security import create_access_token
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
+    BillingAccount,
     BillingCreditLedger,
     BillingManualInvoice,
     BillingMarginSimulation,
@@ -22,6 +27,7 @@ from caseops_api.db.models import (
     BillingProviderEvent,
     BillingSubscription,
     BillingUsageAttribution,
+    Company,
     CompanyMembership,
     PlatformAdminAuditEvent,
     PlatformAdminMembership,
@@ -31,6 +37,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.pine_labs import verify_pine_labs_plural_signature
 from caseops_api.services.platform_admin import require_platform_admin
+from caseops_api.services.saas_billing import ensure_billing_account
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -129,6 +136,58 @@ def test_current_billing_grandfathers_bootstrapped_tenant(client: TestClient) ->
     assert payload["subscription"]["externally_billable"] is False
     assert payload["entitlements"]["tracked_cases_limit"] is None
     assert payload["entitlements"]["storage_bytes_limit"] is None
+
+
+def test_billing_account_creation_is_idempotent_across_parallel_sqlite_sessions(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    company_id = str(bootstrap["company"]["id"])
+    first_inserted = Event()
+    release_first = Event()
+    second_started = Event()
+    factory = get_session_factory()
+
+    def create_account(*, hold_transaction: bool) -> str:
+        with factory() as session:
+            company = session.get(Company, company_id)
+            assert company is not None
+            if not hold_transaction:
+                second_started.set()
+            account = ensure_billing_account(session, company)
+            if hold_transaction:
+                first_inserted.set()
+                assert release_first.wait(timeout=5)
+
+            # Both callers must retain a usable outer transaction. A recovery
+            # that merely catches IntegrityError without a savepoint would
+            # leave this statement (and the route's later commit) poisoned.
+            assert session.scalar(select(1)) == 1
+            session.commit()
+            return account.id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(create_account, hold_transaction=True)
+        assert first_inserted.wait(timeout=5)
+        second = executor.submit(create_account, hold_transaction=False)
+        assert second_started.wait(timeout=5)
+        try:
+            with pytest.raises(FutureTimeoutError):
+                second.result(timeout=0.25)
+        finally:
+            release_first.set()
+        account_ids = {first.result(timeout=5), second.result(timeout=5)}
+
+    with factory() as session:
+        assert (
+            session.scalar(
+                select(func.count(BillingAccount.id)).where(
+                    BillingAccount.company_id == company_id
+                )
+            )
+            == 1
+        )
+    assert len(account_ids) == 1
 
 
 def test_provider_disabled_checkout_does_not_activate_plan(client: TestClient) -> None:

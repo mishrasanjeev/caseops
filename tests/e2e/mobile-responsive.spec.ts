@@ -69,6 +69,24 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     await signIn(page, slug);
     await page.goto("/app");
 
+    // Keep the server-error oracle scoped to the billing APIs implicated by
+    // this navigation path. Other destinations can intentionally exercise
+    // provider-unavailable states; an unhandled billing 5xx is never a valid
+    // page outcome and was the signal for the account-creation race.
+    const billingServerErrors: string[] = [];
+    page.on("response", (response) => {
+      const responseUrl = new URL(response.url());
+      if (
+        responseUrl.pathname.startsWith("/api/billing/") &&
+        response.status() >= 500 &&
+        response.status() <= 599
+      ) {
+        billingServerErrors.push(
+          `${response.request().method()} ${responseUrl.pathname} -> ${response.status()}`,
+        );
+      }
+    });
+
     // Sidebar (`hidden md:flex`) is invisible at this viewport.
     const sidebar = page.locator('aside[aria-label="Primary navigation"]');
     await expect(sidebar).toBeHidden();
@@ -135,6 +153,10 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
       }));
       expect(drawerWidth.scrollWidth).toBeLessThanOrEqual(drawerWidth.clientWidth + 1);
 
+      const previousPath = new URL(page.url()).pathname;
+      const previousHeading = (
+        (await page.locator("main h1").first().textContent()) ?? ""
+      ).trim();
       await link.tap();
       await expect(drawer).toBeHidden();
       const expectedPath = new URL(destination.href, page.url()).pathname;
@@ -143,7 +165,36 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
           message: `${destination.label} should navigate to ${expectedPath}`,
         })
         .toBe(expectedPath);
+
+      // A changed URL can still leave the prior page mounted while the next
+      // route loads. Prove the user-visible destination rendered before moving
+      // to the next drawer action; this also prevents the loop from piling up
+      // requests against pages whose data surface has not mounted yet.
+      const destinationHeading = page.locator("main h1").first();
+      await expect(
+        destinationHeading,
+        `${destination.label} should render a visible page heading`,
+      ).toBeVisible();
+      if (expectedPath !== previousPath && previousHeading) {
+        await expect
+          .poll(
+            async () => ((await destinationHeading.textContent()) ?? "").trim(),
+            {
+              message: `${destination.label} should replace the prior page surface`,
+            },
+          )
+          .not.toBe(previousHeading);
+      }
+
+      if (expectedPath === "/app/admin/billing") {
+        // The heading renders before five parallel billing queries settle.
+        // Waiting for the page's explicit loading surface to leave proves the
+        // implicated requests completed before this test navigates elsewhere.
+        await expect(page.getByTestId("billing-page-loading")).toBeHidden();
+        expect(billingServerErrors).toEqual([]);
+      }
     }
+    expect(billingServerErrors).toEqual([]);
   });
 
   // ---------------------------------------------------------------

@@ -45,6 +45,7 @@ from caseops_api.db.models import (
     TrackedCase,
     TrackedCaseBookmark,
 )
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.saas_billing import (
     AddOnCheckoutRequest,
     BillingAccountRecord,
@@ -268,6 +269,19 @@ def _select_price(plan: BillingPlanVersion, interval: str) -> BillingPlanPrice:
 
 
 def ensure_billing_account(session: Session, company: Company) -> BillingAccount:
+    # ``FOR UPDATE`` cannot lock an absent row (and SQLite ignores it), so the
+    # former query-then-insert implementation let concurrent billing reads both
+    # observe absence and race on ``uq_billing_accounts_company``. Acquire the
+    # CaseOps SQLite writer lock before the lookup. On PostgreSQL, lock the
+    # always-present tenant row so account *and subsequent subscription*
+    # creation are serialized even while their child rows are absent.
+    serialize_sqlite_writer(session)
+    locked_company_id = session.scalar(
+        select(Company.id).where(Company.id == company.id).with_for_update()
+    )
+    if locked_company_id is None:
+        raise RuntimeError("Cannot create a billing account for a missing tenant.")
+
     account = session.scalar(
         select(BillingAccount).where(BillingAccount.company_id == company.id).with_for_update()
     )
