@@ -65,15 +65,19 @@ jobs:
     runs-on: ubuntu-latest
     # Keep shards comfortably within the hosted-runner window under
     # coverage. Every test file is still selected exactly once and the
-    # aggregate coverage gate combines every shard artifact.
-    timeout-minutes: 60
+    # aggregate coverage gate combines every shard artifact. The 2026-08-16
+    # exact-head run proved that three source-line-balanced 10-way shards can
+    # still exceed 60 minutes because runtime cost is not proportional to
+    # source size, so retain hard failure while giving the smaller shards
+    # enough variance headroom.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        # Ten balanced shards leave realistic headroom for the slowest
-        # coverage-heavy suites while preserving whole-file isolation.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        total_shards: [10]
+        # Sixteen balanced shards reduce the worst runtime concentration while
+        # preserving whole-file isolation and exact once-only selection.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        total_shards: [16]
     steps:
       - uses: actions/checkout@v4
 
