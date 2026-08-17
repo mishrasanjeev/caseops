@@ -9,25 +9,37 @@ from __future__ import annotations
 import json
 from datetime import date, timedelta
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import object_session
 
 from caseops_api.db.models import (
     AuditEvent,
+    CalendarConnectionStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
     CalendarProvider,
     Company,
     CompanyMembership,
     IpDocketRecord,
+    MatterDeadline,
+    MatterHearing,
+    MatterTask,
+    MembershipRole,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.calendar_projection_safety import (
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE,
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+)
 from caseops_api.services.calendar_sync import (
     GOOGLE_CALENDAR_SCOPES,
     process_calendar_deletion_tombstones,
+    process_durable_google_calendar_sync,
     set_google_calendar_provider_for_tests,
     sync_hearing_to_google_calendar,
 )
@@ -578,7 +590,9 @@ def test_google_calendar_synced_hearing_is_deleted_when_hearing_is_cancelled(
         )
         assert cancelled.status_code == 200, cancelled.text
         assert cancelled.json()["status"] == "cancelled"
-        assert provider.delete_calls == ["google-event-1"]
+        # Cancellation commits an exact tombstone; provider I/O is drained
+        # only after the lifecycle transaction releases its locks.
+        assert provider.delete_calls == []
 
         factory = get_session_factory()
         with factory() as session:
@@ -589,16 +603,43 @@ def test_google_calendar_synced_hearing_is_deleted_when_hearing_is_cancelled(
                 )
             )
             assert sync_row is not None
-            assert sync_row.sync_status == CalendarEventSyncStatus.DELETED
+            assert sync_row.sync_status == CalendarEventSyncStatus.DELETE_PENDING
             audit = session.scalar(
                 select(AuditEvent)
-                .where(AuditEvent.action == "calendar.sync.auto_deleted")
+                .where(AuditEvent.action == "calendar.sync.auto_delete_queued")
                 .order_by(AuditEvent.created_at.desc())
             )
             assert audit is not None
             metadata = json.loads(audit.metadata_json or "{}")
             assert metadata["provider"] == "google_calendar"
             assert "google-access-credential" not in audit.metadata_json
+            company = session.get(Company, bootstrap["company"]["id"])
+            membership = session.get(
+                CompanyMembership,
+                bootstrap["membership"]["id"],
+            )
+            assert company is not None and membership is not None
+            result = process_calendar_deletion_tombstones(
+                session,
+                context=SessionContext(
+                    company=company,
+                    membership=membership,
+                    user=membership.user,
+                ),
+                calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+            )
+            assert result.deleted == 1
+
+        assert provider.delete_calls == ["google-event-1"]
+        with factory() as session:
+            sync_row = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_id == hearing["id"],
+                    CalendarEventSync.provider_event_id == "google-event-1",
+                )
+            )
+            assert sync_row is not None
+            assert sync_row.sync_status == CalendarEventSyncStatus.DELETED
     finally:
         set_google_calendar_provider_for_tests(None)
 
@@ -891,7 +932,11 @@ def test_google_calendar_failures_show_in_provider_operations_as_google(
             headers=_auth(token),
         )
         assert failed.status_code == 200, failed.text
-        assert failed.json()["sync"]["sync_status"] == "failed"
+        assert failed.json()["sync"]["sync_status"] == "dead_letter"
+        assert (
+            failed.json()["sync"]["dead_letter_reason"]
+            == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        )
 
         ops = client.get(
             "/api/admin/provider-operations/jobs",
@@ -901,6 +946,8 @@ def test_google_calendar_failures_show_in_provider_operations_as_google(
         body = ops.json()
         assert body["operations"][0]["provider"] == "google_calendar"
         assert body["operations"][0]["job_kind"] == "calendar_sync"
+        assert body["operations"][0]["replay_available"] is False
+        assert body["operations"][0]["manual_reconciliation_required"] is True
         assert "google-access-credential" not in ops.text
         assert "googleapis.com" not in ops.text
 
@@ -910,8 +957,8 @@ def test_google_calendar_failures_show_in_provider_operations_as_google(
             headers=_auth(token),
             json={"reason": "Handled in Google console."},
         )
-        assert resolved.status_code == 200, resolved.text
-        assert resolved.json()["operation"]["provider"] == "google_calendar"
+        assert resolved.status_code == 409, resolved.text
+        assert resolved.json()["code"] == CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
 
         factory = get_session_factory()
         with factory() as session:
@@ -927,6 +974,329 @@ def test_google_calendar_failures_show_in_provider_operations_as_google(
             metadata = json.loads(audit.metadata_json or "{}")
             assert metadata["provider"] == "google_calendar"
             assert "Handled in Google console." not in audit.metadata_json
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+@pytest.mark.parametrize("winner", ["revoke", "deactivate", "demote"])
+def test_google_oauth_exchange_discards_result_when_authority_changes(
+    client: TestClient,
+    winner: str,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+
+    class AuthorityChangingProvider(StubGoogleCalendarProvider):
+        def exchange_code(self, *, code: str) -> dict[str, object]:
+            exchanged = super().exchange_code(code=code)
+            # The OAuth claim was committed before this callback. A second DB
+            # session can therefore win revocation/deactivation/demotion while
+            # the external exchange is in flight.
+            with get_session_factory()() as concurrent:
+                membership = concurrent.get(CompanyMembership, membership_id)
+                assert membership is not None
+                if winner == "revoke":
+                    connection = concurrent.scalar(
+                        select(UserCalendarConnection).where(
+                            UserCalendarConnection.company_id == company_id,
+                            UserCalendarConnection.membership_id == membership_id,
+                            UserCalendarConnection.provider
+                            == CalendarProvider.GOOGLE_CALENDAR,
+                        )
+                    )
+                    assert connection is not None
+                    connection.status = CalendarConnectionStatus.REVOKED
+                    connection.encrypted_token_ref = None
+                elif winner == "deactivate":
+                    membership.is_active = False
+                else:
+                    membership.role = MembershipRole.VIEWER
+                concurrent.commit()
+            return exchanged
+
+    provider = AuthorityChangingProvider()
+    set_google_calendar_provider_for_tests(provider)
+    try:
+        start = client.post(
+            "/api/calendar/connections/google-calendar/start",
+            headers=_auth(token),
+        )
+        assert start.status_code == 200, start.text
+        state = parse_qs(urlparse(start.json()["auth_url"]).query)["state"][0]
+        callback = client.get(
+            "/api/calendar/connections/google-calendar/callback",
+            headers=_auth(token),
+            params={"code": "google-oauth-code", "state": state},
+        )
+        assert callback.status_code in {403, 409}, callback.text
+        with get_session_factory()() as session:
+            connection = session.scalar(
+                select(UserCalendarConnection).where(
+                    UserCalendarConnection.company_id == company_id,
+                    UserCalendarConnection.membership_id == membership_id,
+                    UserCalendarConnection.provider
+                    == CalendarProvider.GOOGLE_CALENDAR,
+                )
+            )
+            assert connection is not None
+            assert connection.status != CalendarConnectionStatus.CONNECTED
+            assert connection.provider_account_id is None
+            assert "google-access-credential" not in str(
+                connection.encrypted_token_ref or ""
+            )
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+def test_google_reconnect_blocks_different_account_until_exact_delete_drains(
+    client: TestClient,
+) -> None:
+    class AccountProvider(StubGoogleCalendarProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.account_id = "google-user-1"
+            self.exchange_calls = 0
+
+        def exchange_code(self, *, code: str) -> dict[str, object]:
+            self.exchange_calls += 1
+            result = super().exchange_code(code=code)
+            result["provider_account_id"] = self.account_id
+            result["display_email"] = f"{self.account_id}@example.test"
+            return result
+
+    provider = AccountProvider()
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    set_google_calendar_provider_for_tests(provider)
+    try:
+        connection_id = _connect_google(client, token, provider)
+        with get_session_factory()() as session:
+            session.add(
+                CalendarEventSync(
+                    company_id=company_id,
+                    calendar_connection_id=connection_id,
+                    source_type="matter_hearing",
+                    source_id=str(uuid4()),
+                    provider_event_id="prior-account-event",
+                    sync_status=CalendarEventSyncStatus.DELETE_PENDING,
+                    dead_letter_reason="connection_revoked_delete",
+                )
+            )
+            session.commit()
+        provider.account_id = "google-user-2"
+        start = client.post(
+            "/api/calendar/connections/google-calendar/start",
+            headers=_auth(token),
+        )
+        state = parse_qs(urlparse(start.json()["auth_url"]).query)["state"][0]
+        blocked = client.get(
+            "/api/calendar/connections/google-calendar/callback",
+            headers=_auth(token),
+            params={"code": "google-oauth-code", "state": state},
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert provider.exchange_calls == 1
+        with get_session_factory()() as session:
+            connection = session.get(UserCalendarConnection, connection_id)
+            assert connection is not None
+            assert connection.provider_account_id == "google-user-1"
+            assert connection.status == CalendarConnectionStatus.CONNECTED
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+def test_durable_google_create_timeout_is_unknown_and_never_replayed(
+    client: TestClient,
+) -> None:
+    class AcceptedThenTimeoutProvider(StubGoogleCalendarProvider):
+        def upsert_hearing_event(self, **kwargs) -> str:
+            self.calls.append(
+                {
+                    "hearing_id": kwargs["hearing"].id,
+                    "matter_id": kwargs["matter"].id,
+                    "existing": kwargs["existing_provider_event_id"],
+                }
+            )
+            raise TimeoutError("Google accepted create before response timeout")
+
+    provider = AcceptedThenTimeoutProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        company_id = str(bootstrap["company"]["id"])
+        membership_id = str(bootstrap["membership"]["id"])
+        _connect_google(client, token, provider)
+        matter = _create_matter(client, token, "GOOGLE-UNKNOWN-TRANSPORT")
+        hearing = _schedule_hearing(client, token, str(matter["id"]))
+        factory = get_session_factory()
+        with factory() as session:
+            company = session.get(Company, company_id)
+            membership = session.get(CompanyMembership, membership_id)
+            assert company is not None and membership is not None
+            context = SessionContext(
+                company=company,
+                membership=membership,
+                user=membership.user,
+            )
+            first = process_durable_google_calendar_sync(
+                session,
+                context=context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+                limit=1,
+            )
+            second = process_durable_google_calendar_sync(
+                session,
+                context=context,
+                replay_failed_only=True,
+                limit=1,
+            )
+            sync = session.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_id == str(hearing["id"])
+                )
+            )
+            assert sync is not None
+            assert sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
+            assert sync.dead_letter_reason == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        assert first.dead_lettered == 1
+        assert second.examined == 0
+        assert second.provider_calls == 0
+        assert len(provider.calls) == 1
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+def test_ordinary_child_terminal_winner_compensates_every_google_create(
+    client: TestClient,
+) -> None:
+    factory = get_session_factory()
+
+    class TerminalizingProvider(StubGoogleCalendarProvider):
+        def _terminalize(self, model, source_id: str, terminal_status: str) -> None:
+            with factory() as callback_session:
+                row = callback_session.get(model, source_id)
+                assert row is not None
+                row.status = terminal_status
+                callback_session.commit()
+
+        def upsert_hearing_event(self, **kwargs) -> str:
+            assert object_session(kwargs["hearing"]).in_transaction() is False
+            source_id = str(kwargs["hearing"].id)
+            self.calls.append({"source_type": "matter_hearing", "source_id": source_id})
+            self._terminalize(MatterHearing, source_id, "cancelled")
+            return f"stale-hearing-{source_id}"
+
+        def upsert_calendar_item(self, **kwargs) -> str:
+            assert object_session(kwargs["item"].matter).in_transaction() is False
+            item = kwargs["item"]
+            self.calls.append({"source_type": item.source_type, "source_id": item.source_id})
+            if item.source_type == "matter_task":
+                self._terminalize(MatterTask, item.source_id, "cancelled")
+            else:
+                self._terminalize(MatterDeadline, item.source_id, "cancelled")
+            return f"stale-{item.source_type}-{item.source_id}"
+
+    provider = TerminalizingProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _connect_google(client, token, provider)
+        matter = _create_matter(client, token, "GOOGLE-CHILD-FENCE")
+        hearing = _schedule_hearing(client, token, str(matter["id"]))
+        task_response = client.post(
+            f"/api/matters/{matter['id']}/tasks",
+            headers=_auth(token),
+            json={
+                "title": "Terminal-race task",
+                "due_on": (date.today() + timedelta(days=5)).isoformat(),
+                "priority": "high",
+            },
+        )
+        deadline_response = client.post(
+            f"/api/matters/{matter['id']}/deadlines",
+            headers=_auth(token),
+            json={
+                "title": "Terminal-race deadline",
+                "due_on": (date.today() + timedelta(days=7)).isoformat(),
+                "kind": "filing",
+            },
+        )
+        assert task_response.status_code == 200, task_response.text
+        assert deadline_response.status_code == 200, deadline_response.text
+        sources = (
+            ("hearings", str(hearing["id"])),
+            ("tasks", str(task_response.json()["id"])),
+            ("deadlines", str(deadline_response.json()["id"])),
+        )
+        for route_part, source_id in sources:
+            response = client.post(
+                f"/api/calendar/sync/google-calendar/{route_part}/{source_id}",
+                headers=_auth(token),
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["sync"]["sync_status"] == "deleted"
+            assert response.json()["sync"]["provider_event_id"] is not None
+        assert len(provider.calls) == 3
+        assert provider.delete_calls == [
+            f"stale-hearing-{sources[0][1]}",
+            f"stale-matter_task-{sources[1][1]}",
+            f"stale-matter_deadline-{sources[2][1]}",
+        ]
+    finally:
+        set_google_calendar_provider_for_tests(None)
+
+
+def test_google_upsert_finalize_rechecks_calendar_capability_and_compensates(
+    client: TestClient,
+) -> None:
+    factory = get_session_factory()
+
+    class DemotingProvider(StubGoogleCalendarProvider):
+        def __init__(self, *, membership_id: str) -> None:
+            super().__init__()
+            self.membership_id = membership_id
+
+        def upsert_hearing_event(self, **kwargs) -> str:
+            # The claim is durable and the provider call is outside the
+            # transaction that locked the actor/source/sync/connection graph.
+            assert object_session(kwargs["hearing"]).in_transaction() is False
+            source_id = str(kwargs["hearing"].id)
+            returned_id = f"demoted-google-{source_id}"
+            self.calls.append({"source_type": "matter_hearing", "source_id": source_id})
+            with factory() as callback_session:
+                membership = callback_session.get(
+                    CompanyMembership,
+                    self.membership_id,
+                )
+                assert membership is not None
+                membership.role = MembershipRole.VIEWER
+                callback_session.commit()
+            return returned_id
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    membership_id = str(bootstrap["membership"]["id"])
+    provider = DemotingProvider(membership_id=membership_id)
+    try:
+        _connect_google(client, token, provider)
+        matter = _create_matter(client, token, "GOOGLE-CAPABILITY-FINALIZE")
+        hearing = _schedule_hearing(client, token, str(matter["id"]))
+
+        response = client.post(
+            f"/api/calendar/sync/google-calendar/hearings/{hearing['id']}",
+            headers=_auth(token),
+        )
+
+        assert response.status_code == 200, response.text
+        sync = response.json()["sync"]
+        assert sync["sync_status"] == "deleted"
+        assert sync["provider_event_id"] == f"demoted-google-{hearing['id']}"
+        assert provider.delete_calls == [f"demoted-google-{hearing['id']}"]
+        assert len(provider.calls) == 1
     finally:
         set_google_calendar_provider_for_tests(None)
 

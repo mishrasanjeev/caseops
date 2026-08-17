@@ -18,6 +18,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
+import { PersonPicker } from "@/components/ui/PersonPicker";
+import { Label } from "@/components/ui/Label";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -511,13 +513,15 @@ export default function AdminNotificationsPage() {
               aria-label="Recovery action and evidence"
               data-testid="notification-recovery-action"
             />
-            <Input
-              value={replacementMembershipId}
-              onChange={(event) => setReplacementMembershipId(event.target.value)}
-              placeholder="Replacement membership ID for a changed destination"
-              aria-label="Replacement membership ID"
-              data-testid="notification-replacement-membership"
-            />
+            <div data-testid="notification-replacement-membership">
+              <Label htmlFor="notification-replacement-person">Send instead to</Label>
+              <PersonPicker
+                id="notification-replacement-person"
+                value={replacementMembershipId}
+                onChange={setReplacementMembershipId}
+                placeholder="Keep the original recipient"
+              />
+            </div>
           </div>
           {(query.data?.intents ?? []).filter((intent) =>
             ["blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled"].includes(

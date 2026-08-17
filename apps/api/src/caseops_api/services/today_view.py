@@ -5,7 +5,7 @@ in the morning into a single tenant-scoped, matter-access-respecting
 payload. Replaces the old "open the matters list and remember what's
 hot" workflow with a per-user prioritised feed.
 
-Returns five streams keyed by urgency:
+Returns six streams keyed by urgency:
 
 1. ``hearings_next_7d`` — `MatterHearing` rows with `hearing_on`
    between today and today + horizon_days, status SCHEDULED.
@@ -18,18 +18,35 @@ Returns five streams keyed by urgency:
    AND status in (issued, partially_paid). The collections worry list.
 5. ``deadlines_next_7d`` — `MatterDeadline` rows with `due_on` ≤
    today + horizon_days. Hard statutory dates separate from tasks.
+6. ``ip_coverage_actions`` — IP deadline coverage that is waiting on
+   *this* user: a transfer a colleague has offered them, or a deadline
+   they hold and have not acknowledged. Both were previously reachable
+   only by opening the IP workspace, so a transfer proposal could sit
+   unseen while it blocked a colleague's handover, and an unacknowledged
+   critical deadline could escalate without ever appearing on the page
+   the user opens in the morning.
+   This stream is IP-docket scoped rather than Matter scoped, so its
+   isolation comes from ``can_access_ip_docket`` — the same predicate the
+   IP listing uses — rather than from ``visible_matters_filter``. A
+   restricted docket the caller cannot open contributes nothing.
 
-All five share a common `MatterRef` (id + title + matter_code) so the
-frontend can deeplink to the matter cockpit.
+   Both kinds require ``ip:write``. Read-only members retain the five
+   informational Matter streams, but this action-only stream is empty so Today
+   never advertises an impossible write.
 
-Isolation is enforced on every join by BOTH:
+The five Matter-scoped streams share a common `MatterRef` (id + title +
+matter_code) so the frontend can deeplink to the matter cockpit. The sixth is
+IP-docket scoped and carries its docket identity directly.
+
+Isolation for every Matter-scoped join is enforced by BOTH:
   1. tenant     — `Matter.company_id == context.company.id`
   2. matter-ACL — `visible_matters_filter(session, context=context)`,
      the same predicate `list_matters` uses, so restricted /
      team-scoped / ethical-walled matters the caller is not entitled
      to never surface in the Today feed or in next-action.
-The function never reads a row outside the caller's tenant, and never
-a matter the caller could not also see in the matters list.
+The IP stream applies the analogous tenant and IP-docket visibility predicates.
+The function never reads a row outside the caller's tenant, and never a record
+the caller could not also see in its canonical list.
 """
 from __future__ import annotations
 
@@ -51,6 +68,7 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskStatus,
 )
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.matter_access import visible_matters_filter
 from caseops_api.services.session_context import SessionContext
 
@@ -130,7 +148,31 @@ _STREAM_KEYS: tuple[str, ...] = (
     "drafts_in_review",
     "overdue_invoices",
     "deadlines_next_7d",
+    "ip_coverage_actions",
 )
+
+
+@dataclass(frozen=True)
+class TodayIpCoverageAction:
+    """An IP deadline waiting on this user.
+
+    ``kind`` says what is being asked, because the two are different acts:
+    ``decide_transfer`` blocks a colleague until answered, while
+    ``acknowledge`` is what stops a critical item escalating.
+    """
+
+    coverage_id: str
+    docket_id: str
+    docket_title: str
+    deadline_title: str | None
+    due_on: date | None
+    days_until: int | None
+    critical: bool
+    kind: str
+    # Who is currently accountable. On a transfer that is the colleague
+    # waiting on this decision; on an acknowledgement it is the user.
+    responsible_label: str
+    reason: str | None
 
 
 @dataclass(frozen=True)
@@ -142,6 +184,7 @@ class TodayView:
     drafts_in_review: list[TodayDraftInReview]
     overdue_invoices: list[TodayInvoice]
     deadlines_next_7d: list[TodayDeadline]
+    ip_coverage_actions: list[TodayIpCoverageAction]
     # Additive bounding metadata (response-shape extension, not a
     # breaking change — the five arrays above are unchanged). Keyed by
     # the stream names in _STREAM_KEYS.
@@ -158,6 +201,81 @@ class TodayView:
 # ---------------------------------------------------------------
 # Public API.
 # ---------------------------------------------------------------
+
+
+def _ip_coverage_actions(
+    session: Session,
+    context,
+    today: date,
+    *,
+    limit: int,
+) -> list[TodayIpCoverageAction]:
+    """IP coverage waiting on this user (see the module docstring).
+
+    Delegates to the IP services rather than duplicating their access policy.
+    Both helpers push visibility, lifecycle, ordering and this stream's
+    ``limit + 1`` probe into SQL, so Today does bounded work with no per-docket
+    access-query loop even when the member has years of coverage history.
+    """
+
+    # Imported locally: the IP services import broadly, and Today is imported by
+    # the matters routes. A module-level import would couple the two graphs.
+    from caseops_api.services.ip_operations import (
+        list_ip_assigned_coverage,
+        list_ip_coverage_transfers_awaiting,
+    )
+
+    actions: list[TodayIpCoverageAction] = []
+
+    for transfer in list_ip_coverage_transfers_awaiting(
+        session, context=context, limit=limit
+    ).transfers:
+        actions.append(
+            TodayIpCoverageAction(
+                coverage_id=transfer.coverage_id,
+                docket_id=transfer.docket_id,
+                docket_title=transfer.docket_title,
+                deadline_title=transfer.deadline_title,
+                due_on=transfer.due_on,
+                days_until=transfer.days_until_due,
+                critical=transfer.critical,
+                kind="decide_transfer",
+                responsible_label=transfer.responsible_label,
+                reason=transfer.reason,
+            )
+        )
+
+    assigned = list_ip_assigned_coverage(
+        session,
+        context=context,
+        unacknowledged_only=True,
+        actionable_only=True,
+        limit=limit,
+    )
+    pending_decision = {action.coverage_id for action in actions}
+    for row in assigned.coverages:
+        # A row already listed as a decision must not appear twice saying two
+        # different things: deciding the transfer is the act, not acknowledging.
+        if row.coverage_id in pending_decision or row.transfer_pending:
+            continue
+        actions.append(
+            TodayIpCoverageAction(
+                coverage_id=row.coverage_id,
+                docket_id=row.docket_id,
+                docket_title=row.docket_title,
+                deadline_title=row.deadline_title,
+                due_on=row.due_on,
+                days_until=row.days_until_due,
+                critical=row.critical,
+                kind="acknowledge",
+                responsible_label="You",
+                reason=None,
+            )
+        )
+
+    # Soonest first, undated last: the same order the rest of Today uses.
+    actions.sort(key=lambda a: (a.due_on is None, a.due_on or today, a.docket_title))
+    return actions[:limit]
 
 
 def build_today_view(
@@ -191,6 +309,14 @@ def build_today_view(
         "deadlines_next_7d": _deadlines(
             session, context, today, horizon_end, limit=probe,
         ),
+        # Every item in this stream asks for a write (accept/reject or
+        # acknowledge). Keep the rest of Today informational for read-only
+        # members, but never advertise a control their role cannot execute.
+        "ip_coverage_actions": (
+            _ip_coverage_actions(session, context, today, limit=probe)
+            if membership_has_capability(session, context.membership, "ip:write")
+            else []
+        ),
     }
 
     bounded: dict[str, list] = {}
@@ -214,6 +340,7 @@ def build_today_view(
         drafts_in_review=bounded["drafts_in_review"],
         overdue_invoices=bounded["overdue_invoices"],
         deadlines_next_7d=bounded["deadlines_next_7d"],
+        ip_coverage_actions=bounded["ip_coverage_actions"],
         stream_limits=stream_limits,
         stream_counts=stream_counts,
         stream_truncated=stream_truncated,

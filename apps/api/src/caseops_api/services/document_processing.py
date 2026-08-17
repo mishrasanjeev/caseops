@@ -24,6 +24,7 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services.document_storage import resolve_storage_path
+from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.text_chunking import chunk_text as _chunk_text
 
 logger = logging.getLogger(__name__)
@@ -268,7 +269,7 @@ def parse_attachment(storage_key: str, content_type: str | None) -> ParsedDocume
                 status=DocumentProcessingStatus.NEEDS_OCR,
                 extracted_text=None,
                 chunks=[],
-                error=str(exc),
+                error=redact_provider_error(exc),
             )
         if text:
             return ParsedDocument(

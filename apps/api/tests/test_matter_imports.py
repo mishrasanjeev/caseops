@@ -1345,6 +1345,11 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
     result = committed.json()
     assert result["job"]["status"] == "completed"
     assert len(result["created_matter_ids"]) == 3
+    assert result["created_matter_ids"] == [
+        row["created_matter_id"]
+        for row in result["job"]["rows"]
+        if row["created_matter_id"]
+    ]
 
     records = []
     for matter_id in result["created_matter_ids"]:
@@ -1354,6 +1359,11 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
         )
         assert matter.status_code == 200, matter.text
         records.append(matter.json())
+    assert [item["matter_code"] for item in records] == [
+        "CATALOG-DRT-2",
+        "CATALOG-HC-DELHI",
+        "CATALOG-DRT-99",
+    ]
     record = next(item for item in records if item["matter_code"] == "CATALOG-DRT-2")
     assert record["forum_catalog_entry_id"] == "drt:delhi:drt-2"
     assert record["forum_level"] == "tribunal"
@@ -1364,6 +1374,13 @@ def test_bulk_matter_creation_uses_active_forum_catalog_and_persists_lineage(
     )
     assert high_court["forum_catalog_entry_id"] == "hc:delhi"
     assert high_court["court_name"] == "Delhi High Court"
+
+    repeated = client.post(
+        f"/api/matters/imports/{job['id']}/commit",
+        headers=auth_headers(token),
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["created_matter_ids"] == result["created_matter_ids"]
 
 
 def test_bulk_matter_creation_normalizes_business_values_and_preserves_punctuation(

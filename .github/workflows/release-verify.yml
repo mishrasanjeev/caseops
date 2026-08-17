@@ -88,7 +88,10 @@ jobs:
           # CASEOPS_RELEASE_MODE=true makes requireProviderCredentialOrSkip
           # throw on missing creds instead of skipping silently.
           npx playwright test --config=playwright.app.config.ts --reporter=list
-          npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
+          # This workflow is the provider-UAT gate, not the exact-deployment UX
+          # gate. PR #237's dated suite requires the release SHA and canonical
+          # tester env supplied by prod-verify, so exclude it here explicitly.
+          npx playwright test --config=playwright.prod-ram.config.ts --reporter=list --grep-invert "Ram 2026-08-16 PR #237 production-safe UX proof"
 
       - name: Upload Playwright reports on failure
         if: failure()

@@ -45,6 +45,7 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -669,7 +670,7 @@ def sync_source(
         return run
     except Exception as exc:
         run.status = "failed"
-        run.error_message = str(exc)[:1000]
+        run.error_message = redact_provider_error(exc)
         run.completed_at = _now()
         session.add(run)
         session.flush()

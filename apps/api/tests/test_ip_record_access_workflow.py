@@ -17,6 +17,9 @@ from caseops_api.db.models import (
     IpDocketRecord,
     Matter,
     MatterAccessGrant,
+    MatterDeadline,
+    MatterHearing,
+    MatterTask,
     NotificationDeliveryChannel,
     Team,
     User,
@@ -290,6 +293,16 @@ def test_ip_access_preview_apply_revocation_and_delivery_reauthorization(
     assert client.get(
         f"/api/matters/{matter_id}", headers=member_headers
     ).status_code == 404
+
+    matter_grant = client.post(
+        f"/api/matters/{matter_id}/access/grants",
+        headers=owner_headers,
+        json={
+            "membership_id": member_id,
+            "reason": "Allow the linked-Matter notification fixture.",
+        },
+    )
+    assert matter_grant.status_code == 200, matter_grant.text
 
     stale = client.post(
         f"/api/ip/dockets/{docket_id}/access/apply",
@@ -891,3 +904,359 @@ def test_ip_access_team_grant_and_wall_apply_to_every_active_team_member(
     assert client.get(
         f"/api/ip/dockets/{docket_id}", headers=member_headers
     ).status_code == 404
+
+
+@pytest.mark.parametrize("unstable_access", ["future_wall", "expiring_grant"])
+def test_create_ip_docket_rejects_unstable_linked_matter_responsibility(
+    client: TestClient,
+    unstable_access: str,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_membership_id = str(bootstrap["membership"]["id"])
+    member_id, _member_headers = _invite_admin(
+        client,
+        owner_token=owner_token,
+        name="Unstable Linked Matter Lawyer",
+        email=f"unstable-linked-{unstable_access}@asterlegal.in",
+    )
+    matter_response = client.post(
+        "/api/matters/",
+        headers=owner_headers,
+        json={
+            "title": "Matter with time-bounded responsibility access",
+            "matter_code": f"IP-STABLE-{unstable_access.replace('_', '-').upper()}",
+            "practice_area": "Intellectual Property",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = str(matter_response.json()["id"])
+
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.assignee_membership_id = owner_membership_id
+        matter.restricted_access = True
+        if unstable_access == "future_wall":
+            session.add(
+                MatterTask(
+                    company_id=company_id,
+                    matter_id=matter.id,
+                    created_by_membership_id=owner_membership_id,
+                    owner_membership_id=member_id,
+                    title="Future-walled linked-IP task owner",
+                    status="todo",
+                    priority="high",
+                )
+            )
+        else:
+            session.add(
+                MatterDeadline(
+                    company_id=company_id,
+                    matter_id=matter.id,
+                    source="custom",
+                    kind="response",
+                    title="Expiring-access linked-IP deadline owner",
+                    due_on=(datetime.now(UTC) + timedelta(days=30)).date(),
+                    status="open",
+                    assignee_membership_id=member_id,
+                    created_by_membership_id=owner_membership_id,
+                )
+            )
+        grant = MatterAccessGrant(
+            company_id=company_id,
+            matter_id=matter.id,
+            membership_id=member_id,
+            access_level="member",
+            reason="Currently permits the linked Matter responsibility.",
+            granted_by_membership_id=owner_membership_id,
+            expires_at=(
+                datetime.now(UTC) + timedelta(days=2)
+                if unstable_access == "expiring_grant"
+                else None
+            ),
+        )
+        session.add(grant)
+        if unstable_access == "future_wall":
+            session.add(
+                EthicalWall(
+                    company_id=company_id,
+                    matter_id=matter.id,
+                    excluded_membership_id=member_id,
+                    reason="A scheduled conflict cannot strand linked IP work.",
+                    created_by_membership_id=owner_membership_id,
+                    effective_from=datetime.now(UTC) + timedelta(days=1),
+                )
+            )
+        session.commit()
+
+    created = client.post(
+        "/api/ip/dockets",
+        headers=owner_headers,
+        json={
+            "title": "Must not persist with unstable responsibility access",
+            "matter_id": matter_id,
+            "restricted": False,
+            "particulars": _particulars(f"UNSTABLE {unstable_access}"),
+        },
+    )
+    assert created.status_code == 409, created.text
+    assert "linked-Matter access" in created.text
+
+    with get_session_factory()() as session:
+        assert list(
+            session.scalars(
+                select(IpDocketRecord).where(IpDocketRecord.matter_id == matter_id)
+            )
+        ) == []
+        assert session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.action == "ip_docket.created",
+                AuditEvent.matter_id == matter_id,
+            )
+        ) is None
+
+
+def test_create_restricted_ip_docket_grants_every_live_linked_matter_role(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_id = str(bootstrap["membership"]["id"])
+    role_ids = [
+        _invite_admin(
+            client,
+            owner_token=owner_token,
+            name=f"Linked role {index}",
+            email=f"linked-role-{index}@asterlegal.in",
+        )[0]
+        for index in range(6)
+    ]
+    matter_response = client.post(
+        "/api/matters/",
+        headers=owner_headers,
+        json={
+            "title": "Every live role becomes an IP access authority",
+            "matter_code": "IP-LINK-ALL-LIVE-ROLES",
+            "practice_area": "Intellectual Property",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = str(matter_response.json()["id"])
+
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.assignee_membership_id = owner_id
+        matter.restricted_access = True
+        session.add_all(
+            [
+                MatterAccessGrant(
+                    company_id=company_id,
+                    matter_id=matter_id,
+                    membership_id=membership_id,
+                    access_level="member",
+                    reason="Unbounded access for a live linked-Matter role.",
+                    granted_by_membership_id=owner_id,
+                )
+                for membership_id in role_ids
+            ]
+        )
+        session.add_all(
+            [
+                MatterTask(
+                    company_id=company_id,
+                    matter_id=matter_id,
+                    created_by_membership_id=owner_id,
+                    owner_membership_id=role_ids[0],
+                    title="Live linked task",
+                    status="todo",
+                    priority="high",
+                ),
+                MatterDeadline(
+                    company_id=company_id,
+                    matter_id=matter_id,
+                    source="custom",
+                    kind="response",
+                    title="Live linked deadline",
+                    due_on=(datetime.now(UTC) + timedelta(days=20)).date(),
+                    status="missed",
+                    assignee_membership_id=role_ids[1],
+                    created_by_membership_id=owner_id,
+                ),
+                MatterHearing(
+                    company_id=company_id,
+                    matter_id=matter_id,
+                    hearing_on=(datetime.now(UTC) + timedelta(days=25)).date(),
+                    forum_name="Registry",
+                    purpose="Live linked hearing",
+                    status="adjourned",
+                    responsible_membership_id=role_ids[2],
+                    attendee_membership_ids_json=[role_ids[3]],
+                    reminder_policy_json={
+                        "recipient_membership_ids": [role_ids[4]],
+                        "escalation_membership_id": role_ids[5],
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+    created = client.post(
+        "/api/ip/dockets",
+        headers=owner_headers,
+        json={
+            "title": "Restricted docket with every inherited role",
+            "matter_id": matter_id,
+            "restricted": True,
+            "particulars": _particulars("ALL LIVE ROLES"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket_id = str(created.json()["id"])
+
+    with get_session_factory()() as session:
+        granted_ids = set(
+            session.scalars(
+                select(MatterAccessGrant.membership_id).where(
+                    MatterAccessGrant.ip_docket_id == docket_id,
+                    MatterAccessGrant.revoked_at.is_(None),
+                )
+            ).all()
+        )
+        assert set(role_ids).issubset(granted_ids)
+
+
+def test_generic_linked_ip_deadline_role_blocks_access_and_team_revocation(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_membership_id = str(bootstrap["membership"]["id"])
+    member_id, _member_headers = _invite_admin(
+        client,
+        owner_token=owner_token,
+        name="Generic Deadline Owner",
+        email="generic-linked-deadline-owner@asterlegal.in",
+    )
+    team_response = client.post(
+        "/api/teams/",
+        headers=owner_headers,
+        json={"name": "Linked deadline team", "slug": "linked-deadline-team"},
+    )
+    assert team_response.status_code == 201, team_response.text
+    team_id = str(team_response.json()["id"])
+    matter_response = client.post(
+        "/api/matters/",
+        headers=owner_headers,
+        json={
+            "title": "Generic deadline on linked IP Matter",
+            "matter_code": "IP-GENERIC-DEADLINE-ACL",
+            "practice_area": "Intellectual Property",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter = matter_response.json()
+    assigned_team = client.patch(
+        f"/api/matters/{matter['id']}",
+        headers=owner_headers,
+        json={
+            "team_id": team_id,
+            "expected_updated_at": matter["updated_at"],
+        },
+    )
+    assert assigned_team.status_code == 200, assigned_team.text
+    docket_response = client.post(
+        "/api/ip/dockets",
+        headers=owner_headers,
+        json={
+            "title": "Linked generic deadline docket",
+            "matter_id": matter["id"],
+            "restricted": False,
+            "particulars": _particulars("GENERIC DEADLINE ACL"),
+        },
+    )
+    assert docket_response.status_code == 201, docket_response.text
+    docket_id = str(docket_response.json()["id"])
+
+    with get_session_factory()() as session:
+        deadline = MatterDeadline(
+            company_id=company_id,
+            matter_id=str(matter["id"]),
+            source="custom",
+            kind="response",
+            title="Generic response deadline",
+            due_on=(datetime.now(UTC) + timedelta(days=30)).date(),
+            status="open",
+            assignee_membership_id=member_id,
+            created_by_membership_id=owner_membership_id,
+        )
+        session.add(deadline)
+        session.commit()
+        deadline_id = deadline.id
+
+    ip_wall = client.post(
+        f"/api/ip/dockets/{docket_id}/access/preview",
+        headers=owner_headers,
+        json={
+            "action": "add_wall",
+            "expected_access_policy_version": 0,
+            "reason": "Cannot wall a live generic deadline owner.",
+            "subject_type": "membership",
+            "subject_id": member_id,
+        },
+    )
+    assert ip_wall.status_code == 409, ip_wall.text
+    assert ip_wall.json()["code"] == "ip_access_responsibility_handoff_required"
+
+    matter_wall = client.post(
+        f"/api/matters/{matter['id']}/access/walls",
+        headers=owner_headers,
+        json={
+            "excluded_membership_id": member_id,
+            "reason": "Cannot wall a live generic deadline owner.",
+        },
+    )
+    assert matter_wall.status_code == 409, matter_wall.text
+    assert (
+        matter_wall.json()["code"]
+        == "matter_access_ip_responsibility_handoff_required"
+    )
+
+    team_scoping = client.put(
+        "/api/teams/scoping",
+        headers=owner_headers,
+        json={"enabled": True},
+    )
+    assert team_scoping.status_code == 409, team_scoping.text
+    assert (
+        team_scoping.json()["code"]
+        == "ip_team_access_responsibility_handoff_required"
+    )
+
+    with get_session_factory()() as session:
+        company = session.get(Company, company_id)
+        deadline = session.get(MatterDeadline, deadline_id)
+        walls = list(
+            session.scalars(
+                select(EthicalWall).where(
+                    EthicalWall.excluded_membership_id == member_id,
+                    EthicalWall.revoked_at.is_(None),
+                )
+            )
+        )
+        assert company is not None and company.team_scoping_enabled is False
+        assert deadline is not None and deadline.assignee_membership_id == member_id
+        assert walls == []

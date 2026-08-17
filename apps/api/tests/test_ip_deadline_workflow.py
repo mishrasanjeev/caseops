@@ -7,10 +7,15 @@ from sqlalchemy import select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    CalendarEventSync,
+    CalendarEventSyncStatus,
+    EthicalWall,
     IpDeadline,
     IpDeadlineCoverage,
+    IpResponsibilityAssignment,
     MatterDeadline,
     NotificationDeliveryIntent,
+    UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.ip_deadlines import (
@@ -365,6 +370,53 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         "holiday",
     ]
 
+    noncritical_proposal = client.post(
+        f"/api/ip/dockets/{docket['id']}/deadlines",
+        headers=legal_headers,
+        json={
+            "title": "Noncritical deadline still needs an accepted primary",
+            "rule_version_id": rule["id"],
+            "calendar_version_id": calendar["id"],
+            "base_date": "2026-08-14",
+            "base_date_certainty": "certain",
+            "is_critical": False,
+        },
+    )
+    assert noncritical_proposal.status_code == 201, noncritical_proposal.text
+    noncritical = noncritical_proposal.json()
+    unaccepted_primary = client.post(
+        f"/api/ip/deadlines/{noncritical['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": noncritical["version"],
+            "responsibilities": [
+                {
+                    "membership_id": owner_id,
+                    "role": "primary",
+                    "accepted": False,
+                }
+            ],
+        },
+    )
+    assert unaccepted_primary.status_code == 409, unaccepted_primary.text
+    assert (
+        unaccepted_primary.json()["code"]
+        == "ip_deadline_primary_acceptance_required"
+    )
+    with get_session_factory()() as session:
+        rejected_deadline = session.get(IpDeadline, noncritical["id"])
+        assignments = list(
+            session.scalars(
+                select(IpResponsibilityAssignment).where(
+                    IpResponsibilityAssignment.deadline_id == noncritical["id"]
+                )
+            ).all()
+        )
+        assert rejected_deadline is not None
+        assert rejected_deadline.state == "candidate"
+        assert rejected_deadline.matter_deadline_id is None
+        assert assignments == []
+
     incomplete_coverage = client.post(
         f"/api/ip/deadlines/{deadline['id']}/confirm",
         headers=legal_headers,
@@ -374,6 +426,19 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         },
     )
     assert incomplete_coverage.status_code == 409
+    collapsed_coverage = client.post(
+        f"/api/ip/deadlines/{deadline['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": deadline["version"],
+            "responsibilities": _responsibilities(owner_id, owner_id),
+        },
+    )
+    assert collapsed_coverage.status_code == 409, collapsed_coverage.text
+    assert (
+        collapsed_coverage.json()["code"]
+        == "ip_coverage_distinct_backup_required"
+    )
     stale = client.post(
         f"/api/ip/deadlines/{deadline['id']}/confirm",
         headers=legal_headers,
@@ -383,6 +448,51 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         },
     )
     assert stale.status_code == 409
+
+    with get_session_factory()() as session:
+        wall = EthicalWall(
+            company_id=matter["company_id"],
+            ip_docket_id=docket["id"],
+            excluded_membership_id=reviewer_id,
+            reason="Responsibility assignee cannot access the IP record.",
+            created_by_membership_id=owner_id,
+        )
+        session.add(wall)
+        session.commit()
+        wall_id = wall.id
+    blocked_by_ip_wall = client.post(
+        f"/api/ip/deadlines/{deadline['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": deadline["version"],
+            "responsibilities": _responsibilities(owner_id, reviewer_id),
+        },
+    )
+    assert blocked_by_ip_wall.status_code == 409, blocked_by_ip_wall.text
+    assert "stable Matter and IP-record access" in blocked_by_ip_wall.text
+    with get_session_factory()() as session:
+        wall = session.get(EthicalWall, wall_id)
+        assert wall is not None
+        session.delete(wall)
+        session.add_all(
+            [
+                UserCalendarConnection(
+                    company_id=matter["company_id"],
+                    membership_id=owner_id,
+                    provider="outlook",
+                    status="connected",
+                    encrypted_token_ref="workflow-owner-calendar",
+                ),
+                UserCalendarConnection(
+                    company_id=matter["company_id"],
+                    membership_id=reviewer_id,
+                    provider="google_calendar",
+                    status="connected",
+                    encrypted_token_ref="workflow-reviewer-calendar",
+                ),
+            ]
+        )
+        session.commit()
 
     confirmed_response = client.post(
         f"/api/ip/deadlines/{deadline['id']}/confirm",
@@ -399,13 +509,39 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     assert confirmed["state"] == "confirmed"
     assert confirmed["matter_deadline_id"] is not None
     assert len(confirmed["responsibilities"]) == 2
+    with get_session_factory()() as session:
+        initial_syncs = list(
+            session.scalars(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_type == "matter_deadline",
+                    CalendarEventSync.source_id == confirmed["matter_deadline_id"],
+                )
+            ).all()
+        )
+        assert len(initial_syncs) == 2
+        assert {row.sync_status for row in initial_syncs} == {
+            CalendarEventSyncStatus.PENDING
+        }
+        initial_sync_ids = {row.id for row in initial_syncs}
+        for index, row in enumerate(initial_syncs):
+            row.sync_status = CalendarEventSyncStatus.SYNCED
+            row.provider_event_id = f"confirmed-provider-{index}"
+        coverage = session.scalar(
+            select(IpDeadlineCoverage).where(
+                IpDeadlineCoverage.matter_deadline_id == confirmed["matter_deadline_id"]
+            )
+        )
+        assert coverage is not None
+        assert coverage.calendar_projection_status == "pending"
+        session.commit()
 
     generic_done = client.patch(
         f"/api/matters/{matter['id']}/deadlines/{confirmed['matter_deadline_id']}",
         headers=owner_headers,
-        json={"status": "done"},
+        json={"status": "done", "assignee_membership_id": reviewer_id},
     )
-    assert generic_done.status_code == 200, generic_done.text
+    assert generic_done.status_code == 409, generic_done.text
+    assert generic_done.json()["code"] == "ip_deadline_workflow_required"
     still_legal = client.get(
         f"/api/ip/dockets/{docket['id']}/deadline-workspace",
         headers=owner_headers,
@@ -414,6 +550,16 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     stored = next(item for item in still_legal.json()["deadlines"] if item["id"] == confirmed["id"])
     assert stored["state"] == "confirmed"
     assert still_legal.json()["automation_state"] == "explicit_confirmation_only"
+    with get_session_factory()() as session:
+        operational = session.get(MatterDeadline, confirmed["matter_deadline_id"])
+        coverage = session.scalar(
+            select(IpDeadlineCoverage).where(
+                IpDeadlineCoverage.matter_deadline_id == confirmed["matter_deadline_id"]
+            )
+        )
+        assert operational is not None and coverage is not None
+        assert operational.status == "open"
+        assert operational.assignee_membership_id == coverage.responsible_membership_id
 
     recalculation = client.post(
         f"/api/ip/deadlines/{confirmed['id']}/recalculate",
@@ -442,6 +588,36 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     )
     assert impact.status_code == 200, impact.text
     impact_body = impact.json()
+    with get_session_factory()() as session:
+        wall = EthicalWall(
+            company_id=matter["company_id"],
+            ip_docket_id=docket["id"],
+            excluded_membership_id=reviewer_id,
+            reason="Override responsibility cannot access the IP record.",
+            created_by_membership_id=owner_id,
+        )
+        session.add(wall)
+        session.commit()
+        override_wall_id = wall.id
+    blocked_override = client.post(
+        f"/api/ip/deadlines/{confirmed['id']}/override",
+        headers=legal_headers,
+        json={
+            "expected_version": confirmed["version"],
+            "new_result_on": "2026-08-20",
+            "reason": "Official extension order changes the legal date.",
+            "evidence_reference": "attachment:official-extension-order",
+            "impact_token": impact_body["impact_token"],
+            "responsibilities": _responsibilities(owner_id, reviewer_id),
+        },
+    )
+    assert blocked_override.status_code == 409, blocked_override.text
+    assert "stable Matter and IP-record access" in blocked_override.text
+    with get_session_factory()() as session:
+        wall = session.get(EthicalWall, override_wall_id)
+        assert wall is not None
+        session.delete(wall)
+        session.commit()
     bad_override = client.post(
         f"/api/ip/deadlines/{confirmed['id']}/override",
         headers=legal_headers,
@@ -473,6 +649,59 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     assert replacement["state"] == "confirmed"
     assert replacement["result_on"] == "2026-08-20"
     assert replacement["supersedes_deadline_id"] == confirmed["id"]
+    with get_session_factory()() as session:
+        from caseops_api.services.calendar_sync import (
+            _recompute_ip_calendar_projection_status,
+        )
+
+        retired_syncs = list(
+            session.scalars(
+                select(CalendarEventSync).where(CalendarEventSync.id.in_(initial_sync_ids))
+            ).all()
+        )
+        assert {row.sync_status for row in retired_syncs} == {
+            CalendarEventSyncStatus.DELETE_PENDING
+        }
+        retired_coverage = session.scalar(
+            select(IpDeadlineCoverage).where(
+                IpDeadlineCoverage.matter_deadline_id
+                == confirmed["matter_deadline_id"]
+            )
+        )
+        assert retired_coverage is not None
+        assert retired_coverage.coverage_status == "completed"
+        assert retired_coverage.calendar_projection_status == "completed"
+        for row in retired_syncs:
+            row.sync_status = CalendarEventSyncStatus.DELETED
+        session.flush()
+        assert (
+            _recompute_ip_calendar_projection_status(
+                session,
+                company_id=matter["company_id"],
+                matter_deadline_id=confirmed["matter_deadline_id"],
+            )
+            is None
+        )
+        session.refresh(retired_coverage)
+        assert retired_coverage.coverage_status == "completed"
+        assert retired_coverage.calendar_projection_status == "completed"
+        replacement_syncs = list(
+            session.scalars(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_type == "matter_deadline",
+                    CalendarEventSync.source_id == replacement["matter_deadline_id"],
+                )
+            ).all()
+        )
+        assert len(replacement_syncs) == 2
+        assert {row.sync_status for row in replacement_syncs} == {
+            CalendarEventSyncStatus.PENDING
+        }
+        replacement_sync_ids = {row.id for row in replacement_syncs}
+        for index, row in enumerate(replacement_syncs):
+            row.sync_status = CalendarEventSyncStatus.SYNCED
+            row.provider_event_id = f"replacement-provider-{index}"
+        session.commit()
 
     completed = client.post(
         f"/api/ip/deadlines/{replacement['id']}/complete",
@@ -498,9 +727,23 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
             ).all()
         )
         assert len(coverages) == 2
+        assert {row.coverage_status for row in coverages} == {"completed"}
+        assert {row.calendar_projection_status for row in coverages} == {
+            "completed"
+        }
         legal_projection = session.get(MatterDeadline, replacement["matter_deadline_id"])
         assert legal_projection is not None
         assert legal_projection.status == "done"
+        completed_syncs = list(
+            session.scalars(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.id.in_(replacement_sync_ids)
+                )
+            ).all()
+        )
+        assert {row.sync_status for row in completed_syncs} == {
+            CalendarEventSyncStatus.DELETE_PENDING
+        }
         reminder_intents = list(
             session.scalars(
                 select(NotificationDeliveryIntent).where(

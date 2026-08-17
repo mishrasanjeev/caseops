@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 ProviderOperationKind = Literal[
     "calendar_sync",
@@ -79,11 +79,20 @@ class ProviderOperationRecord(BaseModel):
     replay_available: bool
     ignore_available: bool
     mark_resolved_available: bool
+    manual_reconciliation_required: bool = False
+    automatic_replay_block_code: str | None = None
     notes: list[str] = Field(default_factory=list)
 
 
 class ProviderOperationListResponse(BaseModel):
     operations: list[ProviderOperationRecord]
+    returned_count: int = Field(ge=0)
+    page_limit: int = Field(ge=1, le=200)
+    has_more: bool
+    counts_scope: Literal["page"] = "page"
+    sort_order: Literal["updated_at_desc_id_desc_source_desc"] = (
+        "updated_at_desc_id_desc_source_desc"
+    )
     open_count: int = Field(ge=0)
     ignored_count: int = Field(ge=0)
     resolved_count: int = Field(ge=0)
@@ -159,6 +168,49 @@ class ProviderOperationReplayBatchResponse(BaseModel):
     estimated_total_cost_minor: int = Field(ge=0)
     currency: str = "INR"
     operations: list[ProviderOperationActionResponse]
+
+
+class CalendarUnknownOutcomeReconciliationRequest(BaseModel):
+    action: Literal["attach_remote_event", "attest_remote_absence"]
+    expected_updated_at: datetime
+    expected_status: str = Field(min_length=1, max_length=24)
+    expected_dead_letter_reason: str = Field(min_length=1, max_length=120)
+    expected_provider: Literal["outlook", "google_calendar"]
+    expected_connection_id: str = Field(min_length=1, max_length=36)
+    expected_source_type: Literal[
+        "matter_hearing", "matter_task", "matter_deadline"
+    ]
+    expected_source_id: str = Field(min_length=1, max_length=36)
+    evidence_reference: str = Field(min_length=8, max_length=1000)
+    provider_event_id: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @field_validator(
+        "expected_status",
+        "expected_dead_letter_reason",
+        "expected_connection_id",
+        "expected_source_id",
+        "evidence_reference",
+        "provider_event_id",
+        mode="before",
+    )
+    @classmethod
+    def strip_reconciliation_text(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_remote_event_id(self) -> CalendarUnknownOutcomeReconciliationRequest:
+        if self.action == "attach_remote_event" and not self.provider_event_id:
+            raise ValueError("provider_event_id is required when attaching a remote event")
+        if self.action == "attest_remote_absence" and self.provider_event_id is not None:
+            raise ValueError("provider_event_id is forbidden when attesting remote absence")
+        return self
+
+
+class CalendarUnknownOutcomeReconciliationResponse(BaseModel):
+    action: Literal["attach_remote_event", "attest_remote_absence"]
+    changed: bool
+    message: str
+    operation: ProviderOperationRecord
 
 
 class ProviderReadinessRecord(BaseModel):

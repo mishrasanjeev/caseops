@@ -46,24 +46,24 @@ type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  section: "work" | "intel" | "admin";
+  section: "overview" | "schedule" | "casework" | "ip" | "intel" | "admin";
   placeholder?: boolean;
   requiresCapability?: Capability;
 };
 
 const NAV: NavItem[] = [
-  { href: "/app", label: "Home", icon: LayoutDashboard, section: "work" },
+  { href: "/app", label: "Home", icon: LayoutDashboard, section: "overview" },
   // PG-004 (2026-05-01) — daily command center. Aggregates hearings
   // / tasks / drafts in review / overdue invoices / deadlines for
   // the current user. Pinned at the top of "Work" because most
   // sessions start with "what must I do today".
-  { href: "/app/today", label: "Today", icon: Sun, section: "work" },
-  { href: "/app/matters", label: "Matters", icon: Briefcase, section: "work" },
+  { href: "/app/today", label: "Today", icon: Sun, section: "overview" },
+  { href: "/app/matters", label: "Matters", icon: Briefcase, section: "casework" },
   {
     href: "/app/ip",
     label: "IP docket",
     icon: BookOpenCheck,
-    section: "work",
+    section: "ip",
     requiresCapability: "ip:read",
   },
   // CAL-OPS-09 / CAL-OPS-13 — deadline control: who holds what, what is
@@ -72,31 +72,24 @@ const NAV: NavItem[] = [
     href: "/app/ip/docket",
     label: "Deadline control",
     icon: CalendarClock,
-    section: "work",
+    section: "ip",
     requiresCapability: "ip:read",
   },
-  { href: "/app/notices", label: "Notices", icon: Bell, section: "work" },
+  { href: "/app/notices", label: "Notices", icon: Bell, section: "casework" },
   {
     href: "/app/intake",
     label: "Intake",
     icon: Inbox,
-    section: "work",
+    section: "casework",
     requiresCapability: "intake:submit",
   },
-  { href: "/app/hearings", label: "Hearings", icon: Gavel, section: "work" },
-  { href: "/app/cause-list", label: "Cause list", icon: ListChecks, section: "work" },
+  { href: "/app/hearings", label: "Hearings", icon: Gavel, section: "schedule" },
+  { href: "/app/cause-list", label: "Cause list", icon: ListChecks, section: "schedule" },
   // Phase B / J08 / M08 — unified view across hearings + tasks +
   // matter_deadlines. Closes BUG-029.
-  { href: "/app/calendar", label: "Calendar", icon: CalendarDays, section: "work" },
-  { href: "/app/mailbox", label: "Mailbox", icon: Inbox, section: "work" },
-  { href: "/app/drive", label: "Drive", icon: HardDrive, section: "work" },
-  {
-    href: "/app/notification-preferences",
-    label: "Notifications",
-    icon: ListTodo,
-    section: "work",
-  },
-  { href: "/guide", label: "User guide", icon: BookOpenText, section: "work" },
+  { href: "/app/calendar", label: "Calendar", icon: CalendarDays, section: "schedule" },
+  { href: "/app/mailbox", label: "Mailbox", icon: Inbox, section: "casework" },
+  { href: "/app/drive", label: "Drive", icon: HardDrive, section: "casework" },
   { href: "/app/research", label: "Research", icon: LibraryBig, section: "intel" },
   { href: "/app/drafting", label: "Drafting", icon: FileSignature, section: "intel" },
   {
@@ -105,19 +98,19 @@ const NAV: NavItem[] = [
     icon: Sparkles,
     section: "intel",
   },
-  { href: "/app/contracts", label: "Contracts", icon: Scale, section: "work" },
+  { href: "/app/contracts", label: "Contracts", icon: Scale, section: "casework" },
   {
     href: "/app/clients",
     label: "Clients",
     icon: Contact,
-    section: "work",
+    section: "casework",
     requiresCapability: "clients:view",
   },
   {
     href: "/app/outside-counsel",
     label: "Outside Counsel",
     icon: Users,
-    section: "work",
+    section: "casework",
   },
   { href: "/app/portfolio", label: "Portfolio", icon: PanelsTopLeft, section: "intel" },
   { href: "/app/courts", label: "Courts", icon: Gavel, section: "intel" },
@@ -192,10 +185,26 @@ const NAV: NavItem[] = [
     section: "admin",
     requiresCapability: "platform:admin",
   },
+  {
+    href: "/app/notification-preferences",
+    label: "Notifications",
+    icon: ListTodo,
+    section: "admin",
+  },
+  { href: "/guide", label: "User guide", icon: BookOpenText, section: "admin" },
 ];
 
+// Order is the reading order of the sidebar. "Work" previously held 17 of the
+// 33 destinations in one flat list, which is more than anyone scans, and it mixed
+// the daily action list with scheduling views, casework and settings. The groups
+// below separate *what must I do* from *when is it* from *what is it about*, so
+// a lawyer arriving in the morning has one obvious starting point rather than
+// six plausible ones.
 const SECTION_LABEL: Record<NavItem["section"], string> = {
-  work: "Work",
+  overview: "Overview",
+  schedule: "Schedule",
+  casework: "Casework",
+  ip: "Intellectual property",
   intel: "Intelligence",
   admin: "Workspace",
 };

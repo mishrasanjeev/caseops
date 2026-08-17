@@ -2166,7 +2166,23 @@ export type TodayStreamKey =
   | "tasks_due_or_overdue"
   | "drafts_in_review"
   | "overdue_invoices"
-  | "deadlines_next_7d";
+  | "deadlines_next_7d"
+  | "ip_coverage_actions";
+
+export type TodayIpCoverageAction = {
+  coverage_id: string;
+  docket_id: string;
+  docket_title: string;
+  deadline_title: string | null;
+  due_on: string | null;
+  days_until: number | null;
+  critical: boolean;
+  // Two different acts: deciding blocks a colleague until answered,
+  // acknowledging is what stops a critical item escalating.
+  kind: "decide_transfer" | "acknowledge";
+  responsible_label: string;
+  reason: string | null;
+};
 
 export type TodayView = {
   today: string;
@@ -2176,6 +2192,8 @@ export type TodayView = {
   drafts_in_review: TodayDraftInReview[];
   overdue_invoices: TodayInvoice[];
   deadlines_next_7d: TodayDeadline[];
+  // Optional so an older API (before this stream existed) still renders.
+  ip_coverage_actions?: TodayIpCoverageAction[];
   // Additive bounding metadata (response-shape extension, not a
   // breaking change). Optional on the client so a new web bundle
   // talking to an older API — or vice versa — degrades gracefully:
@@ -3937,6 +3955,34 @@ export async function listJudgeAliases(): Promise<JudgeAliasListResponse> {
 export type EmployeeEmploymentStatus = "invited" | "active" | "inactive" | "offboarding";
 export type EmployeeRole = "owner" | "admin" | "partner" | "member" | "paralegal" | "viewer";
 export type AssignableEmployeeRole = Exclude<EmployeeRole, "owner">;
+
+export type CompanyUserRecord = {
+  membership_id: string;
+  role: EmployeeRole;
+  membership_active: boolean;
+  user_id: string;
+  email: string;
+  full_name: string;
+  user_active: boolean;
+  created_at: string;
+};
+
+export type CompanyUsersResponse = {
+  company_id: string;
+  company_slug: string;
+  users: CompanyUserRecord[];
+};
+
+/**
+ * List the current tenant's memberships for ordinary authenticated workflows.
+ *
+ * This is intentionally distinct from the employee-administration directory:
+ * `/current/employees` requires `company:manage_users`, while person pickers
+ * are also used by partners and other non-manager roles.
+ */
+export async function listCompanyUsers(): Promise<CompanyUsersResponse> {
+  return apiRequest<CompanyUsersResponse>("/api/companies/current/users");
+}
 
 export type EmployeeRecord = {
   company_id: string;

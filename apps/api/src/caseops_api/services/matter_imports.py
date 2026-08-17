@@ -3087,12 +3087,11 @@ def commit_matter_import(
     )
     session.commit()
     job = _load_job(session, context=context, job_id=job.id)
+    response = _job_response(session, job)
     return MatterImportCommitResponse(
-        job=_job_response(session, job),
+        job=response,
         created_matter_ids=[
-            row.created_matter_id
-            for row in final_rows
-            if row.status == MatterImportRowStatus.CREATED and row.created_matter_id
+            row.created_matter_id for row in response.rows if row.created_matter_id
         ],
     )
 

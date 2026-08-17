@@ -123,10 +123,10 @@ def test_uj57_exc01_single_reassignment_refuses_a_replacement_without_access(
     assert unchanged["coverage_status"] == coverage["coverage_status"]
 
 
-def test_uj57_exc01_a_backup_without_access_is_refused_too(
+def test_uj57_exc01_backup_change_requires_handoff_before_access_assignment(
     client: TestClient,
 ) -> None:
-    """The backup owner is checked, not just the primary."""
+    """A backup cannot be replaced before the dedicated handoff workflow exists."""
 
     owner_headers, owner_id, insider_id, outsider_id, matter, _insider_headers = _setup(
         client
@@ -154,7 +154,7 @@ def test_uj57_exc01_a_backup_without_access_is_refused_too(
         },
     )
     assert blocked.status_code == 409, blocked.text
-    assert blocked.json()["code"] == "ip_coverage_replacement_lacks_access"
+    assert blocked.json()["code"] == "ip_coverage_backup_handoff_required"
 
 
 def test_uj57_exc02_ethical_wall_blocks_bulk_transfer_in_full(

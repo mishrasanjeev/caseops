@@ -77,7 +77,7 @@ def _mk_whatsapp_reminder(
     return r.id
 
 
-def test_sms_row_dispatches_through_twilio_when_enabled(
+def test_unlinked_sms_row_never_dispatches_through_twilio(
     client: TestClient,
 ) -> None:
     """CASEOPS_TWILIO_ENABLED + creds set → worker calls Twilio
@@ -117,15 +117,16 @@ def test_sms_row_dispatches_through_twilio_when_enabled(
             import httpx
             with patch.object(
                 httpx, "post", return_value=_FakeTwilioResponse(),
-            ):
+            ) as provider_post:
                 report = run_reminder_worker(session, mode="auto")
+                assert provider_post.call_count == 0
 
         assert report["sms_provider_configured"] is True
         with factory() as session:
             row = session.get(HearingReminder, sms_id)
-        assert row.status == HearingReminderStatus.SENT
-        assert row.provider == "twilio"
-        assert row.provider_message_id == "SMtest123"
+        assert row.status == HearingReminderStatus.QUEUED
+        assert row.provider_message_id is None
+        assert "Canonical notification intent linkage is missing" in (row.last_error or "")
     finally:
         for key in (
             "CASEOPS_HEARING_REMINDERS_ENABLED",
@@ -168,12 +169,12 @@ def test_sms_row_stays_queued_with_actionable_error_when_twilio_disabled(
             report = run_reminder_worker(session, mode="auto")
 
         assert report["sms_provider_configured"] is False
-        assert report["skipped_provider_disabled"] >= 1
+        assert report["missing_canonical_intent"] >= 1
 
         with factory() as session:
             row = session.get(HearingReminder, sms_id)
         assert row.status == HearingReminderStatus.QUEUED
-        assert "CASEOPS_TWILIO_ENABLED" in (row.last_error or "")
+        assert "Canonical notification intent linkage is missing" in (row.last_error or "")
     finally:
         for key in (
             "CASEOPS_HEARING_REMINDERS_ENABLED",
@@ -213,8 +214,7 @@ def test_whatsapp_row_stays_queued_pointing_at_meta_template_setup(
         with factory() as session:
             row = session.get(HearingReminder, wa_id)
         assert row.status == HearingReminderStatus.QUEUED
-        assert "CASEOPS_WHATSAPP_ENABLED" in (row.last_error or "")
-        assert "Meta template" in (row.last_error or "")
+        assert "Canonical notification intent linkage is missing" in (row.last_error or "")
     finally:
         for key in (
             "CASEOPS_HEARING_REMINDERS_ENABLED",
@@ -225,7 +225,7 @@ def test_whatsapp_row_stays_queued_pointing_at_meta_template_setup(
         get_settings.cache_clear()
 
 
-def test_sms_row_with_no_recipient_phone_fails_fast(
+def test_unlinked_sms_row_with_no_recipient_phone_never_dispatches(
     client: TestClient,
 ) -> None:
     """SMS row with NULL recipient_phone is FAILED and counted in
@@ -255,11 +255,11 @@ def test_sms_row_with_no_recipient_phone_fails_fast(
             )
             report = run_reminder_worker(session, mode="auto")
 
-        assert report["skipped_missing_phone"] >= 1
+        assert report["missing_canonical_intent"] >= 1
         with factory() as session:
             row = session.get(HearingReminder, sms_id)
-        assert row.status == HearingReminderStatus.FAILED
-        assert "no recipient phone" in (row.last_error or "")
+        assert row.status == HearingReminderStatus.QUEUED
+        assert "Canonical notification intent linkage is missing" in (row.last_error or "")
     finally:
         for key in (
             "CASEOPS_HEARING_REMINDERS_ENABLED",

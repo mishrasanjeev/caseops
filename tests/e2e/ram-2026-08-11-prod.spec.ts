@@ -468,7 +468,7 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       preview.getByRole("button", { name: "Apply access change" }),
     ).toBeVisible();
     await preview.getByRole("button", { name: "Apply access change" }).click();
-    await expect(workspace.getByText("v2")).toBeVisible();
+    await expect(workspace.getByText("v2", { exact: true })).toBeVisible();
 
     expect(
       (
@@ -498,7 +498,7 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       .click();
     await expect(preview).toContainText("Losses: 1");
     await preview.getByRole("button", { name: "Apply access change" }).click();
-    await expect(workspace.getByText("v3")).toBeVisible();
+    await expect(workspace.getByText("v3", { exact: true })).toBeVisible();
     await expect(workspace.getByText("Revoked")).toBeVisible();
     expect(
       (

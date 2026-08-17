@@ -194,7 +194,7 @@ test("IPLF-026B previews, grants, and revokes independent IP access at 360px", a
   await expect(preview).toContainText("this change never copies permissions");
   await expect(preview.getByRole("button", { name: "Apply access change" })).toBeVisible();
   await preview.getByRole("button", { name: "Apply access change" }).click();
-  await expect(workspace.getByText("v2")).toBeVisible();
+  await expect(workspace.getByText("v2", { exact: true })).toBeVisible();
 
   expect(
     (await memberApi.get(`${apiBaseUrl}/api/ip/dockets/${docketId}`, { headers: memberHeaders })).status(),
@@ -209,7 +209,7 @@ test("IPLF-026B previews, grants, and revokes independent IP access at 360px", a
     .click();
   await expect(preview).toContainText("Losses: 1");
   await preview.getByRole("button", { name: "Apply access change" }).click();
-  await expect(workspace.getByText("v3")).toBeVisible();
+  await expect(workspace.getByText("v3", { exact: true })).toBeVisible();
   await expect(workspace.getByText("Revoked")).toBeVisible();
   expect(
     (await memberApi.get(`${apiBaseUrl}/api/ip/dockets/${docketId}`, { headers: memberHeaders })).status(),

@@ -382,7 +382,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
   await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
   await expect(deadlineWorkspace.getByText("2026-08-18 Â· candidate Â· v1")).toBeVisible();
-  await deadlineWorkspace.getByLabel("Backup membership ID").fill(seeded.backupMembershipId);
+  await deadlineWorkspace.getByLabel("Backup").selectOption(seeded.backupMembershipId);
 
   for (const name of ["Calculate deadline proposal", "Confirm legal deadline"]) {
     const control = deadlineWorkspace.getByRole("button", { name });
@@ -405,14 +405,16 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   const confirmedDeadline = (await confirmedWorkspace.json()).deadlines.find(
     (row: { id: string }) => row.id === seeded.deadlineId,
   );
-  const operationalDone = await api.patch(
+  const operationalBypass = await api.patch(
     `${apiBaseUrl}/api/matters/${seeded.matterId}/deadlines/${confirmedDeadline.matter_deadline_id}`,
     {
       headers: { Authorization: `Bearer ${ownerToken}` },
       data: { status: "done" },
     },
   );
-  expect(operationalDone.status(), await operationalDone.text()).toBe(200);
+  const operationalBypassBody = await operationalBypass.json();
+  expect(operationalBypass.status(), JSON.stringify(operationalBypassBody)).toBe(409);
+  expect(operationalBypassBody.code).toBe("ip_deadline_workflow_required");
   await page.reload();
   await expect(page.getByTestId(`ip-legal-deadline-${seeded.deadlineId}`)).toContainText(
     "confirmed",

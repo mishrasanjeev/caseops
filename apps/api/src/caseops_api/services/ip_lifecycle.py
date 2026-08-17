@@ -5,11 +5,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    CalendarEventSync,
+    CalendarEventSyncStatus,
     CompanyMembership,
+    HearingReminder,
+    HearingReminderDeliveryIntent,
+    HearingReminderStatus,
+    IpDeadline,
     IpDeadlineCoverage,
     IpDeadlineIncident,
     IpDocketEvent,
@@ -17,11 +23,19 @@ from caseops_api.db.models import (
     IpIdentifier,
     IpProceeding,
     IpRelatedRightObligation,
+    IpResponsibilityAssignment,
     IpTitleInterest,
     Matter,
     MatterDeadline,
     MatterDeadlineStatus,
+    MatterHearing,
+    MatterHearingStatus,
+    MatterTask,
+    MatterTaskStatus,
+    NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
     TrademarkApplication,
+    UserCalendarConnection,
 )
 from caseops_api.schemas.ip_lifecycle import (
     IpChecklistItem,
@@ -32,9 +46,20 @@ from caseops_api.schemas.ip_lifecycle import (
     IpLifecycleTransitionRequest,
     IpProsecutionWorkspaceResponse,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.calendar_projection_safety import (
+    calendar_sync_upsert_claim_state,
+    materialize_expired_calendar_sync_upsert_claim,
+)
 from caseops_api.services.ip_records import assert_application_can_enter_filed_phase
-from caseops_api.services.matter_access import assert_ip_docket_access
+from caseops_api.services.matter_access import (
+    assert_ip_docket_access,
+    can_access,
+    can_access_ip_docket,
+)
 from caseops_api.services.session_context import SessionContext
 
 TERMINAL_IP_DOCKET_STATUSES = frozenset(
@@ -73,30 +98,75 @@ def _authorized_lifecycle_docket(
     context: SessionContext,
     docket_id: str,
     for_update: bool,
+    lock_matter_docket_family: bool = False,
 ) -> IpDocketRecord:
     statement = select(IpDocketRecord).where(
         IpDocketRecord.id == docket_id,
         IpDocketRecord.company_id == context.company.id,
     )
-    docket = session.scalar(statement)
-    if docket is not None and for_update and docket.matter_id:
+    discovered_parent = (
+        session.execute(
+            select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
+                IpDocketRecord.id == docket_id,
+                IpDocketRecord.company_id == context.company.id,
+            )
+        ).one_or_none()
+        if for_update
+        else None
+    )
+    docket = session.scalar(statement) if not for_update else None
+    locked_matter: Matter | None = None
+    if discovered_parent is not None and discovered_parent.matter_id:
         # Matter is the access/lifecycle parent. Lock it before the IP child
         # so Matter disposal and direct IP transitions share one lock order.
-        session.scalar(
+        locked_matter = session.scalar(
             select(Matter)
             .where(
-                Matter.id == docket.matter_id,
+                Matter.id == discovered_parent.matter_id,
                 Matter.company_id == context.company.id,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
-    if docket is not None and for_update:
-        docket = session.scalar(statement.with_for_update())
+        if locked_matter is None:
+            raise HTTPException(status_code=404, detail="IP docket record not found.")
+    if discovered_parent is not None:
+        if lock_matter_docket_family and discovered_parent.matter_id:
+            # A Matter deadline can serve more than one IP docket. Terminal
+            # lifecycle must stabilize every sibling before it decides whether
+            # that shared deadline is still operational elsewhere.
+            locked_dockets = list(
+                session.scalars(
+                    select(IpDocketRecord)
+                    .where(
+                        IpDocketRecord.company_id == context.company.id,
+                        IpDocketRecord.matter_id == discovered_parent.matter_id,
+                    )
+                    .order_by(IpDocketRecord.id)
+                    .with_for_update(of=IpDocketRecord)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            docket = next(
+                (candidate for candidate in locked_dockets if candidate.id == docket_id),
+                None,
+            )
+        else:
+            docket = session.scalar(
+                statement.with_for_update().execution_options(populate_existing=True)
+            )
     if docket is None or docket.archived_by_matter_disposal:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
+    if for_update:
+        assert discovered_parent is not None
+        if docket.matter_id != discovered_parent.matter_id:
+            raise HTTPException(
+                status_code=409,
+                detail="The IP docket parent changed; retry the operation.",
+            )
     assert_ip_docket_access(session, context=context, docket=docket)
     if docket.matter_id:
-        matter = session.scalar(
+        matter = locked_matter or session.scalar(
             select(Matter).where(
                 Matter.id == docket.matter_id,
                 Matter.company_id == context.company.id,
@@ -110,6 +180,129 @@ def _authorized_lifecycle_docket(
                 detail="The linked Matter is terminal; its dedicated lifecycle owns reopening.",
             )
     return docket
+
+
+def _fence_reopen_linked_matter_roles(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+) -> tuple[str | None, dict[str, str | None], dict[str, CompanyMembership]]:
+    """Fence inherited Matter roles before the Matter/docket lock family.
+
+    Terminal dockets are deliberately excluded from the normal live-IP
+    deactivation guard.  A controlled reopen must therefore prove that every
+    linked Matter role is still an active, authorized principal.  Discovering
+    the IDs first and locking them in sorted order preserves the canonical
+    Membership -> Matter -> docket lock order; the locked parent snapshot is
+    revalidated before the transition is allowed to proceed.
+    """
+
+    matter_id = session.scalar(
+        select(IpDocketRecord.matter_id).where(
+            IpDocketRecord.id == docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+    )
+    roles: dict[str, str | None] = {
+        "assignee": None,
+        "responsible_lawyer": None,
+    }
+    if matter_id is not None:
+        discovered = session.execute(
+            select(
+                Matter.assignee_membership_id,
+                Matter.responsible_lawyer_membership_id,
+            ).where(
+                Matter.id == matter_id,
+                Matter.company_id == context.company.id,
+            )
+        ).one_or_none()
+        if discovered is not None:
+            roles = {
+                "assignee": discovered.assignee_membership_id,
+                "responsible_lawyer": discovered.responsible_lawyer_membership_id,
+            }
+    locked_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=roles.values(),
+    )
+    return matter_id, roles, locked_memberships
+
+
+def _assert_reopen_linked_matter_roles(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    discovered_matter_id: str | None,
+    discovered_roles: dict[str, str | None],
+    locked_memberships: dict[str, CompanyMembership],
+) -> None:
+    if docket.matter_id != discovered_matter_id:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_docket_reopen_matter_roles_changed",
+                "message": "The linked Matter changed; reload before reopening.",
+            },
+        )
+    if docket.matter_id is None:
+        return
+
+    matter = session.get(Matter, docket.matter_id)
+    if matter is None:
+        raise HTTPException(status_code=404, detail="IP docket record not found.")
+    current_roles = {
+        "assignee": matter.assignee_membership_id,
+        "responsible_lawyer": matter.responsible_lawyer_membership_id,
+    }
+    if current_roles != discovered_roles:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_docket_reopen_matter_roles_changed",
+                "message": "The linked Matter roles changed; reload before reopening.",
+            },
+        )
+
+    for role, membership_id in current_roles.items():
+        if membership_id is None:
+            continue
+        membership = locked_memberships.get(membership_id)
+        if (
+            membership is None
+            or not membership.is_active
+            or membership.user is None
+            or not membership.user.is_active
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ip_docket_reopen_matter_role_unavailable",
+                    "role": role,
+                    "membership_id": membership_id,
+                },
+            )
+        member_context = SessionContext(
+            company=context.company,
+            membership=membership,
+            user=membership.user,
+        )
+        can_access_matter = can_access(session, context=member_context, matter=matter)
+        can_access_docket = can_access_ip_docket(
+            session, context=member_context, docket=docket
+        )
+        if not can_access_matter or not can_access_docket:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ip_docket_reopen_matter_role_inaccessible",
+                    "role": role,
+                    "membership_id": membership_id,
+                },
+            )
 
 
 def _active_membership(
@@ -670,6 +863,470 @@ def preview_ip_docket_lifecycle(
     )
 
 
+def _lock_live_legal_deadlines_for_lifecycle(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+) -> list[IpDeadline]:
+    """Lock live legal-deadline parents before operational projections.
+
+    Legal-deadline writers use Matter -> docket -> IpDeadline ->
+    MatterDeadline.  The lifecycle command already owns Matter/docket, so this
+    preserves that order and prevents a terminal transition from racing a
+    confirm, override, or completion command.
+    """
+
+    return list(
+        session.scalars(
+            select(IpDeadline)
+            .where(
+                IpDeadline.company_id == docket.company_id,
+                IpDeadline.docket_id == docket.id,
+                IpDeadline.state.in_(("confirmed", "overdue")),
+            )
+            .order_by(IpDeadline.id)
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+def _neutralize_live_legal_deadlines(
+    session: Session,
+    *,
+    legal_deadlines: list[IpDeadline],
+    now: datetime,
+) -> int:
+    """Close live responsibility evidence after projections are locked.
+
+    Reopening an IP docket must never reactivate a confirmed/overdue legal
+    deadline or an open-ended responsibility assignment.  The immutable rows
+    remain available as history; only their live interval is closed.
+    """
+
+    deadline_ids = {row.id for row in legal_deadlines}
+    assignments = (
+        list(
+            session.scalars(
+                select(IpResponsibilityAssignment)
+                .where(
+                    IpResponsibilityAssignment.deadline_id.in_(deadline_ids),
+                    IpResponsibilityAssignment.effective_until.is_(None),
+                )
+                .order_by(IpResponsibilityAssignment.id)
+                .with_for_update(of=IpResponsibilityAssignment)
+                .execution_options(populate_existing=True)
+            )
+        )
+        if deadline_ids
+        else []
+    )
+    for assignment in assignments:
+        assignment.effective_until = max(
+            now,
+            _as_utc(assignment.effective_from),
+        )
+        assignment.version += 1
+    for row in legal_deadlines:
+        row.state = "cancelled"
+        row.version += 1
+        row.updated_at = now
+    return len(assignments)
+
+
+def _remaining_operational_deadline_roles(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+    deadline_ids: set[str],
+) -> tuple[dict[str, set[str]], set[str]]:
+    """Return the stable sibling roles/references that survive this transition."""
+
+    if not deadline_ids:
+        return {}, set()
+    coverages = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .join(IpDocketRecord, IpDocketRecord.id == IpDeadlineCoverage.docket_id)
+            .where(
+                IpDeadlineCoverage.company_id == docket.company_id,
+                IpDeadlineCoverage.docket_id != docket.id,
+                IpDeadlineCoverage.matter_deadline_id.in_(deadline_ids),
+                IpDeadlineCoverage.coverage_status.notin_(
+                    ("inactive_lifecycle", "completed")
+                ),
+                IpDocketRecord.company_id == docket.company_id,
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update(of=IpDeadlineCoverage)
+            .execution_options(populate_existing=True)
+        )
+    )
+    roles: dict[str, set[str]] = {}
+    for coverage in coverages:
+        members = roles.setdefault(coverage.matter_deadline_id, set())
+        members.add(coverage.responsible_membership_id)
+        if coverage.backup_membership_id is not None:
+            members.add(coverage.backup_membership_id)
+        # Any create/delete/revival is asynchronous, so never certify a
+        # sibling projection as current before the worker confirms it.
+        coverage.calendar_projection_status = "pending"
+
+    obligations = list(
+        session.scalars(
+            select(IpRelatedRightObligation)
+            .join(IpDocketRecord, IpDocketRecord.id == IpRelatedRightObligation.docket_id)
+            .where(
+                IpRelatedRightObligation.company_id == docket.company_id,
+                IpRelatedRightObligation.docket_id != docket.id,
+                IpRelatedRightObligation.matter_deadline_id.in_(deadline_ids),
+                IpRelatedRightObligation.status.notin_(
+                    ("completed", "cancelled_lifecycle")
+                ),
+                IpDocketRecord.company_id == docket.company_id,
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
+            )
+            .order_by(IpRelatedRightObligation.id)
+            .with_for_update(of=IpRelatedRightObligation)
+            .execution_options(populate_existing=True)
+        )
+    )
+    remaining_reference_ids = set(roles)
+    remaining_reference_ids.update(
+        row.matter_deadline_id
+        for row in obligations
+        if row.matter_deadline_id is not None
+    )
+    return roles, remaining_reference_ids
+
+
+def _neutralize_direct_docket_work_and_projections(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+    event: IpDocketEvent,
+    lifecycle_version: int,
+    legal_deadline_ids: set[str],
+    calendar_deadline_ids: set[str],
+    remaining_deadline_roles: dict[str, set[str]],
+    surviving_deadline_ids: set[str],
+    now: datetime,
+) -> dict[str, int]:
+    """Make every direct operational child durable-terminal under one lock.
+
+    This helper runs for both a new terminal transition and the guarded reopen
+    of a legacy terminal docket.  It deliberately preserves completed/sent
+    history while neutralizing only work or outbound projections that could
+    become actionable again when the parent is reopened.
+    """
+
+    tasks = list(
+        session.scalars(
+            select(MatterTask)
+            .where(
+                MatterTask.company_id == docket.company_id,
+                MatterTask.ip_docket_id == docket.id,
+                MatterTask.status.notin_(
+                    (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
+                ),
+            )
+            .order_by(MatterTask.id)
+            .with_for_update(of=MatterTask)
+            .execution_options(populate_existing=True)
+        )
+    )
+    task_ids: set[str] = set()
+    for task in tasks:
+        task_ids.add(task.id)
+        task.status = MatterTaskStatus.CANCELLED
+        task.completed_at = task.completed_at or now
+        task.neutralized_by_ip_lifecycle_event_id = event.id
+        task.neutralized_by_ip_lifecycle_version = lifecycle_version
+        task.neutralized_at = now
+        task.updated_at = now
+
+    hearings = list(
+        session.scalars(
+            select(MatterHearing)
+            .where(
+                MatterHearing.company_id == docket.company_id,
+                MatterHearing.ip_docket_id == docket.id,
+                MatterHearing.status.in_(
+                    (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+                ),
+            )
+            .order_by(MatterHearing.id)
+            .with_for_update(of=MatterHearing)
+            .execution_options(populate_existing=True)
+        )
+    )
+    hearing_ids: set[str] = set()
+    for hearing in hearings:
+        hearing_ids.add(hearing.id)
+        hearing.status = MatterHearingStatus.CANCELLED
+        hearing.neutralized_by_ip_lifecycle_event_id = event.id
+        hearing.neutralized_by_ip_lifecycle_version = lifecycle_version
+        hearing.neutralized_at = now
+        hearing.updated_at = now
+
+    reminders = list(
+        session.scalars(
+            select(HearingReminder)
+            .where(
+                HearingReminder.company_id == docket.company_id,
+                HearingReminder.ip_docket_id == docket.id,
+                HearingReminder.status == HearingReminderStatus.QUEUED,
+            )
+            .order_by(HearingReminder.id)
+            .with_for_update(of=HearingReminder)
+            .execution_options(populate_existing=True)
+        )
+    )
+    reminder_ids = {row.id for row in reminders}
+    for reminder in reminders:
+        reminder.status = HearingReminderStatus.CANCELLED
+        reminder.neutralized_by_ip_lifecycle_event_id = event.id
+        reminder.neutralized_by_ip_lifecycle_version = lifecycle_version
+        reminder.neutralized_at = now
+        reminder.updated_at = now
+
+    linked_intent_ids = (
+        set(
+            session.scalars(
+                select(HearingReminderDeliveryIntent.intent_id).where(
+                    HearingReminderDeliveryIntent.hearing_reminder_id.in_(reminder_ids)
+                )
+            )
+        )
+        if reminder_ids
+        else set()
+    )
+    intent_targets = [NotificationDeliveryIntent.ip_docket_id == docket.id]
+    if legal_deadline_ids:
+        intent_targets.append(
+            and_(
+                NotificationDeliveryIntent.schedule_source_type == "ip_deadline",
+                NotificationDeliveryIntent.schedule_source_id.in_(legal_deadline_ids),
+            )
+        )
+    if linked_intent_ids:
+        intent_targets.append(NotificationDeliveryIntent.id.in_(linked_intent_ids))
+    intents = list(
+        session.scalars(
+            select(NotificationDeliveryIntent)
+            .where(
+                NotificationDeliveryIntent.company_id == docket.company_id,
+                NotificationDeliveryIntent.status.in_(
+                    (
+                        NotificationDeliveryStatus.QUEUED,
+                        NotificationDeliveryStatus.RETRY_SCHEDULED,
+                    )
+                ),
+                or_(*intent_targets),
+            )
+            .order_by(NotificationDeliveryIntent.id)
+            .with_for_update(of=NotificationDeliveryIntent)
+            .execution_options(populate_existing=True)
+        )
+    )
+    for intent in intents:
+        intent.status = NotificationDeliveryStatus.CANCELLED
+        intent.next_attempt_at = None
+        intent.last_error_redacted = "IP docket lifecycle became terminal before delivery."
+        intent.dead_letter_reason = "ip_docket_lifecycle_terminal"
+        if intent.ip_docket_id == docket.id:
+            intent.neutralized_by_ip_lifecycle_event_id = event.id
+            intent.neutralized_by_ip_lifecycle_version = lifecycle_version
+            intent.neutralized_at = now
+        intent.updated_at = now
+
+    source_pairs = {
+        *(("matter_task", row_id) for row_id in task_ids),
+        *(("matter_hearing", row_id) for row_id in hearing_ids),
+        *(("matter_deadline", row_id) for row_id in calendar_deadline_ids),
+    }
+    sync_targets = [
+        and_(
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+        for source_type, source_id in sorted(source_pairs)
+    ]
+    syncs = (
+        list(
+            session.scalars(
+                select(CalendarEventSync)
+                .where(
+                    CalendarEventSync.company_id == docket.company_id,
+                    or_(*sync_targets),
+                )
+                .order_by(CalendarEventSync.id)
+                .with_for_update(of=CalendarEventSync)
+                .execution_options(populate_existing=True)
+            )
+        )
+        if sync_targets
+        else []
+    )
+    connection_ids = {row.calendar_connection_id for row in syncs}
+    desired_membership_ids = {
+        membership_id
+        for membership_ids in remaining_deadline_roles.values()
+        for membership_id in membership_ids
+    }
+    discovered_desired_connections = (
+        list(
+            session.scalars(
+                select(UserCalendarConnection)
+                .where(
+                    UserCalendarConnection.company_id == docket.company_id,
+                    UserCalendarConnection.membership_id.in_(desired_membership_ids),
+                    UserCalendarConnection.status == "connected",
+                )
+                .order_by(UserCalendarConnection.id)
+            )
+        )
+        if desired_membership_ids
+        else []
+    )
+    connection_ids.update(row.id for row in discovered_desired_connections)
+    connections = (
+        list(
+            session.scalars(
+                select(UserCalendarConnection)
+                .where(UserCalendarConnection.id.in_(connection_ids))
+                .order_by(UserCalendarConnection.id)
+                .with_for_update(of=UserCalendarConnection)
+                .execution_options(populate_existing=True)
+            )
+        )
+        if connection_ids
+        else []
+    )
+    connections_by_id = {row.id: row for row in connections}
+    desired_connections = [
+        row
+        for row in connections
+        if row.status == "connected" and row.membership_id in desired_membership_ids
+    ]
+    existing_sync_keys = {
+        (row.calendar_connection_id, row.source_type, row.source_id) for row in syncs
+    }
+    blocked_unknown_sync_ids: list[str] = []
+    for sync in syncs:
+        connection = connections_by_id.get(sync.calendar_connection_id)
+        desired_for_source = remaining_deadline_roles.get(sync.source_id, set())
+        upsert_claim_state = calendar_sync_upsert_claim_state(sync, now=now)
+        if upsert_claim_state == "live":
+            # Provider I/O is still in flight. Preserve the exact claim marker
+            # and credential fence until its owner finalizes.
+            blocked_unknown_sync_ids.append(sync.id)
+            continue
+        if upsert_claim_state == "expired":
+            # Terminal cleanup cannot truthfully mark an unreceipted create as
+            # absent. Persist the shared typed reconciliation state under the
+            # existing parent -> Sync locks without contacting the provider.
+            materialize_expired_calendar_sync_upsert_claim(sync, now=now)
+            session.add(sync)
+            blocked_unknown_sync_ids.append(sync.id)
+            continue
+        if upsert_claim_state == "manual_reconciliation":
+            # Neither sibling preservation nor terminal withdrawal can claim
+            # that an unreceipted remote create is absent. Keep the durable
+            # reconciliation tombstone and its cleanup credential fence.
+            blocked_unknown_sync_ids.append(sync.id)
+            continue
+        if (
+            sync.source_type == "matter_deadline"
+            and connection is not None
+            and connection.status == "connected"
+            and connection.membership_id in desired_for_source
+        ):
+            if sync.sync_status in (
+                CalendarEventSyncStatus.DELETED,
+                CalendarEventSyncStatus.DELETE_PENDING,
+                CalendarEventSyncStatus.FAILED,
+                CalendarEventSyncStatus.DEAD_LETTER,
+            ):
+                sync.sync_status = CalendarEventSyncStatus.PENDING
+                sync.next_attempt_at = now
+                sync.dead_letter_reason = None
+                sync.last_error = None
+            sync.neutralized_by_ip_lifecycle_event_id = None
+            sync.neutralized_ip_docket_id = None
+            sync.neutralized_by_ip_lifecycle_version = None
+            sync.neutralized_at = None
+            sync.updated_at = now
+            continue
+        if (
+            sync.neutralized_by_ip_lifecycle_event_id is not None
+            and sync.sync_status
+            in (
+                CalendarEventSyncStatus.DELETE_PENDING,
+                CalendarEventSyncStatus.DELETED,
+            )
+        ):
+            # The first lifecycle transition remains the immutable reason this
+            # projection was withdrawn; a later controlled reopen must not
+            # rewrite that provenance.
+            continue
+        source_survives = (
+            sync.source_type == "matter_deadline"
+            and sync.source_id in surviving_deadline_ids
+        )
+        if sync.provider_event_id:
+            sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+            sync.next_attempt_at = now
+        else:
+            sync.sync_status = CalendarEventSyncStatus.DELETED
+            sync.next_attempt_at = None
+        sync.dead_letter_reason = "ip_docket_lifecycle_terminal"
+        sync.last_error = None
+        if not source_survives:
+            sync.neutralized_by_ip_lifecycle_event_id = event.id
+            sync.neutralized_ip_docket_id = docket.id
+            sync.neutralized_by_ip_lifecycle_version = lifecycle_version
+            sync.neutralized_at = now
+        sync.updated_at = now
+
+    created_syncs = 0
+    for source_id, desired_members in sorted(remaining_deadline_roles.items()):
+        for connection in desired_connections:
+            key = (connection.id, "matter_deadline", source_id)
+            if connection.membership_id not in desired_members or key in existing_sync_keys:
+                continue
+            session.add(
+                CalendarEventSync(
+                    company_id=docket.company_id,
+                    calendar_connection_id=connection.id,
+                    source_type="matter_deadline",
+                    source_id=source_id,
+                    sync_status=CalendarEventSyncStatus.PENDING,
+                    next_attempt_at=now,
+                    dead_letter_reason=None,
+                )
+            )
+            existing_sync_keys.add(key)
+            created_syncs += 1
+
+    return {
+        "cancelled_shared_tasks": len(tasks),
+        "cancelled_shared_hearings": len(hearings),
+        "cancelled_hearing_reminders": len(reminders),
+        "cancelled_notification_intents": len(intents),
+        "neutralized_calendar_syncs": sum(
+            row.neutralized_by_ip_lifecycle_event_id == event.id for row in syncs
+        ),
+        "queued_sibling_calendar_syncs": created_syncs,
+        "blocked_unknown_calendar_syncs": len(blocked_unknown_sync_ids),
+    }
+
+
 def transition_ip_docket_lifecycle(
     session: Session,
     *,
@@ -679,20 +1336,47 @@ def transition_ip_docket_lifecycle(
 ) -> tuple[IpDocketRecord, IpDocketEvent]:
     """Apply only the legal parent transition; IPLF-022B owns child-impact UI/routes."""
 
+    requested_terminal = payload.to_status in TERMINAL_IP_DOCKET_STATUSES
+    discovered_matter_id: str | None = None
+    discovered_matter_roles: dict[str, str | None] = {}
+    locked_matter_role_memberships: dict[str, CompanyMembership] = {}
+    if not requested_terminal:
+        (
+            discovered_matter_id,
+            discovered_matter_roles,
+            locked_matter_role_memberships,
+        ) = _fence_reopen_linked_matter_roles(
+            session,
+            context=context,
+            docket_id=docket_id,
+        )
     docket = _authorized_lifecycle_docket(
         session,
         context=context,
         docket_id=docket_id,
         for_update=True,
+        # Reopen must make the same sibling-preservation decision as close;
+        # otherwise a legacy terminal row can cancel a MatterDeadline that is
+        # still operational for another docket on the linked Matter.
+        lock_matter_docket_family=True,
     )
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
     was_terminal = docket.status in TERMINAL_IP_DOCKET_STATUSES
-    will_be_terminal = payload.to_status in TERMINAL_IP_DOCKET_STATUSES
+    will_be_terminal = requested_terminal
     if was_terminal == will_be_terminal:
         raise HTTPException(
             status_code=409,
             detail="Lifecycle transitions must cross the active/terminal boundary.",
+        )
+    if not will_be_terminal:
+        _assert_reopen_linked_matter_roles(
+            session,
+            context=context,
+            docket=docket,
+            discovered_matter_id=discovered_matter_id,
+            discovered_roles=discovered_matter_roles,
+            locked_memberships=locked_matter_role_memberships,
         )
     impacts = _lifecycle_impacts(session, docket=docket, payload=payload)
     blocker_codes = {row.blocker_code for row in impacts if row.blocker_code}
@@ -793,60 +1477,443 @@ def transition_ip_docket_lifecycle(
         session.add(event)
         session.flush()
 
+    # Every lifecycle event has a durable version identity. Docket-owned
+    # operational children use this tuple as their neutralization provenance,
+    # so persist it before acquiring or mutating any child row.
+    event.resulting_lifecycle_version = next_version
+    session.flush()
+
+    neutralized_at = datetime.now(UTC)
+    live_legal_deadlines = _lock_live_legal_deadlines_for_lifecycle(
+        session,
+        docket=docket,
+    )
+    legal_deadline_ids = {row.id for row in live_legal_deadlines}
+    legal_projection_deadline_ids = {
+        row.matter_deadline_id
+        for row in live_legal_deadlines
+        if row.matter_deadline_id is not None
+    }
     neutralized_coverages = 0
     neutralized_obligations = 0
     cancelled_deadlines = 0
+    lifecycle_deadline_ids: set[str] = set()
+    calendar_deadline_ids = set(legal_projection_deadline_ids)
+    remaining_deadline_roles: dict[str, set[str]] = {}
+    remaining_deadline_reference_ids: set[str] = set()
     if will_be_terminal:
-        coverages = list(
+        coverage_refs = session.execute(
+            select(IpDeadlineCoverage.id, IpDeadlineCoverage.matter_deadline_id).where(
+                IpDeadlineCoverage.company_id == docket.company_id,
+                IpDeadlineCoverage.docket_id == docket.id,
+                IpDeadlineCoverage.coverage_status.notin_(
+                    ("inactive_lifecycle", "completed")
+                ),
+            )
+        ).all()
+        obligation_refs = session.execute(
+            select(
+                IpRelatedRightObligation.id,
+                IpRelatedRightObligation.matter_deadline_id,
+            ).where(
+                IpRelatedRightObligation.company_id == docket.company_id,
+                IpRelatedRightObligation.docket_id == docket.id,
+                IpRelatedRightObligation.status.notin_(
+                    ("completed", "cancelled_lifecycle")
+                ),
+            )
+        ).all()
+        referenced_deadline_ids = {
+            deadline_id
+            for _row_id, deadline_id in [*coverage_refs, *obligation_refs]
+            if deadline_id is not None
+        }
+        referenced_deadline_ids.update(legal_projection_deadline_ids)
+        calendar_deadline_ids.update(referenced_deadline_ids)
+        directly_owned_deadline = and_(
+            MatterDeadline.ip_docket_id == docket.id,
+            MatterDeadline.matter_id.is_(None),
+            MatterDeadline.status.in_(
+                (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+            ),
+            MatterDeadline.neutralized_at.is_(None),
+        )
+        if docket.matter_id is not None:
+            deadline_target = or_(
+                directly_owned_deadline,
+                and_(
+                    MatterDeadline.id.in_(referenced_deadline_ids),
+                    MatterDeadline.matter_id == docket.matter_id,
+                    MatterDeadline.ip_docket_id.is_(None),
+                ),
+            )
+        else:
+            deadline_target = directly_owned_deadline
+        deadlines = list(
             session.scalars(
-                select(IpDeadlineCoverage).where(
-                    IpDeadlineCoverage.company_id == docket.company_id,
-                    IpDeadlineCoverage.docket_id == docket.id,
-                    IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
+                select(MatterDeadline)
+                .where(
+                    MatterDeadline.company_id == docket.company_id,
+                    deadline_target,
                 )
+                .order_by(MatterDeadline.id)
+                .with_for_update(of=MatterDeadline)
+                .execution_options(populate_existing=True)
             )
         )
+        locked_deadline_ids = {deadline.id for deadline in deadlines}
+        operational_sibling_docket_ids = (
+            set(
+                session.scalars(
+                    select(IpDocketRecord.id).where(
+                        IpDocketRecord.company_id == docket.company_id,
+                        IpDocketRecord.matter_id == docket.matter_id,
+                        IpDocketRecord.id != docket.id,
+                        IpDocketRecord.is_active.is_(True),
+                        IpDocketRecord.archived_by_matter_disposal.is_(False),
+                        IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
+                    )
+                ).all()
+            )
+            if docket.matter_id is not None
+            else set()
+        )
+
+        # Discover sibling child ids only after the whole Matter/docket family
+        # and candidate deadlines are locked. Coverage writers and obligation
+        # writers use the same parent-first order, so no operational sibling
+        # reference can appear or disappear around this decision.
+        sibling_coverage_refs = (
+            session.execute(
+                select(
+                    IpDeadlineCoverage.id,
+                    IpDeadlineCoverage.docket_id,
+                    IpDeadlineCoverage.matter_deadline_id,
+                ).where(
+                    IpDeadlineCoverage.company_id == docket.company_id,
+                    IpDeadlineCoverage.docket_id.in_(operational_sibling_docket_ids),
+                    IpDeadlineCoverage.matter_deadline_id.in_(locked_deadline_ids),
+                    IpDeadlineCoverage.coverage_status.notin_(
+                        ("inactive_lifecycle", "completed")
+                    ),
+                )
+            ).all()
+            if operational_sibling_docket_ids and locked_deadline_ids
+            else []
+        )
+        sibling_obligation_refs = (
+            session.execute(
+                select(
+                    IpRelatedRightObligation.id,
+                    IpRelatedRightObligation.docket_id,
+                    IpRelatedRightObligation.matter_deadline_id,
+                ).where(
+                    IpRelatedRightObligation.company_id == docket.company_id,
+                    IpRelatedRightObligation.docket_id.in_(
+                        operational_sibling_docket_ids
+                    ),
+                    IpRelatedRightObligation.matter_deadline_id.in_(
+                        locked_deadline_ids
+                    ),
+                    IpRelatedRightObligation.status.notin_(
+                        ("completed", "cancelled_lifecycle")
+                    ),
+                )
+            ).all()
+            if operational_sibling_docket_ids and locked_deadline_ids
+            else []
+        )
+
+        target_coverage_ids = {
+            row_id for row_id, _deadline_id in coverage_refs
+        }
+        sibling_coverage_ids = {
+            row_id for row_id, _docket_id, _deadline_id in sibling_coverage_refs
+        }
+        coverage_ids = target_coverage_ids | sibling_coverage_ids
+        locked_coverages = (
+            list(
+                session.scalars(
+                    select(IpDeadlineCoverage)
+                    .where(
+                        IpDeadlineCoverage.id.in_(coverage_ids),
+                        IpDeadlineCoverage.company_id == docket.company_id,
+                    )
+                    .order_by(IpDeadlineCoverage.id)
+                    .with_for_update(of=IpDeadlineCoverage)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            if coverage_ids
+            else []
+        )
+        coverages = [
+            coverage
+            for coverage in locked_coverages
+            if coverage.id in target_coverage_ids
+            and coverage.docket_id == docket.id
+            and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+        ]
+        sibling_coverage_deadline_ids = {
+            coverage.matter_deadline_id
+            for coverage in locked_coverages
+            if coverage.id in sibling_coverage_ids
+            and coverage.docket_id in operational_sibling_docket_ids
+            and coverage.matter_deadline_id in locked_deadline_ids
+            and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+        }
         for coverage in coverages:
             coverage.coverage_status = "inactive_lifecycle"
             coverage.calendar_projection_status = "inactive_lifecycle"
             coverage.updated_at = datetime.now(UTC)
         neutralized_coverages = len(coverages)
 
-        obligations = list(
-            session.scalars(
-                select(IpRelatedRightObligation).where(
-                    IpRelatedRightObligation.company_id == docket.company_id,
-                    IpRelatedRightObligation.docket_id == docket.id,
-                    IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
+        target_obligation_ids = {
+            row_id for row_id, _deadline_id in obligation_refs
+        }
+        sibling_obligation_ids = {
+            row_id for row_id, _docket_id, _deadline_id in sibling_obligation_refs
+        }
+        obligation_ids = target_obligation_ids | sibling_obligation_ids
+        locked_obligations = (
+            list(
+                session.scalars(
+                    select(IpRelatedRightObligation)
+                    .where(
+                        IpRelatedRightObligation.id.in_(obligation_ids),
+                        IpRelatedRightObligation.company_id == docket.company_id,
+                    )
+                    .order_by(IpRelatedRightObligation.id)
+                    .with_for_update(of=IpRelatedRightObligation)
+                    .execution_options(populate_existing=True)
                 )
             )
+            if obligation_ids
+            else []
         )
+        obligations = [
+            obligation
+            for obligation in locked_obligations
+            if obligation.id in target_obligation_ids
+            and obligation.docket_id == docket.id
+            and obligation.status not in ("completed", "cancelled_lifecycle")
+        ]
+        sibling_obligation_deadline_ids = {
+            obligation.matter_deadline_id
+            for obligation in locked_obligations
+            if obligation.id in sibling_obligation_ids
+            and obligation.docket_id in operational_sibling_docket_ids
+            and obligation.matter_deadline_id in locked_deadline_ids
+            and obligation.status not in ("completed", "cancelled_lifecycle")
+        }
         for obligation in obligations:
             obligation.status = "cancelled_lifecycle"
             obligation.updated_at = datetime.now(UTC)
         neutralized_obligations = len(obligations)
 
-        deadline_ids = {
-            row.matter_deadline_id
-            for row in [*coverages, *obligations]
-            if row.matter_deadline_id is not None
-        }
-        deadlines = (
-            list(
-                session.scalars(
-                    select(MatterDeadline).where(
-                        MatterDeadline.id.in_(deadline_ids),
-                        MatterDeadline.status == MatterDeadlineStatus.OPEN,
-                    )
-                )
-            )
-            if deadline_ids
-            else []
+        sibling_deadline_ids = (
+            sibling_coverage_deadline_ids | sibling_obligation_deadline_ids
         )
         for deadline in deadlines:
-            deadline.status = MatterDeadlineStatus.CANCELLED
-            deadline.updated_at = datetime.now(UTC)
-        cancelled_deadlines = len(deadlines)
+            is_directly_owned = deadline.ip_docket_id == docket.id and deadline.matter_id is None
+            if (
+                (is_directly_owned or deadline.id not in sibling_deadline_ids)
+                and deadline.status in (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                and deadline.neutralized_at is None
+                and (is_directly_owned or not deadline.cancelled_by_matter_disposal)
+            ):
+                deadline.status = MatterDeadlineStatus.CANCELLED
+                deadline.completed_at = deadline.completed_at or neutralized_at
+                deadline.updated_at = neutralized_at
+                if is_directly_owned:
+                    deadline.neutralized_by_ip_lifecycle_event_id = event.id
+                    deadline.neutralized_by_ip_lifecycle_version = next_version
+                    deadline.neutralized_at = neutralized_at
+                cancelled_deadlines += 1
+                lifecycle_deadline_ids.add(deadline.id)
+    elif was_terminal and not will_be_terminal:
+        # Upgrade-time repair may leave an old terminal docket with a direct
+        # operational child. Reopening must neutralize that child under the
+        # locked parent rather than make it visible again. Compliant shared-
+        # work writers lock the docket first, so this refresh is authoritative.
+        legacy_coverage_refs = session.execute(
+            select(
+                IpDeadlineCoverage.id,
+                IpDeadlineCoverage.matter_deadline_id,
+            ).where(
+                IpDeadlineCoverage.company_id == docket.company_id,
+                IpDeadlineCoverage.docket_id == docket.id,
+                IpDeadlineCoverage.coverage_status.notin_(
+                    ("inactive_lifecycle", "completed")
+                ),
+            )
+        ).all()
+        legacy_obligation_refs = session.execute(
+            select(
+                IpRelatedRightObligation.id,
+                IpRelatedRightObligation.matter_deadline_id,
+            ).where(
+                IpRelatedRightObligation.company_id == docket.company_id,
+                IpRelatedRightObligation.docket_id == docket.id,
+                IpRelatedRightObligation.status.notin_(
+                    ("completed", "cancelled_lifecycle")
+                ),
+            )
+        ).all()
+        calendar_deadline_ids.update(
+            deadline_id
+            for _row_id, deadline_id in [
+                *legacy_coverage_refs,
+                *legacy_obligation_refs,
+            ]
+            if deadline_id is not None
+        )
+        legacy_deadline_target = and_(
+            MatterDeadline.ip_docket_id == docket.id,
+            MatterDeadline.matter_id.is_(None),
+        )
+        if docket.matter_id is not None and calendar_deadline_ids:
+            legacy_deadline_target = or_(
+                legacy_deadline_target,
+                and_(
+                    MatterDeadline.id.in_(calendar_deadline_ids),
+                    MatterDeadline.matter_id == docket.matter_id,
+                    MatterDeadline.ip_docket_id.is_(None),
+                ),
+            )
+        legacy_deadlines = list(
+            session.scalars(
+                select(MatterDeadline)
+                .where(
+                    MatterDeadline.company_id == docket.company_id,
+                    legacy_deadline_target,
+                    MatterDeadline.status.in_(
+                        (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                    ),
+                    MatterDeadline.neutralized_at.is_(None),
+                )
+                .order_by(MatterDeadline.id)
+                .with_for_update(of=MatterDeadline)
+                .execution_options(populate_existing=True)
+            )
+        )
+        legacy_coverage_ids = {row_id for row_id, _deadline_id in legacy_coverage_refs}
+        legacy_coverages = (
+            list(
+                session.scalars(
+                    select(IpDeadlineCoverage)
+                    .where(
+                        IpDeadlineCoverage.id.in_(legacy_coverage_ids),
+                        IpDeadlineCoverage.company_id == docket.company_id,
+                    )
+                    .order_by(IpDeadlineCoverage.id)
+                    .with_for_update(of=IpDeadlineCoverage)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            if legacy_coverage_ids
+            else []
+        )
+        for coverage in legacy_coverages:
+            if (
+                coverage.docket_id == docket.id
+                and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+            ):
+                coverage.coverage_status = "inactive_lifecycle"
+                coverage.calendar_projection_status = "inactive_lifecycle"
+                coverage.updated_at = neutralized_at
+        neutralized_coverages = len(legacy_coverages)
+
+        legacy_obligation_ids = {
+            row_id for row_id, _deadline_id in legacy_obligation_refs
+        }
+        legacy_obligations = (
+            list(
+                session.scalars(
+                    select(IpRelatedRightObligation)
+                    .where(
+                        IpRelatedRightObligation.id.in_(legacy_obligation_ids),
+                        IpRelatedRightObligation.company_id == docket.company_id,
+                    )
+                    .order_by(IpRelatedRightObligation.id)
+                    .with_for_update(of=IpRelatedRightObligation)
+                    .execution_options(populate_existing=True)
+                )
+            )
+            if legacy_obligation_ids
+            else []
+        )
+        for obligation in legacy_obligations:
+            if (
+                obligation.docket_id == docket.id
+                and obligation.status not in ("completed", "cancelled_lifecycle")
+            ):
+                obligation.status = "cancelled_lifecycle"
+                obligation.updated_at = neutralized_at
+        neutralized_obligations = len(legacy_obligations)
+
+        (
+            remaining_deadline_roles,
+            remaining_deadline_reference_ids,
+        ) = _remaining_operational_deadline_roles(
+            session,
+            docket=docket,
+            deadline_ids=calendar_deadline_ids,
+        )
+        for deadline in legacy_deadlines:
+            is_directly_owned = (
+                deadline.ip_docket_id == docket.id and deadline.matter_id is None
+            )
+            if (
+                deadline.company_id == docket.company_id
+                and (
+                    is_directly_owned
+                    or (
+                        deadline.id in calendar_deadline_ids
+                        and deadline.matter_id == docket.matter_id
+                        and deadline.ip_docket_id is None
+                    )
+                )
+                and deadline.status in (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                and deadline.neutralized_at is None
+                and deadline.id not in remaining_deadline_reference_ids
+            ):
+                deadline.status = MatterDeadlineStatus.CANCELLED
+                deadline.completed_at = deadline.completed_at or neutralized_at
+                deadline.updated_at = neutralized_at
+                if is_directly_owned:
+                    deadline.neutralized_by_ip_lifecycle_event_id = event.id
+                    deadline.neutralized_by_ip_lifecycle_version = next_version
+                    deadline.neutralized_at = neutralized_at
+                cancelled_deadlines += 1
+                lifecycle_deadline_ids.add(deadline.id)
+
+    if will_be_terminal:
+        (
+            remaining_deadline_roles,
+            remaining_deadline_reference_ids,
+        ) = _remaining_operational_deadline_roles(
+            session,
+            docket=docket,
+            deadline_ids=calendar_deadline_ids,
+        )
+
+    neutralized_responsibility_assignments = _neutralize_live_legal_deadlines(
+        session,
+        legal_deadlines=live_legal_deadlines,
+        now=neutralized_at,
+    )
+    direct_work_counts = _neutralize_direct_docket_work_and_projections(
+        session,
+        docket=docket,
+        event=event,
+        lifecycle_version=next_version,
+        legal_deadline_ids=legal_deadline_ids,
+        calendar_deadline_ids=calendar_deadline_ids | lifecycle_deadline_ids,
+        remaining_deadline_roles=remaining_deadline_roles,
+        surviving_deadline_ids=remaining_deadline_reference_ids,
+        now=neutralized_at,
+    )
 
     docket.status = payload.to_status
     docket.is_active = not will_be_terminal
@@ -864,6 +1931,10 @@ def transition_ip_docket_lifecycle(
         "neutralized_coverages": neutralized_coverages,
         "neutralized_obligations": neutralized_obligations,
         "cancelled_shared_deadlines": cancelled_deadlines,
+        "neutralized_responsibility_assignments": (
+            neutralized_responsibility_assignments
+        ),
+        **direct_work_counts,
         "final_legal_disposition": will_be_terminal,
     }
     record_from_context(
@@ -884,6 +1955,10 @@ def transition_ip_docket_lifecycle(
             "neutralized_coverages": neutralized_coverages,
             "neutralized_obligations": neutralized_obligations,
             "cancelled_shared_deadlines": cancelled_deadlines,
+            "neutralized_responsibility_assignments": (
+                neutralized_responsibility_assignments
+            ),
+            **direct_work_counts,
         },
     )
     session.commit()

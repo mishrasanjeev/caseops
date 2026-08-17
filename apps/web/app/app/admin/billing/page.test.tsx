@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -122,5 +122,44 @@ describe("TenantBillingPage", () => {
     renderWithQuery(<TenantBillingPage />);
 
     expect(await screen.findByText("Billing access required")).toBeInTheDocument();
+  });
+
+  it("announces a structured loader without rendering false invoice or ledger empties", () => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => undefined));
+
+    renderWithQuery(<TenantBillingPage />);
+
+    const loading = screen.getByTestId("billing-page-loading");
+    expect(loading).toHaveAttribute("role", "status");
+    expect(loading).toHaveAttribute("aria-live", "polite");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(
+      within(loading).getByText("Loading plan, usage, invoices, and credits."),
+    ).toHaveClass("sr-only");
+    expect(loading.querySelectorAll(".animate-pulse").length).toBeGreaterThan(8);
+    expect(screen.queryByText("No SaaS invoices yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No credit activity yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows retryable invoice and ledger errors without rendering success empties", async () => {
+    const successfulFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (
+        url.includes("/api/billing/invoices") ||
+        url.includes("/api/billing/credit-ledger")
+      ) {
+        return Promise.reject(new Error("Billing history unavailable"));
+      }
+      return successfulFetch?.(input, init);
+    });
+
+    renderWithQuery(<TenantBillingPage />);
+
+    expect(await screen.findByText("Could not load invoices")).toBeVisible();
+    expect(screen.getByText("Could not load credit activity")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Try again" })).toHaveLength(2);
+    expect(screen.queryByText("No SaaS invoices yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No credit activity yet.")).not.toBeInTheDocument();
   });
 });
