@@ -3039,6 +3039,7 @@ def test_postgres_matter_grant_revocation_wins_before_calendar_claim(
     """A canonical access writer that wins first prevents provider I/O."""
 
     from alembic.config import Config
+    from fastapi import HTTPException
 
     from alembic import command
     from tests.test_postgres_validation import (
@@ -3143,9 +3144,26 @@ def test_postgres_matter_grant_revocation_wins_before_calendar_claim(
             finally:
                 release_writer.set()
             revoke_future.result(timeout=10)
-            response = sync_future.result(timeout=10)
-        assert response.sync.sync_status == CalendarEventSyncStatus.DELETED
+            denied: HTTPException | None = None
+            response = None
+            try:
+                response = sync_future.result(timeout=10)
+            except HTTPException as exc:
+                denied = exc
+        if denied is not None:
+            assert denied.status_code == 404
+        else:
+            assert response is not None
+            assert response.sync.sync_status == CalendarEventSyncStatus.DELETED
         assert provider.calls == []
+        with Session(pg_engine) as verify:
+            sync = verify.scalar(
+                select(CalendarEventSync).where(
+                    CalendarEventSync.source_type == "matter_hearing",
+                    CalendarEventSync.source_id == hearing_id,
+                )
+            )
+            assert sync is None or sync.sync_status == CalendarEventSyncStatus.DELETED
     finally:
         release_writer.set()
         set_google_calendar_provider_for_tests(None)

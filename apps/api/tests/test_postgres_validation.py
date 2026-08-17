@@ -182,7 +182,12 @@ def _seed_matter(session: Session, company_id: str) -> str:
     return matter_id
 
 
-def _seed_membership(session: Session, company_id: str) -> str:
+def _seed_membership(
+    session: Session,
+    company_id: str,
+    *,
+    role: str = "member",
+) -> str:
     user_id = str(uuid4())
     membership_id = str(uuid4())
     now = datetime.now(UTC)
@@ -202,12 +207,13 @@ def _seed_membership(session: Session, company_id: str) -> str:
         text(
             "INSERT INTO company_memberships "
             "(id, company_id, user_id, role, is_active, created_at) "
-            "VALUES (:id, :company, :user, 'member', true, :ts)"
+            "VALUES (:id, :company, :user, :role, true, :ts)"
         ),
         {
             "id": membership_id,
             "company": company_id,
             "user": user_id,
+            "role": role,
             "ts": now,
         },
     )
@@ -225,7 +231,7 @@ def _seed_ip_coverage_lifecycle_fixture(session: Session) -> dict[str, str]:
     )
 
     company_id = _seed_company(session)
-    owner_id = _seed_membership(session, company_id)
+    owner_id = _seed_membership(session, company_id, role="admin")
     replacement_id = _seed_membership(session, company_id)
     matter_id = _seed_matter(session, company_id)
     docket = IpDocketRecord(
@@ -315,6 +321,26 @@ def _wait_for_postgres_lock_wait(pg_engine, *, application_name: str) -> None:
         f"PostgreSQL worker {application_name!r} never waited on a lock; "
         f"last state was {last_state!r}"
     )
+
+
+def _truncate_postgres_application_tables(pg_engine) -> None:
+    """Give destructive migration probes an isolated, schema-only database.
+
+    The PostgreSQL validation module intentionally keeps ordinary test rows
+    between cases.  A downgrade probe is different: rows created by a newer
+    contract can make an older migration fail before the probe has installed
+    its own legacy fixture, leaving every later test on a partially downgraded
+    schema.  Clear application rows while retaining ``alembic_version`` so the
+    three downgrade/upgrade tests remain independent of collection order.
+    """
+
+    with pg_engine.begin() as connection:
+        # Tenant fixtures all descend from one of these roots.  Keep global
+        # catalog/configuration rows intact: several later migrations assume
+        # the canonical forum catalog populated by earlier revisions exists.
+        connection.execute(
+            text("TRUNCATE TABLE companies, users RESTART IDENTITY CASCADE")
+        )
 
 
 def _seed_notice(
@@ -1734,6 +1760,7 @@ def test_notification_convergence_backfills_boolean_on_postgres(
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
 
+    _truncate_postgres_application_tables(pg_engine)
     pg_engine.dispose()
     command.downgrade(config, "20260804_0003")
 
@@ -1846,6 +1873,7 @@ def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
 
+    _truncate_postgres_application_tables(pg_engine)
     company_id = str(uuid4())
     user_id = str(uuid4())
     membership_id = str(uuid4())
@@ -2673,6 +2701,7 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
     config = Config(str(project_root / "alembic.ini"))
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
+    _truncate_postgres_application_tables(pg_engine)
     with pg_engine.connect() as connection:
         installed_revision = connection.scalar(
             text("SELECT version_num FROM alembic_version")
@@ -4430,12 +4459,13 @@ def test_assignment_fence_waits_for_global_user_deactivation_on_postgres(
                 membership_id=actor_id,
             )
             try:
-                _lock_assignment_memberships_or_404(
-                    session,
-                    context,
-                    membership_ids={target_id},
-                    active_membership_ids={target_id},
-                )
+                    _lock_assignment_memberships_or_404(
+                        session,
+                        context,
+                        membership_ids={target_id},
+                        active_membership_ids={target_id},
+                        required_capability="ip:write",
+                    )
             except HTTPException as exc:
                 session.rollback()
                 return exc.status_code, exc.detail

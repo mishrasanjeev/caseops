@@ -38,6 +38,14 @@ class _NoDatabaseAccess:
     def scalar(self) -> NoReturn:
         self._fail("scalar")
 
+    @property
+    def execute(self) -> NoReturn:
+        self._fail("execute")
+
+    @property
+    def scalars(self) -> NoReturn:
+        self._fail("scalars")
+
 
 Writer = Callable[[_NoDatabaseAccess], object]
 
@@ -170,9 +178,9 @@ def test_runtime_setting_changes_do_not_leak_across_the_a0_fence(
     monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "true")
     get_settings.cache_clear()
     enabled_session = _NoDatabaseAccess()
-    with pytest.raises(_DatabaseAccessAttempted, match="scalar"):
+    with pytest.raises(_DatabaseAccessAttempted, match="execute"):
         writer(enabled_session)
-    assert enabled_session.accesses == ["scalar"]
+    assert enabled_session.accesses == ["execute"]
 
     monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "false")
     get_settings.cache_clear()
@@ -190,15 +198,18 @@ def test_calendar_version_writer_remains_outside_the_rule_ownership_drain(
     get_settings.cache_clear()
     session = _NoDatabaseAccess()
 
-    with pytest.raises(_DatabaseAccessAttempted, match="scalar"):
+    with pytest.raises(_DatabaseAccessAttempted, match="scalars"):
         ip_deadline_workflow.activate_calendar_version(
             session,
-            context=object(),
+            context=SimpleNamespace(
+                company=SimpleNamespace(id="company"),
+                membership=SimpleNamespace(id="membership"),
+            ),
             calendar_version_id="calendar-version",
             payload=object(),
         )
 
-    assert session.accesses == ["scalar"]
+    assert session.accesses == ["scalars"]
 
 
 @pytest.mark.parametrize(

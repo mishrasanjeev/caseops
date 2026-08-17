@@ -1076,12 +1076,16 @@ def test_ip_assignment_writers_take_membership_fence_before_parent_locks() -> No
         assert source.index(membership_fence) < source.index(parent_lock), writer.__name__
 
     for helper in (
-        ip_operations._docket_or_404,
+        ip_operations._lock_ip_writer_context,
         ip_operations._lock_assignment_memberships_or_404,
         shared_work._lock_shared_work_memberships,
         ip_deadline_workflow._lock_responsibility_memberships,
     ):
         assert "context.membership.id" in inspect.getsource(helper), helper.__name__
+    docket_source = inspect.getsource(ip_operations._docket_or_404)
+    assert docket_source.index("_lock_ip_writer_context") < docket_source.index(
+        "with_for_update"
+    )
 
 
 def test_reopened_ip_docket_history_rejects_every_shared_work_patch(
