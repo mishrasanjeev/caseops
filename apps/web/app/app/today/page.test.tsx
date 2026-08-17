@@ -162,7 +162,30 @@ describe("TodayPage smoke", () => {
     expect(within(card).getByText(/You hold this and have not acknowledged it/)).toBeVisible();
     expect(within(card).getByTestId("today-ip-action-cov-1")).toHaveAttribute(
       "href",
-      "/app/ip/docket",
+      "/app/ip/docket#coverage-acknowledgements",
+    );
+  });
+
+  it("routes a capped IP stream to the real decision and acknowledgement surfaces", async () => {
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue({
+      ...ipView([ipAction()]),
+      stream_limits: { ip_coverage_actions: 1 },
+      stream_counts: { ip_coverage_actions: 2 },
+      stream_truncated: { ip_coverage_actions: true },
+    } as unknown as endpoints.TodayView);
+    renderWithQuery(<TodayPage />);
+
+    const card = await screen.findByTestId("today-ip-coverage-actions");
+    const note = within(card).getByTestId("today-stream-truncated");
+    expect(note).toHaveTextContent("Showing the first 1");
+    expect(note).not.toHaveTextContent(/matter list views/i);
+    expect(within(note).getByRole("link", { name: "coverage decisions" })).toHaveAttribute(
+      "href",
+      "/app/ip#coverage-decisions",
+    );
+    expect(within(note).getByRole("link", { name: "acknowledgements" })).toHaveAttribute(
+      "href",
+      "/app/ip/docket#coverage-acknowledgements",
     );
   });
 

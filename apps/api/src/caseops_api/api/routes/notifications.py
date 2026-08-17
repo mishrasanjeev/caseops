@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -33,6 +33,10 @@ from caseops_api.db.models import (
     EmailSuppression,
     HearingReminder,
     HearingReminderDeliveryIntent,
+    IpDeadline,
+    IpDocketRecord,
+    Matter,
+    MatterHearing,
     NotificationDeliveryIntent,
 )
 from caseops_api.schemas.calendar import (
@@ -45,14 +49,24 @@ from caseops_api.schemas.notification_preferences import (
     NotificationPreferenceResponse,
     NotificationPreferenceUpdateRequest,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
 )
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
+from caseops_api.services.matter_access import can_access, can_access_ip_docket
+from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.notification_delivery import (
     apply_notification_provider_event,
     enqueue_notification_delivery_intent,
+    materialize_expired_notification_dispatch_claim,
+    notification_dispatch_claim_in_flight_detail,
+    notification_dispatch_claim_state,
+    notification_provider_reconciliation_detail,
     process_notification_delivery_intent,
 )
 from caseops_api.services.notification_preferences import (
@@ -66,6 +80,7 @@ from caseops_api.services.notification_rules import (
     list_notification_rules,
     update_notification_rule,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -224,6 +239,47 @@ def _intent_record(intent: NotificationDeliveryIntent) -> NotificationIntentReco
 
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _recovery_snapshot_value(value: object) -> object:
+    if isinstance(value, datetime):
+        return _aware(value).isoformat()
+    if isinstance(value, (date, time)):
+        return value.isoformat()
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return value
+
+
+def _recovery_row_tuple(row: object | None) -> tuple[tuple[str, object], ...] | None:
+    """Capture the exact persisted generation used by one recovery command."""
+
+    if row is None:
+        return None
+    return tuple(
+        (column.name, _recovery_snapshot_value(getattr(row, column.name)))
+        for column in row.__table__.columns
+    )
+
+
+def _recovery_target_ids(
+    *,
+    original: NotificationDeliveryIntent,
+    hearing: MatterHearing | None,
+    deadline: IpDeadline | None,
+) -> tuple[set[str], set[str]]:
+    """Return every direct or schedule-derived authority parent id."""
+
+    matter_ids = {value for value in (original.matter_id,) if value is not None}
+    docket_ids = {value for value in (original.ip_docket_id,) if value is not None}
+    if hearing is not None:
+        if hearing.matter_id is not None:
+            matter_ids.add(hearing.matter_id)
+        if hearing.ip_docket_id is not None:
+            docket_ids.add(hearing.ip_docket_id)
+    if deadline is not None:
+        docket_ids.add(deadline.docket_id)
+    return matter_ids, docket_ids
 
 
 def _admin_notification_response(
@@ -697,9 +753,11 @@ async def preview_notification_recovery(
     )
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intent not found.")
-    recoverable = str(intent.status) in {
-        "blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled",
-    }
+    recoverable = (
+        str(intent.status)
+        in {"blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled"}
+        and notification_dispatch_claim_state(intent) == "none"
+    )
     return NotificationRecoveryPreview(
         original_intent_id=intent.id,
         recoverable=recoverable,
@@ -724,16 +782,251 @@ async def recover_notification_intent(
     context: AdminContext,
     session: DbSession,
 ) -> NotificationTestResponse:
+    company_id = context.company.id
+    actor_membership_id = context.membership.id
+
+    # Advisory-only discovery comes first. No row lock is acquired until the
+    # complete recipient and authority graph is known, so the write phase can
+    # follow the one canonical Membership/User -> Matter -> docket -> schedule
+    # source -> Intent order.
+    advisory_original = session.scalar(
+        select(NotificationDeliveryIntent).where(
+            NotificationDeliveryIntent.id == intent_id,
+            NotificationDeliveryIntent.company_id == company_id,
+        )
+    )
+    if advisory_original is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intent not found.")
+    advisory_original_tuple = _recovery_row_tuple(advisory_original)
+    target_id = (
+        payload.replacement_membership_id
+        or advisory_original.recipient_membership_id
+    )
+    if not target_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Choose an active internal replacement destination for this recovery.",
+        )
+
+    schedule_type = advisory_original.schedule_source_type
+    schedule_id = advisory_original.schedule_source_id
+    advisory_hearing = (
+        session.scalar(
+            select(MatterHearing).where(
+                MatterHearing.id == schedule_id,
+                MatterHearing.company_id == company_id,
+            )
+        )
+        if schedule_type == "matter_hearing" and schedule_id
+        else None
+    )
+    advisory_deadline = (
+        session.scalar(
+            select(IpDeadline).where(
+                IpDeadline.id == schedule_id,
+                IpDeadline.company_id == company_id,
+            )
+        )
+        if schedule_type == "ip_deadline" and schedule_id
+        else None
+    )
+    advisory_hearing_tuple = _recovery_row_tuple(advisory_hearing)
+    advisory_deadline_tuple = _recovery_row_tuple(advisory_deadline)
+    matter_ids, docket_ids = _recovery_target_ids(
+        original=advisory_original,
+        hearing=advisory_hearing,
+        deadline=advisory_deadline,
+    )
+    advisory_dockets = (
+        list(
+            session.scalars(
+                select(IpDocketRecord)
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.id.in_(sorted(docket_ids)),
+                )
+                .order_by(IpDocketRecord.id)
+            ).all()
+        )
+        if docket_ids
+        else []
+    )
+    advisory_docket_tuples = {
+        row.id: _recovery_row_tuple(row) for row in advisory_dockets
+    }
+    matter_ids.update(
+        row.matter_id for row in advisory_dockets if row.matter_id is not None
+    )
+
+    locked_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=company_id,
+        membership_ids=(actor_membership_id, target_id),
+    )
+    locked_actor = locked_memberships.get(actor_membership_id)
+    if locked_actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active notification administrator membership is required.",
+        )
+    require_locked_membership_capability(
+        session,
+        locked_actor,
+        "notifications:manage",
+    )
+    context = SessionContext(
+        company=context.company,
+        membership=locked_actor,
+        user=locked_actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="destructive_action",
+    )
+    replacement = locked_memberships.get(target_id)
+    if (
+        replacement is None
+        or not replacement.is_active
+        or replacement.user is None
+        or not replacement.user.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "notification_recovery_destination_inactive",
+                "message": "Recovery destination is not an active workspace membership.",
+            },
+        )
+
+    locked_matters = (
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == company_id,
+                    Matter.id.in_(sorted(matter_ids)),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if matter_ids
+        else []
+    )
+    matter_by_id = {row.id: row for row in locked_matters}
+    locked_dockets = (
+        list(
+            session.scalars(
+                select(IpDocketRecord)
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.id.in_(sorted(docket_ids)),
+                )
+                .order_by(IpDocketRecord.id)
+                .with_for_update(of=IpDocketRecord)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if docket_ids
+        else []
+    )
+    docket_by_id = {row.id: row for row in locked_dockets}
+    locked_deadline = (
+        session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == schedule_id,
+                IpDeadline.company_id == company_id,
+            )
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        )
+        if schedule_type == "ip_deadline" and schedule_id
+        else None
+    )
+    locked_hearing = (
+        session.scalar(
+            select(MatterHearing)
+            .where(
+                MatterHearing.id == schedule_id,
+                MatterHearing.company_id == company_id,
+            )
+            .with_for_update(of=MatterHearing)
+            .execution_options(populate_existing=True)
+        )
+        if schedule_type == "matter_hearing" and schedule_id
+        else None
+    )
     original = session.scalar(
         select(NotificationDeliveryIntent)
         .where(
             NotificationDeliveryIntent.id == intent_id,
-            NotificationDeliveryIntent.company_id == context.company.id,
+            NotificationDeliveryIntent.company_id == company_id,
         )
         .with_for_update(of=NotificationDeliveryIntent)
+        .execution_options(populate_existing=True)
     )
     if original is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intent not found.")
+    parent_generation_changed = any(
+        (
+            _recovery_row_tuple(docket_by_id.get(docket_id))
+            != advisory_docket_tuples.get(docket_id)
+        )
+        for docket_id in docket_ids
+    )
+    schedule_generation_changed = bool(
+        _recovery_row_tuple(locked_hearing) != advisory_hearing_tuple
+        or _recovery_row_tuple(locked_deadline) != advisory_deadline_tuple
+    )
+    if (
+        _recovery_row_tuple(original) != advisory_original_tuple
+        or parent_generation_changed
+        or schedule_generation_changed
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "notification_recovery_state_changed",
+                "message": (
+                    "Notification recovery authority changed while the command was "
+                    "being fenced. Refresh the preview and retry."
+                ),
+            },
+        )
+    claim_state = notification_dispatch_claim_state(original)
+    if claim_state != "none":
+        if claim_state == "expired":
+            materialize_expired_notification_dispatch_claim(original)
+            session.add(original)
+            claim_state = notification_dispatch_claim_state(original)
+        record_from_context(
+            session,
+            context,
+            action="notification.delivery.recovery_denied",
+            target_type="notification_delivery_intent",
+            target_id=original.id,
+            result="denied",
+            metadata={
+                "reason": (
+                    "provider_dispatch_in_flight"
+                    if claim_state == "live"
+                    else "provider_outcome_unknown"
+                ),
+                "channel": str(original.channel),
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                notification_dispatch_claim_in_flight_detail()
+                if claim_state == "live"
+                else notification_provider_reconciliation_detail()
+            ),
+        )
     if str(original.status) not in {
         "blocked", "suppressed", "bounced", "dead_letter", "retry_scheduled",
     }:
@@ -744,23 +1037,102 @@ async def recover_notification_intent(
                 "are recoverable."
             ),
         )
-    target_id = payload.replacement_membership_id or original.recipient_membership_id
-    if not target_id:
+
+    # Resolve the exact authority target from both the immutable intent and its
+    # schedule source. Legacy IP reminders may have omitted the direct target;
+    # they are rebound here, while any conflicting target combination fails
+    # closed rather than becoming a targetless recovery.
+    current_matter_ids, current_docket_ids = _recovery_target_ids(
+        original=original,
+        hearing=locked_hearing,
+        deadline=locked_deadline,
+    )
+    if len(current_matter_ids) > 1 or len(current_docket_ids) > 1 or (
+        current_matter_ids and current_docket_ids
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Choose an active internal replacement destination for this recovery.",
+            detail={
+                "code": "notification_recovery_target_conflict",
+                "message": "Notification and schedule authority targets do not agree.",
+            },
         )
-    replacement = session.scalar(
-        select(CompanyMembership).where(
-            CompanyMembership.id == target_id,
-            CompanyMembership.company_id == context.company.id,
-            CompanyMembership.is_active.is_(True),
+    target_matter_id = next(iter(current_matter_ids), None)
+    target_docket_id = next(iter(current_docket_ids), None)
+    target_matter = (
+        matter_by_id.get(target_matter_id) if target_matter_id is not None else None
+    )
+    target_docket = (
+        docket_by_id.get(target_docket_id) if target_docket_id is not None else None
+    )
+    schedule_invalid = bool(
+        (schedule_type == "matter_hearing" and locked_hearing is None)
+        or (schedule_type == "ip_deadline" and locked_deadline is None)
+        or (
+            locked_hearing is not None
+            and str(locked_hearing.status) not in {"scheduled", "adjourned"}
+        )
+        or (
+            locked_deadline is not None
+            and str(locked_deadline.state) not in {"confirmed", "overdue"}
         )
     )
-    if replacement is None or replacement.user is None or not replacement.user.is_active:
+    replacement_context = SessionContext(
+        company=context.company,
+        membership=replacement,
+        user=replacement.user,
+    )
+    target_permitted = not schedule_invalid
+    if target_matter_id is not None:
+        target_permitted = bool(
+            target_permitted
+            and target_matter is not None
+            and matter_is_operational(target_matter)
+            and can_access(
+                session,
+                context=replacement_context,
+                matter=target_matter,
+            )
+        )
+    if target_docket_id is not None:
+        linked_matter = (
+            matter_by_id.get(target_docket.matter_id)
+            if target_docket is not None and target_docket.matter_id is not None
+            else None
+        )
+        target_permitted = bool(
+            target_permitted
+            and target_docket is not None
+            and target_docket.is_active
+            and not target_docket.archived_by_matter_disposal
+            and can_access_ip_docket(
+                session,
+                context=replacement_context,
+                docket=target_docket,
+            )
+            and (
+                target_docket.matter_id is None
+                or (
+                    linked_matter is not None
+                    and matter_is_operational(linked_matter)
+                    and can_access(
+                        session,
+                        context=replacement_context,
+                        matter=linked_matter,
+                    )
+                )
+            )
+        )
+    if not target_permitted:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Recovery destination is not an active workspace membership.",
+            detail={
+                "code": "notification_recovery_target_access_denied",
+                "message": (
+                    "Recovery destination no longer has access to the exact "
+                    "notification authority target."
+                ),
+            },
         )
     original_destination = str((original.recipient_snapshot_json or {}).get("destination") or "")
     if (
@@ -779,8 +1151,12 @@ async def recover_notification_intent(
         channel=str(original.channel),
         event_type=original.event_type,
         source_type="notification_recovery",
-        source_id=f"{original.id}:v{new_version}",
-        matter=original.matter,
+        # In-app notification source ids are UUID-width in PostgreSQL. The
+        # recovery source type plus destination_version already distinguish
+        # this immutable generation without appending an over-width suffix.
+        source_id=original.id,
+        matter=target_matter,
+        ip_docket=target_docket,
         notification_rule_id=original.notification_rule_id,
         title=original.title or "Recovered notification",
         body=original.body or "Open CaseOps to review this recovered notification.",
@@ -804,7 +1180,8 @@ async def recover_notification_intent(
         action="notification.delivery.recovered",
         target_type="notification_delivery_intent",
         target_id=recovered.id,
-        matter_id=original.matter_id,
+        matter_id=target_matter_id,
+        ip_docket_id=target_docket_id,
         metadata={
             "original_intent_id": original.id,
             "destination_version": new_version,

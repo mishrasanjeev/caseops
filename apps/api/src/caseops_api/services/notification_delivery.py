@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from typing import Literal
 from uuid import uuid4
 
 from sqlalchemy import or_, select
@@ -17,6 +19,7 @@ from caseops_api.db.models import (
     HearingReminder,
     HearingReminderDeliveryIntent,
     InAppNotification,
+    IpDeadline,
     IpDocketRecord,
     Matter,
     MatterPortalGrant,
@@ -26,12 +29,16 @@ from caseops_api.db.models import (
     NotificationDeliveryStatus,
     PortalUser,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.matter_access import can_access, can_access_ip_docket
 from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
     assert_operational_matter,
+    matter_is_operational,
 )
 from caseops_api.services.session_context import SessionContext
 from caseops_api.workflows.notification_intent_contracts import (
@@ -63,6 +70,25 @@ _SECRET_KEYS = {
     "webhooksignature",
 }
 _TOKEN_EDGE_PUNCTUATION = "\"'<>[]{}(),;"
+NOTIFICATION_DISPATCH_CLAIM_PREFIX = "dispatch_claim:"
+_NOTIFICATION_DISPATCH_CLAIM_PREFIX = NOTIFICATION_DISPATCH_CLAIM_PREFIX
+_NOTIFICATION_PROVIDER_LEASE = timedelta(minutes=5)
+NOTIFICATION_DISPATCH_CLAIM_IN_FLIGHT_CODE = "notification_dispatch_claim_in_flight"
+NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_REASONS = frozenset(
+    {
+        "dispatch_provider_outcome_unknown",
+        "dispatch_claim_expired_provider_outcome_unknown",
+    }
+)
+NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_CODE = (
+    "notification_provider_outcome_unknown_reconciliation_required"
+)
+NotificationDispatchClaimState = Literal[
+    "none",
+    "live",
+    "expired",
+    "manual_reconciliation",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,8 +103,90 @@ class NotificationDeliveryProcessResult:
     blocked: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _IpDeadlineDeliveryTarget:
+    declared: bool
+    deadline_id: str | None
+    docket_id: str | None
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def notification_intent_requires_provider_reconciliation(
+    intent: NotificationDeliveryIntent,
+) -> bool:
+    """Return whether a resend could duplicate an accepted provider dispatch."""
+
+    return notification_dispatch_claim_state(intent) in {
+        "expired",
+        "manual_reconciliation",
+    }
+
+
+def notification_dispatch_claim_state(
+    intent: NotificationDeliveryIntent,
+    *,
+    now: datetime | None = None,
+) -> NotificationDispatchClaimState:
+    """Classify an external dispatch claim without changing the intent.
+
+    A caller that acts on ``live`` or ``expired`` must hold the exact Intent
+    row lock. The mutation helper below is the only generic transition from an
+    expired raw claim to the canonical ambiguous-provider outcome.
+    """
+
+    if str(intent.dead_letter_reason or "") in NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_REASONS:
+        return "manual_reconciliation"
+    if not str(intent.provider_event_id or "").startswith(
+        _NOTIFICATION_DISPATCH_CLAIM_PREFIX
+    ):
+        return "none"
+    current_time = now or _now()
+    if intent.next_attempt_at is not None and _as_utc(intent.next_attempt_at) > current_time:
+        return "live"
+    return "expired"
+
+
+def materialize_expired_notification_dispatch_claim(
+    intent: NotificationDeliveryIntent,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Persist-ready UNKNOWN transition; caller holds exact Intent FOR UPDATE."""
+
+    current_time = now or _now()
+    if notification_dispatch_claim_state(intent, now=current_time) != "expired":
+        return False
+    intent.status = NotificationDeliveryStatus.DEAD_LETTER
+    intent.dead_letter_reason = "dispatch_claim_expired_provider_outcome_unknown"
+    intent.last_error_redacted = "Provider dispatch outcome is unknown."
+    intent.failed_at = current_time
+    intent.next_attempt_at = None
+    intent.dispatch_owner = "durable_intent"
+    intent.updated_at = current_time
+    return True
+
+
+def notification_provider_reconciliation_detail() -> dict[str, str]:
+    return {
+        "code": NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_CODE,
+        "message": (
+            "The notification provider may already have accepted this delivery. "
+            "Generic recovery is disabled until provider evidence proves absence."
+        ),
+    }
+
+
+def notification_dispatch_claim_in_flight_detail() -> dict[str, str]:
+    return {
+        "code": NOTIFICATION_DISPATCH_CLAIM_IN_FLIGHT_CODE,
+        "message": (
+            "The notification provider dispatch is still in flight. Wait for "
+            "its claim lease to finalize before taking an operator action."
+        ),
+    }
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -220,6 +328,9 @@ def _delivery_result(intent: NotificationDeliveryIntent) -> NotificationDelivery
             1
             if intent.channel != NotificationDeliveryChannel.IN_APP
             and intent.provider_event_id is not None
+            and not str(intent.provider_event_id).startswith(
+                _NOTIFICATION_DISPATCH_CLAIM_PREFIX
+            )
             else 0
         ),
         retry_scheduled=intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED,
@@ -285,6 +396,14 @@ def _terminal_statuses() -> set[str]:
     }
 
 
+def _notification_claim_is_live(
+    intent: NotificationDeliveryIntent,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    return notification_dispatch_claim_state(intent, now=now) == "live"
+
+
 def _recipient_email(intent: NotificationDeliveryIntent) -> str:
     if intent.recipient_membership is not None and intent.recipient_membership.user is not None:
         return str(intent.recipient_membership.user.email or "").strip().lower()
@@ -299,9 +418,29 @@ def _recipient_name(intent: NotificationDeliveryIntent) -> str:
     return str(snapshot.get("display_name") or "CaseOps user")
 
 
-def _recipient_still_permitted(session: Session, intent: NotificationDeliveryIntent) -> bool:
+def _recipient_still_permitted(
+    session: Session,
+    intent: NotificationDeliveryIntent,
+) -> bool:
+    membership = (
+        session.get(CompanyMembership, intent.recipient_membership_id)
+        if intent.recipient_membership_id is not None
+        else None
+    )
+    matter = session.get(Matter, intent.matter_id) if intent.matter_id is not None else None
+    ip_target = _intent_ip_deadline_target(session, intent=intent)
+    resolved_docket_id = ip_target.docket_id or intent.ip_docket_id
+    ip_docket = (
+        session.get(IpDocketRecord, resolved_docket_id)
+        if resolved_docket_id is not None
+        else None
+    )
+    linked_ip_matter = (
+        session.get(Matter, ip_docket.matter_id)
+        if ip_docket is not None and ip_docket.matter_id is not None
+        else None
+    )
     if intent.recipient_membership_id:
-        membership = intent.recipient_membership
         membership_active = bool(
             membership
             and membership.company_id == intent.company_id
@@ -311,20 +450,51 @@ def _recipient_still_permitted(session: Session, intent: NotificationDeliveryInt
         )
         if not membership_active or membership is None:
             return False
-        if intent.ip_docket_id is not None:
-            docket = session.get(IpDocketRecord, intent.ip_docket_id)
-            if docket is None or docket.company_id != intent.company_id:
+        company = session.get(Company, intent.company_id)
+        if company is None:
+            return False
+        recipient_context = SessionContext(
+            company=company,
+            user=membership.user,
+            membership=membership,
+        )
+        if intent.matter_id is not None:
+            if (
+                matter is None
+                or matter.id != intent.matter_id
+                or matter.company_id != intent.company_id
+                or not matter_is_operational(matter)
+                or not can_access(session, context=recipient_context, matter=matter)
+            ):
                 return False
-            recipient_context = SessionContext(
-                company=intent.company,
-                user=membership.user,
-                membership=membership,
-            )
-            return can_access_ip_docket(
-                session,
-                context=recipient_context,
-                docket=docket,
-            )
+        if ip_docket is not None:
+            if (
+                ip_docket.company_id != intent.company_id
+                or not ip_docket.is_active
+                or ip_docket.archived_by_matter_disposal
+                or not can_access_ip_docket(
+                    session,
+                    context=recipient_context,
+                    docket=ip_docket,
+                )
+            ):
+                return False
+            if ip_docket.matter_id is not None and (
+                linked_ip_matter is None
+                or linked_ip_matter.id != ip_docket.matter_id
+                or not matter_is_operational(linked_ip_matter)
+                or not can_access(
+                    session,
+                    context=recipient_context,
+                    matter=linked_ip_matter,
+                )
+            ):
+                return False
+            if intent.matter_id is not None and intent.matter_id != ip_docket.matter_id:
+                return False
+        elif intent.ip_docket_id is not None:
+            # The durable target disappeared between queueing and dispatch.
+            return False
         return True
     if intent.recipient_portal_user_id:
         portal_user = session.get(PortalUser, intent.recipient_portal_user_id)
@@ -337,7 +507,7 @@ def _recipient_still_permitted(session: Session, intent: NotificationDeliveryInt
         # IP portal grants are deliberately not part of the M2 internal-access
         # slice. A portal recipient linked to an IP docket therefore fails
         # closed until the existing portal-grant owner is generalized later.
-        if intent.ip_docket_id is not None:
+        if ip_docket is not None or intent.ip_docket_id is not None:
             return False
         if intent.matter_id is None:
             return True
@@ -347,6 +517,9 @@ def _recipient_still_permitted(session: Session, intent: NotificationDeliveryInt
                 MatterPortalGrant.matter_id == intent.matter_id,
             )
         ) is not None
+    if ip_docket is not None or intent.ip_docket_id is not None:
+        # Approved external destinations do not carry an internal IP grant.
+        return False
     snapshot = intent.recipient_snapshot_json or {}
     return bool(
         intent.recipient_external_ref
@@ -354,6 +527,43 @@ def _recipient_still_permitted(session: Session, intent: NotificationDeliveryInt
         and snapshot.get("approval_ref")
         and snapshot.get("destination")
     )
+
+
+def _intent_ip_deadline_target(
+    session: Session,
+    *,
+    intent: NotificationDeliveryIntent,
+) -> _IpDeadlineDeliveryTarget:
+    """Resolve legacy legal reminders that were queued as Matter-only work."""
+
+    declares_ip_deadline = bool(
+        intent.schedule_source_type == "ip_deadline"
+        or intent.source_type == "ip_deadline"
+    )
+    if not declares_ip_deadline:
+        return _IpDeadlineDeliveryTarget(
+            declared=False,
+            deadline_id=None,
+            docket_id=intent.ip_docket_id,
+        )
+    deadline_id = (
+        intent.schedule_source_id
+        if intent.schedule_source_type == "ip_deadline"
+        else intent.source_id.split(":", 1)[0]
+        if intent.source_type == "ip_deadline"
+        else None
+    )
+    if not deadline_id:
+        return _IpDeadlineDeliveryTarget(True, None, None)
+    row = session.execute(
+        select(IpDeadline.id, IpDeadline.docket_id).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == intent.company_id,
+        )
+    ).one_or_none()
+    if row is None:
+        return _IpDeadlineDeliveryTarget(True, deadline_id, None)
+    return _IpDeadlineDeliveryTarget(True, row.id, row.docket_id)
 
 
 def _recipient_context(
@@ -404,7 +614,11 @@ def enqueue_notification_delivery_intent(
     ]
     if sum(targets) != 1:
         raise ValueError("Exactly one notification recipient target is required.")
-    if recipient_membership is not None and recipient_membership.company_id != context.company.id:
+    if recipient_membership is not None and (
+        recipient_membership.company_id != context.company.id
+        or not recipient_membership.is_active
+        or not recipient_membership.user.is_active
+    ):
         return None
     if recipient_portal_user is not None and recipient_portal_user.company_id != context.company.id:
         return None
@@ -459,15 +673,33 @@ def enqueue_notification_delivery_intent(
         ):
             return None
         if recipient_membership is not None:
+            recipient_context = _recipient_context(
+                actor_context=context,
+                membership=recipient_membership,
+            )
             if not can_access_ip_docket(
                 session,
-                context=_recipient_context(
-                    actor_context=context,
-                    membership=recipient_membership,
-                ),
+                context=recipient_context,
                 docket=ip_docket,
             ):
                 return None
+            if ip_docket.matter_id is not None:
+                linked_matter = session.scalar(
+                    select(Matter).where(
+                        Matter.id == ip_docket.matter_id,
+                        Matter.company_id == context.company.id,
+                    )
+                )
+                if (
+                    linked_matter is None
+                    or not matter_is_operational(linked_matter)
+                    or not can_access(
+                        session,
+                        context=recipient_context,
+                        matter=linked_matter,
+                    )
+                ):
+                    return None
         elif recipient_portal_user is not None:
             # The later portal-owner slice must add an explicit target-aware
             # portal grant. Internal access and linked-Matter visibility never
@@ -776,7 +1008,12 @@ def _ensure_in_app_fallback(
     recipient = intent.recipient_membership
     if recipient is None and intent.escalation_membership_id:
         recipient = session.get(CompanyMembership, intent.escalation_membership_id)
-    if recipient is None:
+    if (
+        recipient is None
+        or not recipient.is_active
+        or recipient.user is None
+        or not recipient.user.is_active
+    ):
         return
     if context is None:
         company = session.get(Company, intent.company_id)
@@ -804,6 +1041,13 @@ def _ensure_in_app_fallback(
         notification_rule_id=intent.notification_rule_id,
         title=intent.title or "Delivery fallback",
         body=intent.body or "An external notification could not be delivered.",
+        scheduled_for=intent.scheduled_for,
+        critical=bool(intent.critical),
+        escalation_membership=recipient,
+        recovery_of_intent_id=intent.recovery_of_intent_id,
+        confidentiality_mode=intent.confidentiality_mode,
+        schedule_source_type=intent.schedule_source_type,
+        schedule_source_id=intent.schedule_source_id,
     )
     if fallback is None:
         return
@@ -850,46 +1094,140 @@ def process_notification_delivery_intent(
     )
     if intent is None:
         raise ValueError("Notification delivery intent not found.")
-    if intent.status in _terminal_statuses() or intent.status == NotificationDeliveryStatus.SENT:
+    if intent.status in _terminal_statuses():
+        return _delivery_result(intent)
+    if intent.status == NotificationDeliveryStatus.SENT and _notification_claim_is_live(intent):
+        return _delivery_result(intent)
+    if intent.status == NotificationDeliveryStatus.SENT and not str(
+        intent.provider_event_id or ""
+    ).startswith(_NOTIFICATION_DISPATCH_CLAIM_PREFIX):
         return _delivery_result(intent)
     if intent.scheduled_for is not None and _as_utc(intent.scheduled_for) > _now():
         return _delivery_result(intent)
 
-    # Serialize the final delivery decision with matter disposal.  The initial
-    # eager load is intentionally treated as advisory: another transaction may
-    # have disposed the matter (and blocked this intent) since it entered the
-    # identity map.  Lock parent first, then refresh+lock the intent, matching
-    # the lifecycle transition's lock order.
-    matter_disposed = False
-    if intent.matter_id is not None:
-        matter = session.get(Matter, intent.matter_id)
-        if matter is None:
-            matter_disposed = True
-        else:
-            try:
-                assert_operational_matter(
-                    session,
-                    matter=matter,
-                    lock_for_write=True,
+    # The first load is advisory. External dispatch fences the recipient before
+    # any parent/intent lock so employee deactivation and disclosure have one
+    # global order. Legacy IP-deadline reminders were queued as Matter-only
+    # intents; resolve their immutable legal deadline here so they receive the
+    # same IP reauthorization as newly docket-bound replacement intents.
+    ip_deadline_target = _intent_ip_deadline_target(session, intent=intent)
+    resolved_ip_docket_id = ip_deadline_target.docket_id
+    advisory_docket = (
+        session.scalar(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id == resolved_ip_docket_id,
+                IpDocketRecord.company_id == expected_company_id,
+            )
+        )
+        if resolved_ip_docket_id is not None
+        else None
+    )
+    delivery_membership_ids = {
+        membership_id
+        for membership_id in (
+            intent.recipient_membership_id,
+            intent.escalation_membership_id,
+        )
+        if membership_id is not None
+    }
+    if intent.channel != NotificationDeliveryChannel.IN_APP:
+        # External delivery is an irreversible disclosure boundary. Fence it
+        # with employee deactivation before any Matter/docket/intent lock.
+        locked_memberships = lock_company_memberships_for_assignment(
+            session,
+            company_id=expected_company_id,
+            membership_ids=delivery_membership_ids,
+        )
+        locked_users = {
+            membership.user_id: membership.user
+            for membership in locked_memberships.values()
+        }
+    else:
+        # Court-order writers deliver in-app notices synchronously while they
+        # already own the Matter lock. Taking Membership here would invert the
+        # global Membership -> Matter order. A fresh, unlocked read is enough:
+        # this path has no external side effect and an inactive user cannot
+        # authenticate to observe a concurrently-created internal row.
+        locked_memberships = {
+            row.id: row
+            for row in session.scalars(
+                select(CompanyMembership)
+                .options(joinedload(CompanyMembership.user))
+                .where(
+                    CompanyMembership.company_id == expected_company_id,
+                    CompanyMembership.id.in_(sorted(delivery_membership_ids)),
                 )
-            except MatterNotOperationalError:
-                matter_disposed = True
-
-    # Serialize the final IP authorization decision with access-policy changes.
-    # The access command locks this same parent before it revokes a grant or
-    # adds a wall. Taking the docket lock before the delivery-intent lock gives
-    # both paths one order: a delivery that already owns the parent may finish,
-    # while a committed revocation is observed before any later dispatch.
-    if intent.ip_docket_id is not None:
+                .order_by(CompanyMembership.id)
+                .execution_options(populate_existing=True)
+            ).all()
+        }
+        locked_users = {
+            membership.user_id: membership.user
+            for membership in locked_memberships.values()
+            if membership.user is not None
+        }
+    locked_matter_ids = sorted(
+        {
+            matter_id
+            for matter_id in (
+                intent.matter_id,
+                advisory_docket.matter_id if advisory_docket is not None else None,
+            )
+            if matter_id is not None
+        }
+    )
+    locked_matters = (
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == expected_company_id,
+                    Matter.id.in_(locked_matter_ids),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if locked_matter_ids
+        else []
+    )
+    matter_by_id = {row.id: row for row in locked_matters}
+    matter = matter_by_id.get(intent.matter_id) if intent.matter_id is not None else None
+    linked_ip_matter = (
+        matter_by_id.get(advisory_docket.matter_id)
+        if advisory_docket is not None and advisory_docket.matter_id is not None
+        else None
+    )
+    ip_docket = (
         session.scalar(
             select(IpDocketRecord)
             .where(
-                IpDocketRecord.id == intent.ip_docket_id,
+                IpDocketRecord.id == resolved_ip_docket_id,
                 IpDocketRecord.company_id == expected_company_id,
             )
             .with_for_update(of=IpDocketRecord)
             .execution_options(populate_existing=True)
         )
+        if resolved_ip_docket_id is not None
+        else None
+    )
+    locked_ip_deadline = (
+        session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == ip_deadline_target.deadline_id,
+                IpDeadline.company_id == expected_company_id,
+                IpDeadline.docket_id == resolved_ip_docket_id,
+            )
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        )
+        if ip_deadline_target.declared
+        and ip_deadline_target.deadline_id is not None
+        and resolved_ip_docket_id is not None
+        else None
+    )
 
     intent = session.scalar(
         select(NotificationDeliveryIntent)
@@ -902,7 +1240,89 @@ def process_notification_delivery_intent(
     )
     if intent is None:
         raise ValueError("Notification delivery intent not found.")
-    if intent.status in _terminal_statuses() or intent.status == NotificationDeliveryStatus.SENT:
+    if intent.status in _terminal_statuses():
+        return _delivery_result(intent)
+    if intent.status == NotificationDeliveryStatus.SENT and _notification_claim_is_live(intent):
+        return _delivery_result(intent)
+    if intent.status == NotificationDeliveryStatus.SENT and str(
+        intent.provider_event_id or ""
+    ).startswith(_NOTIFICATION_DISPATCH_CLAIM_PREFIX):
+        # SendGrid offers no idempotent-send key. After a worker disappears we
+        # cannot distinguish "provider accepted, response lost" from "never
+        # called"; retrying could disclose twice. Recover the expired lease to
+        # an auditable terminal state and require deliberate/manual repair.
+        materialize_expired_notification_dispatch_claim(intent)
+        session.add(intent)
+        _record_delivery_event(
+            session,
+            intent=intent,
+            event_type="delivery_claim_expired",
+            status_value=str(intent.status),
+            error=intent.last_error_redacted,
+            provider="sendgrid",
+        )
+        _ensure_in_app_fallback(session, intent=intent, context=context)
+        session.commit()
+        return _delivery_result(intent)
+    if intent.status == NotificationDeliveryStatus.SENT and not str(
+        intent.provider_event_id or ""
+    ).startswith(_NOTIFICATION_DISPATCH_CLAIM_PREFIX):
+        return _delivery_result(intent)
+    recipient_membership = (
+        locked_memberships.get(intent.recipient_membership_id)
+        if intent.recipient_membership_id is not None
+        else None
+    )
+    recipient_user = (
+        locked_users.get(recipient_membership.user_id)
+        if recipient_membership is not None
+        else None
+    )
+    ip_deadline_target_invalid = ip_deadline_target.declared and (
+        locked_ip_deadline is None
+        or str(locked_ip_deadline.state) not in {"confirmed", "overdue"}
+        or ip_docket is None
+        or locked_ip_deadline.docket_id != ip_docket.id
+        or (
+            intent.ip_docket_id is not None
+            and intent.ip_docket_id != ip_docket.id
+        )
+    )
+    if ip_deadline_target_invalid:
+        intent.status = NotificationDeliveryStatus.BLOCKED
+        intent.dead_letter_reason = "ip_deadline_target_inactive"
+        intent.last_error_redacted = "IP deadline target is missing or no longer operational."
+        intent.failed_at = _now()
+        intent.next_attempt_at = None
+        session.add(intent)
+        _record_delivery_event(
+            session,
+            intent=intent,
+            event_type="delivery_target_blocked",
+            status_value=str(intent.status),
+            error=intent.last_error_redacted,
+        )
+        session.flush()
+        return _delivery_result(intent)
+    matter_disposed = (
+        intent.matter_id is not None
+        and (matter is None or not matter_is_operational(matter))
+    ) or (
+        ip_docket is not None
+        and ip_docket.matter_id is not None
+        and (
+            linked_ip_matter is None
+            or not matter_is_operational(linked_ip_matter)
+        )
+    )
+    if matter_disposed:
+        intent.status = NotificationDeliveryStatus.BLOCKED
+        intent.dead_letter_reason = "matter_disposed"
+        intent.last_error_redacted = "Matter disposed before delivery."
+        intent.failed_at = _now()
+        intent.next_attempt_at = None
+        session.add(intent)
+        session.flush()
         return _delivery_result(intent)
     if not _recipient_still_permitted(session, intent):
         intent.status = NotificationDeliveryStatus.BLOCKED
@@ -918,16 +1338,6 @@ def process_notification_delivery_intent(
             status_value=str(intent.status),
             error=intent.last_error_redacted,
         )
-        session.flush()
-        _ensure_in_app_fallback(session, intent=intent, context=context)
-        return _delivery_result(intent)
-    if matter_disposed:
-        intent.status = NotificationDeliveryStatus.BLOCKED
-        intent.dead_letter_reason = "matter_disposed"
-        intent.last_error_redacted = "Matter disposed before delivery."
-        intent.failed_at = _now()
-        intent.next_attempt_at = None
-        session.add(intent)
         session.flush()
         return _delivery_result(intent)
     if (
@@ -964,7 +1374,25 @@ def process_notification_delivery_intent(
 
         from caseops_api.services.email_suppression import is_suppressed
 
-        recipient_email = _recipient_email(intent)
+        if intent.recipient_membership_id is not None and (
+            recipient_membership is None
+            or recipient_user is None
+            or not recipient_membership.is_active
+            or not recipient_user.is_active
+        ):
+            intent.status = NotificationDeliveryStatus.BLOCKED
+            intent.dead_letter_reason = "recipient_permission_revoked"
+            intent.last_error_redacted = "Recipient is inactive or no longer permitted."
+            intent.failed_at = _now()
+            intent.next_attempt_at = None
+            session.add(intent)
+            session.flush()
+            return _delivery_result(intent)
+        recipient_email = (
+            str(recipient_user.email or "").strip().lower()
+            if recipient_user is not None
+            else _recipient_email(intent)
+        )
         if not recipient_email:
             return record_notification_delivery_failure(
                 session,
@@ -997,18 +1425,102 @@ def process_notification_delivery_intent(
 
         from caseops_api.services.communications import _send_via_sendgrid
 
+        recipient_name = (
+            str(recipient_user.full_name or "CaseOps user")
+            if recipient_user is not None
+            else _recipient_name(intent)
+        )
+        claim_marker = f"{_NOTIFICATION_DISPATCH_CLAIM_PREFIX}{uuid4().hex}"
         intent.attempts += 1
+        intent.status = NotificationDeliveryStatus.SENT
+        intent.provider_event_id = claim_marker
+        intent.dispatch_owner = "provider_claim"
+        intent.next_attempt_at = _now() + _NOTIFICATION_PROVIDER_LEASE
+        intent.updated_at = _now()
+        intent.last_error_redacted = None
+        session.add(intent)
+        _record_delivery_event(
+            session,
+            intent=intent,
+            event_type="delivery_claimed",
+            status_value=str(intent.status),
+            provider="sendgrid",
+            metadata={"claim_lease_seconds": int(_NOTIFICATION_PROVIDER_LEASE.total_seconds())},
+        )
+        # This commit is the winner point against deactivation/access revoke.
+        # A writer that commits first blocks the claim; a claim that commits
+        # first is an authorized disclosure and cannot later be cancelled as
+        # merely queued work. No SQL transaction remains over SendGrid I/O.
+        session.commit()
         try:
             success, provider_event_id, error = _send_via_sendgrid(
                 to_email=recipient_email,
-                recipient_name=_recipient_name(intent),
+                recipient_name=recipient_name,
                 subject="CaseOps notification",
                 body_text="Open CaseOps to review this notification securely.",
-                custom_args={"notification_intent_id": intent.id},
+                custom_args={
+                    "notification_intent_id": intent.id,
+                },
             )
         except Exception as exc:  # noqa: BLE001 - provider/network boundary
             success, provider_event_id, error = False, None, str(exc)
+
+        intent = session.scalar(
+            select(NotificationDeliveryIntent)
+            .where(
+                NotificationDeliveryIntent.id == intent_id,
+                NotificationDeliveryIntent.company_id == expected_company_id,
+            )
+            .with_for_update(of=NotificationDeliveryIntent)
+            .execution_options(populate_existing=True)
+        )
+        if intent is None:
+            session.rollback()
+            raise ValueError("Notification delivery intent not found.")
+        if (
+            intent.status != NotificationDeliveryStatus.SENT
+            or intent.provider_event_id != claim_marker
+        ):
+            # A stale provider callback is audit evidence only. It must never
+            # resurrect a lifecycle/access-blocked or cancelled intent.
+            _record_delivery_event(
+                session,
+                intent=intent,
+                event_type="provider_callback_discarded",
+                status_value=str(intent.status),
+                error=error if not success else None,
+                provider="sendgrid",
+                provider_event_id=provider_event_id,
+                applied_to_state=False,
+            )
+            session.commit()
+            return _delivery_result(intent)
         if not success:
+            intent.provider_event_id = None
+            intent.dispatch_owner = "durable_intent"
+            intent.next_attempt_at = None
+            if _is_retryable_provider_error(error):
+                # A transport exception after dispatch has an ambiguous
+                # provider outcome: SendGrid may have accepted the message
+                # before the response was lost. Automatic retry would risk a
+                # duplicate disclosure, so require explicit reconciliation.
+                intent.status = NotificationDeliveryStatus.DEAD_LETTER
+                intent.dead_letter_reason = "dispatch_provider_outcome_unknown"
+                intent.last_error_redacted = "Notification provider outcome is unknown."
+                intent.failed_at = _now()
+                intent.updated_at = _now()
+                _record_delivery_event(
+                    session,
+                    intent=intent,
+                    event_type="provider_dispatch_outcome_unknown",
+                    status_value=str(intent.status),
+                    error=intent.last_error_redacted,
+                    provider="sendgrid",
+                )
+                session.add(intent)
+                _ensure_in_app_fallback(session, intent=intent, context=context)
+                session.commit()
+                return _delivery_result(intent)
             intent.attempts -= 1
             result = record_notification_delivery_failure(
                 session,
@@ -1018,9 +1530,11 @@ def process_notification_delivery_intent(
             )
             if result.dead_lettered:
                 _ensure_in_app_fallback(session, intent=intent, context=context)
+            session.commit()
             return result
         intent.status = NotificationDeliveryStatus.SENT
         intent.provider_event_id = provider_event_id
+        intent.dispatch_owner = "durable_intent"
         intent.next_attempt_at = None
         intent.updated_at = _now()
         intent.last_error_redacted = None
@@ -1032,7 +1546,7 @@ def process_notification_delivery_intent(
             provider="sendgrid",
             provider_event_id=provider_event_id,
         )
-        session.flush()
+        session.commit()
         return _delivery_result(intent)
     if intent.matter is not None and context is not None and intent.recipient_membership:
         recipient_context = _recipient_context(
@@ -1141,11 +1655,22 @@ def drain_notification_delivery_intents(
                 NotificationDeliveryIntent.company_id,
             )
             .where(
-                NotificationDeliveryIntent.status.in_(
+                or_(
+                    NotificationDeliveryIntent.status.in_(
+                        (
+                            NotificationDeliveryStatus.QUEUED,
+                            NotificationDeliveryStatus.RETRY_SCHEDULED,
+                        )
+                    ),
                     (
-                        NotificationDeliveryStatus.QUEUED,
-                        NotificationDeliveryStatus.RETRY_SCHEDULED,
+                        NotificationDeliveryIntent.status
+                        == NotificationDeliveryStatus.SENT
                     )
+                    & NotificationDeliveryIntent.provider_event_id.startswith(
+                        _NOTIFICATION_DISPATCH_CLAIM_PREFIX
+                    )
+                    & NotificationDeliveryIntent.next_attempt_at.is_not(None)
+                    & (NotificationDeliveryIntent.next_attempt_at <= now),
                 ),
                 or_(
                     NotificationDeliveryIntent.next_attempt_at.is_(None),
@@ -1193,31 +1718,47 @@ def cancel_pending_notification_intents(
     schedule_source_type: str,
     schedule_source_id: str,
     superseded_by_intent_id: str | None = None,
+    exclude_source_id_prefix: str | None = None,
+    cancellation_reason: str = "schedule_cancelled_or_superseded",
+    intent_ids: Iterable[str] | None = None,
 ) -> int:
     """Atomically cancel pending delivery children for a closed/superseded schedule."""
-    intents = list(
-        session.scalars(
-            select(NotificationDeliveryIntent)
-            .where(
-                NotificationDeliveryIntent.company_id == company_id,
-                NotificationDeliveryIntent.schedule_source_type == schedule_source_type,
-                NotificationDeliveryIntent.schedule_source_id == schedule_source_id,
-                NotificationDeliveryIntent.status.in_(
-                    (
-                        NotificationDeliveryStatus.QUEUED,
-                        NotificationDeliveryStatus.RETRY_SCHEDULED,
-                    )
-                ),
-            )
-            .with_for_update(of=NotificationDeliveryIntent)
+    statement = (
+        select(NotificationDeliveryIntent)
+        .where(
+            NotificationDeliveryIntent.company_id == company_id,
+            NotificationDeliveryIntent.schedule_source_type == schedule_source_type,
+            NotificationDeliveryIntent.schedule_source_id == schedule_source_id,
+            NotificationDeliveryIntent.status.in_(
+                (
+                    NotificationDeliveryStatus.QUEUED,
+                    NotificationDeliveryStatus.RETRY_SCHEDULED,
+                )
+            ),
         )
+        .order_by(NotificationDeliveryIntent.id)
+        .with_for_update(of=NotificationDeliveryIntent)
+    )
+    if exclude_source_id_prefix:
+        statement = statement.where(
+            ~NotificationDeliveryIntent.source_id.startswith(exclude_source_id_prefix)
+        )
+    selected_intent_ids = sorted(set(intent_ids or ()))
+    if intent_ids is not None:
+        if not selected_intent_ids:
+            return 0
+        statement = statement.where(
+            NotificationDeliveryIntent.id.in_(selected_intent_ids)
+        )
+    intents = list(
+        session.scalars(statement.execution_options(populate_existing=True))
     )
     now = _now()
     for intent in intents:
         intent.status = NotificationDeliveryStatus.CANCELLED
         intent.next_attempt_at = None
         intent.failed_at = now
-        intent.dead_letter_reason = "schedule_cancelled_or_superseded"
+        intent.dead_letter_reason = cancellation_reason[:160]
         intent.superseded_by_intent_id = superseded_by_intent_id
         intent.updated_at = now
         _record_delivery_event(
@@ -1285,10 +1826,19 @@ def _project_legacy_hearing_reminders(session: Session, *, intent_id: str) -> No
         reminder = session.get(HearingReminder, link.hearing_reminder_id)
         if reminder is None:
             continue
-        reminder.status = projection.get(str(intent.status), "failed")
+        permission_revoked = intent.dead_letter_reason == "recipient_permission_revoked"
+        reminder.status = (
+            "cancelled"
+            if permission_revoked
+            else projection.get(str(intent.status), "failed")
+        )
         reminder.provider = "sendgrid" if intent.provider_event_id else reminder.provider
         reminder.provider_message_id = intent.provider_event_id or reminder.provider_message_id
-        reminder.last_error = intent.last_error_redacted
+        reminder.last_error = (
+            "Recipient permission was removed before delivery."
+            if permission_revoked
+            else intent.last_error_redacted
+        )
         reminder.sent_at = reminder.sent_at or (
             intent.updated_at if intent.status == NotificationDeliveryStatus.SENT else None
         )
@@ -1296,6 +1846,161 @@ def _project_legacy_hearing_reminders(session: Session, *, intent_id: str) -> No
         reminder.attempts = intent.attempts
         reminder.updated_at = _now()
         session.add(reminder)
+
+
+def project_linked_hearing_reminder_intent(
+    session: Session,
+    *,
+    intent_id: str,
+) -> None:
+    """Refresh the legacy reminder projection without provider I/O."""
+
+    _project_legacy_hearing_reminders(session, intent_id=intent_id)
+
+
+def cancel_linked_hearing_reminder_intent_for_inactive_recipient(
+    session: Session,
+    *,
+    intent_id: str,
+) -> bool:
+    """Cancel an undispatched linked intent after recipient deactivation.
+
+    This state-only compatibility fence takes Membership/User before Intent,
+    performs no provider I/O, and deliberately leaves a committed dispatch
+    claim or provider-final state untouched.
+    """
+
+    advisory = session.get(NotificationDeliveryIntent, intent_id)
+    if advisory is None or advisory.recipient_membership_id is None:
+        return False
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=advisory.company_id,
+        membership_ids=(advisory.recipient_membership_id,),
+    )
+    recipient = memberships.get(advisory.recipient_membership_id)
+    recipient_user = recipient.user if recipient is not None else None
+    if (
+        recipient is not None
+        and recipient_user is not None
+        and recipient.is_active
+        and recipient_user.is_active
+    ):
+        return False
+    intent = session.scalar(
+        select(NotificationDeliveryIntent)
+        .where(
+            NotificationDeliveryIntent.id == intent_id,
+            NotificationDeliveryIntent.company_id == advisory.company_id,
+        )
+        .with_for_update(of=NotificationDeliveryIntent)
+        .execution_options(populate_existing=True)
+    )
+    if intent is None or intent.status not in {
+        NotificationDeliveryStatus.QUEUED,
+        NotificationDeliveryStatus.RETRY_SCHEDULED,
+        NotificationDeliveryStatus.BLOCKED,
+    }:
+        return False
+    now = _now()
+    intent.status = NotificationDeliveryStatus.CANCELLED
+    intent.dead_letter_reason = "recipient_permission_revoked"
+    intent.last_error_redacted = "Recipient permission was removed before delivery."
+    intent.failed_at = now
+    intent.next_attempt_at = None
+    intent.updated_at = now
+    session.add(intent)
+    _record_delivery_event(
+        session,
+        intent=intent,
+        event_type="delivery_permission_cancelled",
+        status_value=str(intent.status),
+        error=intent.last_error_redacted,
+    )
+    _project_legacy_hearing_reminders(session, intent_id=intent.id)
+    return True
+
+
+def _lock_notification_provider_event_intent(
+    session: Session,
+    *,
+    advisory_intent: NotificationDeliveryIntent,
+) -> NotificationDeliveryIntent | None:
+    """Lock lifecycle parents, then refresh the exact webhook intent.
+
+    This path deliberately takes no Membership/User lock. Employee and access
+    writers use Membership -> parent -> Intent; taking Membership after a
+    parent here would add the reverse edge. The final Intent lock serializes
+    provider webhooks with those writers and operator actions.
+    """
+
+    company_id = advisory_intent.company_id
+    intent_id = advisory_intent.id
+    ip_target = _intent_ip_deadline_target(session, intent=advisory_intent)
+    docket_id = ip_target.docket_id or advisory_intent.ip_docket_id
+    advisory_docket = (
+        session.scalar(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id == docket_id,
+                IpDocketRecord.company_id == company_id,
+            )
+        )
+        if docket_id is not None
+        else None
+    )
+    matter_ids = sorted(
+        {
+            value
+            for value in (
+                advisory_intent.matter_id,
+                advisory_docket.matter_id if advisory_docket is not None else None,
+            )
+            if value is not None
+        }
+    )
+    if matter_ids:
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == company_id,
+                    Matter.id.in_(matter_ids),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+    if docket_id is not None:
+        session.scalar(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.id == docket_id,
+                IpDocketRecord.company_id == company_id,
+            )
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        )
+    if ip_target.deadline_id is not None and docket_id is not None:
+        session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == ip_target.deadline_id,
+                IpDeadline.company_id == company_id,
+                IpDeadline.docket_id == docket_id,
+            )
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        )
+    return session.scalar(
+        select(NotificationDeliveryIntent)
+        .where(
+            NotificationDeliveryIntent.id == intent_id,
+            NotificationDeliveryIntent.company_id == company_id,
+        )
+        .with_for_update(of=NotificationDeliveryIntent)
+        .execution_options(populate_existing=True)
+    )
 
 
 def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
@@ -1311,6 +2016,12 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
             .where(NotificationDeliveryIntent.provider_event_id.like(f"{prefix}%"))
             .limit(1)
         )
+    if intent is None:
+        return False
+    intent = _lock_notification_provider_event_intent(
+        session,
+        advisory_intent=intent,
+    )
     if intent is None:
         return False
     if provider_message_id and intent.provider_event_id:
@@ -1350,6 +2061,26 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
     if duplicate is not None:
         return True
     error = event.get("reason") or event.get("response")
+    if notification_dispatch_claim_state(intent) != "none":
+        # A raw or typed ambiguous dispatch has no trustworthy provider receipt
+        # to correlate. Preserve it for explicit reconciliation; webhook state
+        # is durable evidence only and can never resurrect or close the intent.
+        _record_delivery_event(
+            session,
+            intent=intent,
+            event_type=f"provider_{event_type}",
+            status_value=str(intent.status),
+            error=str(error) if error else None,
+            provider="sendgrid",
+            provider_event_id=provider_event_key,
+            metadata={"provider_message_ref": redact_identifier(provider_message_id)},
+            idempotency_key=event_idempotency_key,
+            applied_to_state=False,
+        )
+        intent.updated_at = _now()
+        session.add(intent)
+        session.flush()
+        return True
     applied_to_state = False
     current_status = str(intent.status)
     current_state_at = (
@@ -1359,19 +2090,14 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
     )
     chronological = current_state_at is None or when >= current_state_at
     if event_type == "delivered":
-        if chronological and current_status not in {
-            NotificationDeliveryStatus.BOUNCED,
-            NotificationDeliveryStatus.SUPPRESSED,
-            NotificationDeliveryStatus.DEAD_LETTER,
-            NotificationDeliveryStatus.CANCELLED,
-        }:
+        if chronological and current_status not in _terminal_statuses():
             intent.status = NotificationDeliveryStatus.DELIVERED
             intent.delivered_at = when
             intent.failed_at = None
             intent.last_error_redacted = None
             applied_to_state = True
     elif event_type in {"bounce", "dropped", "blocked", "spamreport"}:
-        if current_status != NotificationDeliveryStatus.CANCELLED:
+        if current_status not in _terminal_statuses():
             intent.status = (
                 NotificationDeliveryStatus.BOUNCED
                 if event_type == "bounce"
@@ -1423,10 +2149,7 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
                 source_message_id=provider_message_id or intent.provider_event_id,
             )
             intent.suppression_reason = f"email_{suppression.reason}"
-            if current_status not in {
-                NotificationDeliveryStatus.DELIVERED,
-                NotificationDeliveryStatus.CANCELLED,
-            }:
+            if current_status not in _terminal_statuses():
                 intent.status = NotificationDeliveryStatus.SUPPRESSED
                 intent.failed_at = when
                 intent.next_attempt_at = None
@@ -1438,15 +2161,10 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
             intent.status = NotificationDeliveryStatus.SENT
             applied_to_state = True
     elif event_type == "deferred":
-        if chronological and current_status in {
-            NotificationDeliveryStatus.QUEUED,
-            NotificationDeliveryStatus.SENT,
-            NotificationDeliveryStatus.RETRY_SCHEDULED,
-        }:
-            intent.status = NotificationDeliveryStatus.RETRY_SCHEDULED
-            intent.next_attempt_at = _now() + retry_delay_for_attempt(max(intent.attempts, 1))
-            intent.last_error_redacted = redact_provider_error(error or "provider deferred")
-            applied_to_state = True
+        # SendGrid has accepted the message and continues retrying delivery.
+        # Treat deferral as provider-state evidence only; application replay
+        # would submit a duplicate external message.
+        pass
     if applied_to_state:
         intent.provider_state_occurred_at = when
     _record_delivery_event(
@@ -1469,16 +2187,27 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
 
 
 __all__ = [
+    "NOTIFICATION_DISPATCH_CLAIM_IN_FLIGHT_CODE",
+    "NOTIFICATION_DISPATCH_CLAIM_PREFIX",
+    "NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_CODE",
+    "NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_REASONS",
     "NotificationDeliveryProcessResult",
     "enqueue_notification_delivery_intent",
     "apply_notification_provider_event",
+    "cancel_linked_hearing_reminder_intent_for_inactive_recipient",
     "cancel_pending_notification_intents",
     "drain_notification_delivery_intents",
     "notification_delivery_idempotency_key",
+    "notification_dispatch_claim_in_flight_detail",
+    "notification_dispatch_claim_state",
+    "notification_intent_requires_provider_reconciliation",
+    "notification_provider_reconciliation_detail",
     "link_hearing_reminder_intent",
+    "project_linked_hearing_reminder_intent",
     "process_notification_delivery_intent",
     "process_notification_delivery_intent_by_id",
     "record_notification_delivery_failure",
     "redact_provider_error",
     "retry_delay_for_attempt",
+    "materialize_expired_notification_dispatch_claim",
 ]

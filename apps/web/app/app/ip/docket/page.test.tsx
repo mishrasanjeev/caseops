@@ -119,6 +119,7 @@ const REVIEW = {
 
 describe("IpDailyDocketPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/ip/docket");
     fetchIpDailyDocketMock.mockReset();
     fetchIpAssignedCoverageMock.mockReset();
     fetchIpDocketQueuesMock.mockReset();
@@ -236,6 +237,66 @@ describe("IpDailyDocketPage", () => {
     expect(screen.queryByText(/Nothing is escalating/)).not.toBeInTheDocument();
     expect(screen.queryByText(/acknowledged every deadline/)).not.toBeInTheDocument();
     expect(screen.queryByText(/No saved queues yet/)).not.toBeInTheDocument();
+  });
+
+  it("lands a narrow-screen acknowledgement link on the actionable card", async () => {
+    const originalWidth = window.innerWidth;
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(
+      null,
+      "",
+      "/app/ip/docket#coverage-acknowledgements",
+    );
+    fetchIpAssignedCoverageMock.mockResolvedValue({
+      coverages: [
+        {
+          coverage_id: "cov-mobile",
+          docket_id: "ip-mobile",
+          docket_title: "MOBILE MARK",
+          docket_identifier: "TM 500",
+          deadline_title: "Reply deadline",
+          due_on: "2026-08-20",
+          days_until_due: 4,
+          critical: true,
+          acknowledged: false,
+          coverage_status: "accepted",
+          transfer_pending: false,
+          reassignment_version: 2,
+        },
+      ],
+    });
+
+    try {
+      window.dispatchEvent(new Event("resize"));
+      render(withClient(<IpDailyDocketPage />));
+
+      const card = await screen.findByTestId("ip-docket-acknowledge");
+      expect(card).toHaveAttribute("id", "coverage-acknowledgements");
+      expect(card).toHaveClass("min-w-0", "scroll-mt-6");
+      expect(await within(card).findByText("MOBILE MARK")).toBeVisible();
+      const checkbox = within(card).getByRole("checkbox");
+      expect(checkbox).toBeVisible();
+      fireEvent.click(checkbox);
+      expect(
+        within(card).getByRole("button", { name: "Acknowledge selected" }),
+      ).toBeVisible();
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }),
+      );
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+      if (originalScrollIntoView) {
+        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
   });
 
   it("shows retryable query errors without rendering any docket empty state", async () => {

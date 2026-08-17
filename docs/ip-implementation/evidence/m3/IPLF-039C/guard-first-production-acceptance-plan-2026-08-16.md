@@ -35,8 +35,10 @@ The spec refuses its first mutation unless all of the following are explicit:
 6. owner authentication resolves to that exact company UUID and slug;
 7. the QA IP workspace is enabled with **no provider keys** and **no enabled
    automations**; and
-8. one exact active QA rule version and compatible calendar version are
-   supplied for the critical-confirmation fixture; and
+8. after the isolated docket exists but before the first deadline/coverage
+   guard writer, its read-only deadline workspace contains the exact active,
+   currently effective QA rule and calendar versions; the later proposal
+   request also validates their server-side compatibility; and
 9. `CASEOPS_IP_GUARD_RUN_ID` is an operator-chosen, non-secret recovery key in
    the form `20260816-` plus 6-16 lowercase letters or digits.
 
@@ -46,7 +48,9 @@ explicit password and does not invoke the employee mailer. Do not substitute
 `POST /api/companies/current/employees`: in production it can send a real
 SendGrid setup email. The company-user quota check reads an existing
 subscription and user counts; it does not create a billing account, grant or
-expire credits, or contact the payment provider.
+expire credits, or contact the payment provider. Each disposable password is
+generated cryptographically in memory and is never derived from or printed
+with the intentionally non-secret recovery run id.
 
 Owner and replacement logins use distinct no-redirect request contexts. All
 owner-only writes and cleanup stay on the owner context; the replacement
@@ -81,7 +85,9 @@ budget, at most two 50-row Matter-list pages, and a 10-second timeout on every
 cleanup API call. The hook emits only the non-secret run id and the path to the
 manual recovery procedure plus safe phase names and opaque fixture ids when a
 cleanup step fails. It never prints credentials, bearer tokens, raw exception
-messages, or response bodies.
+messages, or response bodies. HTTP assertion messages contain only the named
+operation and unexpected status, while typed domain assertions inspect bodies
+in memory without serializing them into reporter output.
 
 ## Writer and assertion matrix
 

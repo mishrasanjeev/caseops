@@ -33,11 +33,19 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     EthicalWall,
+    IpDeadline,
+    IpDeadlineCoverage,
     IpDocketRecord,
     IpDocumentLink,
+    IpRelatedRightObligation,
+    IpResponsibilityAssignment,
     Matter,
     MatterAccessGrant,
     MatterAccessLevel,
+    MatterDeadline,
+    MatterDeadlineStatus,
+    MatterHearing,
+    MatterTask,
     MembershipRole,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
@@ -55,6 +63,9 @@ from caseops_api.schemas.ip_access import (
     IpEthicalWallRecord,
     RecordAccessFoundationContract,
     RecordAccessReconciliationReport,
+)
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_operational_guard import matter_is_operational
@@ -308,6 +319,157 @@ def can_access_ip_docket(
     return visible is not None
 
 
+def _unexpired_or_scheduled_wall_exists(
+    session: Session,
+    *,
+    membership_id: str,
+    target_id: str,
+    ip_docket: bool,
+    now: datetime,
+) -> bool:
+    target_column = (
+        EthicalWall.ip_docket_id if ip_docket else EthicalWall.matter_id
+    )
+    return (
+        session.scalar(
+            select(EthicalWall.id)
+            .where(
+                target_column == target_id,
+                EthicalWall.revoked_at.is_(None),
+                or_(EthicalWall.expires_at.is_(None), EthicalWall.expires_at > now),
+                _wall_subject_filter(membership_id),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _has_unbounded_effective_grant(
+    session: Session,
+    *,
+    membership_id: str,
+    target_id: str,
+    ip_docket: bool,
+    now: datetime,
+) -> bool:
+    target_column = (
+        MatterAccessGrant.ip_docket_id if ip_docket else MatterAccessGrant.matter_id
+    )
+    return (
+        session.scalar(
+            select(MatterAccessGrant.id)
+            .where(
+                target_column == target_id,
+                MatterAccessGrant.revoked_at.is_(None),
+                or_(
+                    MatterAccessGrant.effective_from.is_(None),
+                    MatterAccessGrant.effective_from <= now,
+                ),
+                MatterAccessGrant.expires_at.is_(None),
+                _grant_subject_filter(membership_id),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def can_stably_access_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+) -> bool:
+    """Require current Matter access that cannot expire on a timer.
+
+    Live responsibility may not depend on a finite grant or survive until a
+    scheduled wall activates. Explicit access mutations remain responsible for
+    team and restriction changes; their writers call the same predicate while
+    holding the bounded live-role fence.
+    """
+
+    if not can_access(session, context=context, matter=matter):
+        return False
+    if _is_owner(context):
+        return True
+    now = datetime.now(UTC)
+    membership_id = context.membership.id
+    if _unexpired_or_scheduled_wall_exists(
+        session,
+        membership_id=membership_id,
+        target_id=matter.id,
+        ip_docket=False,
+        now=now,
+    ):
+        return False
+    needs_unbounded_grant = bool(
+        matter.restricted_access
+        and matter.assignee_membership_id != membership_id
+    )
+    if (
+        _team_scoping_enabled(session, context.company.id)
+        and matter.team_id is not None
+        and matter.assignee_membership_id != membership_id
+    ):
+        belongs_to_team = session.scalar(
+            select(TeamMembership.id)
+            .join(Team, Team.id == TeamMembership.team_id)
+            .where(
+                TeamMembership.team_id == matter.team_id,
+                TeamMembership.membership_id == membership_id,
+                Team.is_active.is_(True),
+            )
+            .limit(1)
+        )
+        needs_unbounded_grant = needs_unbounded_grant or belongs_to_team is None
+    return not needs_unbounded_grant or _has_unbounded_effective_grant(
+        session,
+        membership_id=membership_id,
+        target_id=matter.id,
+        ip_docket=False,
+        now=now,
+    )
+
+
+def can_stably_access_ip_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+) -> bool:
+    """Require durable IP-docket and independent linked-Matter access."""
+
+    if not can_access_ip_docket(session, context=context, docket=docket):
+        return False
+    now = datetime.now(UTC)
+    membership_id = context.membership.id
+    if _unexpired_or_scheduled_wall_exists(
+        session,
+        membership_id=membership_id,
+        target_id=docket.id,
+        ip_docket=True,
+        now=now,
+    ):
+        return False
+    if docket.restricted and not _has_unbounded_effective_grant(
+        session,
+        membership_id=membership_id,
+        target_id=docket.id,
+        ip_docket=True,
+        now=now,
+    ):
+        return False
+    if docket.matter_id is None:
+        return True
+    linked_matter = session.get(Matter, docket.matter_id)
+    return linked_matter is not None and can_stably_access_matter(
+        session,
+        context=context,
+        matter=linked_matter,
+    )
+
+
 def assert_ip_docket_access(
     session: Session,
     *,
@@ -419,6 +581,340 @@ def _load_ip_docket_for_access_management(
             detail="IP docket record not found.",
         )
     return docket
+
+
+MatterOperationalRoleSnapshot = tuple[tuple[str, str, str, str], ...]
+
+
+def _operational_matter_role_snapshot(
+    session: Session,
+    *,
+    matter: Matter,
+) -> MatterOperationalRoleSnapshot:
+    """Return an exact, deterministic snapshot of live Matter responsibility.
+
+    Linking an operational Matter to an IP docket makes each of these roles an
+    IP-access authority.  Callers that create that link take this lock-free
+    snapshot, fence every referenced Membership/User, lock the Matter, and then
+    compare a fresh snapshot before inserting the docket.  Relation-level
+    tuples deliberately detect swaps that a membership-id set alone would miss.
+    """
+
+    if not matter_is_operational(matter):
+        return ()
+
+    snapshot: list[tuple[str, str, str, str]] = []
+    for relation, membership_id in (
+        ("assignee", matter.assignee_membership_id),
+        ("responsible_lawyer", matter.responsible_lawyer_membership_id),
+    ):
+        if membership_id is not None:
+            snapshot.append(("matter", matter.id, relation, membership_id))
+
+    snapshot.extend(
+        ("matter_task", task_id, "owner", membership_id)
+        for task_id, membership_id in session.execute(
+            select(MatterTask.id, MatterTask.owner_membership_id).where(
+                MatterTask.company_id == matter.company_id,
+                MatterTask.matter_id == matter.id,
+                MatterTask.ip_docket_id.is_(None),
+                MatterTask.owner_membership_id.is_not(None),
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+        if membership_id is not None
+    )
+    snapshot.extend(
+        ("matter_deadline", deadline_id, "assignee", membership_id)
+        for deadline_id, membership_id in session.execute(
+            select(MatterDeadline.id, MatterDeadline.assignee_membership_id).where(
+                MatterDeadline.company_id == matter.company_id,
+                MatterDeadline.matter_id == matter.id,
+                MatterDeadline.ip_docket_id.is_(None),
+                MatterDeadline.assignee_membership_id.is_not(None),
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+        if membership_id is not None
+    )
+    hearings = list(
+        session.scalars(
+            select(MatterHearing).where(
+                MatterHearing.company_id == matter.company_id,
+                MatterHearing.matter_id == matter.id,
+                MatterHearing.ip_docket_id.is_(None),
+                MatterHearing.status.in_(("scheduled", "adjourned")),
+                MatterHearing.neutralized_at.is_(None),
+                MatterHearing.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+    )
+    for hearing in hearings:
+        policy = hearing.reminder_policy_json or {}
+        hearing_roles = [
+            ("responsible", hearing.responsible_membership_id),
+            *(
+                ("attendee", membership_id)
+                for membership_id in hearing.attendee_membership_ids_json or []
+            ),
+            *(
+                ("reminder_recipient", membership_id)
+                for membership_id in policy.get("recipient_membership_ids") or []
+            ),
+            ("reminder_escalation", policy.get("escalation_membership_id")),
+        ]
+        snapshot.extend(
+            ("matter_hearing", hearing.id, relation, membership_id)
+            for relation, membership_id in hearing_roles
+            if membership_id is not None
+        )
+    return tuple(sorted(snapshot))
+
+
+def _operational_matter_role_membership_ids(
+    session: Session,
+    *,
+    matter: Matter,
+) -> set[str]:
+    return {
+        membership_id
+        for _object_type, _object_id, _relation, membership_id in (
+            _operational_matter_role_snapshot(session, matter=matter)
+        )
+    }
+
+
+def _operational_ip_docket_role_membership_ids(
+    session: Session,
+    *,
+    docket: IpDocketRecord,
+) -> set[str]:
+    """Return every live assignee/recipient whose docket access is authoritative."""
+
+    from caseops_api.services.ip_operations import _coverage_has_live_escalation
+
+    membership_ids: set[str] = set()
+    if docket.matter_id is not None:
+        matter = session.get(Matter, docket.matter_id)
+        if matter is not None and matter_is_operational(matter):
+            membership_ids.update(
+                _operational_matter_role_membership_ids(session, matter=matter)
+            )
+
+    coverage_rows = list(
+        session.execute(
+            select(IpDeadlineCoverage, MatterDeadline)
+            .join(
+                MatterDeadline,
+                and_(
+                    MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id,
+                    MatterDeadline.company_id == IpDeadlineCoverage.company_id,
+                ),
+            )
+            .where(
+                IpDeadlineCoverage.company_id == docket.company_id,
+                IpDeadlineCoverage.docket_id == docket.id,
+                IpDeadlineCoverage.coverage_status.notin_(
+                    ("inactive_lifecycle", "completed")
+                ),
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+                or_(
+                    and_(
+                        MatterDeadline.matter_id.is_(None),
+                        MatterDeadline.ip_docket_id == docket.id,
+                    ),
+                    and_(
+                        docket.matter_id is not None,
+                        MatterDeadline.matter_id == docket.matter_id,
+                        MatterDeadline.ip_docket_id.is_(None),
+                    ),
+                ),
+            )
+        ).all()
+    )
+    for coverage, deadline in coverage_rows:
+        membership_ids.update(
+            membership_id
+            for membership_id in (
+                coverage.responsible_membership_id,
+                coverage.backup_membership_id,
+                (
+                    coverage.pending_replacement_membership_id
+                    if coverage.replacement_decision == "pending"
+                    else None
+                ),
+                (
+                    coverage.emergency_escalation_membership_id
+                    if _coverage_has_live_escalation(coverage)
+                    else None
+                ),
+                deadline.assignee_membership_id,
+            )
+            if membership_id is not None
+        )
+
+    membership_ids.update(
+        membership_id
+        for membership_id in session.scalars(
+            select(MatterDeadline.assignee_membership_id).where(
+                MatterDeadline.company_id == docket.company_id,
+                MatterDeadline.ip_docket_id == docket.id,
+                MatterDeadline.matter_id.is_(None),
+                MatterDeadline.assignee_membership_id.is_not(None),
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+        if membership_id is not None
+    )
+    membership_ids.update(
+        membership_id
+        for membership_id in session.scalars(
+            select(MatterDeadline.assignee_membership_id)
+            .join(IpDeadline, IpDeadline.matter_deadline_id == MatterDeadline.id)
+            .where(
+                IpDeadline.company_id == docket.company_id,
+                IpDeadline.docket_id == docket.id,
+                IpDeadline.state.in_(("confirmed", "overdue")),
+                MatterDeadline.assignee_membership_id.is_not(None),
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+        if membership_id is not None
+    )
+    membership_ids.update(
+        membership_id
+        for membership_id in session.scalars(
+            select(IpResponsibilityAssignment.membership_id)
+            .join(IpDeadline, IpDeadline.id == IpResponsibilityAssignment.deadline_id)
+            .where(
+                IpResponsibilityAssignment.company_id == docket.company_id,
+                IpResponsibilityAssignment.docket_id == docket.id,
+                IpResponsibilityAssignment.effective_until.is_(None),
+                IpDeadline.state.in_(("confirmed", "overdue")),
+            )
+        ).all()
+        if membership_id is not None
+    )
+    membership_ids.update(
+        membership_id
+        for membership_id in session.scalars(
+            select(MatterTask.owner_membership_id).where(
+                MatterTask.company_id == docket.company_id,
+                MatterTask.ip_docket_id == docket.id,
+                MatterTask.matter_id.is_(None),
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+        if membership_id is not None
+    )
+    hearings = list(
+        session.scalars(
+            select(MatterHearing).where(
+                MatterHearing.company_id == docket.company_id,
+                MatterHearing.ip_docket_id == docket.id,
+                MatterHearing.matter_id.is_(None),
+                MatterHearing.status.in_(("scheduled", "adjourned")),
+                MatterHearing.neutralized_at.is_(None),
+                MatterHearing.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+    )
+    for hearing in hearings:
+        policy = hearing.reminder_policy_json or {}
+        membership_ids.update(
+            membership_id
+            for membership_id in (
+                hearing.responsible_membership_id,
+                *(hearing.attendee_membership_ids_json or []),
+                *(policy.get("recipient_membership_ids") or []),
+                policy.get("escalation_membership_id"),
+            )
+            if membership_id is not None
+        )
+    membership_ids.update(
+        membership_id
+        for membership_id in session.scalars(
+            select(IpRelatedRightObligation.owner_membership_id).where(
+                IpRelatedRightObligation.company_id == docket.company_id,
+                IpRelatedRightObligation.docket_id == docket.id,
+                IpRelatedRightObligation.status == "open",
+            )
+        ).all()
+        if membership_id is not None
+    )
+    return membership_ids
+
+
+def _lock_ip_access_responsibility_fence(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+) -> tuple[IpDocketRecord, dict[str, CompanyMembership], set[str]]:
+    advisory = _load_ip_docket_for_access_management(
+        session,
+        context=context,
+        docket_id=docket_id,
+    )
+    role_membership_ids = _operational_ip_docket_role_membership_ids(
+        session,
+        docket=advisory,
+    )
+    fenced_ids = role_membership_ids | {context.membership.id}
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=fenced_ids,
+    )
+    actor = memberships.get(context.membership.id)
+    if (
+        actor is None
+        or not actor.is_active
+        or not actor.user.is_active
+        or actor.role not in (MembershipRole.OWNER, MembershipRole.ADMIN)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Managing IP access requires an active admin or owner.",
+        )
+    docket = _load_ip_docket_for_access_management(
+        session,
+        context=context,
+        docket_id=docket_id,
+        lock=True,
+    )
+    if (
+        _operational_ip_docket_role_membership_ids(session, docket=docket)
+        != role_membership_ids
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_access_responsibility_changed",
+                "message": "Operational IP responsibilities changed; preview again.",
+            },
+        )
+    return docket, memberships, role_membership_ids
 
 
 def _linked_matter_visibility_by_membership(
@@ -633,6 +1129,74 @@ def _policy_visible_from_rows(
     return False
 
 
+def _policy_stably_visible_from_rows(
+    *,
+    membership_id: str,
+    team_ids: set[str],
+    restricted: bool,
+    grants: list[MatterAccessGrant],
+    walls: list[EthicalWall],
+    now: datetime,
+    ignored_grant_id: str | None = None,
+    ignored_wall_id: str | None = None,
+    added_grant_subject: tuple[str, str, datetime | None, datetime | None] | None = None,
+    added_wall_subject: tuple[str, str, datetime | None, datetime | None] | None = None,
+) -> bool:
+    """Evaluate whether hypothetical access remains valid indefinitely."""
+
+    for wall in walls:
+        if wall.id == ignored_wall_id or wall.revoked_at is not None:
+            continue
+        expires = _as_utc(wall.expires_at)
+        if expires is not None and expires <= now:
+            continue
+        if _subject_matches(
+            membership_id=membership_id,
+            team_ids=team_ids,
+            subject_membership_id=wall.excluded_membership_id,
+            subject_team_id=wall.excluded_team_id,
+        ):
+            return False
+    if added_wall_subject is not None:
+        subject_type, subject_id, _effective_from, expires_at = added_wall_subject
+        expires = _as_utc(expires_at)
+        matches = (
+            subject_type == "membership" and subject_id == membership_id
+        ) or (subject_type == "team" and subject_id in team_ids)
+        if matches and (expires is None or expires > now):
+            return False
+    if not restricted:
+        return True
+    for grant in grants:
+        if grant.id == ignored_grant_id or grant.revoked_at is not None:
+            continue
+        effective = _as_utc(grant.effective_from)
+        if effective is not None and effective > now:
+            continue
+        if grant.expires_at is not None:
+            continue
+        if _subject_matches(
+            membership_id=membership_id,
+            team_ids=team_ids,
+            subject_membership_id=grant.membership_id,
+            subject_team_id=grant.team_id,
+        ):
+            return True
+    if added_grant_subject is not None:
+        subject_type, subject_id, effective_from, expires_at = added_grant_subject
+        effective = _as_utc(effective_from)
+        matches = (
+            subject_type == "membership" and subject_id == membership_id
+        ) or (subject_type == "team" and subject_id in team_ids)
+        if (
+            matches
+            and (effective is None or effective <= now)
+            and expires_at is None
+        ):
+            return True
+    return False
+
+
 def _validate_ip_access_change(
     session: Session,
     *,
@@ -745,6 +1309,112 @@ def _validate_ip_access_change(
     return grant, wall
 
 
+def _assert_ip_access_change_preserves_live_roles(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    payload: IpAccessChangeRequest,
+    grants: list[MatterAccessGrant],
+    walls: list[EthicalWall],
+    revoked_grant: MatterAccessGrant | None,
+    revoked_wall: EthicalWall | None,
+    memberships: dict[str, CompanyMembership],
+    role_membership_ids: set[str],
+) -> None:
+    """Fail closed when an ACL change would orphan live docket responsibility."""
+
+    membership_teams, _ = _active_team_membership_map(
+        session,
+        company_id=context.company.id,
+    )
+    linked_matter = (
+        session.get(Matter, docket.matter_id)
+        if docket.matter_id is not None
+        else None
+    )
+    now = datetime.now(UTC)
+    blocked_membership_ids: list[str] = []
+    for membership_id in sorted(role_membership_ids):
+        membership = memberships.get(membership_id)
+        if (
+            membership is None
+            or not membership.is_active
+            or not membership.user.is_active
+        ):
+            blocked_membership_ids.append(membership_id)
+            continue
+        remains_ip_visible = _policy_stably_visible_from_rows(
+            membership_id=membership.id,
+            team_ids=membership_teams.get(membership.id, set()),
+            restricted=(
+                bool(payload.restricted)
+                if payload.action == "set_restricted"
+                else docket.restricted
+            ),
+            grants=grants,
+            walls=walls,
+            now=now,
+            ignored_grant_id=(
+                revoked_grant.id
+                if payload.action == "revoke_grant" and revoked_grant is not None
+                else None
+            ),
+            ignored_wall_id=(
+                revoked_wall.id
+                if payload.action == "revoke_wall" and revoked_wall is not None
+                else None
+            ),
+            added_grant_subject=(
+                (
+                    str(payload.subject_type),
+                    str(payload.subject_id),
+                    payload.effective_from,
+                    payload.expires_at,
+                )
+                if payload.action == "grant"
+                else None
+            ),
+            added_wall_subject=(
+                (
+                    str(payload.subject_type),
+                    str(payload.subject_id),
+                    payload.effective_from,
+                    payload.expires_at,
+                )
+                if payload.action == "add_wall"
+                else None
+            ),
+        )
+        member_context = SessionContext(
+            company=context.company,
+            user=membership.user,
+            membership=membership,
+        )
+        remains_matter_visible = (
+            linked_matter is None
+            or can_stably_access_matter(
+                session,
+                context=member_context,
+                matter=linked_matter,
+            )
+        )
+        if not remains_ip_visible or not remains_matter_visible:
+            blocked_membership_ids.append(membership_id)
+    if blocked_membership_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_access_responsibility_handoff_required",
+                "message": (
+                    "Reassign every live IP responsibility before revoking its "
+                    "holder's Matter or docket access."
+                ),
+                "blocked_membership_ids": blocked_membership_ids,
+            },
+        )
+
+
 def _preview_token(
     *,
     company_id: str,
@@ -784,6 +1454,33 @@ def _ip_access_preview_for_docket(
         payload=payload,
         grants=grants,
         walls=walls,
+    )
+    role_membership_ids = _operational_ip_docket_role_membership_ids(
+        session,
+        docket=docket,
+    )
+    role_memberships = {
+        membership.id: membership
+        for membership in session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.company_id == context.company.id,
+                CompanyMembership.id.in_(role_membership_ids or {""}),
+            )
+        ).all()
+    }
+    _assert_ip_access_change_preserves_live_roles(
+        session,
+        context=context,
+        docket=docket,
+        payload=payload,
+        grants=grants,
+        walls=walls,
+        revoked_grant=revoked_grant,
+        revoked_wall=revoked_wall,
+        memberships=role_memberships,
+        role_membership_ids=role_membership_ids,
     )
     memberships = _active_company_memberships(
         session, company_id=context.company.id
@@ -1105,11 +1802,10 @@ def apply_ip_access_change(
     docket_id: str,
     payload: IpAccessApplyRequest,
 ) -> IpAccessChangeResponse:
-    docket = _load_ip_docket_for_access_management(
+    docket, memberships, role_membership_ids = _lock_ip_access_responsibility_fence(
         session,
         context=context,
         docket_id=docket_id,
-        lock=True,
     )
     preview = _ip_access_preview_for_docket(
         session,
@@ -1130,6 +1826,18 @@ def apply_ip_access_change(
         payload=payload,
         grants=grants,
         walls=walls,
+    )
+    _assert_ip_access_change_preserves_live_roles(
+        session,
+        context=context,
+        docket=docket,
+        payload=payload,
+        grants=grants,
+        walls=walls,
+        revoked_grant=revoked_grant,
+        revoked_wall=revoked_wall,
+        memberships=memberships,
+        role_membership_ids=role_membership_ids,
     )
     now = datetime.now(UTC)
     if payload.expires_at is not None and _as_utc(payload.expires_at) <= now:
@@ -1432,18 +2140,179 @@ def _require_admin(context: SessionContext) -> None:
 
 
 def _load_matter_or_404(
-    session: Session, company_id: str, matter_id: str
+    session: Session,
+    company_id: str,
+    matter_id: str,
+    *,
+    lock: bool = False,
 ) -> Matter:
-    matter = session.scalar(
-        select(Matter).where(
-            Matter.id == matter_id, Matter.company_id == company_id
-        )
+    statement = select(Matter).where(
+        Matter.id == matter_id, Matter.company_id == company_id
     )
+    if lock:
+        statement = (
+            statement.with_for_update(of=Matter)
+            .execution_options(populate_existing=True)
+        )
+    matter = session.scalar(statement)
     if matter is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found."
         )
     return matter
+
+
+def _lock_matter_access_responsibility_fence(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+) -> tuple[
+    Matter,
+    list[IpDocketRecord],
+    dict[str, CompanyMembership],
+    dict[str, set[str]],
+]:
+    advisory_matter = _load_matter_or_404(
+        session,
+        context.company.id,
+        matter_id,
+    )
+    advisory_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.matter_id == advisory_matter.id,
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(
+                    ("archived", "abandoned", "transferred", "retired", "closed")
+                ),
+            )
+            .order_by(IpDocketRecord.id)
+        ).all()
+    )
+    role_ids_by_docket = {
+        docket.id: _operational_ip_docket_role_membership_ids(
+            session,
+            docket=docket,
+        )
+        for docket in advisory_dockets
+    }
+    role_membership_ids = {
+        membership_id
+        for membership_ids in role_ids_by_docket.values()
+        for membership_id in membership_ids
+    }
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=role_membership_ids | {context.membership.id},
+    )
+    actor = memberships.get(context.membership.id)
+    if (
+        actor is None
+        or not actor.is_active
+        or not actor.user.is_active
+        or actor.role not in (MembershipRole.OWNER, MembershipRole.ADMIN)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Managing matter access requires an active admin or owner.",
+        )
+    matter = _load_matter_or_404(
+        session,
+        context.company.id,
+        matter_id,
+        lock=True,
+    )
+    locked_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.matter_id == matter.id,
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(
+                    ("archived", "abandoned", "transferred", "retired", "closed")
+                ),
+            )
+            .order_by(IpDocketRecord.id)
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    refreshed_ids_by_docket = {
+        docket.id: _operational_ip_docket_role_membership_ids(
+            session,
+            docket=docket,
+        )
+        for docket in locked_dockets
+    }
+    if refreshed_ids_by_docket != role_ids_by_docket:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_access_ip_responsibility_changed",
+                "message": "Linked IP responsibilities changed; retry the access change.",
+            },
+        )
+    return matter, locked_dockets, memberships, role_ids_by_docket
+
+
+def _assert_matter_access_preserves_live_ip_roles(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    dockets: list[IpDocketRecord],
+    memberships: dict[str, CompanyMembership],
+    role_ids_by_docket: dict[str, set[str]],
+) -> None:
+    dockets_by_id = {docket.id: docket for docket in dockets}
+    blocked_membership_ids: set[str] = set()
+    for docket_id, membership_ids in role_ids_by_docket.items():
+        docket = dockets_by_id.get(docket_id)
+        if docket is None:
+            blocked_membership_ids.update(membership_ids)
+            continue
+        for membership_id in membership_ids:
+            membership = memberships.get(membership_id)
+            if (
+                membership is None
+                or not membership.is_active
+                or not membership.user.is_active
+            ):
+                blocked_membership_ids.add(membership_id)
+                continue
+            member_context = SessionContext(
+                company=context.company,
+                user=membership.user,
+                membership=membership,
+            )
+            if not can_stably_access_matter(
+                session,
+                context=member_context,
+                matter=matter,
+            ) or not can_stably_access_ip_docket(
+                session,
+                context=member_context,
+                docket=docket,
+            ):
+                blocked_membership_ids.add(membership_id)
+    if blocked_membership_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_access_ip_responsibility_handoff_required",
+                "message": (
+                    "Reassign live linked-IP responsibility before revoking Matter access."
+                ),
+                "blocked_membership_ids": sorted(blocked_membership_ids),
+            },
+        )
 
 
 def _membership_in_company(
@@ -1493,12 +2362,26 @@ def set_restricted_access(
     restricted: bool,
 ) -> Matter:
     _require_admin(context)
-    matter = _load_matter_or_404(session, context.company.id, matter_id)
+    matter, dockets, memberships, role_ids_by_docket = (
+        _lock_matter_access_responsibility_fence(
+            session,
+            context=context,
+            matter_id=matter_id,
+        )
+    )
     if matter.restricted_access == restricted:
         return matter
     matter.restricted_access = restricted
     session.add(matter)
     session.flush()
+    _assert_matter_access_preserves_live_ip_roles(
+        session,
+        context=context,
+        matter=matter,
+        dockets=dockets,
+        memberships=memberships,
+        role_ids_by_docket=role_ids_by_docket,
+    )
     record_from_context(
         session,
         context,
@@ -1523,7 +2406,13 @@ def add_access_grant(
     reason: str | None = None,
 ) -> MatterAccessGrant:
     _require_admin(context)
-    matter = _load_matter_or_404(session, context.company.id, matter_id)
+    matter, dockets, memberships, role_ids_by_docket = (
+        _lock_matter_access_responsibility_fence(
+            session,
+            context=context,
+            matter_id=matter_id,
+        )
+    )
     if not _membership_in_company(
         session, company_id=context.company.id, membership_id=membership_id
     ):
@@ -1549,6 +2438,14 @@ def add_access_grant(
     )
     session.add(grant)
     session.flush()
+    _assert_matter_access_preserves_live_ip_roles(
+        session,
+        context=context,
+        matter=matter,
+        dockets=dockets,
+        memberships=memberships,
+        role_ids_by_docket=role_ids_by_docket,
+    )
     record_from_context(
         session,
         context,
@@ -1575,7 +2472,13 @@ def remove_access_grant(
     grant_id: str,
 ) -> None:
     _require_admin(context)
-    matter = _load_matter_or_404(session, context.company.id, matter_id)
+    matter, dockets, memberships, role_ids_by_docket = (
+        _lock_matter_access_responsibility_fence(
+            session,
+            context=context,
+            matter_id=matter_id,
+        )
+    )
     grant = session.scalar(
         select(MatterAccessGrant).where(
             MatterAccessGrant.id == grant_id,
@@ -1588,6 +2491,14 @@ def remove_access_grant(
         )
     session.delete(grant)
     session.flush()
+    _assert_matter_access_preserves_live_ip_roles(
+        session,
+        context=context,
+        matter=matter,
+        dockets=dockets,
+        memberships=memberships,
+        role_ids_by_docket=role_ids_by_docket,
+    )
     record_from_context(
         session,
         context,
@@ -1609,7 +2520,13 @@ def add_ethical_wall(
     reason: str | None = None,
 ) -> EthicalWall:
     _require_admin(context)
-    matter = _load_matter_or_404(session, context.company.id, matter_id)
+    matter, dockets, memberships, role_ids_by_docket = (
+        _lock_matter_access_responsibility_fence(
+            session,
+            context=context,
+            matter_id=matter_id,
+        )
+    )
     if not _membership_in_company(
         session, company_id=context.company.id, membership_id=excluded_membership_id
     ):
@@ -1634,6 +2551,14 @@ def add_ethical_wall(
     )
     session.add(wall)
     session.flush()
+    _assert_matter_access_preserves_live_ip_roles(
+        session,
+        context=context,
+        matter=matter,
+        dockets=dockets,
+        memberships=memberships,
+        role_ids_by_docket=role_ids_by_docket,
+    )
     record_from_context(
         session,
         context,
@@ -1659,7 +2584,13 @@ def remove_ethical_wall(
     wall_id: str,
 ) -> None:
     _require_admin(context)
-    matter = _load_matter_or_404(session, context.company.id, matter_id)
+    matter, dockets, memberships, role_ids_by_docket = (
+        _lock_matter_access_responsibility_fence(
+            session,
+            context=context,
+            matter_id=matter_id,
+        )
+    )
     wall = session.scalar(
         select(EthicalWall).where(
             EthicalWall.id == wall_id,
@@ -1673,6 +2604,14 @@ def remove_ethical_wall(
     excluded = wall.excluded_membership_id
     session.delete(wall)
     session.flush()
+    _assert_matter_access_preserves_live_ip_roles(
+        session,
+        context=context,
+        matter=matter,
+        dockets=dockets,
+        memberships=memberships,
+        role_ids_by_docket=role_ids_by_docket,
+    )
     record_from_context(
         session,
         context,

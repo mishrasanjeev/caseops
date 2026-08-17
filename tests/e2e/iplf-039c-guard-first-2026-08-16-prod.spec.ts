@@ -26,6 +26,8 @@
  * guarded API stay in the static/service and hosted-PostgreSQL evidence. This
  * production spec does not manufacture an invalid pre-guard row.
  */
+import { randomBytes } from "node:crypto";
+
 import {
   expect,
   request as playwrightRequest,
@@ -106,6 +108,13 @@ type DocketRecord = {
   is_active: boolean;
   lifecycle_version: number;
   deadline_coverages: CoverageRow[];
+};
+
+type DeadlineGovernanceRecord = {
+  id: string;
+  status: string;
+  effective_from: string;
+  effective_until: string | null;
 };
 
 type Runtime = {
@@ -231,23 +240,12 @@ function fixtureIdentity(
   };
 }
 
-async function body(response: APIResponse): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return await response.text();
-  }
-}
-
 async function expectStatus(
   response: APIResponse,
   expected: number,
   operation: string,
 ): Promise<void> {
-  expect(
-    response.status(),
-    `${operation}: ${JSON.stringify(await body(response))}`,
-  ).toBe(expected);
+  expect(response.status(), `${operation}: unexpected HTTP status`).toBe(expected);
 }
 
 async function json<T>(response: APIResponse): Promise<T> {
@@ -432,7 +430,7 @@ async function createDisposableUser(
 ): Promise<{ record: CompanyUser; password: string }> {
   const { run, owner } = state;
   const runId = run.runId;
-  const password = `QaGuard-${runId}-Aa7!`;
+  const password = `Qa7!${randomBytes(24).toString("base64url")}`;
   const email = userEmail(roleLabel, runId);
   const response = await api.post(`${run.apiBaseUrl}/api/companies/current/users`, {
     headers: authHeaders(owner),
@@ -542,6 +540,39 @@ async function createOperationalDeadline(
   );
   await expectStatus(response, 200, `create operational deadline: ${title}`);
   return json<{ id: string }>(response);
+}
+
+async function assertDeadlineGovernancePrerequisites(
+  api: APIRequestContext,
+  run: Runtime,
+  owner: AuthContext,
+  docketId: string,
+): Promise<void> {
+  const response = await api.get(
+    `${run.apiBaseUrl}/api/ip/dockets/${docketId}/deadline-workspace`,
+    { headers: authHeaders(owner) },
+  );
+  await expectStatus(response, 200, "read exact QA deadline governance prerequisites");
+  const workspace = await json<{
+    rules: DeadlineGovernanceRecord[];
+    calendars: DeadlineGovernanceRecord[];
+  }>(response);
+  const rule = workspace.rules.find((candidate) => candidate.id === run.ruleVersionId);
+  const calendar = workspace.calendars.find(
+    (candidate) => candidate.id === run.calendarVersionId,
+  );
+  expect(rule, "the exact QA rule version must be available to the isolated docket").toBeTruthy();
+  expect(calendar, "the exact QA calendar version must be available to the isolated docket").toBeTruthy();
+  if (!rule || !calendar) {
+    throw new Error("Exact QA deadline governance prerequisites are unavailable.");
+  }
+  expect(rule.status).toBe("active");
+  expect(calendar.status).toBe("active");
+  const today = new Date().toISOString().slice(0, 10);
+  expect(rule.effective_from <= today).toBe(true);
+  expect(calendar.effective_from <= today).toBe(true);
+  expect(rule.effective_until === null || rule.effective_until >= today).toBe(true);
+  expect(calendar.effective_until === null || calendar.effective_until >= today).toBe(true);
 }
 
 async function getDocket(
@@ -973,6 +1004,12 @@ test("guard-first writers reject role collapse and preserve disposable QA state"
     await assertCurrentActor(api, run, owner);
 
     const conflictFixture = await createFixtureMatter(api, state, "conflict");
+    await assertDeadlineGovernancePrerequisites(
+      api,
+      run,
+      owner,
+      conflictFixture.docket.id,
+    );
     const conflictDeadline = await createOperationalDeadline(
       api,
       run,

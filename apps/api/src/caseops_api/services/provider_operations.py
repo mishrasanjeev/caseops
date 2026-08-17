@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     CalendarEventCandidateStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    CalendarSyncSourceType,
     ConnectorHealthRecord,
     DriveFileCandidate,
     InboundEmailEvent,
@@ -35,6 +36,7 @@ from caseops_api.db.models import (
     UserCalendarConnection,
 )
 from caseops_api.schemas.provider_operations import (
+    CalendarUnknownOutcomeReconciliationResponse,
     ProviderOperationAction,
     ProviderOperationActionResponse,
     ProviderOperationListResponse,
@@ -45,7 +47,22 @@ from caseops_api.schemas.provider_operations import (
     ProviderReadinessListResponse,
     ProviderReadinessRecord,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.calendar_projection_safety import (
+    CALENDAR_UPSERT_CLAIM_PREFIX,
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+    calendar_sync_automatic_replay_allowed,
+    calendar_sync_automatic_replay_block_code,
+    calendar_sync_claim_in_flight_detail,
+    calendar_sync_reconciliation_detail,
+    calendar_sync_requires_manual_reconciliation,
+    calendar_sync_upsert_claim_state,
+    materialize_expired_calendar_sync_upsert_claim,
+)
 from caseops_api.services.durable_workflows import (
     durable_workflow_status,
     redact_identifier,
@@ -58,8 +75,16 @@ from caseops_api.services.google_workspace import (
     google_workspace_connector_missing_config_names,
     google_workspace_oauth_config,
 )
-from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.notification_delivery import (
+    NOTIFICATION_DISPATCH_CLAIM_PREFIX,
+    materialize_expired_notification_dispatch_claim,
+    notification_dispatch_claim_in_flight_detail,
+    notification_dispatch_claim_state,
+    notification_provider_reconciliation_detail,
+    redact_provider_error,
+)
 from caseops_api.services.provider_costs import effective_cost_minor
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 _CALENDAR_OPEN_STATUSES = {
@@ -89,6 +114,40 @@ _MAX_REPLAY_BATCH_SIZE = 25
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _fence_provider_operator(
+    session: Session,
+    *,
+    context: SessionContext,
+    capability: str,
+    step_up_purpose: str,
+) -> SessionContext:
+    """Refresh the actor under Membership/User locks before provider writes."""
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Capability {capability!r} is required.",
+        )
+    require_locked_membership_capability(session, actor, capability)
+    locked_context = SessionContext(
+        company=context.company,
+        membership=actor,
+        user=actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=locked_context,
+        purpose=step_up_purpose,
+    )
+    return locked_context
 
 
 def _operation_id(kind: str, row_id: str) -> str:
@@ -242,10 +301,42 @@ def _operator_state(
     return "open"
 
 
+def _operator_open_clause(column):
+    """Filter operator-closed tombstones before a bounded source query."""
+
+    return or_(
+        column.is_(None),
+        column.notin_(tuple(sorted({_OPERATOR_IGNORE_REASON, _OPERATOR_RESOLVE_REASON}))),
+    )
+
+
 def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
     operator_state = _operator_state(row.dead_letter_reason)
-    status_value = str(row.sync_status)
-    replayable = row.sync_status in _CALENDAR_OPEN_STATUSES
+    claim_state = calendar_sync_upsert_claim_state(row)
+    # An expired no-receipt create is logically the canonical UNKNOWN state
+    # even before a mutation/sweep wins its exact row lock. This makes list and
+    # exact lookup usable as reconciliation input without exposing claim ids.
+    status_value = (
+        str(CalendarEventSyncStatus.DEAD_LETTER)
+        if claim_state == "expired"
+        else str(row.sync_status)
+    )
+    displayed_dead_letter_reason = (
+        CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        if claim_state == "expired"
+        else row.dead_letter_reason
+    )
+    displayed_error = (
+        "Calendar provider upsert outcome is unknown."
+        if claim_state == "expired"
+        else row.last_error
+    )
+    reconciliation_required = claim_state in {"expired", "manual_reconciliation"}
+    claim_protected = claim_state != "none"
+    automatic_replay_block_code = calendar_sync_automatic_replay_block_code(row)
+    replayable = row.sync_status in _CALENDAR_OPEN_STATUSES and (
+        calendar_sync_automatic_replay_allowed(row)
+    )
     open_action = row.sync_status not in {
         CalendarEventSyncStatus.SYNCED,
         CalendarEventSyncStatus.DELETED,
@@ -261,9 +352,9 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
         provider_item_ref=redact_identifier(row.provider_event_id),
         status=status_value,
         operator_state=operator_state,
-        error_redacted=redact_provider_error(row.last_error) if row.last_error else None,
-        dead_letter_reason=redact_provider_error(row.dead_letter_reason)
-        if row.dead_letter_reason
+        error_redacted=redact_provider_error(displayed_error) if displayed_error else None,
+        dead_letter_reason=redact_provider_error(displayed_dead_letter_reason)
+        if displayed_dead_letter_reason
         else None,
         attempts=row.attempts,
         max_attempts=max(row.max_attempts, 1),
@@ -271,11 +362,31 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
         created_at=row.created_at,
         updated_at=row.updated_at,
         replay_available=replayable,
-        ignore_available=open_action and operator_state == "open",
-        mark_resolved_available=open_action and operator_state == "open",
+        ignore_available=(
+            open_action and operator_state == "open" and not claim_protected
+        ),
+        mark_resolved_available=(
+            open_action and operator_state == "open" and not claim_protected
+        ),
+        manual_reconciliation_required=reconciliation_required,
+        automatic_replay_block_code=automatic_replay_block_code,
         notes=[
             "Replay only reschedules the stored sync row; provider calls remain "
-            "gated by provider readiness."
+            "gated by provider readiness.",
+            *(
+                [
+                    "Automatic replay is permanently disabled because the remote "
+                    "upsert outcome is unknown; explicit remote reconciliation is "
+                    "required."
+                ]
+                if reconciliation_required
+                else []
+            ),
+            *(
+                ["The provider upsert claim is still in flight and cannot be changed."]
+                if claim_state == "live"
+                else []
+            ),
         ],
     )
 
@@ -283,9 +394,13 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
 def _notification_record(row: NotificationDeliveryIntent) -> ProviderOperationRecord:
     operator_state = _operator_state(row.dead_letter_reason)
     is_external = row.channel != NotificationDeliveryChannel.IN_APP
+    claim_state = notification_dispatch_claim_state(row)
+    reconciliation_required = claim_state in {"expired", "manual_reconciliation"}
+    claim_protected = claim_state != "none"
     replayable = (
         row.status in _NOTIFICATION_OPEN_STATUSES
         and row.channel == NotificationDeliveryChannel.IN_APP
+        and operator_state == "open"
     )
     open_action = row.status != NotificationDeliveryStatus.DELIVERED
     notes = ["Replay uses the existing idempotency key and cannot create a second delivery intent."]
@@ -326,8 +441,20 @@ def _notification_record(row: NotificationDeliveryIntent) -> ProviderOperationRe
         created_at=row.created_at,
         updated_at=row.updated_at,
         replay_available=replayable,
-        ignore_available=open_action and operator_state == "open",
-        mark_resolved_available=open_action and operator_state == "open",
+        ignore_available=(
+            open_action and operator_state == "open" and not claim_protected
+        ),
+        mark_resolved_available=(
+            open_action and operator_state == "open" and not claim_protected
+        ),
+        manual_reconciliation_required=reconciliation_required,
+        automatic_replay_block_code=(
+            notification_provider_reconciliation_detail()["code"]
+            if reconciliation_required
+            else notification_dispatch_claim_in_flight_detail()["code"]
+            if claim_state == "live"
+            else None
+        ),
         notes=notes,
     )
 
@@ -477,7 +604,7 @@ def _mailbox_import_record(row: MailboxMessageImport) -> ProviderOperationRecord
     replayable = row.status in {
         MailboxImportStatus.FAILED,
         MailboxImportStatus.DEAD_LETTER,
-    }
+    } and operator_state == "open"
     return ProviderOperationRecord(
         id=_operation_id("mailbox_message_import", row.id),
         job_kind="mailbox_message_import",
@@ -513,7 +640,9 @@ def _mailbox_import_record(row: MailboxMessageImport) -> ProviderOperationRecord
 def _mailbox_webhook_record(row: MailboxWebhookEvent) -> ProviderOperationRecord:
     operator_state = _operator_state(row.last_error_redacted)
     replayable = (
-        row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES and row.mailbox_connection_id is not None
+        row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES
+        and row.mailbox_connection_id is not None
+        and operator_state == "open"
     )
     return ProviderOperationRecord(
         id=_operation_id("mailbox_webhook", row.id),
@@ -532,7 +661,7 @@ def _mailbox_webhook_record(row: MailboxWebhookEvent) -> ProviderOperationRecord
         dead_letter_reason=None,
         attempts=row.attempts,
         max_attempts=max(row.max_attempts, 1),
-        next_attempt_at=row.next_attempt_at,
+        next_attempt_at=None,
         created_at=row.created_at,
         updated_at=row.updated_at,
         replay_available=replayable,
@@ -693,6 +822,42 @@ def list_provider_operations(
     include_resolved: bool = False,
     limit: int = 100,
 ) -> ProviderOperationListResponse:
+    source_limit = limit + 1
+    calendar_filters = [
+        CalendarEventSync.company_id == context.company.id,
+        or_(
+            CalendarEventSync.sync_status.in_(tuple(_CALENDAR_OPEN_STATUSES)),
+            and_(
+                CalendarEventSync.provider_event_id.is_(None),
+                CalendarEventSync.dead_letter_reason.startswith(
+                    CALENDAR_UPSERT_CLAIM_PREFIX
+                ),
+            ),
+        ),
+    ]
+    notification_filters = [
+        NotificationDeliveryIntent.company_id == context.company.id,
+        or_(
+            NotificationDeliveryIntent.status.in_(tuple(_NOTIFICATION_OPEN_STATUSES)),
+            NotificationDeliveryIntent.provider_event_id.startswith(
+                NOTIFICATION_DISPATCH_CLAIM_PREFIX
+            ),
+        ),
+    ]
+    webhook_filters = [
+        MailboxWebhookEvent.company_id == context.company.id,
+        MailboxWebhookEvent.status.in_(tuple(_MAILBOX_WEBHOOK_OPEN_STATUSES)),
+    ]
+    if not include_resolved:
+        calendar_filters.append(
+            _operator_open_clause(CalendarEventSync.dead_letter_reason)
+        )
+        notification_filters.append(
+            _operator_open_clause(NotificationDeliveryIntent.dead_letter_reason)
+        )
+        webhook_filters.append(
+            _operator_open_clause(MailboxWebhookEvent.last_error_redacted)
+        )
     calendar_rows = list(
         session.scalars(
             select(CalendarEventSync)
@@ -701,22 +866,26 @@ def list_provider_operations(
                 UserCalendarConnection.id == CalendarEventSync.calendar_connection_id,
             )
             .where(
-                CalendarEventSync.company_id == context.company.id,
-                CalendarEventSync.sync_status.in_(tuple(_CALENDAR_OPEN_STATUSES)),
+                *calendar_filters,
             )
-            .order_by(CalendarEventSync.updated_at.desc())
-            .limit(limit)
+            .order_by(
+                CalendarEventSync.updated_at.desc(),
+                CalendarEventSync.id.desc(),
+            )
+            .limit(source_limit)
         )
     )
     notification_rows = list(
         session.scalars(
             select(NotificationDeliveryIntent)
             .where(
-                NotificationDeliveryIntent.company_id == context.company.id,
-                NotificationDeliveryIntent.status.in_(tuple(_NOTIFICATION_OPEN_STATUSES)),
+                *notification_filters,
             )
-            .order_by(NotificationDeliveryIntent.updated_at.desc())
-            .limit(limit)
+            .order_by(
+                NotificationDeliveryIntent.updated_at.desc(),
+                NotificationDeliveryIntent.id.desc(),
+            )
+            .limit(source_limit)
         )
     )
     poll_statuses = (
@@ -737,8 +906,8 @@ def list_provider_operations(
                 TrackedCasePollRun.company_id == context.company.id,
                 TrackedCasePollRun.status.in_(poll_statuses),
             )
-            .order_by(TrackedCasePollRun.started_at.desc())
-            .limit(limit)
+            .order_by(TrackedCasePollRun.started_at.desc(), TrackedCasePollRun.id.desc())
+            .limit(source_limit)
         )
     )
     tracking_operation_statuses = (
@@ -763,8 +932,11 @@ def list_provider_operations(
                 TrackedCaseProviderOperation.company_id == context.company.id,
                 TrackedCaseProviderOperation.status.in_(tracking_operation_statuses),
             )
-            .order_by(TrackedCaseProviderOperation.updated_at.desc())
-            .limit(limit)
+            .order_by(
+                TrackedCaseProviderOperation.updated_at.desc(),
+                TrackedCaseProviderOperation.id.desc(),
+            )
+            .limit(source_limit)
         )
     )
     mailbox_import_rows = list(
@@ -774,19 +946,18 @@ def list_provider_operations(
                 MailboxMessageImport.company_id == context.company.id,
                 MailboxMessageImport.status.in_(tuple(_MAILBOX_IMPORT_OPEN_STATUSES)),
             )
-            .order_by(MailboxMessageImport.updated_at.desc())
-            .limit(limit)
+            .order_by(MailboxMessageImport.updated_at.desc(), MailboxMessageImport.id.desc())
+            .limit(source_limit)
         )
     )
     mailbox_webhook_rows = list(
         session.scalars(
             select(MailboxWebhookEvent)
             .where(
-                MailboxWebhookEvent.company_id == context.company.id,
-                MailboxWebhookEvent.status.in_(tuple(_MAILBOX_WEBHOOK_OPEN_STATUSES)),
+                *webhook_filters,
             )
-            .order_by(MailboxWebhookEvent.updated_at.desc())
-            .limit(limit)
+            .order_by(MailboxWebhookEvent.updated_at.desc(), MailboxWebhookEvent.id.desc())
+            .limit(source_limit)
         )
     )
     drive_candidate_rows = list(
@@ -796,8 +967,8 @@ def list_provider_operations(
                 DriveFileCandidate.company_id == context.company.id,
                 DriveFileCandidate.status == "failed",
             )
-            .order_by(DriveFileCandidate.updated_at.desc())
-            .limit(limit)
+            .order_by(DriveFileCandidate.updated_at.desc(), DriveFileCandidate.id.desc())
+            .limit(source_limit)
         )
     )
     calendar_candidate_rows = list(
@@ -812,8 +983,8 @@ def list_provider_operations(
                     )
                 ),
             )
-            .order_by(CalendarEventCandidate.updated_at.desc())
-            .limit(limit)
+            .order_by(CalendarEventCandidate.updated_at.desc(), CalendarEventCandidate.id.desc())
+            .limit(source_limit)
         )
     )
     inbound_email_event_rows = list(
@@ -823,8 +994,8 @@ def list_provider_operations(
                 InboundEmailEvent.company_id == context.company.id,
                 InboundEmailEvent.status.in_(("failed", "rejected")),
             )
-            .order_by(InboundEmailEvent.updated_at.desc())
-            .limit(limit)
+            .order_by(InboundEmailEvent.updated_at.desc(), InboundEmailEvent.id.desc())
+            .limit(source_limit)
         )
     )
     connector_health_rows = list(
@@ -843,8 +1014,8 @@ def list_provider_operations(
                     )
                 ),
             )
-            .order_by(ConnectorHealthRecord.updated_at.desc())
-            .limit(limit)
+            .order_by(ConnectorHealthRecord.updated_at.desc(), ConnectorHealthRecord.id.desc())
+            .limit(source_limit)
         )
     )
     records = [
@@ -861,10 +1032,17 @@ def list_provider_operations(
     ]
     if not include_resolved:
         records = [row for row in records if row.operator_state == "open"]
-    records.sort(key=lambda row: row.updated_at, reverse=True)
+    records.sort(
+        key=lambda row: (_as_aware(row.updated_at), row.id, row.job_kind),
+        reverse=True,
+    )
+    has_more = len(records) > limit
     records = [_enrich_operation(row) for row in records[:limit]]
     return ProviderOperationListResponse(
         operations=records,
+        returned_count=len(records),
+        page_limit=limit,
+        has_more=has_more,
         open_count=sum(1 for row in records if row.operator_state == "open"),
         ignored_count=sum(1 for row in records if row.operator_state == "ignored"),
         resolved_count=sum(1 for row in records if row.operator_state == "resolved"),
@@ -877,8 +1055,9 @@ def _load_calendar_operation(
     *,
     context: SessionContext,
     row_id: str,
+    for_update: bool = False,
 ) -> CalendarEventSync:
-    row = session.scalar(
+    statement = (
         select(CalendarEventSync)
         .join(
             UserCalendarConnection,
@@ -889,6 +1068,11 @@ def _load_calendar_operation(
             CalendarEventSync.company_id == context.company.id,
         )
     )
+    if for_update:
+        statement = statement.with_for_update(of=CalendarEventSync).execution_options(
+            populate_existing=True
+        )
+    row = session.scalar(statement)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -897,18 +1081,55 @@ def _load_calendar_operation(
     return row
 
 
+def _lock_calendar_operation_with_source_parent(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> CalendarEventSync:
+    """Acquire a calendar operation in source-parent -> Sync order."""
+
+    advisory = _load_calendar_operation(
+        session,
+        context=context,
+        row_id=row_id,
+    )
+    from caseops_api.services.calendar_sync import (
+        _lock_calendar_projection_source_parent,
+    )
+
+    _lock_calendar_projection_source_parent(
+        session,
+        company_id=context.company.id,
+        source_type=str(advisory.source_type),
+        source_id=advisory.source_id,
+    )
+    return _load_calendar_operation(
+        session,
+        context=context,
+        row_id=row_id,
+        for_update=True,
+    )
+
+
 def _load_notification_operation(
     session: Session,
     *,
     context: SessionContext,
     row_id: str,
+    for_update: bool = False,
 ) -> NotificationDeliveryIntent:
-    row = session.scalar(
+    statement = (
         select(NotificationDeliveryIntent).where(
             NotificationDeliveryIntent.id == row_id,
             NotificationDeliveryIntent.company_id == context.company.id,
         )
     )
+    if for_update:
+        statement = statement.with_for_update(
+            of=NotificationDeliveryIntent
+        ).execution_options(populate_existing=True)
+    row = session.scalar(statement)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -922,13 +1143,17 @@ def _load_case_tracking_poll_operation(
     *,
     context: SessionContext,
     row_id: str,
+    for_update: bool = False,
 ) -> TrackedCasePollRun:
-    row = session.scalar(
-        select(TrackedCasePollRun).where(
+    statement = select(TrackedCasePollRun).where(
             TrackedCasePollRun.id == row_id,
             TrackedCasePollRun.company_id == context.company.id,
         )
-    )
+    if for_update:
+        statement = statement.with_for_update(
+            of=TrackedCasePollRun
+        ).execution_options(populate_existing=True)
+    row = session.scalar(statement)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -942,13 +1167,17 @@ def _load_case_tracking_record_operation(
     *,
     context: SessionContext,
     row_id: str,
+    for_update: bool = False,
 ) -> TrackedCaseProviderOperation:
-    row = session.scalar(
-        select(TrackedCaseProviderOperation).where(
+    statement = select(TrackedCaseProviderOperation).where(
             TrackedCaseProviderOperation.id == row_id,
             TrackedCaseProviderOperation.company_id == context.company.id,
         )
-    )
+    if for_update:
+        statement = statement.with_for_update(
+            of=TrackedCaseProviderOperation
+        ).execution_options(populate_existing=True)
+    row = session.scalar(statement)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -962,13 +1191,17 @@ def _load_mailbox_import_operation(
     *,
     context: SessionContext,
     row_id: str,
+    for_update: bool = False,
 ) -> MailboxMessageImport:
-    row = session.scalar(
-        select(MailboxMessageImport).where(
+    statement = select(MailboxMessageImport).where(
             MailboxMessageImport.id == row_id,
             MailboxMessageImport.company_id == context.company.id,
         )
-    )
+    if for_update:
+        statement = statement.with_for_update(
+            of=MailboxMessageImport
+        ).execution_options(populate_existing=True)
+    row = session.scalar(statement)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -982,13 +1215,17 @@ def _load_mailbox_webhook_operation(
     *,
     context: SessionContext,
     row_id: str,
+    for_update: bool = False,
 ) -> MailboxWebhookEvent:
-    row = session.scalar(
-        select(MailboxWebhookEvent).where(
+    statement = select(MailboxWebhookEvent).where(
             MailboxWebhookEvent.id == row_id,
             MailboxWebhookEvent.company_id == context.company.id,
         )
-    )
+    if for_update:
+        statement = statement.with_for_update(
+            of=MailboxWebhookEvent
+        ).execution_options(populate_existing=True)
+    row = session.scalar(statement)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1039,6 +1276,21 @@ def _load_operation_record(
     )
 
 
+def get_provider_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    operation_id: str,
+) -> ProviderOperationRecord:
+    """Return one exact tenant-scoped operation without list-window coupling."""
+
+    return _load_operation_record(
+        session,
+        context=context,
+        operation_id=operation_id,
+    )
+
+
 def _replay_cost(
     session: Session,
     *,
@@ -1069,12 +1321,42 @@ def _replay_cost(
     )
 
 
+def _calendar_record_requires_manual_reconciliation(
+    record: ProviderOperationRecord,
+) -> bool:
+    return bool(
+        record.job_kind == "calendar_sync"
+        and record.manual_reconciliation_required
+    )
+
+
+def _protected_claim_detail(
+    record: ProviderOperationRecord,
+) -> dict[str, str] | None:
+    code = record.automatic_replay_block_code
+    if code == calendar_sync_claim_in_flight_detail()["code"]:
+        return calendar_sync_claim_in_flight_detail()
+    if code == calendar_sync_reconciliation_detail()["code"]:
+        return calendar_sync_reconciliation_detail()
+    if code == notification_dispatch_claim_in_flight_detail()["code"]:
+        return notification_dispatch_claim_in_flight_detail()
+    if code == notification_provider_reconciliation_detail()["code"]:
+        return notification_provider_reconciliation_detail()
+    return None
+
+
 def preview_provider_operation_replay(
     session: Session,
     *,
     context: SessionContext,
     operation_ids: list[str],
 ) -> ProviderOperationReplayPreviewResponse:
+    context = _fence_provider_operator(
+        session,
+        context=context,
+        capability="workspace:admin",
+        step_up_purpose="provider_operation_replay",
+    )
     if not 1 <= len(operation_ids) <= _MAX_REPLAY_BATCH_SIZE:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -1092,6 +1374,41 @@ def preview_provider_operation_replay(
             operation_id=operation_id,
         )
         if not record.replay_available:
+            reconciliation_required = (
+                _calendar_record_requires_manual_reconciliation(record)
+            )
+            protected_claim_detail = _protected_claim_detail(record)
+            if protected_claim_detail is not None:
+                kind, row_id = _split_operation_id(operation_id)
+                if kind == "calendar_sync":
+                    protected_row = _lock_calendar_operation_with_source_parent(
+                        session,
+                        context=context,
+                        row_id=row_id,
+                    )
+                    _deny_protected_calendar_claim_action(
+                        session,
+                        context=context,
+                        row=protected_row,
+                        action="replay",
+                        reason=None,
+                        commit=True,
+                    )
+                if kind == "notification_delivery":
+                    protected_intent = _load_notification_operation(
+                        session,
+                        context=context,
+                        row_id=row_id,
+                        for_update=True,
+                    )
+                    _deny_protected_notification_claim_action(
+                        session,
+                        context=context,
+                        row=protected_intent,
+                        action="replay",
+                        reason=None,
+                        commit=True,
+                    )
             record_from_context(
                 session,
                 context,
@@ -1102,13 +1419,21 @@ def preview_provider_operation_replay(
                 metadata={
                     "job_kind": record.job_kind,
                     "provider": record.provider,
-                    "reason": "operation_not_replayable",
+                    "reason": (
+                        "calendar_upsert_outcome_unknown"
+                        if reconciliation_required
+                        else "operation_not_replayable"
+                    ),
                 },
             )
             session.commit()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Provider operation {operation_id} is not replayable.",
+                detail=(
+                    protected_claim_detail
+                    if protected_claim_detail is not None
+                    else f"Provider operation {operation_id} is not replayable."
+                ),
             )
         cost, cost_basis, warning = _replay_cost(session, record=record)
         total_cost += cost
@@ -1203,6 +1528,12 @@ def _validated_preview_operations(
             operation_id=operation_id,
         )
         already_replayed = current.status == replay_targets.get(current.job_kind)
+        protected_claim_detail = _protected_claim_detail(current)
+        if protected_claim_detail is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=protected_claim_detail,
+            )
         if not already_replayed and (
             current.status != expected.get("status")
             or _as_aware(current.updated_at).isoformat() != expected.get("updated_at")
@@ -1257,12 +1588,59 @@ def replay_provider_operation(
     operation_id: str,
     reason: str | None = None,
     commit: bool = True,
+    actor_fenced: bool = False,
 ) -> ProviderOperationActionResponse:
+    if not actor_fenced:
+        context = _fence_provider_operator(
+            session,
+            context=context,
+            capability="workspace:admin",
+            step_up_purpose="provider_operation_replay",
+        )
     kind, row_id = _split_operation_id(operation_id)
     current_time = _now()
     if kind == "calendar_sync":
-        row = _load_calendar_operation(session, context=context, row_id=row_id)
+        row = _lock_calendar_operation_with_source_parent(
+            session,
+            context=context,
+            row_id=row_id,
+        )
         previous_status = str(row.sync_status)
+        _deny_protected_calendar_claim_action(
+            session,
+            context=context,
+            row=row,
+            action="replay",
+            reason=reason,
+            commit=commit,
+        )
+        replay_block_code = calendar_sync_automatic_replay_block_code(row)
+        if replay_block_code is not None:
+            _audit_operation_action(
+                session,
+                context=context,
+                action="replay",
+                target_type="calendar_event_sync",
+                target_id=row.id,
+                provider=str(row.connection.provider),
+                previous_status=previous_status,
+                next_status=previous_status,
+                changed=False,
+                result=AuditResult.DENIED,
+                reason=reason,
+            )
+            session.commit() if commit else session.flush()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    calendar_sync_reconciliation_detail()
+                    if calendar_sync_requires_manual_reconciliation(row)
+                    else {
+                        "code": replay_block_code,
+                        "message": "This calendar operation is not replayable.",
+                    }
+                ),
+            )
         changed = row.sync_status in _CALENDAR_OPEN_STATUSES
         if changed:
             if row.sync_status == CalendarEventSyncStatus.DEAD_LETTER:
@@ -1298,7 +1676,9 @@ def replay_provider_operation(
         )
 
     if kind == "case_tracking_poll":
-        row = _load_case_tracking_poll_operation(session, context=context, row_id=row_id)
+        row = _load_case_tracking_poll_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         _audit_operation_action(
             session,
             context=context,
@@ -1326,7 +1706,9 @@ def replay_provider_operation(
         )
 
     if kind == "case_tracking_record":
-        row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
+        row = _load_case_tracking_record_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         previous_status = row.status
         changed = row.status in {"failed", "quarantined"} and (
             row.status == "quarantined" or row.attempts < row.max_attempts
@@ -1391,12 +1773,14 @@ def replay_provider_operation(
         )
 
     if kind == "mailbox_message_import":
-        row = _load_mailbox_import_operation(session, context=context, row_id=row_id)
+        row = _load_mailbox_import_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         previous_status = str(row.status)
         changed = row.status in {
             MailboxImportStatus.FAILED,
             MailboxImportStatus.DEAD_LETTER,
-        }
+        } and _operator_state(row.dead_letter_reason) == "open"
         if changed:
             if row.status == MailboxImportStatus.DEAD_LETTER:
                 row.attempts = 0
@@ -1430,14 +1814,18 @@ def replay_provider_operation(
         )
 
     if kind == "mailbox_webhook":
-        row = _load_mailbox_webhook_operation(session, context=context, row_id=row_id)
+        row = _load_mailbox_webhook_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         previous_status = str(row.status)
-        changed = row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES
+        changed = (
+            row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES
+            and _operator_state(row.last_error_redacted) == "open"
+        )
         if changed:
             row.status = MailboxWebhookStatus.QUEUED
             row.attempts = 0
             row.last_error_redacted = None
-            row.next_attempt_at = current_time
             row.updated_at = current_time
             session.add(row)
         _audit_operation_action(
@@ -1464,8 +1852,21 @@ def replay_provider_operation(
             operation=_mailbox_webhook_record(row),
         )
 
-    row = _load_notification_operation(session, context=context, row_id=row_id)
+    row = _load_notification_operation(
+        session,
+        context=context,
+        row_id=row_id,
+        for_update=True,
+    )
     previous_status = str(row.status)
+    _deny_protected_notification_claim_action(
+        session,
+        context=context,
+        row=row,
+        action="replay",
+        reason=reason,
+        commit=commit,
+    )
     if row.channel != NotificationDeliveryChannel.IN_APP:
         _audit_operation_action(
             session,
@@ -1491,7 +1892,10 @@ def replay_provider_operation(
             operation=_notification_record(row),
         )
 
-    changed = row.status in _NOTIFICATION_OPEN_STATUSES
+    changed = (
+        row.status in _NOTIFICATION_OPEN_STATUSES
+        and _operator_state(row.dead_letter_reason) == "open"
+    )
     if changed:
         if row.status == NotificationDeliveryStatus.DEAD_LETTER:
             row.attempts = 0
@@ -1526,6 +1930,130 @@ def replay_provider_operation(
     )
 
 
+def _deny_protected_calendar_claim_action(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: CalendarEventSync,
+    action: ProviderOperationAction,
+    reason: str | None,
+    commit: bool,
+) -> None:
+    """Preserve a no-receipt create claim before any operator mutation."""
+
+    claim_state = calendar_sync_upsert_claim_state(row)
+    if claim_state == "none":
+        return
+    previous_status = str(row.sync_status)
+    if claim_state == "expired":
+        changed = materialize_expired_calendar_sync_upsert_claim(row)
+        if changed:
+            session.add(row)
+            if row.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+                from caseops_api.services.calendar_sync import (
+                    _recompute_ip_calendar_projection_status,
+                )
+
+                _recompute_ip_calendar_projection_status(
+                    session,
+                    company_id=context.company.id,
+                    matter_deadline_id=row.source_id,
+                )
+            record_from_context(
+                session,
+                context,
+                action="calendar.sync.claim_expired",
+                target_type="calendar_event_sync",
+                target_id=row.id,
+                result=AuditResult.FAILED,
+                metadata={
+                    "provider": str(row.connection.provider),
+                    "source_type": str(row.source_type),
+                    "source_ref": redact_identifier(row.source_id),
+                    "classified_by": "provider_operator_guard",
+                },
+            )
+        claim_state = calendar_sync_upsert_claim_state(row)
+    _audit_operation_action(
+        session,
+        context=context,
+        action=action,
+        target_type="calendar_event_sync",
+        target_id=row.id,
+        provider=str(row.connection.provider),
+        previous_status=previous_status,
+        next_status=str(row.sync_status),
+        changed=False,
+        result=AuditResult.DENIED,
+        reason=reason,
+    )
+    session.commit() if commit else session.flush()
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            calendar_sync_claim_in_flight_detail()
+            if claim_state == "live"
+            else calendar_sync_reconciliation_detail()
+        ),
+    )
+
+
+def _deny_protected_notification_claim_action(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: NotificationDeliveryIntent,
+    action: ProviderOperationAction,
+    reason: str | None,
+    commit: bool,
+) -> None:
+    """Preserve a raw/typed external dispatch before operator mutation."""
+
+    claim_state = notification_dispatch_claim_state(row)
+    if claim_state == "none":
+        return
+    previous_status = str(row.status)
+    if claim_state == "expired":
+        changed = materialize_expired_notification_dispatch_claim(row)
+        if changed:
+            session.add(row)
+            record_from_context(
+                session,
+                context,
+                action="notification.delivery.claim_expired",
+                target_type="notification_delivery_intent",
+                target_id=row.id,
+                result=AuditResult.FAILED,
+                metadata={
+                    "channel": str(row.channel),
+                    "classified_by": "provider_operator_guard",
+                },
+            )
+        claim_state = notification_dispatch_claim_state(row)
+    _audit_operation_action(
+        session,
+        context=context,
+        action=action,
+        target_type="notification_delivery_intent",
+        target_id=row.id,
+        provider=str(row.channel),
+        previous_status=previous_status,
+        next_status=str(row.status),
+        changed=False,
+        result=AuditResult.DENIED,
+        reason=reason,
+    )
+    session.commit() if commit else session.flush()
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            notification_dispatch_claim_in_flight_detail()
+            if claim_state == "live"
+            else notification_provider_reconciliation_detail()
+        ),
+    )
+
+
 def confirm_provider_operation_replay(
     session: Session,
     *,
@@ -1534,6 +2062,12 @@ def confirm_provider_operation_replay(
     reason: str,
     expected_operation_ids: list[str] | None = None,
 ) -> ProviderOperationReplayBatchResponse:
+    context = _fence_provider_operator(
+        session,
+        context=context,
+        capability="workspace:admin",
+        step_up_purpose="provider_operation_replay",
+    )
     operation_ids, estimated_total_cost_minor = _validated_preview_operations(
         session,
         context=context,
@@ -1549,6 +2083,7 @@ def confirm_provider_operation_replay(
                 operation_id=operation_id,
                 reason=reason,
                 commit=False,
+                actor_fenced=True,
             )
             responses.append(
                 response.model_copy(update={"operation": _enrich_operation(response.operation)})
@@ -1587,13 +2122,21 @@ def resolve_case_tracking_incident(
     prevention: str,
     canary_evidence: str,
 ) -> ProviderOperationActionResponse:
+    context = _fence_provider_operator(
+        session,
+        context=context,
+        capability="workspace:admin",
+        step_up_purpose="provider_incident_resolution",
+    )
     kind, row_id = _split_operation_id(operation_id)
     if kind != "case_tracking_record":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Structured incident closure applies only to tracked-case record operations.",
         )
-    row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
+    row = _load_case_tracking_record_operation(
+        session, context=context, row_id=row_id, for_update=True
+    )
     metadata = dict(row.metadata_json or {})
     replay_id = str(metadata.get("replay_operation_id") or "")
     replay = (
@@ -1670,13 +2213,31 @@ def update_provider_operation_state(
     action: Literal["ignore", "mark_resolved"],
     reason: str | None = None,
 ) -> ProviderOperationActionResponse:
+    context = _fence_provider_operator(
+        session,
+        context=context,
+        capability="workspace:admin",
+        step_up_purpose="destructive_action",
+    )
     kind, row_id = _split_operation_id(operation_id)
     marker = _OPERATOR_IGNORE_REASON if action == "ignore" else _OPERATOR_RESOLVE_REASON
     current_time = _now()
 
     if kind == "calendar_sync":
-        row = _load_calendar_operation(session, context=context, row_id=row_id)
+        row = _lock_calendar_operation_with_source_parent(
+            session,
+            context=context,
+            row_id=row_id,
+        )
         previous_status = str(row.sync_status)
+        _deny_protected_calendar_claim_action(
+            session,
+            context=context,
+            row=row,
+            action=action,
+            reason=reason,
+            commit=True,
+        )
         changed = (
             row.sync_status
             not in {
@@ -1688,7 +2249,6 @@ def update_provider_operation_state(
         if changed:
             row.sync_status = CalendarEventSyncStatus.DEAD_LETTER
             row.dead_letter_reason = marker
-            row.next_attempt_at = None
             row.updated_at = current_time
             session.add(row)
         _audit_operation_action(
@@ -1716,7 +2276,9 @@ def update_provider_operation_state(
         )
 
     if kind == "case_tracking_poll":
-        row = _load_case_tracking_poll_operation(session, context=context, row_id=row_id)
+        row = _load_case_tracking_poll_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         _audit_operation_action(
             session,
             context=context,
@@ -1743,7 +2305,9 @@ def update_provider_operation_state(
         )
 
     if kind == "case_tracking_record":
-        row = _load_case_tracking_record_operation(session, context=context, row_id=row_id)
+        row = _load_case_tracking_record_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         if action == "mark_resolved":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1801,7 +2365,9 @@ def update_provider_operation_state(
         )
 
     if kind == "mailbox_message_import":
-        row = _load_mailbox_import_operation(session, context=context, row_id=row_id)
+        row = _load_mailbox_import_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         previous_status = str(row.status)
         changed = row.status not in {
             MailboxImportStatus.IMPORTED,
@@ -1842,13 +2408,14 @@ def update_provider_operation_state(
         )
 
     if kind == "mailbox_webhook":
-        row = _load_mailbox_webhook_operation(session, context=context, row_id=row_id)
+        row = _load_mailbox_webhook_operation(
+            session, context=context, row_id=row_id, for_update=True
+        )
         previous_status = str(row.status)
         changed = row.status != MailboxWebhookStatus.PROCESSED
         if changed:
             row.status = MailboxWebhookStatus.DEAD_LETTER
             row.last_error_redacted = marker
-            row.next_attempt_at = None
             row.updated_at = current_time
             session.add(row)
         _audit_operation_action(
@@ -1875,8 +2442,21 @@ def update_provider_operation_state(
             operation=_mailbox_webhook_record(row),
         )
 
-    row = _load_notification_operation(session, context=context, row_id=row_id)
+    row = _load_notification_operation(
+        session,
+        context=context,
+        row_id=row_id,
+        for_update=True,
+    )
     previous_status = str(row.status)
+    _deny_protected_notification_claim_action(
+        session,
+        context=context,
+        row=row,
+        action=action,
+        reason=reason,
+        commit=True,
+    )
     changed = (
         row.status != NotificationDeliveryStatus.DELIVERED and row.dead_letter_reason != marker
     )
@@ -1909,6 +2489,65 @@ def update_provider_operation_state(
             else "Notification intent was marked operator-resolved."
         ),
         operation=_notification_record(row),
+    )
+
+
+def reconcile_calendar_provider_unknown_outcome(
+    session: Session,
+    *,
+    context: SessionContext,
+    operation_id: str,
+    action: Literal["attach_remote_event", "attest_remote_absence"],
+    expected_updated_at: datetime,
+    expected_status: str,
+    expected_dead_letter_reason: str,
+    expected_provider: str,
+    expected_connection_id: str,
+    expected_source_type: str,
+    expected_source_id: str,
+    evidence_reference: str,
+    provider_event_id: str | None,
+) -> CalendarUnknownOutcomeReconciliationResponse:
+    kind, row_id = _split_operation_id(operation_id)
+    if kind != "calendar_sync":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "calendar_reconciliation_invalid_operation_kind",
+                "message": "Only calendar sync operations can be reconciled here.",
+            },
+        )
+    # Lazy import avoids making calendar_sync <-> provider_operations a module
+    # cycle while keeping the canonical lock/recompute implementation next to
+    # calendar claims and revocation cleanup.
+    from caseops_api.services.calendar_sync import (
+        reconcile_calendar_unknown_outcome,
+    )
+
+    row = reconcile_calendar_unknown_outcome(
+        session,
+        context=context,
+        sync_id=row_id,
+        action=action,
+        expected_updated_at=expected_updated_at,
+        expected_status=expected_status,
+        expected_dead_letter_reason=expected_dead_letter_reason,
+        expected_provider=expected_provider,
+        expected_connection_id=expected_connection_id,
+        expected_source_type=expected_source_type,
+        expected_source_id=expected_source_id,
+        evidence_reference=evidence_reference,
+        provider_event_id=provider_event_id,
+    )
+    return CalendarUnknownOutcomeReconciliationResponse(
+        action=action,
+        changed=True,
+        message=(
+            "Verified remote event attached and queued for exact deletion."
+            if action == "attach_remote_event"
+            else "Verified remote absence recorded; the tombstone is closed."
+        ),
+        operation=_enrich_operation(_calendar_record(row)),
     )
 
 

@@ -10,9 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.db.models import (
-    CalendarConnectionStatus,
-    CalendarEventSync,
-    CalendarEventSyncStatus,
     Communication,
     CompanyMembership,
     CompanyNotice,
@@ -31,6 +28,8 @@ from caseops_api.db.models import (
     IpTitleInterest,
     IpTrademarkParticularVersion,
     Matter,
+    MatterAccessGrant,
+    MatterAccessLevel,
     MatterAttachment,
     MatterDeadline,
     MatterDeadlineStatus,
@@ -39,7 +38,6 @@ from caseops_api.db.models import (
     MatterTimeEntry,
     Team,
     TeamMembership,
-    UserCalendarConnection,
 )
 from caseops_api.schemas.ip_operations import (
     IpAssignedCoverageListResponse,
@@ -95,15 +93,24 @@ from caseops_api.schemas.ip_operations import (
     TrademarkParticularPayload,
     TrademarkParticularVersionRecord,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_coverage_projection import (
+    cutover_ip_coverage_projection,
+)
 from caseops_api.services.ip_deadlines import (
     assert_distinct_deadline_coverage,
     assert_distinct_deadline_escalation,
 )
 from caseops_api.services.matter_access import (
+    _operational_matter_role_snapshot,
     assert_access,
     assert_ip_docket_access,
-    can_access_ip_docket,
+    can_stably_access_ip_docket,
+    can_stably_access_matter,
     seed_restricted_ip_creator_access,
     visible_ip_dockets_filter,
 )
@@ -178,7 +185,13 @@ def _matter_for_docket(
     if matter is None:
         raise HTTPException(status_code=404, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
-    return assert_operational_matter(session, matter=matter)
+    # Docket creation must discover every inherited responsibility before it
+    # acquires the participant fence.  Locking the Matter here would invert
+    # Membership/User -> Matter and would also turn the later role snapshot
+    # comparison into a same-snapshot no-op after a concurrent child writer.
+    # The caller takes and revalidates the authoritative Matter lock after the
+    # sorted participant fence.
+    return assert_operational_matter(session, matter=matter, lock_for_write=False)
 
 
 def _docket_or_404(
@@ -187,7 +200,19 @@ def _docket_or_404(
     context: SessionContext,
     docket_id: str,
     for_update: bool = False,
+    required_capability: str = "ip:write",
 ) -> IpDocketRecord:
+    if for_update:
+        # Every docket mutation eventually persists an actor-backed audit or
+        # evidence row.  Fence that FK participant before Matter/docket locks;
+        # otherwise offboarding can hold Membership while waiting on the
+        # docket and this writer can hold the docket while PostgreSQL waits for
+        # a Membership KEY SHARE lock during flush.
+        context = _lock_ip_writer_context(
+            session,
+            context=context,
+            required_capability=required_capability,
+        )
     statement = select(IpDocketRecord).where(
         IpDocketRecord.id == docket_id,
         IpDocketRecord.company_id == context.company.id,
@@ -243,6 +268,137 @@ def _docket_or_404(
         except MatterNotOperationalError as exc:
             raise HTTPException(status_code=404, detail="IP docket record not found.") from exc
     return docket
+
+
+def _lock_ip_writer_context(
+    session: Session,
+    *,
+    context: SessionContext,
+    required_capability: str,
+) -> SessionContext:
+    """Fence an IP mutation actor and rebuild context from locked rows."""
+
+    actor_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={context.membership.id},
+    )
+    locked_actor = actor_memberships.get(context.membership.id)
+    if (
+        locked_actor is None
+        or not locked_actor.is_active
+        or not locked_actor.user.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active company membership is required for this IP mutation.",
+        )
+    require_locked_membership_capability(
+        session,
+        locked_actor,
+        required_capability,
+    )
+    return SessionContext(
+        company=context.company,
+        user=locked_actor.user,
+        membership=locked_actor,
+    )
+
+
+def _lock_ip_dockets_in_stable_order(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_ids: set[str],
+    required_capability: str,
+) -> dict[str, IpDocketRecord]:
+    """Discover, lock, and exactly revalidate a related docket set.
+
+    Cross-docket writers cannot call ``_docket_or_404`` once per record: two
+    inverse relationships could otherwise acquire their Matter and docket
+    locks in opposite orders. The actor must already be fenced; then every
+    Matter parent is locked by id before every docket child is locked by id.
+    """
+
+    require_locked_membership_capability(
+        session,
+        context.membership,
+        required_capability,
+    )
+    requested_ids = sorted(docket_ids)
+    discovered_rows = list(
+        session.execute(
+            select(IpDocketRecord.id, IpDocketRecord.matter_id)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id.in_(requested_ids),
+            )
+            .order_by(IpDocketRecord.id)
+        ).all()
+    )
+    discovered_parents = {row.id: row.matter_id for row in discovered_rows}
+    if set(discovered_parents) != set(requested_ids):
+        raise HTTPException(status_code=404, detail="IP docket record not found.")
+
+    matter_ids = sorted(
+        {matter_id for matter_id in discovered_parents.values() if matter_id}
+    )
+    locked_matters = (
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == context.company.id,
+                    Matter.id.in_(matter_ids),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if matter_ids
+        else []
+    )
+    matters_by_id = {matter.id: matter for matter in locked_matters}
+    if set(matters_by_id) != set(matter_ids):
+        raise HTTPException(status_code=404, detail="IP docket record not found.")
+
+    locked_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id.in_(requested_ids),
+            )
+            .order_by(IpDocketRecord.id)
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    dockets_by_id = {docket.id: docket for docket in locked_dockets}
+    if set(dockets_by_id) != set(requested_ids):
+        raise HTTPException(status_code=404, detail="IP docket record not found.")
+
+    for docket_id in requested_ids:
+        docket = dockets_by_id[docket_id]
+        if docket.matter_id != discovered_parents[docket_id]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The IP docket parent changed; retry the operation.",
+            )
+        if docket.archived_by_matter_disposal or not docket.is_active:
+            raise HTTPException(status_code=404, detail="IP docket record not found.")
+        assert_ip_docket_access(session, context=context, docket=docket)
+        if docket.matter_id:
+            matter = matters_by_id[docket.matter_id]
+            try:
+                assert_operational_matter(session, matter=matter)
+            except MatterNotOperationalError as exc:
+                raise HTTPException(
+                    status_code=404,
+                    detail="IP docket record not found.",
+                ) from exc
+    return dockets_by_id
 
 
 def _current_particulars(session: Session, docket: IpDocketRecord) -> IpTrademarkParticularVersion:
@@ -356,7 +512,103 @@ def create_ip_docket(
     docket_id: str | None = None,
     source_provenance: tuple[str, str] | None = None,
 ) -> IpDocketRecordResponse:
-    _matter_for_docket(session, context=context, matter_id=payload.matter_id)
+    linked_matter = _matter_for_docket(
+        session,
+        context=context,
+        matter_id=payload.matter_id,
+    )
+    candidate_role_snapshot = (
+        _operational_matter_role_snapshot(session, matter=linked_matter)
+        if linked_matter is not None
+        else ()
+    )
+    candidate_role_ids = {
+        membership_id
+        for _object_type, _object_id, _relation, membership_id in candidate_role_snapshot
+    }
+    linked_role_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=candidate_role_ids | {context.membership.id},
+    )
+    locked_actor = linked_role_memberships.get(context.membership.id)
+    if (
+        locked_actor is None
+        or not locked_actor.is_active
+        or not locked_actor.user.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active company membership is required to create an IP record.",
+        )
+    require_locked_membership_capability(session, locked_actor, "ip:write")
+    if linked_matter is not None:
+        locked_matter = session.scalar(
+            select(Matter)
+            .where(
+                Matter.id == linked_matter.id,
+                Matter.company_id == context.company.id,
+            )
+            .with_for_update(of=Matter)
+            .execution_options(populate_existing=True)
+        )
+        if locked_matter is None:
+            raise HTTPException(status_code=404, detail="Matter not found.")
+        locked_role_snapshot = _operational_matter_role_snapshot(
+            session,
+            matter=locked_matter,
+        )
+        if locked_role_snapshot != candidate_role_snapshot:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_docket_linked_matter_roles_changed",
+                    "message": (
+                        "Linked-Matter responsibility changed; reload before creating "
+                        "the IP record."
+                    ),
+                },
+            )
+        locked_context = SessionContext(
+            company=context.company,
+            user=locked_actor.user,
+            membership=locked_actor,
+        )
+        _matter_for_docket(session, context=locked_context, matter_id=locked_matter.id)
+        for membership_id in sorted(candidate_role_ids):
+            member = linked_role_memberships.get(membership_id)
+            if member is None or not member.is_active or not member.user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_docket_linked_matter_role_inactive",
+                        "message": (
+                            "Reassign inactive Matter responsibility before linking a "
+                            "new operational IP record."
+                        ),
+                        "blocked_membership_ids": [membership_id],
+                    },
+                )
+            if not can_stably_access_matter(
+                session,
+                context=SessionContext(
+                    company=context.company,
+                    user=member.user,
+                    membership=member,
+                ),
+                matter=locked_matter,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_docket_linked_matter_role_lacks_stable_access",
+                        "message": (
+                            "Resolve durable linked-Matter access for every operational "
+                            "role before creating the IP record."
+                        ),
+                        "blocked_membership_ids": [membership_id],
+                    },
+                )
     errors = _readiness_errors(payload.particulars)
     docket_values = {
         "company_id": context.company.id,
@@ -388,6 +640,19 @@ def create_ip_docket(
         context=context,
         docket=docket,
     )
+    if docket.restricted:
+        for membership_id in sorted(candidate_role_ids - {context.membership.id}):
+            session.add(
+                MatterAccessGrant(
+                    company_id=context.company.id,
+                    ip_docket_id=docket.id,
+                    membership_id=membership_id,
+                    access_level=MatterAccessLevel.MEMBER,
+                    reason="Initial restricted-record Matter responsibility access.",
+                    granted_by_membership_id=context.membership.id,
+                )
+            )
+            docket.access_policy_version += 1
     version = _new_version(
         docket=docket,
         context=context,
@@ -461,7 +726,13 @@ def append_ip_docket_version(
     docket_id: str,
     payload: IpDocketVersionCreateRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:write",
+    )
     if docket.current_version != payload.expected_current_version:
         raise HTTPException(
             status_code=409,
@@ -544,9 +815,64 @@ def _membership_or_404(
             CompanyMembership.company_id == context.company.id,
         )
     )
-    if row is None or not row.is_active:
+    if row is None or not row.is_active or not row.user.is_active:
         raise HTTPException(status_code=404, detail="Company membership not found.")
     return row
+
+
+def _lock_assignment_memberships_or_404(
+    session: Session,
+    context: SessionContext,
+    *,
+    membership_ids: set[str | None],
+    active_membership_ids: set[str | None],
+    required_capability: str,
+) -> dict[str, CompanyMembership]:
+    """Fence every assignment participant before locking lifecycle parents."""
+
+    required_active_ids = {
+        membership_id for membership_id in active_membership_ids if membership_id
+    } | {context.membership.id}
+    requested_ids = {
+        membership_id for membership_id in membership_ids if membership_id
+    } | required_active_ids
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=requested_ids,
+    )
+    if set(memberships) != requested_ids:
+        raise HTTPException(status_code=404, detail="Company membership not found.")
+    if any(
+        not memberships[membership_id].is_active
+        or not memberships[membership_id].user.is_active
+        for membership_id in required_active_ids
+    ):
+        raise HTTPException(status_code=404, detail="Company membership not found.")
+    require_locked_membership_capability(
+        session,
+        memberships[context.membership.id],
+        required_capability,
+    )
+    return memberships
+
+
+def _coverage_has_live_escalation(coverage: IpDeadlineCoverage) -> bool:
+    """Return whether the stored escalation can still receive responsibility."""
+
+    pending_immediate = (
+        coverage.replacement_decision == "pending"
+        and coverage.pending_replacement_membership_id is not None
+        and coverage.pending_replacement_membership_id
+        == coverage.responsible_membership_id
+        and coverage.emergency_escalation_membership_id is not None
+    )
+    active_emergency = (
+        coverage.coverage_status == "emergency"
+        and coverage.emergency_until is not None
+        and _aware_utc(coverage.emergency_until) > _now()
+    )
+    return pending_immediate or active_emergency
 
 
 def add_ip_notice_link(
@@ -556,7 +882,18 @@ def add_ip_notice_link(
     docket_id: str,
     payload: IpNoticeLinkCreateRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:write",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:write",
+    )
     notice = session.scalar(
         select(CompanyNotice).where(
             CompanyNotice.id == payload.notice_id,
@@ -743,7 +1080,18 @@ def discover_ip_evidence_candidates(
     context: SessionContext,
     docket_id: str,
 ) -> IpEvidenceDiscoveryResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:approve",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     discovered = 0
     duplicates = 0
     fingerprints: dict[str, IpEvidenceCandidate] = {}
@@ -873,7 +1221,13 @@ def review_ip_evidence_candidate(
     candidate_id: str,
     payload: IpEvidenceCandidateReviewRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     candidate = session.scalar(
         select(IpEvidenceCandidate)
         .where(
@@ -943,12 +1297,70 @@ def _deadline_for_docket(
     deadline_id: str,
 ) -> MatterDeadline:
     deadline = session.scalar(select(MatterDeadline).where(MatterDeadline.id == deadline_id))
-    if deadline is None or not docket.matter_id or deadline.matter_id != docket.matter_id:
+    if deadline is None or not (
+        (deadline.matter_id is None and deadline.ip_docket_id == docket.id)
+        or (
+            docket.matter_id is not None
+            and deadline.matter_id == docket.matter_id
+            and deadline.ip_docket_id is None
+        )
+    ):
         raise HTTPException(
             status_code=404,
-            detail="Operational deadline is not part of this IP record's Matter.",
+            detail="Operational deadline is not part of this IP record.",
         )
     return deadline
+
+
+def _lock_legal_deadlines_for_operational_deadlines(
+    session: Session,
+    *,
+    company_id: str,
+    matter_deadline_ids: set[str] | list[str],
+) -> dict[str, IpDeadline]:
+    """Lock legal parents before their operational deadline projections."""
+
+    ids = sorted(set(matter_deadline_ids))
+    if not ids:
+        return {}
+    candidates = list(
+        session.execute(
+            select(
+                IpDeadline.id,
+                IpDeadline.matter_deadline_id,
+                IpDeadline.docket_id,
+            ).where(
+                IpDeadline.company_id == company_id,
+                IpDeadline.matter_deadline_id.in_(ids),
+            )
+        ).all()
+    )
+    if not candidates:
+        return {}
+    rows = list(
+        session.scalars(
+            select(IpDeadline)
+            .where(
+                IpDeadline.company_id == company_id,
+                IpDeadline.id.in_([candidate.id for candidate in candidates]),
+            )
+            .order_by(IpDeadline.id)
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    expected = {
+        candidate.id: (candidate.matter_deadline_id, candidate.docket_id)
+        for candidate in candidates
+    }
+    if len(rows) != len(expected) or any(
+        (row.matter_deadline_id, row.docket_id) != expected.get(row.id) for row in rows
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="IP legal-deadline projection changed; reload and retry.",
+        )
+    return {row.matter_deadline_id: row for row in rows if row.matter_deadline_id}
 
 
 def _lock_docket_deadline(
@@ -965,16 +1377,26 @@ def _lock_docket_deadline(
     both rows.
     """
 
-    target_predicate = (
-        and_(
-            MatterDeadline.matter_id == docket.matter_id,
-            MatterDeadline.ip_docket_id.is_(None),
+    legal_deadline = _lock_legal_deadlines_for_operational_deadlines(
+        session,
+        company_id=docket.company_id,
+        matter_deadline_ids={deadline_id},
+    ).get(deadline_id)
+    if legal_deadline is not None and legal_deadline.docket_id != docket.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="IP legal deadline belongs to a different docket.",
         )
-        if docket.matter_id
-        else and_(
+    target_predicate = or_(
+        and_(
             MatterDeadline.ip_docket_id == docket.id,
             MatterDeadline.matter_id.is_(None),
-        )
+        ),
+        and_(
+            docket.matter_id is not None,
+            MatterDeadline.matter_id == docket.matter_id,
+            MatterDeadline.ip_docket_id.is_(None),
+        ),
     )
     deadline = session.scalar(
         select(MatterDeadline)
@@ -1006,6 +1428,71 @@ def _assert_operational_coverage_deadline(deadline: MatterDeadline) -> None:
     )
 
 
+def _operational_coverage_ids_for_deadline(
+    session: Session,
+    *,
+    company_id: str,
+    deadline: MatterDeadline,
+    lock: bool = False,
+) -> list[str]:
+    """Return live coverage projections sharing one identified deadline."""
+
+    statement = (
+        select(IpDeadlineCoverage, IpDocketRecord, Matter)
+        .join(IpDocketRecord, IpDocketRecord.id == IpDeadlineCoverage.docket_id)
+        .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+        .where(
+            IpDeadlineCoverage.company_id == company_id,
+            IpDeadlineCoverage.matter_deadline_id == deadline.id,
+        )
+        .order_by(IpDeadlineCoverage.id)
+    )
+    if lock:
+        statement = statement.with_for_update(of=IpDeadlineCoverage)
+    return [
+        coverage.id
+        for coverage, docket, matter in session.execute(statement).all()
+        if _coverage_child_is_operational(
+            coverage,
+            docket=docket,
+            deadline=deadline,
+            matter=matter,
+        )
+    ]
+
+
+def _assert_single_operational_coverage_projection(
+    session: Session,
+    *,
+    company_id: str,
+    deadline: MatterDeadline,
+    coverage_id: str | None,
+) -> None:
+    """Fail closed until a group handoff exists for shared live deadlines."""
+
+    operational_ids = _operational_coverage_ids_for_deadline(
+        session,
+        company_id=company_id,
+        deadline=deadline,
+        lock=True,
+    )
+    expected_ids = [] if coverage_id is None else [coverage_id]
+    if operational_ids == expected_ids:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "ip_coverage_shared_deadline_handoff_required",
+            "message": (
+                "This operational deadline is shared by multiple IP docket coverages. "
+                "Use a future group handoff workflow before changing responsibility."
+            ),
+            "matter_deadline_id": deadline.id,
+            "coverage_ids": operational_ids,
+        },
+    )
+
+
 def add_ip_deadline_coverage(
     session: Session,
     *,
@@ -1017,8 +1504,35 @@ def add_ip_deadline_coverage(
         responsible_membership_id=payload.responsible_membership_id,
         backup_membership_id=payload.backup_membership_id,
     )
+    deadline_candidate = session.execute(
+        select(
+            MatterDeadline.assignee_membership_id,
+            MatterDeadline.company_id,
+        ).where(MatterDeadline.id == payload.matter_deadline_id)
+    ).one_or_none()
+    if deadline_candidate is None or deadline_candidate.company_id != context.company.id:
+        raise HTTPException(
+            status_code=404,
+            detail="Operational deadline is not part of this IP record.",
+        )
+    assignment_ids = {
+        deadline_candidate.assignee_membership_id,
+        payload.responsible_membership_id,
+        payload.backup_membership_id,
+    }
+    memberships = _lock_assignment_memberships_or_404(
+        session,
+        context,
+        membership_ids=assignment_ids,
+        active_membership_ids=assignment_ids,
+        required_capability="ip:approve",
+    )
     docket = _docket_or_404(
-        session, context=context, docket_id=docket_id, for_update=True
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
     )
     deadline = _lock_docket_deadline(
         session,
@@ -1026,26 +1540,28 @@ def add_ip_deadline_coverage(
         deadline_id=payload.matter_deadline_id,
     )
     _assert_operational_coverage_deadline(deadline)
-    _membership_or_404(session, context, payload.responsible_membership_id)
-    if payload.backup_membership_id:
-        _membership_or_404(session, context, payload.backup_membership_id)
-    membership_ids = tuple(
-        value
-        for value in (
-            payload.responsible_membership_id,
-            payload.backup_membership_id,
+    if deadline.assignee_membership_id != deadline_candidate.assignee_membership_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_deadline_assignment_changed",
+                "message": "Deadline responsibility changed; reload before adding coverage.",
+            },
         )
-        if value
+    _assert_single_operational_coverage_projection(
+        session,
+        company_id=context.company.id,
+        deadline=deadline,
+        coverage_id=None,
     )
-    connections = list(
-        session.scalars(
-            select(UserCalendarConnection).where(
-                UserCalendarConnection.company_id == context.company.id,
-                UserCalendarConnection.membership_id.in_(membership_ids),
-                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+    for incoming_id in assignment_ids:
+        if incoming_id is not None:
+            _assert_replacement_can_cover(
+                session,
+                context=context,
+                replacement=memberships[incoming_id],
+                dockets=[docket],
             )
-        ).all()
-    )
     row = IpDeadlineCoverage(
         company_id=context.company.id,
         docket_id=docket.id,
@@ -1057,25 +1573,18 @@ def add_ip_deadline_coverage(
         accepted_at=_now() if payload.coverage_status == "accepted" else None,
     )
     session.add(row)
-    for connection in connections:
-        existing_sync = session.scalar(
-            select(CalendarEventSync).where(
-                CalendarEventSync.calendar_connection_id == connection.id,
-                CalendarEventSync.source_type == "matter_deadline",
-                CalendarEventSync.source_id == payload.matter_deadline_id,
-            )
-        )
-        if existing_sync is None:
-            session.add(
-                CalendarEventSync(
-                    company_id=context.company.id,
-                    calendar_connection_id=connection.id,
-                    source_type="matter_deadline",
-                    source_id=payload.matter_deadline_id,
-                    sync_status=CalendarEventSyncStatus.PENDING,
-                )
-            )
     session.flush()
+    projection = cutover_ip_coverage_projection(
+        session,
+        context=context,
+        docket=docket,
+        coverage=row,
+        previous_responsible_membership_id=deadline_candidate.assignee_membership_id,
+        previous_backup_membership_id=row.backup_membership_id,
+        reason="Initial IP deadline coverage assignment",
+        replacement_source="coverage_created",
+        responsible_accepted_at=row.accepted_at,
+    )
     record_from_context(
         session,
         context,
@@ -1086,7 +1595,9 @@ def add_ip_deadline_coverage(
         ip_docket_id=docket.id,
         metadata={
             "matter_deadline_id": payload.matter_deadline_id,
-            "calendar_projection_count": len(connections),
+            "calendar_projection_count": len(
+                projection.calendar.desired_connection_ids
+            ),
         },
     )
     try:
@@ -1098,11 +1609,10 @@ def add_ip_deadline_coverage(
 
 
 def _resolve_escalation(
-    session: Session,
-    context: SessionContext,
     *,
     mode: str,
     escalation_membership_id: str | None,
+    memberships: dict[str, CompanyMembership],
 ) -> CompanyMembership | None:
     """An immediate transfer must name where a rejection goes.
 
@@ -1124,7 +1634,75 @@ def _resolve_escalation(
                 ),
             },
         )
-    return _membership_or_404(session, context, escalation_membership_id)
+    return memberships[escalation_membership_id]
+
+
+def _assert_source_can_propose(
+    source: CompanyMembership,
+    *,
+    transfer_mode: str,
+) -> None:
+    """Legacy-inactive ownership may be repaired, but cannot stay pending."""
+
+    if transfer_mode != "proposed" or (
+        source.is_active and source.user.is_active
+    ):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "ip_coverage_immediate_repair_required",
+            "message": (
+                "An inactive current owner cannot retain responsibility during a "
+                "proposal. Use the privileged immediate repair workflow."
+            ),
+        },
+    )
+
+
+def _assert_operational_coverage_participants(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    coverage_id: str,
+    memberships: dict[str, CompanyMembership],
+    responsible_membership_id: str,
+    backup_membership_id: str | None,
+) -> None:
+    """Require every role that remains live to be active and dual-authorized."""
+
+    for role, membership_id in (
+        ("responsible", responsible_membership_id),
+        ("backup", backup_membership_id),
+    ):
+        if membership_id is None:
+            continue
+        membership = memberships.get(membership_id)
+        if (
+            membership is None
+            or not membership.is_active
+            or not membership.user.is_active
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_coverage_participant_repair_required",
+                    "message": (
+                        "A resulting operational coverage role belongs to an inactive "
+                        "employee. Repair it with an immediate authorized handoff."
+                    ),
+                    "coverage_id": coverage_id,
+                    "role": role,
+                    "membership_id": membership_id,
+                },
+            )
+        _assert_replacement_can_cover(
+            session,
+            context=context,
+            replacement=membership,
+            dockets=[docket],
+        )
 
 
 def _apply_coverage_transfer(
@@ -1139,10 +1717,10 @@ def _apply_coverage_transfer(
     """Move or propose responsibility for one coverage row (CAL-OPS-08).
 
     Returns ``True`` when responsibility actually moved. This is the single
-    place either transfer path may touch responsibility, and it deliberately
-    never writes ``accepted_at``: an acceptance is a record that a named person
-    took on a filing date, and only ``decide_ip_coverage_replacement`` — which
-    runs on that person's own action — is entitled to write one.
+    place either transfer path may touch responsibility. It never creates an
+    acceptance timestamp: an immediate handoff clears the prior owner's
+    acceptance when responsibility changes, and only the named replacement's
+    later decision may write a new ``accepted_at``.
     """
 
     coverage.pending_replacement_membership_id = replacement.id
@@ -1153,14 +1731,19 @@ def _apply_coverage_transfer(
     coverage.updated_at = now
 
     if mode == "immediate":
+        if coverage.responsible_membership_id != replacement.id:
+            coverage.accepted_at = None
         coverage.responsible_membership_id = replacement.id
         coverage.emergency_escalation_membership_id = escalation.id if escalation else None
+        coverage.emergency_until = None
         coverage.coverage_status = "reassigned"
         # They hold the work now, so it belongs on their calendar now.
         coverage.calendar_projection_status = "pending"
         return True
 
     # Proposed: the current owner keeps the work until the replacement accepts.
+    coverage.emergency_escalation_membership_id = None
+    coverage.emergency_until = None
     coverage.coverage_status = "transfer_pending"
     return False
 
@@ -1178,7 +1761,15 @@ def reassign_ip_deadline_coverage(
         backup_membership_id=payload.backup_membership_id,
     )
     candidate = session.execute(
-        select(IpDeadlineCoverage.docket_id, IpDeadlineCoverage.matter_deadline_id).where(
+        select(
+            IpDeadlineCoverage.docket_id,
+            IpDeadlineCoverage.matter_deadline_id,
+            IpDeadlineCoverage.responsible_membership_id,
+            IpDeadlineCoverage.backup_membership_id,
+            IpDeadlineCoverage.pending_replacement_membership_id,
+            IpDeadlineCoverage.emergency_escalation_membership_id,
+            IpDeadlineCoverage.reassignment_version,
+        ).where(
             IpDeadlineCoverage.id == coverage_id,
             IpDeadlineCoverage.docket_id == docket_id,
             IpDeadlineCoverage.company_id == context.company.id,
@@ -1186,8 +1777,54 @@ def reassign_ip_deadline_coverage(
     ).one_or_none()
     if candidate is None:
         raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    assignment_ids = {
+        candidate.responsible_membership_id,
+        candidate.backup_membership_id,
+        candidate.pending_replacement_membership_id,
+        candidate.emergency_escalation_membership_id,
+        payload.expected_responsible_membership_id,
+        payload.responsible_membership_id,
+        payload.backup_membership_id,
+        (
+            payload.escalation_membership_id
+            if payload.transfer_mode == "immediate"
+            else None
+        ),
+    }
+    active_assignment_ids = {
+        payload.responsible_membership_id,
+        (
+            payload.escalation_membership_id
+            if payload.transfer_mode == "immediate"
+            else None
+        ),
+    }
+    memberships = _lock_assignment_memberships_or_404(
+        session,
+        context,
+        membership_ids=assignment_ids,
+        active_membership_ids=active_assignment_ids,
+        required_capability="ip:approve",
+    )
+    source = memberships[candidate.responsible_membership_id]
+    _assert_source_can_propose(source, transfer_mode=payload.transfer_mode)
+    replacement = memberships[payload.responsible_membership_id]
+    backup = (
+        memberships[payload.backup_membership_id]
+        if payload.backup_membership_id
+        else None
+    )
+    escalation = _resolve_escalation(
+        mode=payload.transfer_mode,
+        escalation_membership_id=payload.escalation_membership_id,
+        memberships=memberships,
+    )
     docket = _docket_or_404(
-        session, context=context, docket_id=docket_id, for_update=True
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
     )
     deadline = _lock_docket_deadline(
         session,
@@ -1206,6 +1843,26 @@ def reassign_ip_deadline_coverage(
     )
     if coverage is None:
         raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    if (
+        coverage.responsible_membership_id,
+        coverage.backup_membership_id,
+        coverage.pending_replacement_membership_id,
+        coverage.emergency_escalation_membership_id,
+        coverage.reassignment_version,
+    ) != (
+        candidate.responsible_membership_id,
+        candidate.backup_membership_id,
+        candidate.pending_replacement_membership_id,
+        candidate.emergency_escalation_membership_id,
+        candidate.reassignment_version,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_assignment_changed",
+                "message": "Coverage assignments changed; reload before reassigning.",
+            },
+        )
     matter = session.get(Matter, docket.matter_id) if docket.matter_id else None
     if not _coverage_lifecycle_is_operational(
         coverage,
@@ -1233,6 +1890,16 @@ def reassign_ip_deadline_coverage(
                 "message": "Lifecycle-neutralized coverage cannot be reassigned.",
             },
         )
+    _assert_single_operational_coverage_projection(
+        session,
+        company_id=context.company.id,
+        deadline=deadline,
+        coverage_id=coverage.id,
+    )
+    assert_distinct_deadline_coverage(
+        responsible_membership_id=coverage.responsible_membership_id,
+        backup_membership_id=coverage.backup_membership_id,
+    )
     if coverage.responsible_membership_id != payload.expected_responsible_membership_id:
         raise HTTPException(
             status_code=409,
@@ -1252,42 +1919,70 @@ def reassign_ip_deadline_coverage(
         responsible_membership_id=effective_responsible_membership_id,
         backup_membership_id=payload.backup_membership_id,
     )
-    replacement = _membership_or_404(session, context, payload.responsible_membership_id)
-    backup = (
-        _membership_or_404(session, context, payload.backup_membership_id)
-        if payload.backup_membership_id
-        else None
+    if payload.backup_membership_id != coverage.backup_membership_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_backup_handoff_required",
+                "message": (
+                    "Existing backup responsibility cannot be replaced without an "
+                    "accepted backup-handoff workflow."
+                ),
+            },
+        )
+    _assert_operational_coverage_participants(
+        session,
+        context=context,
+        docket=docket,
+        coverage_id=coverage.id,
+        memberships=memberships,
+        responsible_membership_id=effective_responsible_membership_id,
+        backup_membership_id=payload.backup_membership_id,
     )
     # Guard before any mutation: an incoming owner or backup who cannot open
     # the record must not be given responsibility for its deadline.
-    for incoming in (replacement, backup):
+    for incoming in (replacement, backup, escalation):
         if incoming is not None:
             _assert_replacement_can_cover(
                 session, context=context, replacement=incoming, dockets=[docket]
             )
-    escalation = _resolve_escalation(
-        session,
-        context,
-        mode=payload.transfer_mode,
-        escalation_membership_id=payload.escalation_membership_id,
-    )
     if escalation is not None:
         assert_distinct_deadline_escalation(
             escalation_membership_id=escalation.id,
             backup_membership_id=payload.backup_membership_id,
+            responsible_membership_id=replacement.id,
         )
     old_responsible = coverage.responsible_membership_id
+    old_backup = coverage.backup_membership_id
     # Naming a backup is an administrative assignment and applies at once; the
     # backup is not accountable for the date until responsibility moves.
     coverage.backup_membership_id = payload.backup_membership_id
-    _apply_coverage_transfer(
+    now = _now()
+    moved = _apply_coverage_transfer(
         coverage,
         replacement=replacement,
         mode=payload.transfer_mode,
         escalation=escalation,
         reason=payload.reason,
-        now=_now(),
+        now=now,
     )
+    if moved:
+        session.flush()
+        cutover_ip_coverage_projection(
+            session,
+            context=context,
+            docket=docket,
+            coverage=coverage,
+            previous_responsible_membership_id=old_responsible,
+            previous_backup_membership_id=old_backup,
+            reason=payload.reason,
+            replacement_source="direct_immediate",
+            responsible_accepted_at=None,
+            notification_escalation_membership_id=(
+                escalation.id if escalation is not None else None
+            ),
+            changed_at=now,
+        )
     record_from_context(
         session,
         context,
@@ -1306,6 +2001,25 @@ def reassign_ip_deadline_coverage(
     )
     session.commit()
     return _serialize_docket(session, docket)
+
+
+def _membership_can_cover_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership: CompanyMembership,
+    docket: IpDocketRecord,
+) -> bool:
+    recipient = SessionContext(
+        company=context.company,
+        user=membership.user,
+        membership=membership,
+    )
+    return can_stably_access_ip_docket(
+        session,
+        context=recipient,
+        docket=docket,
+    )
 
 
 def _assert_replacement_can_cover(
@@ -1327,15 +2041,15 @@ def _assert_replacement_can_cover(
     other record content is disclosed.
     """
 
-    recipient = SessionContext(
-        company=context.company,
-        user=replacement.user,
-        membership=replacement,
-    )
     blocked = [
         docket.id
         for docket in dockets
-        if not can_access_ip_docket(session, context=recipient, docket=docket)
+        if not _membership_can_cover_docket(
+            session,
+            context=context,
+            membership=replacement,
+            docket=docket,
+        )
     ]
     if blocked:
         raise HTTPException(
@@ -1357,18 +2071,57 @@ def bulk_reassign_ip_deadline_coverages(
     context: SessionContext,
     payload: IpCoverageBulkReassignRequest,
     commit: bool = True,
+    replacement_source: str = "bulk_reassignment",
 ) -> IpCoverageBulkReassignResponse:
     if payload.from_membership_id == payload.to_membership_id:
         raise HTTPException(status_code=422, detail="Coverage replacement must be different.")
-    source = session.scalar(
-        select(CompanyMembership).where(
-            CompanyMembership.id == payload.from_membership_id,
-            CompanyMembership.company_id == context.company.id,
-        )
+    candidate_rows = _coverages_for_member(
+        session,
+        context=context,
+        membership_id=payload.from_membership_id,
     )
-    if source is None:
-        raise HTTPException(status_code=404, detail="Source membership not found.")
-    replacement = _membership_or_404(session, context, payload.to_membership_id)
+    assignment_ids = {
+        payload.from_membership_id,
+        payload.to_membership_id,
+        (
+            payload.escalation_membership_id
+            if payload.transfer_mode == "immediate"
+            else None
+        ),
+    }
+    assignment_ids.update(
+        membership_id
+        for row in candidate_rows
+        for membership_id in (
+            row.responsible_membership_id,
+            row.backup_membership_id,
+            row.pending_replacement_membership_id,
+            row.emergency_escalation_membership_id,
+        )
+        if membership_id is not None
+    )
+    memberships = _lock_assignment_memberships_or_404(
+        session,
+        context,
+        membership_ids=assignment_ids,
+        active_membership_ids={
+            payload.to_membership_id,
+            (
+                payload.escalation_membership_id
+                if payload.transfer_mode == "immediate"
+                else None
+            ),
+        },
+        required_capability="ip:approve",
+    )
+    source = memberships[payload.from_membership_id]
+    _assert_source_can_propose(source, transfer_mode=payload.transfer_mode)
+    replacement = memberships[payload.to_membership_id]
+    escalation = _resolve_escalation(
+        mode=payload.transfer_mode,
+        escalation_membership_id=payload.escalation_membership_id,
+        memberships=memberships,
+    )
     # Matter lifecycle is authoritative. Lock every affected parent before its
     # docket and coverage children, then re-read all three levels from the
     # database. This matches disposal's lock order and prevents a stale ORM row
@@ -1383,21 +2136,73 @@ def bulk_reassign_ip_deadline_coverages(
         source_membership_id=source.id,
         replacement_membership_id=replacement.id,
     )
+    if any(row.backup_membership_id == source.id for row in rows):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_backup_handoff_required",
+                "message": (
+                    "Existing backup responsibility cannot be bulk-reassigned without "
+                    "an accepted backup-handoff workflow."
+                ),
+            },
+        )
     _assert_replacement_can_cover(
         session, context=context, replacement=replacement, dockets=affected_dockets
     )
     affected_dockets_by_id = {docket.id: docket for docket in affected_dockets}
-    escalation = _resolve_escalation(
-        session,
-        context,
-        mode=payload.transfer_mode,
-        escalation_membership_id=payload.escalation_membership_id,
-    )
+    deadlines_by_id = {
+        deadline.id: deadline
+        for deadline in session.scalars(
+            select(MatterDeadline).where(
+                MatterDeadline.company_id == context.company.id,
+                MatterDeadline.id.in_({row.matter_deadline_id for row in rows}),
+            )
+        ).all()
+    }
+    for row in rows:
+        docket = affected_dockets_by_id.get(row.docket_id)
+        if docket is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Coverage participants changed; reload before reassignment.",
+            )
+        resulting_responsible_id = (
+            replacement.id
+            if row.responsible_membership_id == source.id
+            and payload.transfer_mode == "immediate"
+            else row.responsible_membership_id
+        )
+        _assert_operational_coverage_participants(
+            session,
+            context=context,
+            docket=docket,
+            coverage_id=row.id,
+            memberships=memberships,
+            responsible_membership_id=resulting_responsible_id,
+            backup_membership_id=row.backup_membership_id,
+        )
     if escalation is not None:
+        responsible_docket_ids = {
+            row.docket_id
+            for row in rows
+            if row.responsible_membership_id == source.id
+        }
+        _assert_replacement_can_cover(
+            session,
+            context=context,
+            replacement=escalation,
+            dockets=[
+                docket
+                for docket in affected_dockets
+                if docket.id in responsible_docket_ids
+            ],
+        )
         _assert_distinct_escalation_backups(
             rows,
             source_membership_id=source.id,
             escalation_membership_id=escalation.id,
+            replacement_membership_id=replacement.id,
         )
 
     responsible_count = 0
@@ -1412,13 +2217,15 @@ def bulk_reassign_ip_deadline_coverages(
                 detail=f"Coverage {row.id} changed; reload before bulk reassignment.",
             )
         changed_roles: list[str] = []
+        previous_responsible = row.responsible_membership_id
+        previous_backup = row.backup_membership_id
         if row.backup_membership_id == source.id:
             # Backup naming is administrative and applies at once.
             row.backup_membership_id = replacement.id
             backup_count += 1
             changed_roles.append("backup")
         if row.responsible_membership_id == source.id:
-            _apply_coverage_transfer(
+            moved = _apply_coverage_transfer(
                 row,
                 replacement=replacement,
                 mode=payload.transfer_mode,
@@ -1430,41 +2237,39 @@ def bulk_reassign_ip_deadline_coverages(
             pending_count += 1
             changed_roles.append("responsible")
         else:
+            moved = False
             row.updated_at = now
             row.reassignment_version += 1
-        # Only project onto the replacement's calendar once the work is actually
-        # theirs. A proposal they have not accepted must not appear as their
-        # commitment.
-        connection = (
-            session.scalar(
-                select(UserCalendarConnection).where(
-                    UserCalendarConnection.company_id == context.company.id,
-                    UserCalendarConnection.membership_id == replacement.id,
-                    UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
-                )
-            )
-            if row.responsible_membership_id == replacement.id
-            else None
-        )
-        if connection is not None:
-            existing_sync = session.scalar(
-                select(CalendarEventSync).where(
-                    CalendarEventSync.calendar_connection_id == connection.id,
-                    CalendarEventSync.source_type == "matter_deadline",
-                    CalendarEventSync.source_id == row.matter_deadline_id,
-                )
-            )
-            if existing_sync is None:
-                session.add(
-                    CalendarEventSync(
-                        company_id=context.company.id,
-                        calendar_connection_id=connection.id,
-                        source_type="matter_deadline",
-                        source_id=row.matter_deadline_id,
-                        sync_status=CalendarEventSyncStatus.PENDING,
-                    )
-                )
         docket = affected_dockets_by_id.get(row.docket_id)
+        deadline = deadlines_by_id.get(row.matter_deadline_id)
+        if docket is None or deadline is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Coverage projection changed; reload before reassignment.",
+            )
+        _assert_single_operational_coverage_projection(
+            session,
+            company_id=context.company.id,
+            deadline=deadline,
+            coverage_id=row.id,
+        )
+        if moved:
+            session.flush()
+            cutover_ip_coverage_projection(
+                session,
+                context=context,
+                docket=docket,
+                coverage=row,
+                previous_responsible_membership_id=previous_responsible,
+                previous_backup_membership_id=previous_backup,
+                reason=payload.reason,
+                replacement_source=replacement_source,
+                responsible_accepted_at=None,
+                notification_escalation_membership_id=(
+                    escalation.id if escalation is not None else None
+                ),
+                changed_at=now,
+            )
         record_from_context(
             session,
             context,
@@ -1503,7 +2308,18 @@ def add_ip_deadline_incident(
     docket_id: str,
     payload: IpDeadlineIncidentCreateRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:approve",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     for deadline_id in (payload.matter_deadline_id, payload.correction_deadline_id):
         if deadline_id:
             _deadline_for_docket(session, docket=docket, deadline_id=deadline_id)
@@ -1542,7 +2358,18 @@ def verify_ip_deadline_incident(
     incident_id: str,
     payload: IpDeadlineIncidentVerifyRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:approve",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     incident = session.scalar(
         select(IpDeadlineIncident)
         .where(
@@ -1581,17 +2408,33 @@ def add_ip_title_interest(
     docket_id: str,
     payload: IpTitleInterestCreateRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:approve",
+    )
     if payload.related_docket_id:
-        if payload.related_docket_id == docket.id:
+        if payload.related_docket_id == docket_id:
             raise HTTPException(status_code=422, detail="A docket cannot be related to itself.")
-        _docket_or_404(session, context=context, docket_id=payload.related_docket_id)
+    requested_docket_ids = {docket_id}
+    if payload.related_docket_id:
+        requested_docket_ids.add(payload.related_docket_id)
+    locked_dockets = _lock_ip_dockets_in_stable_order(
+        session,
+        context=context,
+        docket_ids=requested_docket_ids,
+        required_capability="ip:approve",
+    )
+    docket = locked_dockets[docket_id]
     existing = list(
         session.scalars(
-            select(IpTitleInterest).where(
+            select(IpTitleInterest)
+            .where(
                 IpTitleInterest.company_id == context.company.id,
                 IpTitleInterest.docket_id == docket.id,
             )
+            .order_by(IpTitleInterest.id)
+            .with_for_update()
         ).all()
     )
     flags: list[str] = []
@@ -1654,13 +2497,26 @@ def add_ip_related_right_obligation(
     docket_id: str,
     payload: IpRelatedRightObligationCreateRequest,
 ) -> IpDocketRecordResponse:
+    memberships = _lock_assignment_memberships_or_404(
+        session,
+        context,
+        membership_ids={payload.owner_membership_id},
+        active_membership_ids={payload.owner_membership_id},
+        required_capability="ip:approve",
+    )
     docket = _docket_or_404(
         session,
         context=context,
         docket_id=docket_id,
         for_update=True,
+        required_capability="ip:approve",
     )
-    _membership_or_404(session, context, payload.owner_membership_id)
+    _assert_replacement_can_cover(
+        session,
+        context=context,
+        replacement=memberships[payload.owner_membership_id],
+        dockets=[docket],
+    )
     if payload.title_interest_id:
         interest = session.scalar(
             select(IpTitleInterest).where(
@@ -1728,7 +2584,13 @@ def complete_ip_related_right_obligation(
     obligation_id: str,
     payload: IpRelatedRightObligationCompleteRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     row = session.scalar(
         select(IpRelatedRightObligation)
         .where(
@@ -1844,7 +2706,18 @@ def add_ip_cost_item(
     docket_id: str,
     payload: IpCostItemCreateRequest,
 ) -> IpDocketRecordResponse:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:fees_manage",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:fees_manage",
+    )
     if not docket.matter_id:
         raise HTTPException(status_code=409, detail="IP costs require a Matter billing owner.")
     cost = IpCostItem(
@@ -1883,7 +2756,13 @@ def reconcile_ip_cost_items(
     context: SessionContext,
     docket_id: str,
 ) -> IpCostReconciliationReport:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:fees_manage",
+    )
     costs = list(
         session.scalars(
             select(IpCostItem)
@@ -2171,6 +3050,12 @@ def create_ip_control_review(
     dismissal can hide them (CAL-OPS-13).
     """
 
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:write",
+    )
+
     reasons: list[str] = []
     for source in sorted({s.strip() for s in payload.stale_sources if s.strip()}):
         reasons.append(f"stale_source:{source}")
@@ -2310,6 +3195,11 @@ def record_ip_control_review_export(
 ) -> IpControlReviewRecord:
     """UJ-59-EXC-03 — a failed export must not leave the review signable."""
 
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:write",
+    )
     row = _review_or_404(session, context=context, review_id=review_id, for_update=True)
     _stored_control_review_snapshot(row)
     if row.signed_off_at is not None:
@@ -2344,6 +3234,11 @@ def sign_off_ip_control_review(
 ) -> IpControlReviewRecord:
     """CAL-OPS-09 sign-off, refused unless the review is genuinely clean."""
 
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:approve",
+    )
     row = _review_or_404(session, context=context, review_id=review_id, for_update=True)
     snapshot = _stored_control_review_snapshot(row)
     if row.version != payload.expected_version:
@@ -2626,6 +3521,10 @@ def _backup_replacement_conflicts(
         row
         for row in rows
         if (
+            row.responsible_membership_id == source_membership_id
+            and row.backup_membership_id == source_membership_id
+        )
+        or (
             row.backup_membership_id == source_membership_id
             and row.responsible_membership_id == replacement_membership_id
         )
@@ -2667,6 +3566,7 @@ def _assert_distinct_escalation_backups(
     *,
     source_membership_id: str,
     escalation_membership_id: str,
+    replacement_membership_id: str,
 ) -> None:
     """Refuse a fallback that cannot take responsibility after a decline."""
 
@@ -2675,6 +3575,7 @@ def _assert_distinct_escalation_backups(
             assert_distinct_deadline_escalation(
                 escalation_membership_id=escalation_membership_id,
                 backup_membership_id=row.backup_membership_id,
+                responsible_membership_id=replacement_membership_id,
             )
 
 
@@ -2715,6 +3616,7 @@ def _coverages_for_member(
     context: SessionContext,
     membership_id: str,
     for_update: bool = False,
+    include_auxiliary_roles: bool = False,
 ) -> list[IpDeadlineCoverage]:
     if for_update:
         rows, _dockets = _lock_operational_coverages_for_member(
@@ -2727,6 +3629,34 @@ def _coverages_for_member(
     # A preview is an actionable surface too. Filter the parent and deadline
     # lifecycle in SQL so a legacy non-terminal coverage row under a disposed
     # parent cannot appear transferable.
+    membership_predicate = or_(
+        IpDeadlineCoverage.responsible_membership_id == membership_id,
+        IpDeadlineCoverage.backup_membership_id == membership_id,
+    )
+    if include_auxiliary_roles:
+        membership_predicate = or_(
+            membership_predicate,
+            and_(
+                IpDeadlineCoverage.pending_replacement_membership_id == membership_id,
+                IpDeadlineCoverage.replacement_decision == "pending",
+            ),
+            and_(
+                IpDeadlineCoverage.emergency_escalation_membership_id == membership_id,
+                or_(
+                    and_(
+                        IpDeadlineCoverage.pending_replacement_membership_id.is_not(None),
+                        IpDeadlineCoverage.replacement_decision == "pending",
+                        IpDeadlineCoverage.pending_replacement_membership_id
+                        == IpDeadlineCoverage.responsible_membership_id,
+                    ),
+                    and_(
+                        IpDeadlineCoverage.coverage_status == "emergency",
+                        IpDeadlineCoverage.emergency_until.is_not(None),
+                        IpDeadlineCoverage.emergency_until > _now(),
+                    ),
+                ),
+            ),
+        )
     return list(
         session.scalars(
             select(IpDeadlineCoverage)
@@ -2753,10 +3683,7 @@ def _coverages_for_member(
             )
             .where(
                 IpDeadlineCoverage.company_id == context.company.id,
-                or_(
-                    IpDeadlineCoverage.responsible_membership_id == membership_id,
-                    IpDeadlineCoverage.backup_membership_id == membership_id,
-                ),
+                membership_predicate,
                 IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
@@ -2826,14 +3753,35 @@ def _lock_operational_coverages_for_member(
     if not candidate_rows:
         return [], []
 
-    candidate_ids = sorted(
+    target_candidate_ids = sorted(
         {coverage_id for coverage_id, _docket_id, _deadline_id in candidate_rows}
-    )
-    docket_ids = sorted(
-        {docket_id for _coverage_id, docket_id, _deadline_id in candidate_rows}
     )
     deadline_ids = sorted(
         {deadline_id for _coverage_id, _docket_id, deadline_id in candidate_rows}
+    )
+    # A schema-valid deadline can be shared by multiple docket coverages. Lock
+    # every sibling parent and coverage in the same global order before any
+    # cutover so opposite-owner bulk requests cannot take sibling child locks
+    # in reverse order. The release remains fail-closed for this ambiguous
+    # projection shape.
+    all_candidate_rows = session.execute(
+        select(
+            IpDeadlineCoverage.id,
+            IpDeadlineCoverage.docket_id,
+            IpDeadlineCoverage.matter_deadline_id,
+        )
+        .where(
+            IpDeadlineCoverage.company_id == context.company.id,
+            IpDeadlineCoverage.matter_deadline_id.in_(deadline_ids),
+            IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
+        )
+        .order_by(IpDeadlineCoverage.id)
+    ).all()
+    candidate_ids = sorted(
+        {coverage_id for coverage_id, _docket_id, _deadline_id in all_candidate_rows}
+    )
+    docket_ids = sorted(
+        {docket_id for _coverage_id, docket_id, _deadline_id in all_candidate_rows}
     )
     docket_parent_rows = session.execute(
         select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
@@ -2873,6 +3821,19 @@ def _lock_operational_coverages_for_member(
             .execution_options(populate_existing=True)
         ).all()
     )
+    legal_deadlines = _lock_legal_deadlines_for_operational_deadlines(
+        session,
+        company_id=context.company.id,
+        matter_deadline_ids=deadline_ids,
+    )
+    if any(
+        legal_deadline.docket_id not in docket_ids
+        for legal_deadline in legal_deadlines.values()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="IP legal-deadline projection changed; reload and retry.",
+        )
     locked_deadlines = list(
         session.scalars(
             select(MatterDeadline)
@@ -2891,10 +3852,6 @@ def _lock_operational_coverages_for_member(
             .where(
                 IpDeadlineCoverage.company_id == context.company.id,
                 IpDeadlineCoverage.id.in_(candidate_ids),
-                or_(
-                    IpDeadlineCoverage.responsible_membership_id == membership_id,
-                    IpDeadlineCoverage.backup_membership_id == membership_id,
-                ),
                 IpDeadlineCoverage.coverage_status.notin_(_TERMINAL_COVERAGE_STATUSES),
             )
             .order_by(IpDeadlineCoverage.id)
@@ -2906,7 +3863,7 @@ def _lock_operational_coverages_for_member(
     dockets_by_id = {docket.id: docket for docket in locked_dockets}
     deadlines_by_id = {deadline.id: deadline for deadline in locked_deadlines}
 
-    operational_rows = [
+    operational_coverages = [
         row
         for row in locked_coverages
         if (docket := dockets_by_id.get(row.docket_id)) is not None
@@ -2915,6 +3872,35 @@ def _lock_operational_coverages_for_member(
             docket=docket,
             deadline=deadlines_by_id.get(row.matter_deadline_id),
             matter=matters_by_id.get(docket.matter_id) if docket.matter_id else None,
+        )
+    ]
+    operational_by_deadline: dict[str, list[str]] = {}
+    for row in operational_coverages:
+        operational_by_deadline.setdefault(row.matter_deadline_id, []).append(row.id)
+    shared = {
+        deadline_id: coverage_ids
+        for deadline_id, coverage_ids in operational_by_deadline.items()
+        if len(coverage_ids) > 1
+    }
+    if shared:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_shared_deadline_handoff_required",
+                "message": (
+                    "A shared operational deadline needs a group handoff workflow "
+                    "before responsibility can change."
+                ),
+                "shared_deadlines": shared,
+            },
+        )
+    operational_rows = [
+        row
+        for row in operational_coverages
+        if row.id in target_candidate_ids
+        and (
+            row.responsible_membership_id == membership_id
+            or row.backup_membership_id == membership_id
         )
     ]
     operational_docket_ids = {row.docket_id for row in operational_rows}
@@ -2966,6 +3952,12 @@ def save_ip_docket_queue(
     A team queue may only be saved by a member of that team: sharing a view
     into a team's workload is a disclosure, not a preference.
     """
+
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:write",
+    )
 
     if payload.team_id is not None:
         team = session.scalar(
@@ -3051,11 +4043,19 @@ def delete_ip_docket_queue(
     context: SessionContext,
     queue_id: str,
 ) -> None:
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:write",
+    )
     row = session.scalar(
-        select(IpDocketQueue).where(
+        select(IpDocketQueue)
+        .where(
             IpDocketQueue.id == queue_id,
             IpDocketQueue.company_id == context.company.id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Queue not found.")
@@ -3121,10 +4121,13 @@ def _coverage_child_is_operational(
         return False
     if deadline is None or deadline.id != coverage.matter_deadline_id:
         return False
-    if docket.matter_id:
-        if deadline.matter_id != docket.matter_id or deadline.ip_docket_id is not None:
-            return False
-    elif deadline.ip_docket_id != docket.id or deadline.matter_id is not None:
+    docket_owned = deadline.matter_id is None and deadline.ip_docket_id == docket.id
+    matter_owned = (
+        docket.matter_id is not None
+        and deadline.matter_id == docket.matter_id
+        and deadline.ip_docket_id is None
+    )
+    if not docket_owned and not matter_owned:
         return False
     return _deadline_is_operational(deadline)
 
@@ -3231,6 +4234,27 @@ def bulk_acknowledge_ip_coverage(
     """
 
     requested = list(dict.fromkeys(payload.coverage_ids))
+    actor_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={context.membership.id},
+    )
+    locked_actor = actor_memberships.get(context.membership.id)
+    if (
+        locked_actor is None
+        or not locked_actor.is_active
+        or not locked_actor.user.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active company membership is required to acknowledge coverage.",
+        )
+    require_locked_membership_capability(session, locked_actor, "ip:write")
+    context = SessionContext(
+        company=context.company,
+        membership=locked_actor,
+        user=locked_actor.user,
+    )
 
     # Discover ids only, then acquire the shared lifecycle lock order:
     # Matter -> docket -> MatterDeadline -> coverage. A parent disposal or a
@@ -3594,7 +4618,16 @@ def preview_ip_coverage_reassignment(
 
     if payload.from_membership_id == payload.to_membership_id:
         raise HTTPException(status_code=422, detail="Coverage replacement must be different.")
-    _membership_or_404(session, context, payload.from_membership_id)
+    source = session.scalar(
+        select(CompanyMembership)
+        .options(joinedload(CompanyMembership.user))
+        .where(
+            CompanyMembership.id == payload.from_membership_id,
+            CompanyMembership.company_id == context.company.id,
+        )
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Company membership not found.")
     replacement = _membership_or_404(session, context, payload.to_membership_id)
 
     rows = _coverages_for_member(
@@ -3612,20 +4645,78 @@ def preview_ip_coverage_reassignment(
     blocked = [
         docket.id
         for docket in dockets
-        if not can_access_ip_docket(
+        if not _membership_can_cover_docket(
             session,
-            context=SessionContext(
-                company=context.company, user=replacement.user, membership=replacement
-            ),
+            context=context,
+            membership=replacement,
             docket=docket,
         )
     ]
+    dockets_by_id = {docket.id: docket for docket in dockets}
+    participant_ids = {
+        membership_id
+        for row in rows
+        for membership_id in (
+            row.responsible_membership_id,
+            row.backup_membership_id,
+        )
+        if membership_id is not None
+    }
+    participants = {
+        membership.id: membership
+        for membership in session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.company_id == context.company.id,
+                CompanyMembership.id.in_(participant_ids or {""}),
+            )
+        ).all()
+    }
+    for row in rows:
+        docket = dockets_by_id.get(row.docket_id)
+        if docket is None:
+            blocked.append(row.docket_id)
+            continue
+        for membership_id in (
+            row.responsible_membership_id,
+            row.backup_membership_id,
+        ):
+            if membership_id is None:
+                continue
+            membership = participants.get(membership_id)
+            if (
+                membership is None
+                or not membership.is_active
+                or not membership.user.is_active
+                or not _membership_can_cover_docket(
+                    session,
+                    context=context,
+                    membership=membership,
+                    docket=docket,
+                )
+            ):
+                blocked.append(row.docket_id)
+        deadline = session.get(MatterDeadline, row.matter_deadline_id)
+        if deadline is None or len(
+            _operational_coverage_ids_for_deadline(
+                session,
+                company_id=context.company.id,
+                deadline=deadline,
+            )
+        ) != 1:
+            blocked.append(row.docket_id)
     backup_conflicts = _backup_replacement_conflicts(
         rows,
         source_membership_id=payload.from_membership_id,
         replacement_membership_id=replacement.id,
     )
     blocked.extend(row.docket_id for row in backup_conflicts)
+    blocked.extend(
+        row.docket_id
+        for row in rows
+        if row.backup_membership_id == payload.from_membership_id
+    )
     return IpCoverageReassignPreviewResponse(
         from_membership_id=payload.from_membership_id,
         to_membership_id=payload.to_membership_id,
@@ -3658,14 +4749,89 @@ def propose_ip_coverage_reassignment(
 
     if payload.from_membership_id == payload.to_membership_id:
         raise HTTPException(status_code=422, detail="Coverage replacement must be different.")
-    _membership_or_404(session, context, payload.from_membership_id)
-    replacement = _membership_or_404(session, context, payload.to_membership_id)
+    emergency_until = payload.emergency_until
+    if emergency_until is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_emergency_expiry_unavailable",
+                "message": (
+                    "Time-boxed emergency coverage is unavailable until an idempotent "
+                    "expiry transition is enabled. Use a proposed or immediate transfer."
+                ),
+            },
+        )
+    if emergency_until is not None and payload.emergency_escalation_membership_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Emergency coverage requires an escalation owner.",
+        )
+    candidate_rows = _coverages_for_member(
+        session,
+        context=context,
+        membership_id=payload.from_membership_id,
+    )
+    assignment_ids = {
+        payload.from_membership_id,
+        payload.to_membership_id,
+        payload.emergency_escalation_membership_id if emergency_until is not None else None,
+    }
+    assignment_ids.update(
+        membership_id
+        for row in candidate_rows
+        for membership_id in (
+            row.responsible_membership_id,
+            row.backup_membership_id,
+            row.pending_replacement_membership_id,
+            row.emergency_escalation_membership_id,
+        )
+        if membership_id is not None
+    )
+    memberships = _lock_assignment_memberships_or_404(
+        session,
+        context,
+        membership_ids=assignment_ids,
+        active_membership_ids={
+            payload.to_membership_id,
+            payload.emergency_escalation_membership_id,
+        },
+        required_capability="ip:write",
+    )
+    source = memberships[payload.from_membership_id]
+    _assert_source_can_propose(source, transfer_mode="proposed")
+    replacement = memberships[payload.to_membership_id]
+    escalation = (
+        memberships[payload.emergency_escalation_membership_id]
+        if emergency_until is not None
+        and payload.emergency_escalation_membership_id is not None
+        else None
+    )
 
     rows, dockets = _lock_operational_coverages_for_member(
         session,
         context=context,
         membership_id=payload.from_membership_id,
     )
+    _assert_distinct_backup_replacement(
+        rows,
+        source_membership_id=payload.from_membership_id,
+        replacement_membership_id=replacement.id,
+    )
+    backup_rows = [
+        row for row in rows if row.backup_membership_id == payload.from_membership_id
+    ]
+    if backup_rows:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_backup_handoff_required",
+                "message": (
+                    "Existing backup responsibility cannot be proposed for reassignment "
+                    "without an accepted backup-handoff workflow."
+                ),
+                "blocked_coverage_ids": [row.id for row in backup_rows],
+            },
+        )
     # UJ-57-EXC-04: the preview must still describe reality.
     if (
         _coverage_preview_token(rows, membership_id=payload.from_membership_id)
@@ -3682,34 +4848,46 @@ def propose_ip_coverage_reassignment(
     _assert_replacement_can_cover(
         session, context=context, replacement=replacement, dockets=dockets
     )
-    _assert_distinct_backup_replacement(
-        rows,
-        source_membership_id=payload.from_membership_id,
-        replacement_membership_id=replacement.id,
-    )
-
-    emergency_until = payload.emergency_until
-    if emergency_until is not None:
-        if payload.emergency_escalation_membership_id is None:
+    dockets_by_id = {docket.id: docket for docket in dockets}
+    for row in rows:
+        docket = dockets_by_id.get(row.docket_id)
+        if docket is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Emergency coverage requires an escalation owner.",
+                detail="Coverage participants changed; reload before reassignment.",
             )
-        escalation = _membership_or_404(
-            session, context, payload.emergency_escalation_membership_id
+        _assert_operational_coverage_participants(
+            session,
+            context=context,
+            docket=docket,
+            coverage_id=row.id,
+            memberships=memberships,
+            responsible_membership_id=row.responsible_membership_id,
+            backup_membership_id=row.backup_membership_id,
         )
+    if emergency_until is not None:
         if _aware_utc(emergency_until) <= _now():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Emergency coverage must expire in the future.",
             )
-    else:
-        escalation = None
     if escalation is not None:
+        responsible_docket_ids = {
+            row.docket_id
+            for row in rows
+            if row.responsible_membership_id == payload.from_membership_id
+        }
+        _assert_replacement_can_cover(
+            session,
+            context=context,
+            replacement=escalation,
+            dockets=[docket for docket in dockets if docket.id in responsible_docket_ids],
+        )
         _assert_distinct_escalation_backups(
             rows,
             source_membership_id=payload.from_membership_id,
             escalation_membership_id=escalation.id,
+            replacement_membership_id=replacement.id,
         )
 
     affected_roles = _coverage_preview_roles(
@@ -3742,6 +4920,8 @@ def propose_ip_coverage_reassignment(
             else:
                 row.replacement_decision = "pending"
                 row.replacement_decided_at = None
+                row.emergency_until = None
+                row.emergency_escalation_membership_id = None
                 row.coverage_status = "transfer_pending"
 
         row.reassignment_version += 1
@@ -3792,6 +4972,11 @@ def decide_ip_coverage_replacement(
         select(
             IpDeadlineCoverage.docket_id,
             IpDeadlineCoverage.matter_deadline_id,
+            IpDeadlineCoverage.responsible_membership_id,
+            IpDeadlineCoverage.backup_membership_id,
+            IpDeadlineCoverage.pending_replacement_membership_id,
+            IpDeadlineCoverage.emergency_escalation_membership_id,
+            IpDeadlineCoverage.reassignment_version,
         ).where(
             IpDeadlineCoverage.id == coverage_id,
             IpDeadlineCoverage.company_id == context.company.id,
@@ -3799,10 +4984,35 @@ def decide_ip_coverage_replacement(
     ).one_or_none()
     if candidate is None:
         raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    assignment_ids = {
+        context.membership.id,
+        candidate.responsible_membership_id,
+        candidate.backup_membership_id,
+        candidate.pending_replacement_membership_id,
+        candidate.emergency_escalation_membership_id,
+    }
+    required_active_ids = {context.membership.id}
+    if (
+        payload.decision == "rejected"
+        and candidate.responsible_membership_id == context.membership.id
+        and candidate.emergency_escalation_membership_id is not None
+    ):
+        required_active_ids.add(candidate.emergency_escalation_membership_id)
+    memberships = _lock_assignment_memberships_or_404(
+        session,
+        context,
+        membership_ids=assignment_ids,
+        active_membership_ids=required_active_ids,
+        required_capability="ip:write",
+    )
     # Match lifecycle's lock order: the parent is authoritative and must win
     # before a child decision can mutate responsibility or status.
     docket = _docket_or_404(
-        session, context=context, docket_id=candidate.docket_id, for_update=True
+        session,
+        context=context,
+        docket_id=candidate.docket_id,
+        for_update=True,
+        required_capability="ip:write",
     )
     deadline = _lock_docket_deadline(
         session,
@@ -3821,6 +5031,26 @@ def decide_ip_coverage_replacement(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Deadline coverage not found.")
+    if (
+        row.responsible_membership_id,
+        row.backup_membership_id,
+        row.pending_replacement_membership_id,
+        row.emergency_escalation_membership_id,
+        row.reassignment_version,
+    ) != (
+        candidate.responsible_membership_id,
+        candidate.backup_membership_id,
+        candidate.pending_replacement_membership_id,
+        candidate.emergency_escalation_membership_id,
+        candidate.reassignment_version,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_assignment_changed",
+                "message": "Coverage assignments changed; reload before deciding.",
+            },
+        )
     matter = session.get(Matter, docket.matter_id) if docket.matter_id else None
     if not _coverage_lifecycle_is_operational(
         row,
@@ -3848,6 +5078,12 @@ def decide_ip_coverage_replacement(
                 "message": "Lifecycle-neutralized coverage cannot accept a decision.",
             },
         )
+    _assert_single_operational_coverage_projection(
+        session,
+        company_id=context.company.id,
+        deadline=deadline,
+        coverage_id=row.id,
+    )
     if row.replacement_decision != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -3861,7 +5097,17 @@ def decide_ip_coverage_replacement(
 
     now = _now()
     previous_owner = row.responsible_membership_id
+    previous_backup = row.backup_membership_id
     if payload.decision == "accepted":
+        _assert_operational_coverage_participants(
+            session,
+            context=context,
+            docket=docket,
+            coverage_id=row.id,
+            memberships=memberships,
+            responsible_membership_id=context.membership.id,
+            backup_membership_id=row.backup_membership_id,
+        )
         # A legacy pending transfer may already name the current backup as its
         # replacement. Refuse that acceptance before changing responsibility;
         # silently deleting backup coverage is not a safe reconciliation.
@@ -3888,18 +5134,41 @@ def decide_ip_coverage_replacement(
                     ),
                 },
             )
-        _membership_or_404(session, context, escalation_id)
-        assert_distinct_deadline_coverage(
-            responsible_membership_id=escalation_id,
+        escalation = memberships[escalation_id]
+        _assert_operational_coverage_participants(
+            session,
+            context=context,
+            docket=docket,
+            coverage_id=row.id,
+            memberships=memberships,
+            responsible_membership_id=escalation.id,
             backup_membership_id=row.backup_membership_id,
         )
-        row.responsible_membership_id = escalation_id
+        assert_distinct_deadline_escalation(
+            escalation_membership_id=escalation.id,
+            responsible_membership_id=context.membership.id,
+            backup_membership_id=row.backup_membership_id,
+        )
+        assert_distinct_deadline_coverage(
+            responsible_membership_id=escalation.id,
+            backup_membership_id=row.backup_membership_id,
+        )
+        row.responsible_membership_id = escalation.id
         row.coverage_status = "escalated"
         row.accepted_at = None
         row.calendar_projection_status = "pending"
     else:
         # UJ-57-EXC-03: a rejection returns the work, it never leaves it unowned.
         # In proposed mode the original owner never stopped holding it.
+        _assert_operational_coverage_participants(
+            session,
+            context=context,
+            docket=docket,
+            coverage_id=row.id,
+            memberships=memberships,
+            responsible_membership_id=row.responsible_membership_id,
+            backup_membership_id=row.backup_membership_id,
+        )
         row.coverage_status = "accepted" if row.accepted_at else "pending"
     row.replacement_decision = payload.decision
     row.replacement_decided_at = now
@@ -3908,8 +5177,32 @@ def decide_ip_coverage_replacement(
         # without a note must not erase why the transfer was asked for.
         row.replacement_decision_reason = payload.reason
     row.pending_replacement_membership_id = None
+    row.emergency_until = None
+    row.emergency_escalation_membership_id = None
     row.reassignment_version += 1
     row.updated_at = now
+    should_reconcile_projection = (
+        row.responsible_membership_id != previous_owner
+        or payload.decision == "accepted"
+    )
+    if should_reconcile_projection:
+        session.flush()
+        cutover_ip_coverage_projection(
+            session,
+            context=context,
+            docket=docket,
+            coverage=row,
+            previous_responsible_membership_id=previous_owner,
+            previous_backup_membership_id=previous_backup,
+            reason=payload.reason or row.replacement_decision_reason or "Coverage decision",
+            replacement_source=(
+                "replacement_accepted"
+                if payload.decision == "accepted"
+                else "decline_escalation"
+            ),
+            responsible_accepted_at=row.accepted_at,
+            changed_at=now,
+        )
 
     record_from_context(
         session,

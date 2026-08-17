@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   addIpCostItem,
@@ -336,21 +338,25 @@ function CoverageDecisionsCard({ onChanged }: { onChanged: () => Promise<void> }
     });
   }, [awaiting.data]);
 
+  const initialDecisionError = awaiting.isError && awaiting.data === undefined;
+  const showDecisionCard =
+    awaiting.isPending || initialDecisionError || transfers.length > 0;
+
   // The target is query-backed and usually does not exist when the browser
   // first processes /app/ip#coverage-decisions. Honor the deep link once the
   // asynchronous card has actually mounted.
   useEffect(() => {
     if (
-      transfers.length > 0 &&
+      showDecisionCard &&
       window.location.hash === "#coverage-decisions"
     ) {
       document.getElementById("coverage-decisions")?.scrollIntoView({
         block: "start",
       });
     }
-  }, [transfers.length]);
+  }, [showDecisionCard]);
 
-  if (!transfers.length) return null;
+  if (!showDecisionCard) return null;
 
   return (
     <Card
@@ -362,7 +368,24 @@ function CoverageDecisionsCard({ onChanged }: { onChanged: () => Promise<void> }
         <CardTitle as="h2">Coverage awaiting your decision</CardTitle>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
-        {transfers.map((row) => {
+        {awaiting.isPending ? (
+          <div
+            className="flex min-w-0 flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-coverage-decisions-loading"
+          >
+            <span className="sr-only">Loading coverage decisions.</span>
+            <Skeleton className="h-20 w-full" aria-hidden="true" />
+          </div>
+        ) : initialDecisionError ? (
+          <QueryErrorState
+            error={awaiting.error}
+            title="Could not load coverage decisions"
+            onRetry={() => awaiting.refetch()}
+          />
+        ) : transfers.map((row) => {
           const isDeclining = decliningId === row.coverage_id;
           const reasonId = `decline-reason-${row.coverage_id}`;
           return (

@@ -2,20 +2,26 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from caseops_api.db.models import (
     AuditEvent,
+    CalendarConnectionStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    CalendarProvider,
     Company,
     CompanyMembership,
     InAppNotification,
     IpDocketRecord,
     Matter,
     MatterCourtOrder,
+    MembershipRole,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
     TenantOutlookConfiguration,
@@ -23,9 +29,15 @@ from caseops_api.db.models import (
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.calendar_projection_safety import (
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+)
 from caseops_api.services.calendar_sync import (
     process_durable_outlook_sync,
     set_outlook_provider_for_tests,
+)
+from caseops_api.services.calendar_sync import (
+    test_outlook_tenant_configuration as run_outlook_readiness_test,
 )
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -434,6 +446,199 @@ def test_outlook_connection_start_callback_revoke_store_no_raw_tokens(
         set_outlook_provider_for_tests(None)
 
 
+@pytest.mark.parametrize("winner", ["revoke", "deactivate", "demote"])
+def test_outlook_oauth_exchange_discards_result_when_authority_changes(
+    client: TestClient,
+    winner: str,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+
+    class AuthorityChangingProvider(StubOutlookProvider):
+        def exchange_code(self, *, code: str) -> dict[str, object]:
+            exchanged = super().exchange_code(code=code)
+            with get_session_factory()() as concurrent:
+                membership = concurrent.get(CompanyMembership, membership_id)
+                assert membership is not None
+                if winner == "revoke":
+                    connection = concurrent.scalar(
+                        select(UserCalendarConnection).where(
+                            UserCalendarConnection.company_id == company_id,
+                            UserCalendarConnection.membership_id == membership_id,
+                            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+                        )
+                    )
+                    assert connection is not None
+                    connection.status = CalendarConnectionStatus.REVOKED
+                    connection.encrypted_token_ref = None
+                elif winner == "deactivate":
+                    membership.is_active = False
+                else:
+                    membership.role = MembershipRole.VIEWER
+                concurrent.commit()
+            return exchanged
+
+    provider = AuthorityChangingProvider()
+    set_outlook_provider_for_tests(provider)
+    try:
+        start = client.post(
+            "/api/calendar/connections/outlook/start",
+            headers=_auth(token),
+        )
+        assert start.status_code == 200, start.text
+        state = parse_qs(urlparse(start.json()["auth_url"]).query)["state"][0]
+        callback = client.get(
+            "/api/calendar/connections/outlook/callback",
+            headers=_auth(token),
+            params={"code": "oauth-code", "state": state},
+        )
+        assert callback.status_code in {403, 409}, callback.text
+        with get_session_factory()() as session:
+            connection = session.scalar(
+                select(UserCalendarConnection).where(
+                    UserCalendarConnection.company_id == company_id,
+                    UserCalendarConnection.membership_id == membership_id,
+                    UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+                )
+            )
+            assert connection is not None
+            assert connection.status != CalendarConnectionStatus.CONNECTED
+            assert connection.provider_account_id is None
+            assert "fixture-access-credential" not in str(
+                connection.encrypted_token_ref or ""
+            )
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_outlook_reconnect_blocks_different_account_while_unknown_create_exists(
+    client: TestClient,
+) -> None:
+    class AccountProvider(StubOutlookProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.account_id = "outlook-user-1"
+            self.exchange_calls = 0
+
+        def exchange_code(self, *, code: str) -> dict[str, object]:
+            self.exchange_calls += 1
+            result = super().exchange_code(code=code)
+            result["provider_account_id"] = self.account_id
+            result["display_email"] = f"{self.account_id}@example.test"
+            return result
+
+    provider = AccountProvider()
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    set_outlook_provider_for_tests(provider)
+    try:
+        connection_id = _connect_outlook(client, token, provider)
+        with get_session_factory()() as session:
+            session.add(
+                CalendarEventSync(
+                    company_id=company_id,
+                    calendar_connection_id=connection_id,
+                    source_type="matter_hearing",
+                    source_id=str(uuid4()),
+                    provider_event_id=None,
+                    sync_status=CalendarEventSyncStatus.DEAD_LETTER,
+                    dead_letter_reason=CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+                    last_error="Calendar provider upsert outcome is unknown.",
+                )
+            )
+            session.commit()
+        provider.account_id = "outlook-user-2"
+        start = client.post(
+            "/api/calendar/connections/outlook/start",
+            headers=_auth(token),
+        )
+        state = parse_qs(urlparse(start.json()["auth_url"]).query)["state"][0]
+        blocked = client.get(
+            "/api/calendar/connections/outlook/callback",
+            headers=_auth(token),
+            params={"code": "oauth-code", "state": state},
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert provider.exchange_calls == 1
+        with get_session_factory()() as session:
+            connection = session.get(UserCalendarConnection, connection_id)
+            assert connection is not None
+            assert connection.provider_account_id == "outlook-user-1"
+            assert connection.status == CalendarConnectionStatus.CONNECTED
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+@pytest.mark.parametrize("winner", ["configuration", "revoke", "demote"])
+def test_outlook_readiness_probe_discards_stale_provider_success(
+    client: TestClient,
+    winner: str,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    base_provider = StubOutlookProvider()
+    connection_id = _configure_ready_outlook(client, token, base_provider)
+    worker_sessions: list = []
+
+    class AuthorityChangingProbeProvider(StubOutlookProvider):
+        def validate_connection(
+            self,
+            *,
+            token_payload: dict[str, object],
+        ) -> dict[str, object]:
+            assert worker_sessions
+            # The durable readiness claim must be committed before Graph I/O.
+            assert worker_sessions[0].in_transaction() is False
+            result = super().validate_connection(token_payload=token_payload)
+            with get_session_factory()() as concurrent:
+                if winner == "configuration":
+                    configuration = concurrent.scalar(
+                        select(TenantOutlookConfiguration).where(
+                            TenantOutlookConfiguration.company_id == company_id
+                        )
+                    )
+                    assert configuration is not None
+                    configuration.enabled = False
+                    configuration.last_test_status = "not_run"
+                    configuration.last_tested_at = None
+                    configuration.last_error_redacted = None
+                elif winner == "revoke":
+                    connection = concurrent.get(UserCalendarConnection, connection_id)
+                    assert connection is not None
+                    connection.status = CalendarConnectionStatus.REVOKED
+                    connection.encrypted_token_ref = None
+                else:
+                    membership = concurrent.get(CompanyMembership, membership_id)
+                    assert membership is not None
+                    membership.role = MembershipRole.VIEWER
+                concurrent.commit()
+            return result
+
+    set_outlook_provider_for_tests(AuthorityChangingProbeProvider())
+    try:
+        with get_session_factory()() as worker:
+            worker_sessions.append(worker)
+            context = _session_context(worker, company_id)
+            with pytest.raises(HTTPException) as exc_info:
+                run_outlook_readiness_test(worker, context=context)
+            assert exc_info.value.status_code in {403, 409}
+        with get_session_factory()() as verify:
+            configuration = verify.scalar(
+                select(TenantOutlookConfiguration).where(
+                    TenantOutlookConfiguration.company_id == company_id
+                )
+            )
+            assert configuration is not None
+            assert configuration.last_test_status != "passed"
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
 def test_outlook_start_reports_safe_unavailable_state(client: TestClient) -> None:
     try:
         set_outlook_provider_for_tests(MissingOutlookProvider())
@@ -677,14 +882,25 @@ def test_durable_outlook_sync_is_idempotent_for_hearings(
         set_outlook_provider_for_tests(None)
 
 
-def test_durable_outlook_sync_retry_and_dead_letter_are_redacted(
+def test_durable_outlook_create_timeout_is_unknown_and_never_replayed(
     client: TestClient,
 ) -> None:
     raw_error = (
         "authorization samplecredentialvalueforredaction for lawyer@example.test "
         "https://graph.example.test/events"
     )
-    provider = StubOutlookProvider(fail=True, fail_message=raw_error)
+    class AcceptedThenTimeoutProvider(StubOutlookProvider):
+        def upsert_hearing_event(self, **kwargs) -> str:
+            self.calls.append(
+                {
+                    "hearing_id": kwargs["hearing"].id,
+                    "matter_id": kwargs["matter"].id,
+                    "existing": kwargs["existing_provider_event_id"],
+                }
+            )
+            raise TimeoutError(raw_error)
+
+    provider = AcceptedThenTimeoutProvider()
     try:
         bootstrap = bootstrap_company(client)
         token = str(bootstrap["access_token"])
@@ -707,26 +923,15 @@ def test_durable_outlook_sync_retry_and_dead_letter_are_redacted(
                 context=context,
                 replay_failed_only=True,
             )
-            third = process_durable_outlook_sync(
-                session,
-                context=context,
-                replay_failed_only=True,
-            )
-            fourth = process_durable_outlook_sync(
-                session,
-                context=context,
-                replay_failed_only=True,
-            )
             sync = session.scalar(select(CalendarEventSync))
             assert sync is not None
 
-        assert first.retry_scheduled == 1
-        assert second.retry_scheduled == 1
-        assert third.dead_lettered == 1
-        assert fourth.dead_lettered == 1
+        assert first.dead_lettered == 1
+        assert second.examined == 0
+        assert second.provider_calls == 0
+        assert len(provider.calls) == 1
         assert sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
-        assert sync.attempts == sync.max_attempts == 3
-        assert sync.dead_letter_reason == "retry_limit_exhausted"
+        assert sync.dead_letter_reason == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
         redacted = sync.last_error or ""
         assert "lawyer@example.test" not in redacted
         assert "samplecredentialvalueforredaction" not in redacted
@@ -738,7 +943,7 @@ def test_durable_outlook_sync_retry_and_dead_letter_are_redacted(
 def test_admin_outlook_replay_is_tenant_scoped(
     client: TestClient,
 ) -> None:
-    provider = StubOutlookProvider(fail=True)
+    provider = StubOutlookProvider()
     try:
         first = bootstrap_company(client)
         first_token = str(first["access_token"])
@@ -760,6 +965,19 @@ def test_admin_outlook_replay_is_tenant_scoped(
         with factory() as session:
             first_context = _session_context(session, str(first["company"]["id"]))
             second_context = _session_context(session, str(second["company"]["id"]))
+            process_durable_outlook_sync(
+                session,
+                context=first_context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+            process_durable_outlook_sync(
+                session,
+                context=second_context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+            provider.fail = True
             process_durable_outlook_sync(
                 session,
                 context=first_context,
@@ -934,8 +1152,9 @@ def test_manual_hearing_sync_failure_persists_safe_status(
         )
         assert response.status_code == 200, response.text
         body = response.json()["sync"]
-        assert body["sync_status"] == "failed"
-        assert body["last_error"] == "provider unavailable"
+        assert body["sync_status"] == "dead_letter"
+        assert body["dead_letter_reason"] == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        assert body["last_error"] == "Calendar provider upsert outcome is unknown."
         assert "fixture-access-credential" not in response.text
     finally:
         set_outlook_provider_for_tests(None)

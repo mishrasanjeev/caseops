@@ -28,10 +28,12 @@ from sqlalchemy import select
 
 from caseops_api.db.models import (
     HearingReminder,
+    HearingReminderDeliveryIntent,
     HearingReminderStatus,
     Matter,
     MatterHearing,
     MatterHearingStatus,
+    NotificationDeliveryIntent,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.hearing_reminders import (
@@ -39,6 +41,7 @@ from caseops_api.services.hearing_reminders import (
     run_reminder_worker,
     schedule_reminders_for_hearing,
 )
+from caseops_api.services.notification_delivery import drain_notification_delivery_intents
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -324,11 +327,34 @@ def test_update_hearing_cancelled_recomputes_next_hearing_from_remaining_open(
 
 
 def _force_due(session, hearing_id: str) -> None:
-    """Shift the reminders into the past so the worker picks them."""
-    for r in session.query(HearingReminder).filter(
-        HearingReminder.hearing_id == hearing_id
+    """Shift legacy rows and their canonical primary intents into the past."""
+    due_at = datetime.now(UTC) - timedelta(minutes=5)
+    reminder_ids: list[str] = []
+    reminder_due: dict[str, datetime] = {}
+    for index, r in enumerate(
+        session.query(HearingReminder)
+        .filter(HearingReminder.hearing_id == hearing_id)
+        .order_by(HearingReminder.id)
     ):
-        r.scheduled_for = datetime.now(UTC) - timedelta(minutes=5)
+        row_due_at = due_at - timedelta(microseconds=index)
+        r.scheduled_for = row_due_at
+        reminder_ids.append(r.id)
+        reminder_due[r.id] = row_due_at
+    intent_links = list(
+        session.execute(
+            select(
+                HearingReminderDeliveryIntent.hearing_reminder_id,
+                HearingReminderDeliveryIntent.intent_id,
+            ).where(
+                HearingReminderDeliveryIntent.hearing_reminder_id.in_(reminder_ids),
+                HearingReminderDeliveryIntent.is_primary.is_(True),
+            )
+        ).all()
+    )
+    for reminder_id, intent_id in intent_links:
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+        if intent is not None:
+            intent.scheduled_for = reminder_due[reminder_id]
     session.commit()
 
 
@@ -358,7 +384,7 @@ def test_worker_auto_mode_flag_off_leaves_rows_queued(
 
     assert report["effective_live"] is False
     assert report["due_count"] == 2
-    assert report["would_send"] == 2
+    assert report["delegated_to_durable_intent"] == 2
     assert report["sent"] == 0
 
     with factory() as session:
@@ -367,11 +393,11 @@ def test_worker_auto_mode_flag_off_leaves_rows_queued(
                 HearingReminder.hearing_id == hearing["id"]
             )
         )
-    assert {r.status for r in rows} == {HearingReminderStatus.QUEUED}
-    assert all(r.attempts == 1 for r in rows)
+    assert {r.status for r in rows} == {HearingReminderStatus.FAILED}
+    assert all(r.attempts == 0 for r in rows)
 
 
-def test_worker_live_sends_and_marks_sent(
+def test_legacy_worker_never_sends_directly(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Flag ON + SendGrid creds set → worker actually POSTs to
@@ -384,6 +410,8 @@ def test_worker_live_sends_and_marks_sent(
     os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
     os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
     os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
+    os.environ["CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_ENABLED"] = "true"
+    os.environ["CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_PROVIDER"] = "sendgrid"
     get_settings.cache_clear()
 
     token = str(bootstrap_company(client)["access_token"])
@@ -402,12 +430,12 @@ def test_worker_live_sends_and_marks_sent(
             import httpx
             with patch.object(httpx, "post", return_value=_FakeResponse()) as mock:
                 report = run_reminder_worker(session, mode="auto")
-                # Real send attempted once per recipient-row.
-                assert mock.call_count == 2
+                assert mock.call_count == 0
 
-        assert report["effective_live"] is True
-        assert report["sent"] == 2
+        assert report["effective_live"] is False
+        assert report["sent"] == 0
         assert report["failed"] == 0
+        assert report["delegated_to_durable_intent"] == 2
 
         with factory() as session:
             rows = list(
@@ -415,20 +443,21 @@ def test_worker_live_sends_and_marks_sent(
                     HearingReminder.hearing_id == hearing["id"]
                 )
             )
-        assert {r.status for r in rows} == {HearingReminderStatus.SENT}
-        assert all(r.provider == "sendgrid" for r in rows)
-        assert all(r.provider_message_id == "msg-test-123" for r in rows)
+        assert {r.status for r in rows} == {HearingReminderStatus.QUEUED}
+        assert all(r.provider_message_id is None for r in rows)
     finally:
         for key in (
             "CASEOPS_HEARING_REMINDERS_ENABLED",
             "CASEOPS_SENDGRID_API_KEY",
             "CASEOPS_SENDGRID_SENDER_EMAIL",
+            "CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_ENABLED",
+            "CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_PROVIDER",
         ):
             os.environ.pop(key, None)
         get_settings.cache_clear()
 
 
-def test_worker_mode_live_raises_when_provider_unset(
+def test_worker_mode_live_without_provider_is_projection_only(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``mode='live'`` explicitly requires the provider. Emergency
@@ -450,8 +479,9 @@ def test_worker_mode_live_raises_when_provider_unset(
     _ = client
     factory = get_session_factory()
     with factory() as session:
-        with pytest.raises(RuntimeError, match="SendGrid credentials"):
-            run_reminder_worker(session, mode="live")
+        report = run_reminder_worker(session, mode="live")
+    assert report["effective_live"] is False
+    assert report["due_count"] == 0
 
 
 # ---------------------------------------------------------------
@@ -731,6 +761,8 @@ def test_full_lifecycle_create_hearing_through_delivered(
     os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
     os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
     os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
+    os.environ["CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_ENABLED"] = "true"
+    os.environ["CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_PROVIDER"] = "sendgrid"
     get_settings.cache_clear()
 
     try:
@@ -774,11 +806,14 @@ def test_full_lifecycle_create_hearing_through_delivered(
             _force_due(session, hearing["id"])
             with patch.object(httpx, "post", side_effect=_fake_post) as mock:
                 report = run_reminder_worker(session, mode="auto")
+                drained = drain_notification_delivery_intents(session, limit=20)
                 assert mock.call_count == 2
 
-        assert report["effective_live"] is True
-        assert report["sent"] == 2
+        assert report["effective_live"] is False
+        assert report["sent"] == 0
         assert report["failed"] == 0
+        assert report["delegated_to_durable_intent"] == 2
+        assert drained["external_calls"] == 2
 
         with factory() as session:
             after_send = list(
@@ -826,6 +861,8 @@ def test_full_lifecycle_create_hearing_through_delivered(
             "CASEOPS_HEARING_REMINDERS_ENABLED",
             "CASEOPS_SENDGRID_API_KEY",
             "CASEOPS_SENDGRID_SENDER_EMAIL",
+            "CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_ENABLED",
+            "CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_PROVIDER",
         ):
             os.environ.pop(key, None)
         get_settings.cache_clear()

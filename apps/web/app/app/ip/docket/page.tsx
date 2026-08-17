@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -565,8 +565,20 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
 
   const selectable = rows.filter((row) => !row.transfer_pending);
 
+  useEffect(() => {
+    if (window.location.hash === "#coverage-acknowledgements") {
+      document.getElementById("coverage-acknowledgements")?.scrollIntoView({
+        block: "start",
+      });
+    }
+  }, []);
+
   return (
-    <Card className="min-w-0" data-testid="ip-docket-acknowledge">
+    <Card
+      id="coverage-acknowledgements"
+      className="min-w-0 scroll-mt-6"
+      data-testid="ip-docket-acknowledge"
+    >
       <CardHeader>
         <CardTitle as="h2">Your unacknowledged deadlines</CardTitle>
       </CardHeader>

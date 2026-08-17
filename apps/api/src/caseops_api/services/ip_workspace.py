@@ -19,6 +19,10 @@ from caseops_api.schemas.ip_records import (
     IpWorkspaceEnableRequest,
     IpWorkspaceTestRunRequest,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.session_context import SessionContext
 
@@ -156,12 +160,51 @@ def upsert_ip_workspace_configuration(
     payload: IpWorkspaceConfigurationUpsertRequest,
 ) -> IpWorkspaceConfigurationStatusResponse:
     company_id = context.company.id
-    _active_membership(
+    candidate = session.execute(
+        select(
+            IpWorkspaceConfiguration.id,
+            IpWorkspaceConfiguration.version,
+            IpWorkspaceConfiguration.escalation_owner_membership_id,
+        ).where(IpWorkspaceConfiguration.company_id == company_id)
+    ).one_or_none()
+    current_owner_id = (
+        candidate.escalation_owner_membership_id if candidate is not None else None
+    )
+    memberships = lock_company_memberships_for_assignment(
         session,
         company_id=company_id,
-        membership_id=payload.escalation_owner_membership_id,
+        membership_ids={
+            context.membership.id,
+            current_owner_id,
+            payload.escalation_owner_membership_id,
+        },
     )
+    locked_actor = memberships.get(context.membership.id)
+    if locked_actor is None:
+        raise HTTPException(status_code=403, detail="Active company membership required.")
+    require_locked_membership_capability(
+        session,
+        locked_actor,
+        "ip:taxonomy_admin",
+    )
+    context = SessionContext(
+        company=context.company,
+        membership=locked_actor,
+        user=locked_actor.user,
+    )
+    new_owner = memberships.get(payload.escalation_owner_membership_id)
+    if new_owner is None or not new_owner.is_active or not new_owner.user.is_active:
+        raise HTTPException(
+            status_code=422,
+            detail="Escalation owner is not an active tenant member.",
+        )
     row = _configuration(session, company_id=company_id, for_update=True)
+    if candidate is not None and (
+        row is None
+        or (row.id, row.version, row.escalation_owner_membership_id)
+        != (candidate.id, candidate.version, candidate.escalation_owner_membership_id)
+    ):
+        raise HTTPException(status_code=409, detail="Workspace configuration changed; reload.")
     now = datetime.now(UTC)
     if row is None:
         if payload.expected_version is not None:
@@ -244,6 +287,24 @@ def run_ip_workspace_test(
     context: SessionContext,
     payload: IpWorkspaceTestRunRequest,
 ) -> IpWorkspaceTestResult:
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={context.membership.id},
+    )
+    locked_actor = memberships.get(context.membership.id)
+    if locked_actor is None:
+        raise HTTPException(status_code=403, detail="Active company membership required.")
+    require_locked_membership_capability(
+        session,
+        locked_actor,
+        "ip:taxonomy_admin",
+    )
+    context = SessionContext(
+        company=context.company,
+        membership=locked_actor,
+        user=locked_actor.user,
+    )
     row = _configuration(session, company_id=context.company.id, for_update=True)
     if row is None:
         raise HTTPException(status_code=409, detail="Configure the IP workspace first.")
@@ -339,9 +400,54 @@ def enable_ip_workspace(
     context: SessionContext,
     payload: IpWorkspaceEnableRequest,
 ) -> IpWorkspaceConfigurationStatusResponse:
+    candidate = session.execute(
+        select(
+            IpWorkspaceConfiguration.id,
+            IpWorkspaceConfiguration.version,
+            IpWorkspaceConfiguration.escalation_owner_membership_id,
+        ).where(IpWorkspaceConfiguration.company_id == context.company.id)
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=409, detail="Configure the IP workspace first.")
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={
+            context.membership.id,
+            candidate.escalation_owner_membership_id,
+        },
+    )
+    locked_actor = memberships.get(context.membership.id)
+    if locked_actor is None:
+        raise HTTPException(status_code=403, detail="Active company membership required.")
+    require_locked_membership_capability(
+        session,
+        locked_actor,
+        "ip:taxonomy_admin",
+    )
+    context = SessionContext(
+        company=context.company,
+        membership=locked_actor,
+        user=locked_actor.user,
+    )
+    owner = memberships.get(candidate.escalation_owner_membership_id)
+    if owner is None or not owner.is_active or not owner.user.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_workspace_escalation_owner_inactive",
+                "message": "Choose an active escalation owner before enabling the workspace.",
+            },
+        )
     row = _configuration(session, company_id=context.company.id, for_update=True)
     if row is None:
         raise HTTPException(status_code=409, detail="Configure the IP workspace first.")
+    if (row.id, row.version, row.escalation_owner_membership_id) != (
+        candidate.id,
+        candidate.version,
+        candidate.escalation_owner_membership_id,
+    ):
+        raise HTTPException(status_code=409, detail="Workspace configuration changed; reload.")
     if row.version != payload.expected_config_version:
         raise HTTPException(status_code=409, detail="Workspace configuration changed; reload.")
     tests = _tests_for_current_version(session, row)

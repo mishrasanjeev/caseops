@@ -206,6 +206,17 @@ def test_guard_first_production_acceptance_is_isolated_and_recoverable() -> None
     assert 'expect(auth.membership.role).toBe("member")' in spec
     assert 'expect(auth.capabilities).not.toContain("ip:approve")' in spec
     assert 'expect(auth.capabilities).not.toContain("company:manage_users")' in spec
+    assert 'randomBytes(24).toString("base64url")' in spec
+    assert "QaGuard-${runId}" not in spec
+    assert "JSON.stringify(await body(response))" not in spec
+    assert "await response.text()" not in spec
+    assert "unexpected HTTP status" in spec
+    assert "async function assertDeadlineGovernancePrerequisites" in spec
+    assert (
+        test_body.index("await assertDeadlineGovernancePrerequisites(")
+        < test_body.index("const conflictDeadline = await createOperationalDeadline(")
+        < test_body.index("const collapsedCreate = await api.post(")
+    )
     assert spec.count("await assertExactRelease(api, run)") == 2
     assert "test.afterEach" in spec
     assert "testInfo.setTimeout(CLEANUP_TIMEOUT_MS)" in spec

@@ -140,11 +140,35 @@ function TodayBody({ data }: { data: TodayView }) {
 function TruncationNote({
   truncated,
   limit,
+  ipCoverage = false,
 }: {
   truncated?: boolean;
   limit?: number;
+  ipCoverage?: boolean;
 }) {
   if (!truncated) return null;
+  if (ipCoverage) {
+    return (
+      <p
+        className="mt-3 text-xs text-[var(--color-mute)]"
+        data-testid="today-stream-truncated"
+      >
+        {limit ? `Showing the first ${limit}.` : "Showing a capped subset."} More
+        available — review all{" "}
+        <Link href="/app/ip#coverage-decisions" className="font-medium underline">
+          coverage decisions
+        </Link>{" "}
+        and{" "}
+        <Link
+          href="/app/ip/docket#coverage-acknowledgements"
+          className="font-medium underline"
+        >
+          acknowledgements
+        </Link>
+        .
+      </p>
+    );
+  }
   return (
     <p
       className="mt-3 text-xs text-[var(--color-mute)]"
@@ -545,7 +569,7 @@ function IpCoverageActionsCard({
             href={
               action.kind === "decide_transfer"
                 ? "/app/ip#coverage-decisions"
-                : "/app/ip/docket"
+                : "/app/ip/docket#coverage-acknowledgements"
             }
             className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 hover:bg-[var(--color-bg-2)]"
             data-testid={`today-ip-action-${action.coverage_id}`}
@@ -571,7 +595,7 @@ function IpCoverageActionsCard({
             </span>
           </Link>
         ))}
-        <TruncationNote truncated={truncated} limit={limit} />
+        <TruncationNote truncated={truncated} limit={limit} ipCoverage />
       </CardContent>
     </Card>
   );
