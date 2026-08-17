@@ -7196,3 +7196,95 @@ def test_saved_queue_serializes_with_exact_actor_capability_on_postgres(
             )
             assert revocation_event is not None
             assert saved_events[0].created_at <= revocation_event.created_at
+
+
+# ---------- login request/background transaction boundary (2026-08-17) ----------
+
+
+def test_login_releases_identity_fence_before_background_audit_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real FastAPI lifecycle must not self-deadlock on login audit.
+
+    Starlette awaits BackgroundTasks before FastAPI closes the yielded request
+    session. The background probe therefore asks PostgreSQL for KEY SHARE
+    NOWAIT on the exact membership before running the real audit worker. It
+    fails immediately on the regressed route, whose request still holds the
+    Membership/User FOR UPDATE fence, and succeeds only when that completed
+    fence transaction was committed before task registration.
+    """
+
+    from fastapi.testclient import TestClient
+
+    from caseops_api.api.routes import auth as auth_routes
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.models import AuditEvent, EmployeeProfile
+    from caseops_api.db.session import clear_engine_cache
+    from caseops_api.main import create_application
+
+    with Session(pg_engine) as seed:
+        fixture = _seed_auth_session_fence_identity(seed)
+
+    database_url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", database_url)
+    monkeypatch.setenv("CASEOPS_ENV", "ci")
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET",
+        "pg-login-background-fence-secret-at-least-32-bytes",
+    )
+    get_settings.cache_clear()
+    clear_engine_cache()
+
+    original_worker = auth_routes.record_employee_login_async
+    background_checked = Event()
+
+    def checked_background_worker(membership_id: str) -> None:
+        assert membership_id == fixture["target_id"]
+        with Session(pg_engine) as probe:
+            locked_id = probe.scalar(
+                text(
+                    "SELECT id FROM company_memberships "
+                    "WHERE id = :membership_id FOR KEY SHARE NOWAIT"
+                ),
+                {"membership_id": membership_id},
+            )
+            assert locked_id == membership_id
+            probe.rollback()
+        background_checked.set()
+        original_worker(membership_id)
+
+    monkeypatch.setattr(
+        auth_routes,
+        "record_employee_login_async",
+        checked_background_worker,
+    )
+
+    with TestClient(create_application()) as test_client:
+        response = test_client.post(
+            "/api/auth/login",
+            json={
+                "company_slug": fixture["company_slug"],
+                "email": fixture["email"],
+                "password": "BeforeFence123!",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["access_token"]
+    assert background_checked.is_set()
+
+    with Session(pg_engine) as verify:
+        audit = verify.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "employee.login",
+                AuditEvent.actor_membership_id == fixture["target_id"],
+            )
+        )
+        profile = verify.scalar(
+            select(EmployeeProfile).where(
+                EmployeeProfile.membership_id == fixture["target_id"]
+            )
+        )
+        assert audit is not None
+        assert profile is not None and profile.last_login_at is not None
