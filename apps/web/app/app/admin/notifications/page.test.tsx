@@ -7,6 +7,7 @@ const {
   createNotificationRuleMock,
   deleteNotificationRuleMock,
   listAdminNotificationsMock,
+  listCompanyUsersMock,
   listNotificationRulesMock,
   previewNotificationRecoveryMock,
   recoverEmailSuppressionMock,
@@ -18,6 +19,7 @@ const {
   createNotificationRuleMock: vi.fn(),
   deleteNotificationRuleMock: vi.fn(),
   listAdminNotificationsMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
   listNotificationRulesMock: vi.fn(),
   previewNotificationRecoveryMock: vi.fn(),
   recoverEmailSuppressionMock: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   createNotificationRule: createNotificationRuleMock,
   deleteNotificationRule: deleteNotificationRuleMock,
   listAdminNotifications: listAdminNotificationsMock,
+  listCompanyUsers: listCompanyUsersMock,
   listNotificationRules: listNotificationRulesMock,
   previewNotificationRecovery: previewNotificationRecoveryMock,
   recoverEmailSuppression: recoverEmailSuppressionMock,
@@ -57,6 +60,11 @@ describe("AdminNotificationsPage", () => {
     createNotificationRuleMock.mockReset();
     deleteNotificationRuleMock.mockReset();
     listAdminNotificationsMock.mockReset();
+    listCompanyUsersMock.mockReset().mockResolvedValue({
+      company_id: "company-1",
+      company_slug: "firm",
+      users: [],
+    });
     listNotificationRulesMock.mockReset();
     previewNotificationRecoveryMock.mockReset();
     recoverEmailSuppressionMock.mockReset();

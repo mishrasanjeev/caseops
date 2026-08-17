@@ -1,9 +1,10 @@
 """matter_deadlines CRUD (BG-041, Sprint 13 partial)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -11,18 +12,24 @@ from caseops_api.db.models import (
     AuditEvent,
     Company,
     CompanyMembership,
+    EthicalWall,
+    IpDocketRecord,
     Matter,
+    MatterAccessGrant,
+    MatterDeadline,
     MatterDeadlineStatus,
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.matters import MatterDeadlineUpdateRequest
 from caseops_api.services.deadlines import (
     create_deadline,
     list_deadlines,
     transition_deadline,
+    update_deadline,
 )
 from caseops_api.services.session_context import SessionContext
-from tests.test_auth_company import bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company
 
 
 def _context(session) -> tuple[SessionContext, Matter]:
@@ -237,4 +244,294 @@ def test_cross_tenant_deadline_is_invisible(client: TestClient) -> None:
         # Nor can B transition A's deadline.
         with pytest.raises(Exception) as exc2:
             transition_deadline(session, context=ctx_b, deadline_id=d.id, action="complete")
-        assert "matter not found" in str(exc2.value).lower()
+        assert "not found" in str(exc2.value).lower()
+
+
+def test_linked_ip_generic_deadline_assignment_requires_durable_matter_access(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_membership_id = str(bootstrap["membership"]["id"])
+
+    candidate_ids: dict[str, str] = {}
+    for access_case in ("future_wall", "expiring_grant"):
+        created = client.post(
+            "/api/companies/current/users",
+            headers=headers,
+            json={
+                "full_name": f"Deadline {access_case}",
+                "email": f"deadline-{access_case}@example.com",
+                "password": "DeadlineFence123!",
+                "role": "member",
+            },
+        )
+        assert created.status_code == 200, created.text
+        candidate_ids[access_case] = str(created.json()["membership_id"])
+
+    factory = get_session_factory()
+    with factory() as session:
+        owner = session.get(CompanyMembership, owner_membership_id)
+        assert owner is not None
+        matter = Matter(
+            company_id=company_id,
+            assignee_membership_id=owner_membership_id,
+            matter_code="DLN-IP-STABLE-ACCESS",
+            title="Linked IP deadline stable access",
+            practice_area="Intellectual Property",
+            forum_level="high_court",
+            status="active",
+            restricted_access=True,
+        )
+        session.add(matter)
+        session.flush()
+        docket = IpDocketRecord(
+            company_id=company_id,
+            matter_id=matter.id,
+            record_type="trademark",
+            title="Stable access deadline docket",
+            primary_identifier="TM-DLN-STABLE-ACCESS",
+            status="active",
+            is_active=True,
+            created_by_membership_id=owner_membership_id,
+        )
+        existing = MatterDeadline(
+            company_id=company_id,
+            matter_id=matter.id,
+            source="custom",
+            kind="response",
+            title="Existing owner deadline",
+            due_on=date(2026, 12, 1),
+            status=MatterDeadlineStatus.OPEN,
+            assignee_membership_id=owner_membership_id,
+            created_by_membership_id=owner_membership_id,
+        )
+        session.add_all(
+            [
+                docket,
+                existing,
+                MatterAccessGrant(
+                    company_id=company_id,
+                    matter_id=matter.id,
+                    membership_id=candidate_ids["future_wall"],
+                    access_level="member",
+                    reason="Unbounded access before the scheduled wall.",
+                    granted_by_membership_id=owner_membership_id,
+                ),
+                MatterAccessGrant(
+                    company_id=company_id,
+                    matter_id=matter.id,
+                    membership_id=candidate_ids["expiring_grant"],
+                    access_level="member",
+                    reason="Current access expires while responsibility remains live.",
+                    granted_by_membership_id=owner_membership_id,
+                    expires_at=datetime.now(UTC) + timedelta(days=2),
+                ),
+                EthicalWall(
+                    company_id=company_id,
+                    matter_id=matter.id,
+                    excluded_membership_id=candidate_ids["future_wall"],
+                    reason="Scheduled conflict activation.",
+                    created_by_membership_id=owner_membership_id,
+                    effective_from=datetime.now(UTC) + timedelta(days=1),
+                ),
+            ]
+        )
+        session.commit()
+        matter_id = matter.id
+        existing_id = existing.id
+
+    with factory() as session:
+        owner = session.get(CompanyMembership, owner_membership_id)
+        assert owner is not None
+        context = SessionContext(
+            company=owner.company,
+            user=owner.user,
+            membership=owner,
+        )
+        with pytest.raises(HTTPException) as create_error:
+            create_deadline(
+                session,
+                context=context,
+                matter_id=matter_id,
+                source="custom",
+                kind="response",
+                title="Future-wall assignment must not persist",
+                due_on=date(2026, 12, 2),
+                assignee_membership_id=candidate_ids["future_wall"],
+            )
+        assert create_error.value.status_code == 400
+        assert "durable access" in str(create_error.value.detail)
+        assert session.scalar(
+            select(MatterDeadline.id).where(
+                MatterDeadline.matter_id == matter_id,
+                MatterDeadline.title == "Future-wall assignment must not persist",
+            )
+        ) is None
+
+    with factory() as session:
+        owner = session.get(CompanyMembership, owner_membership_id)
+        assert owner is not None
+        context = SessionContext(
+            company=owner.company,
+            user=owner.user,
+            membership=owner,
+        )
+        with pytest.raises(HTTPException) as update_error:
+            update_deadline(
+                session,
+                context=context,
+                matter_id=matter_id,
+                deadline_id=existing_id,
+                payload=MatterDeadlineUpdateRequest(
+                    assignee_membership_id=candidate_ids["expiring_grant"]
+                ),
+            )
+        assert update_error.value.status_code == 400
+        assert "durable access" in str(update_error.value.detail)
+        session.rollback()
+        persisted = session.get(MatterDeadline, existing_id)
+        assert persisted is not None
+        assert persisted.assignee_membership_id == owner_membership_id
+
+
+@pytest.mark.parametrize("access_case", ["restricted_sibling", "future_ip_wall"])
+def test_generic_deadline_assignment_requires_every_linked_ip_docket_access(
+    client: TestClient,
+    access_case: str,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_id = str(bootstrap["membership"]["id"])
+    created_member = client.post(
+        "/api/companies/current/users",
+        headers=headers,
+        json={
+            "full_name": f"Every docket {access_case}",
+            "email": f"every-docket-{access_case}@example.com",
+            "password": "EveryDocketFence123!",
+            "role": "member",
+        },
+    )
+    assert created_member.status_code == 200, created_member.text
+    candidate_id = str(created_member.json()["membership_id"])
+
+    factory = get_session_factory()
+    with factory() as session:
+        matter = Matter(
+            company_id=company_id,
+            assignee_membership_id=owner_id,
+            matter_code=f"DLN-EVERY-IP-{access_case}",
+            title="Generic deadline across every linked IP docket",
+            practice_area="Intellectual Property",
+            forum_level="high_court",
+            status="active",
+        )
+        session.add(matter)
+        session.flush()
+        first = IpDocketRecord(
+            company_id=company_id,
+            matter_id=matter.id,
+            record_type="trademark",
+            title="First linked deadline docket",
+            primary_identifier=f"DLN-EVERY-FIRST-{access_case}",
+            status="active",
+            is_active=True,
+            restricted=False,
+            created_by_membership_id=owner_id,
+        )
+        second = IpDocketRecord(
+            company_id=company_id,
+            matter_id=matter.id,
+            record_type="trademark",
+            title="Second linked deadline docket",
+            primary_identifier=f"DLN-EVERY-SECOND-{access_case}",
+            status="active",
+            is_active=True,
+            restricted=access_case == "restricted_sibling",
+            created_by_membership_id=owner_id,
+        )
+        existing = MatterDeadline(
+            company_id=company_id,
+            matter_id=matter.id,
+            source="custom",
+            kind="response",
+            title="Existing sibling-bound deadline",
+            due_on=date(2026, 12, 8),
+            status=MatterDeadlineStatus.OPEN,
+            assignee_membership_id=owner_id,
+            created_by_membership_id=owner_id,
+        )
+        session.add_all([first, second, existing])
+        session.flush()
+        if access_case == "future_ip_wall":
+            session.add(
+                EthicalWall(
+                    company_id=company_id,
+                    ip_docket_id=second.id,
+                    excluded_membership_id=candidate_id,
+                    reason="Scheduled docket wall must block durable assignment.",
+                    created_by_membership_id=owner_id,
+                    effective_from=datetime.now(UTC) + timedelta(days=1),
+                )
+            )
+        session.commit()
+        matter_id = matter.id
+        existing_id = existing.id
+
+    with factory() as session:
+        owner = session.get(CompanyMembership, owner_id)
+        assert owner is not None
+        context = SessionContext(
+            company=owner.company,
+            user=owner.user,
+            membership=owner,
+        )
+        with pytest.raises(HTTPException) as create_error:
+            create_deadline(
+                session,
+                context=context,
+                matter_id=matter_id,
+                source="custom",
+                kind="response",
+                title="Must not bypass one inaccessible sibling",
+                due_on=date(2026, 12, 9),
+                assignee_membership_id=candidate_id,
+            )
+        assert create_error.value.status_code == 400
+        assert "durable access" in str(create_error.value.detail)
+        session.rollback()
+
+    with factory() as session:
+        owner = session.get(CompanyMembership, owner_id)
+        assert owner is not None
+        context = SessionContext(
+            company=owner.company,
+            user=owner.user,
+            membership=owner,
+        )
+        with pytest.raises(HTTPException) as update_error:
+            update_deadline(
+                session,
+                context=context,
+                matter_id=matter_id,
+                deadline_id=existing_id,
+                payload=MatterDeadlineUpdateRequest(
+                    assignee_membership_id=candidate_id
+                ),
+            )
+        assert update_error.value.status_code == 400
+        session.rollback()
+        persisted = session.get(MatterDeadline, existing_id)
+        assert persisted is not None
+        assert persisted.assignee_membership_id == owner_id
+        assert session.scalar(
+            select(MatterDeadline.id).where(
+                MatterDeadline.matter_id == matter_id,
+                MatterDeadline.title == "Must not bypass one inaccessible sibling",
+            )
+        ) is None

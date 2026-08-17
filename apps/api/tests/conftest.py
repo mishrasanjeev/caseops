@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from collections.abc import Generator
 from pathlib import Path
 
@@ -75,12 +76,66 @@ def pg_engine():
     engine.dispose()
 
 
+
+
+# Build the migrated schema ONCE per session, then copy it per test.
+#
+# Every test that uses ``client`` got a fresh SQLite file, and
+# ``create_application()`` replayed all 148 Alembic revisions into it. CI's
+# --durations output shows the cost: 20-29 seconds of *setup* per test, with
+# the test bodies themselves fast. That is what pushes shards past the
+# 60-minute cap -- on 2026-08-16 shards 1, 4 and 7 ran ~90 minutes and were
+# killed, cancelling the whole run.
+#
+# The schema is byte-identical for every test, so it is built once and copied.
+# Isolation is unchanged: each test still gets its own file, created fresh from
+# the template and deleted at teardown. Copying a few hundred KB is milliseconds
+# against ~25 seconds of migration replay.
+@pytest.fixture(scope="session")
+def _migrated_template_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    from caseops_api.db.migrations import run_migrations
+
+    template = tmp_path_factory.mktemp("caseops-schema") / "template.db"
+    # monkeypatch is function-scoped, so the environment is saved and restored
+    # by hand here rather than leaking session-wide.
+    guarded = (
+        "CASEOPS_ENV",
+        "CASEOPS_DATABASE_URL",
+        "CASEOPS_AUTH_SECRET",
+        "CASEOPS_AUTO_MIGRATE",
+    )
+    previous = {key: os.environ.get(key) for key in guarded}
+    os.environ["CASEOPS_ENV"] = "local"
+    os.environ["CASEOPS_DATABASE_URL"] = f"sqlite+pysqlite:///{template.as_posix()}"
+    os.environ["CASEOPS_AUTH_SECRET"] = "test-secret-should-be-at-least-32-bytes"
+    os.environ["CASEOPS_AUTO_MIGRATE"] = "true"
+    get_settings.cache_clear()
+    clear_engine_cache()
+    try:
+        run_migrations()
+    finally:
+        clear_engine_cache()
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        get_settings.cache_clear()
+
+    if not template.exists():  # pragma: no cover - defensive
+        raise RuntimeError("migrated template database was not created")
+    return template
+
+
 @pytest.fixture
 def client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    _migrated_template_db: Path,
 ) -> Generator[TestClient]:
     database_path = tmp_path / "caseops-test.db"
+    # Start from the session template instead of replaying every revision.
+    shutil.copyfile(_migrated_template_db, database_path)
     storage_path = tmp_path / "documents"
     # EG-003 (2026-04-23) — pin the test process to "local" env.
     # ``services.virus_scan._required_default_for_env`` reads
@@ -91,6 +146,9 @@ def client(
     # upload because no scanner is configured.
     monkeypatch.setenv("CASEOPS_ENV", "local")
     monkeypatch.setenv("CASEOPS_DATABASE_URL", f"sqlite+pysqlite:///{database_path.as_posix()}")
+    # The copied file is already at head; re-running the migration machinery
+    # would reload all 148 revision modules to discover it has nothing to do.
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "test-secret-should-be-at-least-32-bytes")
     monkeypatch.setenv("CASEOPS_PUBLIC_APP_URL", "http://testserver")
     monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["http://localhost:3000","http://testserver"]')

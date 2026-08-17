@@ -560,6 +560,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/provider-operations/jobs/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one exact tenant-scoped provider operation. */
+        get: operations["get_provider_operation_job_api_admin_provider_operations_jobs__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/provider-operations/jobs/{operation_id}/ignore": {
         parameters: {
             query?: never;
@@ -588,6 +605,23 @@ export interface paths {
         put?: never;
         /** Mark a provider operation resolved with an audit event. */
         post: operations["post_provider_operation_mark_resolved_api_admin_provider_operations_jobs__operation_id__mark_resolved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/provider-operations/jobs/{operation_id}/reconcile-calendar-unknown-outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconcile an ambiguous calendar create using verified remote evidence. */
+        post: operations["post_calendar_unknown_outcome_reconciliation_api_admin_provider_operations_jobs__operation_id__reconcile_calendar_unknown_outcome_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5295,6 +5329,23 @@ export interface paths {
         patch: operations["patch_ip_operational_deadline_api_ip_operational_deadlines__deadline_id__patch"];
         trace?: never;
     };
+    "/api/ip/operational-deadlines/{deadline_id}/terminalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Covered Deadline Terminalization */
+        post: operations["post_ip_covered_deadline_terminalization_api_ip_operational_deadlines__deadline_id__terminalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/portfolio": {
         parameters: {
             query?: never;
@@ -9902,6 +9953,35 @@ export interface components {
             /** Total Amount Minor */
             total_amount_minor: number;
         };
+        /** _IpCoverageActionResponse */
+        _IpCoverageActionResponse: {
+            /** Coverage Id */
+            coverage_id: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Days Until */
+            days_until?: number | null;
+            /** Deadline Title */
+            deadline_title?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Due On */
+            due_on?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "decide_transfer" | "acknowledge";
+            /** Reason */
+            reason?: string | null;
+            /** Responsible Label */
+            responsible_label: string;
+        };
         /** _MatterRefResponse */
         _MatterRefResponse: {
             /** Id */
@@ -12405,6 +12485,54 @@ export interface components {
             provider_config: components["schemas"]["CalendarProviderConfigStatus"][];
             /** Syncs */
             syncs: components["schemas"]["CalendarEventSyncRecord"][];
+        };
+        /** CalendarUnknownOutcomeReconciliationRequest */
+        CalendarUnknownOutcomeReconciliationRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "attach_remote_event" | "attest_remote_absence";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Connection Id */
+            expected_connection_id: string;
+            /** Expected Dead Letter Reason */
+            expected_dead_letter_reason: string;
+            /**
+             * Expected Provider
+             * @enum {string}
+             */
+            expected_provider: "outlook" | "google_calendar";
+            /** Expected Source Id */
+            expected_source_id: string;
+            /**
+             * Expected Source Type
+             * @enum {string}
+             */
+            expected_source_type: "matter_hearing" | "matter_task" | "matter_deadline";
+            /** Expected Status */
+            expected_status: string;
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Provider Event Id */
+            provider_event_id?: string | null;
+        };
+        /** CalendarUnknownOutcomeReconciliationResponse */
+        CalendarUnknownOutcomeReconciliationResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "attach_remote_event" | "attest_remote_absence";
+            /** Changed */
+            changed: boolean;
+            /** Message */
+            message: string;
+            operation: components["schemas"]["ProviderOperationRecord"];
         };
         /** CalibratedPredictiveSignal */
         CalibratedPredictiveSignal: {
@@ -18574,7 +18702,7 @@ export interface components {
             /** Coverage Id */
             coverage_id: string;
             /** Reason */
-            reason?: ("acknowledged" | "already_acknowledged" | "not_found" | "not_responsible" | "version_conflict" | "transfer_pending") | null;
+            reason?: ("acknowledged" | "already_acknowledged" | "not_found" | "not_responsible" | "version_conflict" | "transfer_pending" | "inactive_lifecycle") | null;
             /** Reassignment Version */
             reassignment_version?: number | null;
         };
@@ -20964,6 +21092,16 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** IpOperationalDeadlineTransitionRequest */
+        IpOperationalDeadlineTransitionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "complete" | "cancel";
+            /** Docket Id */
+            docket_id: string;
         };
         /** IpOperationalDeadlineUpdateRequest */
         IpOperationalDeadlineUpdateRequest: {
@@ -29711,21 +29849,41 @@ export interface components {
         };
         /** ProviderOperationListResponse */
         ProviderOperationListResponse: {
+            /**
+             * Counts Scope
+             * @default page
+             * @constant
+             */
+            counts_scope: "page";
+            /** Has More */
+            has_more: boolean;
             /** Ignored Count */
             ignored_count: number;
             /** Open Count */
             open_count: number;
             /** Operations */
             operations: components["schemas"]["ProviderOperationRecord"][];
+            /** Page Limit */
+            page_limit: number;
             /** Replayable Count */
             replayable_count: number;
             /** Resolved Count */
             resolved_count: number;
+            /** Returned Count */
+            returned_count: number;
+            /**
+             * Sort Order
+             * @default updated_at_desc_id_desc_source_desc
+             * @constant
+             */
+            sort_order: "updated_at_desc_id_desc_source_desc";
         };
         /** ProviderOperationRecord */
         ProviderOperationRecord: {
             /** Attempts */
             attempts: number;
+            /** Automatic Replay Block Code */
+            automatic_replay_block_code?: string | null;
             /** Company Id */
             company_id: string;
             /** Correlation Ref */
@@ -29775,6 +29933,11 @@ export interface components {
             last_good_at?: string | null;
             /** Last Successful At */
             last_successful_at?: string | null;
+            /**
+             * Manual Reconciliation Required
+             * @default false
+             */
+            manual_reconciliation_required: boolean;
             /** Mark Resolved Available */
             mark_resolved_available: boolean;
             /** Matter Id */
@@ -31952,6 +32115,8 @@ export interface components {
             hearings_next_7d: components["schemas"]["_HearingResponse"][];
             /** Horizon Days */
             horizon_days: number;
+            /** Ip Coverage Actions */
+            ip_coverage_actions: components["schemas"]["_IpCoverageActionResponse"][];
             /** Overdue Invoices */
             overdue_invoices: components["schemas"]["_InvoiceResponse"][];
             /** Stream Counts */
@@ -33493,6 +33658,37 @@ export interface operations {
             };
         };
     };
+    get_provider_operation_job_api_admin_provider_operations_jobs__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_provider_operation_ignore_api_admin_provider_operations_jobs__operation_id__ignore_post: {
         parameters: {
             query?: never;
@@ -33550,6 +33746,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderOperationActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_calendar_unknown_outcome_reconciliation_api_admin_provider_operations_jobs__operation_id__reconcile_calendar_unknown_outcome_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarUnknownOutcomeReconciliationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarUnknownOutcomeReconciliationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -42841,6 +43072,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["IpOperationalDeadlineUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOperationalDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_covered_deadline_terminalization_api_ip_operational_deadlines__deadline_id__terminalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOperationalDeadlineTransitionRequest"];
             };
         };
         responses: {

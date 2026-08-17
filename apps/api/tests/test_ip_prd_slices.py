@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuditEvent,
     CalendarEventSync,
     Communication,
     Company,
@@ -16,6 +17,7 @@ from caseops_api.db.models import (
     InAppNotification,
     IpDeadlineCoverage,
     IpDocketRecord,
+    MatterAccessGrant,
     MatterAttachment,
     MatterTimeEntry,
     NotificationDeliveryChannel,
@@ -247,7 +249,37 @@ def test_ip_docket_end_to_end_uses_existing_notice_deadline_and_billing_owners(
             "reason": "Coverage owner returned from leave",
         },
     )
-    assert stale_reassignment.status_code == 409
+    # Every claimed assignment participant enters the same tenant-scoped
+    # Membership/User fence. A nonexistent optimistic token is therefore a
+    # nondisclosing membership miss, not a stale-row conflict.
+    assert stale_reassignment.status_code == 404, stale_reassignment.text
+    assert stale_reassignment.headers["content-type"].startswith(
+        "application/problem+json"
+    )
+    stale_problem = stale_reassignment.json()
+    assert stale_problem["status"] == 404
+    assert stale_problem["detail"] == "Company membership not found."
+    assert stale_problem["instance"].endswith(
+        f"/deadline-coverages/{coverage_row['id']}/reassign"
+    )
+    after_stale_reassignment = client.get(
+        f"/api/ip/dockets/{docket['id']}", headers=headers
+    )
+    assert after_stale_reassignment.status_code == 200
+    persisted_after_stale = next(
+        row
+        for row in after_stale_reassignment.json()["deadline_coverages"]
+        if row["id"] == coverage_row["id"]
+    )
+    assert persisted_after_stale == coverage_row
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.company_id == str(bootstrap["company"]["id"]),
+                AuditEvent.target_id == coverage_row["id"],
+                AuditEvent.action == "ip_deadline_coverage.transfer_proposed",
+            )
+        ) is None
 
     with get_session_factory()() as session:
         notice = CompanyNotice(
@@ -378,15 +410,54 @@ def test_ip_remaining_operations_end_to_end(
         },
     )
     assert deadline.status_code == 200, deadline.text
+    coverage_payload = {
+        "matter_deadline_id": deadline.json()["id"],
+        "responsible_membership_id": owner_id,
+        "backup_membership_id": replacement_id,
+        "coverage_status": "accepted",
+    }
+    blocked_coverage = client.post(
+        f"/api/ip/dockets/{docket_id}/deadline-coverages",
+        headers=headers,
+        json=coverage_payload,
+    )
+    assert blocked_coverage.status_code == 409, blocked_coverage.text
+    blocked_problem = blocked_coverage.json()
+    assert blocked_problem["code"] == "ip_coverage_replacement_lacks_access"
+    assert blocked_problem["blocked_docket_ids"] == [docket_id]
+    assert "Completed operations mark" not in str(blocked_problem)
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(IpDeadlineCoverage.id).where(
+                IpDeadlineCoverage.docket_id == docket_id,
+                IpDeadlineCoverage.matter_deadline_id == deadline.json()["id"],
+            )
+        ) is None
+        assert session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.target_type == "ip_deadline_coverage",
+                AuditEvent.action == "ip_deadline_coverage.accepted",
+            )
+        ) is None
+        # A live backup is an operational role, so this restricted docket needs
+        # durable, unbounded access before the positive-path fixture can exist.
+        session.add(
+            MatterAccessGrant(
+                company_id=company_id,
+                ip_docket_id=docket_id,
+                membership_id=replacement_id,
+                access_level="member",
+                reason="Unbounded restricted-docket access for the backup fixture.",
+                granted_by_membership_id=owner_id,
+            )
+        )
+        session.commit()
+
     coverage = client.post(
         f"/api/ip/dockets/{docket_id}/deadline-coverages",
         headers=headers,
-        json={
-            "matter_deadline_id": deadline.json()["id"],
-            "responsible_membership_id": owner_id,
-            "backup_membership_id": replacement_id,
-            "coverage_status": "accepted",
-        },
+        json=coverage_payload,
     )
     assert coverage.status_code == 200, coverage.text
     coverage_row = coverage.json()["deadline_coverages"][0]
@@ -406,15 +477,12 @@ def test_ip_remaining_operations_end_to_end(
             "expected_versions": {coverage_row["id"]: coverage_row["reassignment_version"]},
         },
     )
-    # UJ-57-EXC-01/02 (2026-08-15): this docket is `restricted: True` and the
-    # replacement was inserted with no access grant, so the transfer is now
-    # refused. This assertion previously expected 200, which encoded the defect
-    # that bulk reassignment could hand a restricted record to a walled-off
-    # member. The success path is covered by
-    # `test_ip_coverage_reassignment_access.py::
-    # test_uj57_bulk_transfer_succeeds_when_the_replacement_has_access`.
+    # The replacement is already this row's backup. The role-collision guard is
+    # intentionally evaluated before access: either defect must refuse the
+    # whole transfer, and the structural coverage invariant is independent of
+    # whether this restricted docket later grants the replacement access.
     assert bulk.status_code == 409, bulk.text
-    assert bulk.json()["code"] == "ip_coverage_replacement_lacks_access"
+    assert bulk.json()["code"] == "ip_coverage_distinct_backup_required"
     assert bulk.json()["blocked_docket_ids"] == [docket_id]
 
     # Fail closed: the original owner still holds the coverage.
@@ -577,9 +645,8 @@ def test_ip_remaining_operations_end_to_end(
     with get_session_factory()() as session:
         persisted_coverage = session.get(IpDeadlineCoverage, coverage_row["id"])
         assert persisted_coverage is not None
-        # UJ-57-EXC-01/02 (2026-08-15): the bulk transfer above was refused
-        # because this docket is restricted and the replacement holds no grant,
-        # so the coverage is durably unchanged in the database too.
+        # The bulk transfer above was refused because the replacement already
+        # holds backup cover, so the distinct-role invariant is durable too.
         assert persisted_coverage.responsible_membership_id != replacement_id
         assert (
             persisted_coverage.responsible_membership_id
@@ -676,7 +743,10 @@ def test_notification_external_block_creates_exactly_one_visible_fallback(
             recipient_membership=membership,
             channel=NotificationDeliveryChannel.EMAIL,
             event_type="ip.deadline.critical",
-            source_type="ip_deadline",
+            # This test exercises provider fallback only. A declared
+            # ``ip_deadline`` must reference a real, operational deadline and
+            # is correctly blocked by the canonical target fence.
+            source_type="provider_fixture",
             source_id="deadline-fixture-1",
             title="Critical IP deadline",
             body="A critical deadline requires review.",
@@ -728,7 +798,7 @@ def test_notification_external_cutover_uses_only_durable_intent_and_webhook(
             recipient_membership=membership,
             channel=NotificationDeliveryChannel.EMAIL,
             event_type="ip.deadline.critical",
-            source_type="ip_deadline",
+            source_type="provider_fixture",
             source_id="deadline-live-fixture",
             title="Critical IP deadline",
             body="Open CaseOps to review the deadline.",

@@ -53,7 +53,7 @@ async function signIn(page: import("@playwright/test").Page, slug: string) {
 }
 
 test.describe("Mobile / responsive proofs [mobile]", () => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
 
   // ---------------------------------------------------------------
   // Ram-BUG-005 — Topbar hamburger MUST be visible + functional on
@@ -69,6 +69,24 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     await signIn(page, slug);
     await page.goto("/app");
 
+    // Keep the server-error oracle scoped to the billing APIs implicated by
+    // this navigation path. Other destinations can intentionally exercise
+    // provider-unavailable states; an unhandled billing 5xx is never a valid
+    // page outcome and was the signal for the account-creation race.
+    const billingServerErrors: string[] = [];
+    page.on("response", (response) => {
+      const responseUrl = new URL(response.url());
+      if (
+        responseUrl.pathname.startsWith("/api/billing/") &&
+        response.status() >= 500 &&
+        response.status() <= 599
+      ) {
+        billingServerErrors.push(
+          `${response.request().method()} ${responseUrl.pathname} -> ${response.status()}`,
+        );
+      }
+    });
+
     // Sidebar (`hidden md:flex`) is invisible at this viewport.
     const sidebar = page.locator('aside[aria-label="Primary navigation"]');
     await expect(sidebar).toBeHidden();
@@ -81,13 +99,102 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     const drawer = page.getByRole("dialog", { name: /workspace navigation/i });
     await expect(drawer).toBeVisible();
 
-    // The drawer body contains the same nav items the desktop
-    // sidebar would. Tap one and assert two things:
-    //  1) the URL changes (navigation happened)
-    //  2) the drawer auto-closes (so the user lands cleanly)
-    await drawer.getByRole("link", { name: /Matters/ }).first().tap();
-    await page.waitForURL(/\/app\/matters/);
-    await expect(drawer).toBeHidden();
+    // Snapshot the capability-visible navigation, then exercise every link in
+    // the real mobile drawer. This catches regrouping defects that a single
+    // desktop link cannot: an item below the fold must remain reachable, fit
+    // horizontally, navigate, and close the drawer. User guide is last in the
+    // navigation order, so leaving the authenticated shell happens last.
+    const destinations = await drawer.locator("nav ul a[href]").evaluateAll((links) =>
+      links.map((link) => ({
+        label: link.getAttribute("aria-label") ?? link.textContent?.trim() ?? "",
+        href: link.getAttribute("href") ?? "",
+      })),
+    );
+    expect(destinations.length).toBeGreaterThan(0);
+    expect(new Set(destinations.map(({ label }) => label)).size).toBe(
+      destinations.length,
+    );
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    for (const destination of destinations) {
+      if (!(await drawer.isVisible())) {
+        await expect(trigger).toBeVisible();
+        await trigger.tap();
+        await expect(drawer).toBeVisible();
+      }
+
+      const drawerNav = drawer.locator("nav");
+      const link = drawerNav.getByRole("link", {
+        name: destination.label,
+        exact: true,
+      });
+      await link.scrollIntoViewIfNeeded();
+      await expect(
+        link,
+        `${destination.label} should be reachable in the mobile drawer`,
+      ).toBeVisible();
+
+      const box = await link.boundingBox();
+      expect(box, `${destination.label} should have a rendered tap target`).not.toBeNull();
+      if (box && viewport) {
+        expect(
+          box.x,
+          `${destination.label} should not overflow left`,
+        ).toBeGreaterThanOrEqual(0);
+        expect(
+          box.x + box.width,
+          `${destination.label} should not overflow right`,
+        ).toBeLessThanOrEqual(viewport.width + 1);
+      }
+      const drawerWidth = await drawerNav.evaluate((node) => ({
+        clientWidth: node.clientWidth,
+        scrollWidth: node.scrollWidth,
+      }));
+      expect(drawerWidth.scrollWidth).toBeLessThanOrEqual(drawerWidth.clientWidth + 1);
+
+      const previousPath = new URL(page.url()).pathname;
+      const previousHeading = (
+        (await page.locator("main h1").first().textContent()) ?? ""
+      ).trim();
+      await link.tap();
+      await expect(drawer).toBeHidden();
+      const expectedPath = new URL(destination.href, page.url()).pathname;
+      await expect
+        .poll(() => new URL(page.url()).pathname, {
+          message: `${destination.label} should navigate to ${expectedPath}`,
+        })
+        .toBe(expectedPath);
+
+      // A changed URL can still leave the prior page mounted while the next
+      // route loads. Prove the user-visible destination rendered before moving
+      // to the next drawer action; this also prevents the loop from piling up
+      // requests against pages whose data surface has not mounted yet.
+      const destinationHeading = page.locator("main h1").first();
+      await expect(
+        destinationHeading,
+        `${destination.label} should render a visible page heading`,
+      ).toBeVisible();
+      if (expectedPath !== previousPath && previousHeading) {
+        await expect
+          .poll(
+            async () => ((await destinationHeading.textContent()) ?? "").trim(),
+            {
+              message: `${destination.label} should replace the prior page surface`,
+            },
+          )
+          .not.toBe(previousHeading);
+      }
+
+      if (expectedPath === "/app/admin/billing") {
+        // The heading renders before five parallel billing queries settle.
+        // Waiting for the page's explicit loading surface to leave proves the
+        // implicated requests completed before this test navigates elsewhere.
+        await expect(page.getByTestId("billing-page-loading")).toBeHidden();
+        expect(billingServerErrors).toEqual([]);
+      }
+    }
+    expect(billingServerErrors).toEqual([]);
   });
 
   // ---------------------------------------------------------------

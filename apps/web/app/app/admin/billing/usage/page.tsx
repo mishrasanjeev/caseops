@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Download } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Card,
   CardContent,
@@ -79,6 +80,35 @@ function BreakdownTable({
   );
 }
 
+function BillingUsageLoading() {
+  return (
+    <div
+      className="flex flex-col gap-6"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-testid="billing-usage-loading"
+    >
+      <span className="sr-only">Loading usage and spend report.</span>
+      <div className="grid gap-4 md:grid-cols-3" aria-hidden="true">
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+      </div>
+      <Card aria-hidden="true">
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-14 w-full" />
+        </CardContent>
+      </Card>
+      <div className="grid gap-6 xl:grid-cols-2" aria-hidden="true">
+        <Skeleton className="h-44 w-full" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    </div>
+  );
+}
+
 export default function TenantBillingUsagePage() {
   const [downloading, setDownloading] = useState(false);
   const usageQuery = useQuery({
@@ -89,7 +119,13 @@ export default function TenantBillingUsagePage() {
     queryKey: ["billing", "spend-report"],
     queryFn: fetchBillingSpendReport,
   });
-  const report = spendQuery.data ?? usageQuery.data;
+  // Do not render a faster query's fallback as final state while the other
+  // initial request is still unresolved. In particular, an empty usage
+  // fallback beside an announced loader tells the user both "loading" and
+  // "there is no usage" at once. `isPending` is false during background
+  // refetches with retained data, so already-valid reports stay visible.
+  const isPending = usageQuery.isPending || spendQuery.isPending;
+  const report = isPending ? undefined : spendQuery.data ?? usageQuery.data;
 
   async function exportSpend() {
     setDownloading(true);
@@ -148,13 +184,8 @@ export default function TenantBillingUsagePage() {
         }
       />
 
-      {usageQuery.isPending || spendQuery.isPending ? (
-        <Card>
-          <CardContent className="flex items-center gap-2 text-sm text-[var(--color-mute)]">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Loading usage...
-          </CardContent>
-        </Card>
+      {isPending ? (
+        <BillingUsageLoading />
       ) : null}
 
       {snapshot ? (

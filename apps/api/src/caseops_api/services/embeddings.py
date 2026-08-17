@@ -32,6 +32,7 @@ from typing import Protocol
 
 from caseops_api.core.settings import get_settings
 from caseops_api.services import voyage_usage as _voyage_usage
+from caseops_api.services.notification_delivery import redact_provider_error
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -378,7 +379,7 @@ class VoyageProvider:
                     dimensions=self.dimensions,
                     latency_ms=int((time.perf_counter() - t0) * 1000),
                     status="error",
-                    error=str(exc)[:500],
+                    error=redact_provider_error(exc),
                 )
                 raise EmbeddingProviderError(f"Voyage embed failed: {exc}") from exc
             _voyage_usage.record_call(

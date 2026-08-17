@@ -47,6 +47,7 @@ def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
         "playwright.prod-ram.config.ts",
         "playwright.notice-prod.config.ts",
         "playwright.ip-a0-prod.config.ts",
+        "playwright.ip-guard-first-prod.config.ts",
     ],
 )
 def test_production_playwright_does_not_retain_authenticated_media(
@@ -86,7 +87,7 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     )
     assert "testMatch: /iplf-027b-a0-quiescence-2026-08-14-prod\\.spec\\.ts$/" in config
     assert "testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\\.spec\\.ts$/" in app_config
-    assert "testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\\.spec\\.ts$/" in root_config
+    assert "/iplf-027b-a0-quiescence-2026-08-14-prod\\.spec\\.ts$/" in root_config
     assert "iplf-027b-a0-quiescence-2026-08-14-prod" not in broad_config
     assert 'process.env.CASEOPS_IP_A0_PROD_MODE ?? "verify"' in spec
     assert 'const PROD_BASE_URL = "https://caseops.ai"' in spec
@@ -154,6 +155,82 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     assert "PROD_API_BASE_URL:" not in a0_step
     assert "CASEOPS_IP_QA_EMAIL:" not in a0_step
     assert "CASEOPS_IP_QA_SLUG:" not in a0_step
+
+
+def test_guard_first_production_acceptance_is_isolated_and_recoverable() -> None:
+    root_config = _read_repo_text("playwright.config.ts")
+    config = _read_repo_text("playwright.ip-guard-first-prod.config.ts")
+    spec = _read_repo_text(
+        "tests/e2e/iplf-039c-guard-first-2026-08-16-prod.spec.ts"
+    )
+    plan = _read_repo_text(
+        "docs/ip-implementation/evidence/m3/IPLF-039C/"
+        "guard-first-production-acceptance-plan-2026-08-16.md"
+    )
+
+    guard_pattern = "/iplf-039c-guard-first-2026-08-16-prod\\.spec\\.ts$/"
+    assert guard_pattern in root_config
+    assert f"testMatch: {guard_pattern}" in config
+    assert "retries: 0" in config
+    for setting in ('trace: "off"', 'screenshot: "off"', 'video: "off"'):
+        assert setting in config
+
+    assert 'required("CASEOPS_IP_GUARD_RUN_ID")' in spec
+    assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
+    assert 'required("CASEOPS_IP_GUARD_QA_ACK")' in spec
+    assert 'const PROD_BASE_URL = "https://caseops.ai"' in spec
+    assert 'const PROD_API_BASE_URL = "https://api.caseops.ai"' in spec
+    assert "process.env.PROD_BASE_URL" not in spec
+    assert "process.env.PROD_API_BASE_URL" not in spec
+    assert "playwrightRequest.newContext({ maxRedirects: 0 })" in spec
+    assert spec.count("await newNoRedirectContext()") == 2
+    assert "request: api" not in spec
+    test_body = spec.rsplit(
+        'test("guard-first writers reject role collapse and preserve disposable QA state"',
+        maxsplit=1,
+    )[1]
+    assert (
+        test_body.index("assertCanonicalProductionOrigins();")
+        < test_body.index("await newNoRedirectContext()")
+        < test_body.index("await authenticateOwner(api, run)")
+    )
+    assert "ownerApi: api" in test_body
+    assert "await cleanupReservedRun(state.ownerApi, state)" in spec
+    assert "const replacementApi = await newNoRedirectContext()" in test_body
+    assert "authenticateUser(\n      replacementApi," in test_body
+    assert "await assertCurrentActor(api, run, owner)" in test_body
+    assert "await replacementApi.post(" in test_body
+    assert "authHeaders(replacementAuth)" in test_body
+    assert "`${run.apiBaseUrl}/api/companies/current`" in spec
+    assert "await assertCurrentActor(api, run, auth)" in spec
+    assert 'expect(auth.membership.role).toBe("member")' in spec
+    assert 'expect(auth.capabilities).not.toContain("ip:approve")' in spec
+    assert 'expect(auth.capabilities).not.toContain("company:manage_users")' in spec
+    assert 'randomBytes(24).toString("base64url")' in spec
+    assert "QaGuard-${runId}" not in spec
+    assert "JSON.stringify(await body(response))" not in spec
+    assert "await response.text()" not in spec
+    assert "unexpected HTTP status" in spec
+    assert "async function assertDeadlineGovernancePrerequisites" in spec
+    assert (
+        test_body.index("await assertDeadlineGovernancePrerequisites(")
+        < test_body.index("const conflictDeadline = await createOperationalDeadline(")
+        < test_body.index("const collapsedCreate = await api.post(")
+    )
+    assert spec.count("await assertExactRelease(api, run)") == 2
+    assert "test.afterEach" in spec
+    assert "testInfo.setTimeout(CLEANUP_TIMEOUT_MS)" in spec
+    assert "recoverReservedUsers" in spec
+    assert "recoverReservedMatters" in spec
+    assert "recoverReservedDockets" in spec
+    assert "CLEANUP_REQUEST_TIMEOUT_MS" in spec
+    assert "cleanup_failure_${index + 1}; phase=${failure.phase}; target=${failure.target}" in spec
+    assert "error.message" not in spec
+    assert "new AggregateError" not in spec
+    assert "/lifecycle/status" in spec
+    assert "randomUUID" not in spec
+    assert "## Manual recovery" in plan
+    assert "Do not reuse the recovered run id" in plan
 
 
 def test_local_playwright_enables_rule_governance_journey_explicitly() -> None:

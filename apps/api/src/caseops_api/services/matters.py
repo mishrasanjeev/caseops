@@ -5,7 +5,7 @@ import io
 import logging
 import zipfile
 from datetime import UTC, date, datetime, time
-from typing import BinaryIO
+from typing import BinaryIO, NamedTuple
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
@@ -104,7 +104,15 @@ from caseops_api.schemas.matters import (
     ResolvedBenchMember,
     normalize_matter_code,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.calendar_projection_safety import (
+    calendar_sync_upsert_claim_state,
+    materialize_expired_calendar_sync_upsert_claim,
+)
 from caseops_api.services.case_tracking import auto_link_matter_case_tracking
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
@@ -116,8 +124,10 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.matter_access import (
+    _operational_ip_docket_role_membership_ids,
     assert_access,
-    can_access,
+    can_stably_access_ip_docket,
+    can_stably_access_matter,
     visible_matters_filter,
 )
 from caseops_api.services.matter_billing import (
@@ -168,6 +178,32 @@ DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
     "other": "other",
 }
 NOTICE_REMINDER_OFFSETS = [7, 3, 1]
+_TERMINAL_IP_DOCKET_STATUSES = frozenset(
+    {"archived", "abandoned", "transferred", "retired", "closed"}
+)
+# Keep the service-level capability contract next to the actor fence.  Route
+# dependencies are an advisory first check; every mutation below repeats its
+# exact capability check against the Membership/User rows held by the
+# transaction before taking a Matter or child lock.
+MATTER_MUTATION_CAPABILITIES: dict[str, str] = {
+    "create_matter": "matters:create",
+    "import_matter": "matters:bulk_import",
+    "update_matter": "matters:edit",
+    "transition_matter_lifecycle_status": "matters:archive",
+    "create_matter_note": "matters:write",
+    "create_matter_task": "matters:write",
+    "update_matter_task": "matters:write",
+    "create_matter_hearing": "matters:write",
+    "update_matter_hearing": "matters:write",
+    "create_matter_court_order": "matters:edit",
+    "update_matter_court_order": "matters:edit",
+    "create_matter_court_sync_import": "court_sync:run",
+    "create_matter_attachment": "documents:upload",
+    "update_matter_attachment_metadata": "documents:manage",
+    "request_matter_attachment_processing": "documents:manage",
+    "create_time_entry": "time_entries:write",
+    "create_matter_invoice": "invoices:issue",
+}
 NOTICE_TEXT_FIELDS = {
     "notice_source",
     "notice_subject",
@@ -1106,6 +1142,515 @@ def _task_sort_key(task: MatterTask) -> tuple[int, date, datetime]:
     return (status_rank, due_on, task.created_at)
 
 
+class _MatterRoleSnapshot(NamedTuple):
+    assignee_membership_id: str | None
+    responsible_lawyer_membership_id: str | None
+    status: str
+    is_active: bool
+    lifecycle_version: int
+    restricted_access: bool
+    access_policy_version: int
+    team_id: str | None
+
+
+class _LinkedDocketSnapshot(NamedTuple):
+    docket_id: str
+    matter_id: str | None
+    status: str
+    is_active: bool
+    archived_by_matter_disposal: bool
+    lifecycle_version: int
+    restricted: bool
+    access_policy_version: int
+
+
+class _MatterTaskMutationSnapshot(NamedTuple):
+    matter_id: str
+    owner_membership_id: str | None
+    status: str
+    completed_at: datetime | None
+    cancelled_by_matter_disposal: bool
+    neutralized_by_ip_lifecycle_event_id: str | None
+    neutralized_by_ip_lifecycle_version: int | None
+    neutralized_at: datetime | None
+    updated_at: datetime
+
+
+class _HearingRoleSnapshot(NamedTuple):
+    matter_id: str
+    status: str
+    responsible_membership_id: str | None
+    attendee_membership_ids: tuple[str, ...]
+    reminder_recipient_membership_ids: tuple[str, ...]
+    escalation_membership_id: str | None
+    cancelled_by_matter_disposal: bool
+    neutralized_by_ip_lifecycle_event_id: str | None
+    neutralized_by_ip_lifecycle_version: int | None
+    neutralized_at: datetime | None
+
+
+def _matter_role_snapshot_from_model(matter: Matter) -> _MatterRoleSnapshot:
+    return _MatterRoleSnapshot(
+        assignee_membership_id=matter.assignee_membership_id,
+        responsible_lawyer_membership_id=matter.responsible_lawyer_membership_id,
+        status=_status_value(matter.status) or "",
+        is_active=bool(matter.is_active),
+        lifecycle_version=matter.lifecycle_version,
+        restricted_access=bool(matter.restricted_access),
+        access_policy_version=matter.access_policy_version,
+        team_id=matter.team_id,
+    )
+
+
+def _linked_docket_snapshot_from_model(
+    docket: IpDocketRecord,
+) -> _LinkedDocketSnapshot:
+    return _LinkedDocketSnapshot(
+        docket_id=docket.id,
+        matter_id=docket.matter_id,
+        status=str(docket.status),
+        is_active=bool(docket.is_active),
+        archived_by_matter_disposal=bool(docket.archived_by_matter_disposal),
+        lifecycle_version=docket.lifecycle_version,
+        restricted=bool(docket.restricted),
+        access_policy_version=docket.access_policy_version,
+    )
+
+
+def _active_linked_docket_statement(*, company_id: str, matter_id: str):
+    return (
+        select(IpDocketRecord)
+        .where(
+            IpDocketRecord.company_id == company_id,
+            IpDocketRecord.matter_id == matter_id,
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            IpDocketRecord.status.notin_(_TERMINAL_IP_DOCKET_STATUSES),
+        )
+        .order_by(IpDocketRecord.id)
+    )
+
+
+def _discover_active_linked_docket_snapshot(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+) -> tuple[_LinkedDocketSnapshot, ...]:
+    return tuple(
+        _linked_docket_snapshot_from_model(docket)
+        for docket in session.scalars(
+            _active_linked_docket_statement(
+                company_id=company_id,
+                matter_id=matter_id,
+            )
+        )
+    )
+
+
+def _lock_and_revalidate_active_linked_dockets(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+    expected: tuple[_LinkedDocketSnapshot, ...],
+) -> list[IpDocketRecord]:
+    dockets = list(
+        session.scalars(
+            _active_linked_docket_statement(
+                company_id=company_id,
+                matter_id=matter_id,
+            )
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        )
+    )
+    current = tuple(_linked_docket_snapshot_from_model(docket) for docket in dockets)
+    if current != expected:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_linked_ip_fence_changed",
+                "message": "Linked IP lifecycle or access changed; reload and retry.",
+            },
+        )
+    return dockets
+
+
+def _linked_docket_role_snapshot(
+    session: Session,
+    *,
+    dockets: list[IpDocketRecord],
+) -> dict[str, tuple[str, ...]]:
+    return {
+        docket.id: tuple(
+            sorted(
+                _operational_ip_docket_role_membership_ids(
+                    session,
+                    docket=docket,
+                )
+            )
+        )
+        for docket in dockets
+    }
+
+
+def _discover_linked_docket_role_snapshot(
+    session: Session,
+    *,
+    company_id: str,
+    expected_dockets: tuple[_LinkedDocketSnapshot, ...],
+) -> dict[str, tuple[str, ...]]:
+    docket_ids = [snapshot.docket_id for snapshot in expected_dockets]
+    if not docket_ids:
+        return {}
+    dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == company_id,
+                IpDocketRecord.id.in_(docket_ids),
+            )
+            .order_by(IpDocketRecord.id)
+        )
+    )
+    if [docket.id for docket in dockets] != docket_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Linked IP records changed; reload and retry.",
+        )
+    return _linked_docket_role_snapshot(session, dockets=dockets)
+
+
+def _discover_matter_role_snapshot(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+) -> _MatterRoleSnapshot:
+    row = session.execute(
+        select(
+            Matter.assignee_membership_id,
+            Matter.responsible_lawyer_membership_id,
+            Matter.status,
+            Matter.is_active,
+            Matter.lifecycle_version,
+            Matter.restricted_access,
+            Matter.access_policy_version,
+            Matter.team_id,
+        ).where(
+            Matter.id == matter_id,
+            Matter.company_id == company_id,
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
+    return _MatterRoleSnapshot(
+        assignee_membership_id=row.assignee_membership_id,
+        responsible_lawyer_membership_id=row.responsible_lawyer_membership_id,
+        status=_status_value(row.status) or "",
+        is_active=bool(row.is_active),
+        lifecycle_version=row.lifecycle_version,
+        restricted_access=bool(row.restricted_access),
+        access_policy_version=row.access_policy_version,
+        team_id=row.team_id,
+    )
+
+
+def _lock_matter_assignment_fence(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    matter_roles: _MatterRoleSnapshot,
+    linked_docket_snapshot: tuple[_LinkedDocketSnapshot, ...],
+    additional_membership_ids: set[str | None],
+    required_capability: str,
+    team_ids_to_lock: set[str | None] | None = None,
+) -> tuple[Matter, dict[str, CompanyMembership], list[IpDocketRecord]]:
+    """Lock principals, Matter, and active linked dockets in canonical order."""
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={
+            matter_roles.assignee_membership_id,
+            matter_roles.responsible_lawyer_membership_id,
+            context.membership.id,
+            *additional_membership_ids,
+        },
+    )
+    _assert_active_locked_actor(
+        session,
+        memberships,
+        context=context,
+        required_capability=required_capability,
+    )
+    team_ids = sorted(team_id for team_id in (team_ids_to_lock or set()) if team_id)
+    if team_ids:
+        teams = list(
+            session.scalars(
+                select(Team)
+                .where(
+                    Team.company_id == context.company.id,
+                    Team.id.in_(team_ids),
+                )
+                .order_by(Team.id)
+                .with_for_update(of=Team)
+                .execution_options(populate_existing=True)
+            )
+        )
+        if [team.id for team in teams] != team_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Team does not belong to this company.",
+            )
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        lock_for_update=True,
+    )
+    current_roles = _matter_role_snapshot_from_model(matter)
+    if current_roles != matter_roles:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_assignment_fence_changed",
+                "message": (
+                    "Matter responsibility, lifecycle, or access changed; reload "
+                    "before updating work."
+                ),
+            },
+        )
+    dockets = _lock_and_revalidate_active_linked_dockets(
+        session,
+        company_id=context.company.id,
+        matter_id=matter.id,
+        expected=linked_docket_snapshot,
+    )
+    return matter, memberships, dockets
+
+
+def _matter_task_mutation_snapshot_from_values(
+    *,
+    matter_id: str,
+    owner_membership_id: str | None,
+    task_status: object,
+    completed_at: datetime | None,
+    cancelled_by_matter_disposal: bool,
+    neutralized_by_ip_lifecycle_event_id: str | None,
+    neutralized_by_ip_lifecycle_version: int | None,
+    neutralized_at: datetime | None,
+    updated_at: datetime,
+) -> _MatterTaskMutationSnapshot:
+    return _MatterTaskMutationSnapshot(
+        matter_id=matter_id,
+        owner_membership_id=owner_membership_id,
+        status=str(task_status),
+        completed_at=completed_at,
+        cancelled_by_matter_disposal=bool(cancelled_by_matter_disposal),
+        neutralized_by_ip_lifecycle_event_id=neutralized_by_ip_lifecycle_event_id,
+        neutralized_by_ip_lifecycle_version=neutralized_by_ip_lifecycle_version,
+        neutralized_at=neutralized_at,
+        updated_at=updated_at,
+    )
+
+
+def _discover_matter_task_mutation_snapshot(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+    task_id: str,
+) -> _MatterTaskMutationSnapshot:
+    row = session.execute(
+        select(
+            MatterTask.matter_id,
+            MatterTask.owner_membership_id,
+            MatterTask.status,
+            MatterTask.completed_at,
+            MatterTask.cancelled_by_matter_disposal,
+            MatterTask.neutralized_by_ip_lifecycle_event_id,
+            MatterTask.neutralized_by_ip_lifecycle_version,
+            MatterTask.neutralized_at,
+            MatterTask.updated_at,
+        ).where(
+            MatterTask.id == task_id,
+            MatterTask.matter_id == matter_id,
+            MatterTask.company_id == company_id,
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter task not found.")
+    assert row.matter_id is not None
+    return _matter_task_mutation_snapshot_from_values(
+        matter_id=row.matter_id,
+        owner_membership_id=row.owner_membership_id,
+        task_status=row.status,
+        completed_at=row.completed_at,
+        cancelled_by_matter_disposal=row.cancelled_by_matter_disposal,
+        neutralized_by_ip_lifecycle_event_id=row.neutralized_by_ip_lifecycle_event_id,
+        neutralized_by_ip_lifecycle_version=row.neutralized_by_ip_lifecycle_version,
+        neutralized_at=row.neutralized_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _active_locked_assignment_membership(
+    memberships: dict[str, CompanyMembership],
+    *,
+    membership_id: str,
+    detail: str = "Assignee membership was not found in the current company.",
+) -> CompanyMembership:
+    membership = memberships.get(membership_id)
+    if (
+        membership is None
+        or not membership.is_active
+        or membership.user is None
+        or not membership.user.is_active
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    return membership
+
+
+def _assert_active_locked_actor(
+    session: Session,
+    memberships: dict[str, CompanyMembership],
+    *,
+    context: SessionContext,
+    required_capability: str,
+) -> CompanyMembership:
+    actor = memberships.get(context.membership.id)
+    if (
+        actor is None
+        or not actor.is_active
+        or actor.user is None
+        or not actor.user.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active company membership is required for Matter changes.",
+        )
+    require_locked_membership_capability(session, actor, required_capability)
+    # Ensure access checks and every actor-backed audit/provenance row below
+    # use the authoritative instances protected by this transaction's fence.
+    context.membership = actor
+    context.user = actor.user
+    return actor
+
+
+def _lock_matter_mutation_actor(
+    session: Session,
+    *,
+    context: SessionContext,
+    required_capability: str,
+) -> CompanyMembership:
+    """Fence and authorize a Matter writer before any parent/child lock."""
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={context.membership.id},
+    )
+    return _assert_active_locked_actor(
+        session,
+        memberships,
+        context=context,
+        required_capability=required_capability,
+    )
+
+
+def _hearing_role_snapshot_from_values(
+    *,
+    matter_id: str,
+    hearing_status: object,
+    responsible_membership_id: str | None,
+    attendee_membership_ids: list[str] | None,
+    reminder_policy: dict | None,
+    cancelled_by_matter_disposal: bool,
+    neutralized_by_ip_lifecycle_event_id: str | None,
+    neutralized_by_ip_lifecycle_version: int | None,
+    neutralized_at: datetime | None,
+) -> _HearingRoleSnapshot:
+    policy = reminder_policy or {}
+    return _HearingRoleSnapshot(
+        matter_id=matter_id,
+        status=str(hearing_status),
+        responsible_membership_id=responsible_membership_id,
+        attendee_membership_ids=tuple(
+            str(value) for value in (attendee_membership_ids or []) if value
+        ),
+        reminder_recipient_membership_ids=tuple(
+            str(value)
+            for value in (policy.get("recipient_membership_ids") or [])
+            if value
+        ),
+        escalation_membership_id=(
+            str(policy["escalation_membership_id"])
+            if policy.get("escalation_membership_id")
+            else None
+        ),
+        cancelled_by_matter_disposal=bool(cancelled_by_matter_disposal),
+        neutralized_by_ip_lifecycle_event_id=neutralized_by_ip_lifecycle_event_id,
+        neutralized_by_ip_lifecycle_version=neutralized_by_ip_lifecycle_version,
+        neutralized_at=neutralized_at,
+    )
+
+
+def _discover_hearing_role_snapshot(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+    hearing_id: str,
+) -> _HearingRoleSnapshot:
+    row = session.execute(
+        select(
+            MatterHearing.matter_id,
+            MatterHearing.status,
+            MatterHearing.responsible_membership_id,
+            MatterHearing.attendee_membership_ids_json,
+            MatterHearing.reminder_policy_json,
+            MatterHearing.cancelled_by_matter_disposal,
+            MatterHearing.neutralized_by_ip_lifecycle_event_id,
+            MatterHearing.neutralized_by_ip_lifecycle_version,
+            MatterHearing.neutralized_at,
+        ).where(
+            MatterHearing.id == hearing_id,
+            MatterHearing.matter_id == matter_id,
+            MatterHearing.company_id == company_id,
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found.")
+    assert row.matter_id is not None
+    return _hearing_role_snapshot_from_values(
+        matter_id=row.matter_id,
+        hearing_status=row.status,
+        responsible_membership_id=row.responsible_membership_id,
+        attendee_membership_ids=row.attendee_membership_ids_json,
+        reminder_policy=row.reminder_policy_json,
+        cancelled_by_matter_disposal=row.cancelled_by_matter_disposal,
+        neutralized_by_ip_lifecycle_event_id=row.neutralized_by_ip_lifecycle_event_id,
+        neutralized_by_ip_lifecycle_version=row.neutralized_by_ip_lifecycle_version,
+        neutralized_at=row.neutralized_at,
+    )
+
+
+def _hearing_role_membership_ids(snapshot: _HearingRoleSnapshot) -> set[str]:
+    return {
+        membership_id
+        for membership_id in (
+            snapshot.responsible_membership_id,
+            *snapshot.attendee_membership_ids,
+            *snapshot.reminder_recipient_membership_ids,
+            snapshot.escalation_membership_id,
+        )
+        if membership_id is not None
+    }
+
+
 def _get_company_membership(
     session: Session,
     *,
@@ -1230,17 +1775,32 @@ def _assert_membership_can_access_matter(
     context: SessionContext,
     matter: Matter,
     membership: CompanyMembership,
+    linked_dockets: list[IpDocketRecord],
 ) -> None:
     candidate_context = SessionContext(
         company=context.company,
         user=membership.user,
         membership=membership,
     )
-    if can_access(session, context=candidate_context, matter=matter):
+    if can_stably_access_matter(
+        session,
+        context=candidate_context,
+        matter=matter,
+    ) and all(
+        can_stably_access_ip_docket(
+            session,
+            context=candidate_context,
+            docket=docket,
+        )
+        for docket in linked_dockets
+    ):
         return
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Assignee cannot access this matter.",
+        detail=(
+            "Assignee does not have durable access to this Matter and every "
+            "active linked IP record."
+        ),
     )
 
 
@@ -1296,6 +1856,23 @@ def create_matter(
     payload: MatterCreateRequest,
     commit: bool = True,
 ) -> MatterRecord:
+    assignment_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={
+            context.membership.id,
+            payload.assignee_membership_id,
+            payload.responsible_lawyer_membership_id,
+        },
+    )
+    _assert_active_locked_actor(
+        session,
+        assignment_memberships,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "create_matter" if commit else "import_matter"
+        ],
+    )
     if payload.status == MatterStatus.DISPOSED.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1342,23 +1919,26 @@ def create_matter(
                 detail="A matter with this case number already exists for the current company.",
             )
     assignee = (
-        _get_company_membership(
-            session,
-            company_id=context.company.id,
-            membership_id=payload.assignee_membership_id,
-        )
+        assignment_memberships.get(payload.assignee_membership_id)
         if payload.assignee_membership_id
         else None
     )
     responsible_lawyer = (
-        _get_company_membership(
-            session,
-            company_id=context.company.id,
-            membership_id=payload.responsible_lawyer_membership_id,
-        )
+        assignment_memberships.get(payload.responsible_lawyer_membership_id)
         if payload.responsible_lawyer_membership_id
         else None
     )
+    for membership_id, membership in (
+        (payload.assignee_membership_id, assignee),
+        (payload.responsible_lawyer_membership_id, responsible_lawyer),
+    ):
+        if membership_id and (
+            membership is None or not membership.is_active or not membership.user.is_active
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assignee membership was not found in the current company.",
+            )
     team = None
     if payload.team_id:
         team = session.scalar(
@@ -1367,6 +1947,8 @@ def create_matter(
                 Team.company_id == context.company.id,
                 Team.is_active.is_(True),
             )
+            .with_for_update(of=Team)
+            .execution_options(populate_existing=True)
         )
         if team is None:
             raise HTTPException(
@@ -1757,14 +2339,67 @@ def update_matter(
     matter_id: str,
     payload: MatterUpdateRequest,
 ) -> MatterRecord:
-    matter = _get_matter_model(
+    requested_updates = payload.model_dump(exclude_unset=True)
+    matter_roles = _discover_matter_role_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    linked_docket_snapshot = _discover_active_linked_docket_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    team_access_changing = "team_id" in requested_updates
+    linked_role_snapshot = (
+        _discover_linked_docket_role_snapshot(
+            session,
+            company_id=context.company.id,
+            expected_dockets=linked_docket_snapshot,
+        )
+        if team_access_changing
+        else {}
+    )
+    linked_role_membership_ids = {
+        membership_id
+        for membership_ids in linked_role_snapshot.values()
+        for membership_id in membership_ids
+    }
+    resulting_assignee_id = requested_updates.get(
+        "assignee_membership_id", matter_roles.assignee_membership_id
+    )
+    resulting_responsible_id = requested_updates.get(
+        "responsible_lawyer_membership_id",
+        matter_roles.responsible_lawyer_membership_id,
+    )
+    resulting_team_id = requested_updates.get("team_id", matter_roles.team_id)
+    matter, assignment_memberships, linked_dockets = _lock_matter_assignment_fence(
         session,
         context=context,
         matter_id=matter_id,
-        lock_for_update=True,
+        matter_roles=matter_roles,
+        linked_docket_snapshot=linked_docket_snapshot,
+        additional_membership_ids={
+            resulting_assignee_id,
+            resulting_responsible_id,
+            *linked_role_membership_ids,
+        },
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter"],
+        team_ids_to_lock={matter_roles.team_id, resulting_team_id},
     )
+    if team_access_changing and _linked_docket_role_snapshot(
+        session,
+        dockets=linked_dockets,
+    ) != linked_role_snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_linked_ip_responsibility_changed",
+                "message": "Linked IP responsibility changed; reload and retry.",
+            },
+        )
 
-    updates = payload.model_dump(exclude_unset=True)
+    updates = requested_updates
     provided_update_fields = set(updates)
     expected_updated_at = updates.pop("expected_updated_at", None)
     _assert_expected_updated_at(matter, expected_updated_at=expected_updated_at)
@@ -1802,11 +2437,12 @@ def update_matter(
         if assignee_membership_id is None:
             matter.assignee_membership_id = None
         else:
-            assignee = _get_company_membership(
-                session,
-                company_id=context.company.id,
-                membership_id=assignee_membership_id,
-            )
+            assignee = assignment_memberships.get(assignee_membership_id)
+            if assignee is None or not assignee.is_active or not assignee.user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Assignee membership was not found in the current company.",
+                )
             matter.assignee_membership_id = assignee.id
 
     responsible_membership_id = updates.pop("responsible_lawyer_membership_id", None)
@@ -1817,11 +2453,16 @@ def update_matter(
         if responsible_membership_id is None:
             matter.responsible_lawyer_membership_id = None
         else:
-            responsible = _get_company_membership(
-                session,
-                company_id=context.company.id,
-                membership_id=responsible_membership_id,
-            )
+            responsible = assignment_memberships.get(responsible_membership_id)
+            if (
+                responsible is None
+                or not responsible.is_active
+                or not responsible.user.is_active
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Assignee membership was not found in the current company.",
+                )
             matter.responsible_lawyer_membership_id = responsible.id
 
     # Sprint 8c: validate team membership lives in this company before
@@ -1865,6 +2506,48 @@ def update_matter(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"{label} must belong to the assigned team.",
                 )
+
+    if assignee_changed or responsible_changed or team_access_changing:
+        # Make the prospective Matter role visible to the access predicates;
+        # failures still roll back atomically before the endpoint commits.
+        session.flush()
+        resulting_role_ids = {
+            matter.assignee_membership_id,
+            matter.responsible_lawyer_membership_id,
+        } - {None}
+        if team_access_changing:
+            resulting_role_ids = {
+                membership_id
+                for membership_ids in _linked_docket_role_snapshot(
+                    session,
+                    dockets=linked_dockets,
+                ).values()
+                for membership_id in membership_ids
+            }
+        for membership_id in sorted(resulting_role_ids):
+            membership = assignment_memberships.get(membership_id)
+            if (
+                membership is None
+                or not membership.is_active
+                or not membership.user.is_active
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_matter_responsibility_inactive",
+                        "message": (
+                            "Every resulting Matter responsibility must name an "
+                            "active member before linked IP work can be updated."
+                        ),
+                    },
+                )
+            _assert_membership_can_access_matter(
+                session,
+                context=context,
+                matter=matter,
+                membership=membership,
+                linked_dockets=linked_dockets,
+            )
 
     if "matter_code" in updates:
         requested_code = updates.pop("matter_code")
@@ -2103,6 +2786,23 @@ def _neutralize_disposed_matter_operations(
     matter: Matter,
 ) -> dict[str, int]:
     now = utcnow()
+    # Matter is already locked by the lifecycle command. Acquire every linked
+    # IP child in the shared hierarchy before any operational deadline, then
+    # lock coverage only after all deadlines below. This keeps disposal aligned
+    # with coverage writes: Matter -> docket -> MatterDeadline -> coverage.
+    ip_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.matter_id == matter.id,
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+            )
+            .order_by(IpDocketRecord.id)
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        )
+    )
     open_hearings = list(
         session.scalars(
             select(MatterHearing).where(
@@ -2115,19 +2815,24 @@ def _neutralize_disposed_matter_operations(
         hearing.status = MatterHearingStatus.CANCELLED.value
         hearing.cancelled_by_matter_disposal = True
 
-    open_deadlines = list(
+    locked_deadlines = list(
         session.scalars(
-            select(MatterDeadline).where(
-                MatterDeadline.matter_id == matter.id,
-                MatterDeadline.status.notin_(
-                    (
-                        MatterDeadlineStatus.DONE.value,
-                        MatterDeadlineStatus.CANCELLED.value,
-                    )
-                ),
-            )
+            select(MatterDeadline)
+            .where(MatterDeadline.matter_id == matter.id)
+            .order_by(MatterDeadline.id)
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
         )
     )
+    open_deadlines = [
+        deadline
+        for deadline in locked_deadlines
+        if deadline.status
+        not in (
+            MatterDeadlineStatus.DONE.value,
+            MatterDeadlineStatus.CANCELLED.value,
+        )
+    ]
     for deadline in open_deadlines:
         deadline.status = MatterDeadlineStatus.CANCELLED.value
         deadline.completed_at = now
@@ -2243,15 +2948,6 @@ def _neutralize_disposed_matter_operations(
         suggestion.decided_by_membership_id = context.membership.id
         suggestion.decided_at = now
 
-    ip_dockets = list(
-        session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.company_id == context.company.id,
-                IpDocketRecord.matter_id == matter.id,
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-            ).with_for_update()
-        )
-    )
     neutralized_ip_coverages = 0
     neutralized_ip_obligations = 0
     for docket in ip_dockets:
@@ -2299,13 +2995,17 @@ def _neutralize_disposed_matter_operations(
 
         coverages = list(
             session.scalars(
-                select(IpDeadlineCoverage).where(
+                select(IpDeadlineCoverage)
+                .where(
                     IpDeadlineCoverage.company_id == docket.company_id,
                     IpDeadlineCoverage.docket_id == docket.id,
                     IpDeadlineCoverage.coverage_status.notin_(
                         ("inactive_lifecycle", "completed")
                     ),
                 )
+                .order_by(IpDeadlineCoverage.id)
+                .with_for_update(of=IpDeadlineCoverage)
+                .execution_options(populate_existing=True)
             )
         )
         for coverage in coverages:
@@ -2378,7 +3078,36 @@ def _neutralize_disposed_matter_operations(
                 .with_for_update(of=CalendarEventSync)
             )
         )
+    neutralized_calendar_syncs = 0
+    blocked_unknown_calendar_syncs = 0
     for calendar_sync in calendar_syncs:
+        upsert_claim_state = calendar_sync_upsert_claim_state(
+            calendar_sync,
+            now=now,
+        )
+        if upsert_claim_state == "live":
+            # A provider create already won the durable claim. Its worker must
+            # retain the exact marker and credential fence until it records a
+            # receipt (and observes this disposal) or the lease expires.
+            blocked_unknown_calendar_syncs += 1
+            continue
+        if upsert_claim_state == "expired":
+            # With no receipt, disposal cannot assert that no remote event was
+            # created. Persist the shared typed reconciliation tombstone in
+            # this same Matter transaction and leave provider I/O to an
+            # explicit operator action.
+            materialize_expired_calendar_sync_upsert_claim(
+                calendar_sync,
+                now=now,
+            )
+            session.add(calendar_sync)
+            blocked_unknown_calendar_syncs += 1
+            continue
+        if upsert_claim_state == "manual_reconciliation":
+            # The unknown-outcome tombstone is immutable until an operator
+            # supplies the exact remote id or attests verified absence.
+            blocked_unknown_calendar_syncs += 1
+            continue
         if calendar_sync.provider_event_id:
             # Durable tombstone: external deletion is deliberately performed by
             # the calendar worker, never inside this lifecycle transaction.
@@ -2391,13 +3120,15 @@ def _neutralize_disposed_matter_operations(
             calendar_sync.next_attempt_at = None
             calendar_sync.dead_letter_reason = "matter_disposed"
             calendar_sync.last_error = None
+        neutralized_calendar_syncs += 1
 
     return {
         "cancelled_open_hearings": len(open_hearings),
         "cancelled_open_deadlines": len(open_deadlines),
         "cancelled_open_tasks": len(open_tasks),
         "cancelled_document_processing_jobs": len(document_processing_jobs),
-        "neutralized_calendar_syncs": len(calendar_syncs),
+        "neutralized_calendar_syncs": neutralized_calendar_syncs,
+        "blocked_unknown_calendar_syncs": blocked_unknown_calendar_syncs,
         "cancelled_hearing_reminders": len(reminders),
         "cancelled_court_sync_jobs": len(court_sync_jobs),
         "blocked_notification_deliveries": len(delivery_intents),
@@ -2416,6 +3147,17 @@ def transition_matter_lifecycle_status(
     payload: MatterLifecycleStatusRequest,
 ) -> MatterRecord:
     """Perform the only legal terminal lifecycle edges in one transaction."""
+    # Lifecycle writes append multiple rows with actor-membership foreign keys.
+    # Fence that actor before the Matter parent so a concurrent assignment
+    # transaction cannot hold Membership -> wait on Matter while disposal holds
+    # Matter -> waits for PostgreSQL's FK key-share on the same membership.
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "transition_matter_lifecycle_status"
+        ],
+    )
     matter = _get_matter_model(
         session,
         context=context,
@@ -2645,6 +3387,11 @@ def create_matter_note(
     matter_id: str,
     payload: MatterNoteCreateRequest,
 ) -> MatterNoteRecord:
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_note"],
+    )
     matter = _get_matter_model(
         session,
         context=context,
@@ -2684,19 +3431,31 @@ def create_matter_task(
     matter_id: str,
     payload: MatterTaskCreateRequest,
 ) -> MatterTaskRecord:
-    matter = _get_matter_model(
+    matter_roles = _discover_matter_role_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    linked_docket_snapshot = _discover_active_linked_docket_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    matter, locked_memberships, linked_dockets = _lock_matter_assignment_fence(
         session,
         context=context,
         matter_id=matter_id,
-        lock_for_update=True,
+        matter_roles=matter_roles,
+        linked_docket_snapshot=linked_docket_snapshot,
+        additional_membership_ids={payload.owner_membership_id},
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_task"],
     )
     _assert_matter_not_disposed(matter, operation="create a task")
     owner_membership_id: str | None = None
     owner_name: str | None = None
     if payload.owner_membership_id:
-        owner = _get_company_membership(
-            session,
-            company_id=context.company.id,
+        owner = _active_locked_assignment_membership(
+            locked_memberships,
             membership_id=payload.owner_membership_id,
         )
         _assert_membership_can_access_matter(
@@ -2704,6 +3463,7 @@ def create_matter_task(
             context=context,
             matter=matter,
             membership=owner,
+            linked_dockets=linked_dockets,
         )
         owner_membership_id = owner.id
         owner_name = owner.user.full_name
@@ -2835,11 +3595,37 @@ def update_matter_task(
     task_id: str,
     payload: MatterTaskUpdateRequest,
 ) -> MatterTaskRecord:
-    matter = _get_matter_model(
+    requested_updates = payload.model_dump(exclude_unset=True)
+    candidate = _discover_matter_task_mutation_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+        task_id=task_id,
+    )
+    resulting_owner_id = requested_updates.get(
+        "owner_membership_id", candidate.owner_membership_id
+    )
+    matter_roles = _discover_matter_role_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    linked_docket_snapshot = _discover_active_linked_docket_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    matter, locked_memberships, linked_dockets = _lock_matter_assignment_fence(
         session,
         context=context,
         matter_id=matter_id,
-        lock_for_update=True,
+        matter_roles=matter_roles,
+        linked_docket_snapshot=linked_docket_snapshot,
+        additional_membership_ids={
+            candidate.owner_membership_id,
+            resulting_owner_id,
+        },
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_task"],
     )
     _assert_matter_not_disposed(matter, operation="update a task")
     task = session.scalar(
@@ -2854,43 +3640,80 @@ def update_matter_task(
     )
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter task not found.")
-
-    updates = payload.model_dump(exclude_unset=True)
+    assert task.matter_id is not None
+    current_task_snapshot = _matter_task_mutation_snapshot_from_values(
+        matter_id=task.matter_id,
+        owner_membership_id=task.owner_membership_id,
+        task_status=task.status,
+        completed_at=task.completed_at,
+        cancelled_by_matter_disposal=task.cancelled_by_matter_disposal,
+        neutralized_by_ip_lifecycle_event_id=task.neutralized_by_ip_lifecycle_event_id,
+        neutralized_by_ip_lifecycle_version=task.neutralized_by_ip_lifecycle_version,
+        neutralized_at=task.neutralized_at,
+        updated_at=task.updated_at,
+    )
+    if current_task_snapshot != candidate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_task_assignment_changed",
+                "message": (
+                    "Task responsibility, lifecycle, or state changed; reload "
+                    "before updating."
+                ),
+            },
+        )
     if (
         task.cancelled_by_matter_disposal
-        and "status" in updates
-        and updates["status"] != MatterTaskStatus.CANCELLED.value
+        or task.neutralized_by_ip_lifecycle_event_id is not None
+        or task.neutralized_by_ip_lifecycle_version is not None
+        or task.neutralized_at is not None
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This task was cancelled by matter disposal and cannot be "
-                "resurrected after reopening. Create a new task instead."
-            ),
+            detail={
+                "code": "matter_task_lifecycle_history_immutable",
+                "message": (
+                    "This task is immutable lifecycle history. Create a new "
+                    "task after reopening instead."
+                ),
+            },
         )
+    resulting_owner = (
+        _active_locked_assignment_membership(
+            locked_memberships,
+            membership_id=resulting_owner_id,
+        )
+        if resulting_owner_id is not None
+        else None
+    )
+    resulting_status = requested_updates.get("status", task.status)
+    if resulting_owner is not None and resulting_status not in {
+        MatterTaskStatus.COMPLETED.value,
+        MatterTaskStatus.CANCELLED.value,
+    }:
+        _assert_membership_can_access_matter(
+            session,
+            context=context,
+            matter=matter,
+            membership=resulting_owner,
+            linked_dockets=linked_dockets,
+        )
+
+    updates = requested_updates
+    previous_owner = task.owner_membership_id
+    owner_changed = "owner_membership_id" in requested_updates
     owner_membership_id = updates.pop("owner_membership_id", None)
-    owner_changed = "owner_membership_id" in payload.model_dump(exclude_unset=True)
     if owner_changed:
         if owner_membership_id is None:
             task.owner_membership_id = None
         else:
-            owner = _get_company_membership(
-                session,
-                company_id=context.company.id,
-                membership_id=owner_membership_id,
-            )
-            _assert_membership_can_access_matter(
-                session,
-                context=context,
-                matter=matter,
-                membership=owner,
-            )
-            task.owner_membership_id = owner.id
+            assert resulting_owner is not None
+            task.owner_membership_id = resulting_owner.id
 
     previous_status = task.status
     previous_due_on = task.due_on
     previous_priority = task.priority
-    previous_owner = task.owner_membership_id
     for field_name, value in updates.items():
         setattr(task, field_name, value)
     if task.status in {
@@ -2975,11 +3798,31 @@ def update_matter_hearing(
     outcome_note auto-creates a follow-up task so the PRD §9.6
     post-hearing loop survives a distracted user. Other status changes
     are recorded as activity but do not create tasks."""
-    matter = _get_matter_model(
+    requested_hearing_updates = payload.model_dump(exclude_unset=True)
+    matter_roles = _discover_matter_role_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    hearing_roles = _discover_hearing_role_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+        hearing_id=hearing_id,
+    )
+    linked_docket_snapshot = _discover_active_linked_docket_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    matter, locked_memberships, linked_dockets = _lock_matter_assignment_fence(
         session,
         context=context,
         matter_id=matter_id,
-        lock_for_update=True,
+        matter_roles=matter_roles,
+        linked_docket_snapshot=linked_docket_snapshot,
+        additional_membership_ids=_hearing_role_membership_ids(hearing_roles),
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_hearing"],
     )
     _assert_matter_not_disposed(matter, operation="update a hearing")
     hearing = session.scalar(
@@ -2992,18 +3835,77 @@ def update_matter_hearing(
     if hearing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found.")
 
-    requested_hearing_updates = payload.model_dump(exclude_unset=True)
+    assert hearing.matter_id is not None
+    current_hearing_roles = _hearing_role_snapshot_from_values(
+        matter_id=hearing.matter_id,
+        hearing_status=hearing.status,
+        responsible_membership_id=hearing.responsible_membership_id,
+        attendee_membership_ids=hearing.attendee_membership_ids_json,
+        reminder_policy=hearing.reminder_policy_json,
+        cancelled_by_matter_disposal=hearing.cancelled_by_matter_disposal,
+        neutralized_by_ip_lifecycle_event_id=hearing.neutralized_by_ip_lifecycle_event_id,
+        neutralized_by_ip_lifecycle_version=hearing.neutralized_by_ip_lifecycle_version,
+        neutralized_at=hearing.neutralized_at,
+    )
+    if current_hearing_roles != hearing_roles:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_hearing_responsibility_changed",
+                "message": "Hearing responsibility changed; reload before updating.",
+            },
+        )
     if (
         hearing.cancelled_by_matter_disposal
-        and "status" in requested_hearing_updates
-        and requested_hearing_updates["status"] != MatterHearingStatus.CANCELLED.value
+        or hearing.neutralized_by_ip_lifecycle_event_id is not None
+        or hearing.neutralized_by_ip_lifecycle_version is not None
+        or hearing.neutralized_at is not None
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This hearing was cancelled by matter disposal and cannot be "
-                "resurrected after reopening. Create a new hearing instead."
-            ),
+            detail={
+                "code": "matter_hearing_lifecycle_history_immutable",
+                "message": (
+                    "This hearing is immutable lifecycle history. Create a new "
+                    "hearing after reopening instead."
+                ),
+            },
+        )
+
+    resulting_status = payload.status if payload.status is not None else hearing.status
+    if resulting_status not in _CLOSED_HEARING_STATUSES:
+        for membership_id in sorted(_hearing_role_membership_ids(hearing_roles)):
+            member = _active_locked_assignment_membership(
+                locked_memberships,
+                membership_id=membership_id,
+                detail="A hearing participant is no longer an active company member.",
+            )
+            _assert_membership_can_access_matter(
+                session,
+                context=context,
+                matter=matter,
+                membership=member,
+                linked_dockets=linked_dockets,
+            )
+
+    creates_follow_up = (
+        payload.status == MatterHearingStatus.COMPLETED.value
+        and hearing.status != MatterHearingStatus.COMPLETED.value
+        and (payload.create_follow_up is None or payload.create_follow_up)
+    )
+    follow_up_owner: CompanyMembership | None = None
+    if creates_follow_up and matter.assignee_membership_id is not None:
+        follow_up_owner = _active_locked_assignment_membership(
+            locked_memberships,
+            membership_id=matter.assignee_membership_id,
+            detail="Matter assignee is unavailable for the generated follow-up task.",
+        )
+        _assert_membership_can_access_matter(
+            session,
+            context=context,
+            matter=matter,
+            membership=follow_up_owner,
+            linked_dockets=linked_dockets,
         )
 
     prior_status = hearing.status
@@ -3137,7 +4039,7 @@ def update_matter_hearing(
             logger.warning("calendar sync auto-delete on cancellation failed: %s", exc)
 
     completed = payload.status == "completed" and prior_status != "completed"
-    if completed and (payload.create_follow_up is None or payload.create_follow_up):
+    if creates_follow_up:
         from datetime import timedelta
 
         due = hearing.hearing_on + timedelta(days=3)
@@ -3146,7 +4048,7 @@ def update_matter_hearing(
             company_id=matter.company_id,
             matter_id=matter.id,
             created_by_membership_id=context.membership.id,
-            owner_membership_id=matter.assignee_membership_id,
+            owner_membership_id=(follow_up_owner.id if follow_up_owner is not None else None),
             title=f"Post-hearing follow-up — {hearing.purpose}",
             description=outcome_detail,
             due_on=due,
@@ -3572,6 +4474,14 @@ def create_matter_court_order(
     the in-app notification rules other workspace members rely on.
     """
 
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "create_matter_court_order"
+        ],
+    )
+
     matter = _get_matter_model(
         session,
         context=context,
@@ -3687,6 +4597,13 @@ def update_matter_court_order(
     order_id: str,
     payload: MatterCourtOrderUpdateRequest,
 ) -> MatterCourtOrderRecord:
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "update_matter_court_order"
+        ],
+    )
     matter = _get_matter_model(
         session,
         context=context,
@@ -3782,13 +4699,6 @@ def create_matter_hearing(
     matter_id: str,
     payload: MatterHearingCreateRequest,
 ) -> MatterHearingRecord:
-    matter = _get_matter_model(
-        session,
-        context=context,
-        matter_id=matter_id,
-        lock_for_update=True,
-    )
-    _assert_matter_not_disposed(matter, operation="create a hearing")
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
     try:
@@ -3798,37 +4708,61 @@ def create_matter_hearing(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unknown IANA hearing timezone.",
         ) from exc
+    matter_roles = _discover_matter_role_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
     recipient_ids = list(dict.fromkeys(payload.reminder_recipient_membership_ids))
     if not recipient_ids:
-        recipient_ids = [matter.assignee_membership_id or context.membership.id]
+        recipient_ids = [matter_roles.assignee_membership_id or context.membership.id]
+    escalation_id = (
+        payload.escalation_membership_id
+        or matter_roles.assignee_membership_id
+        or context.membership.id
+    )
+    linked_docket_snapshot = _discover_active_linked_docket_snapshot(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+    )
+    matter, locked_memberships, linked_dockets = _lock_matter_assignment_fence(
+        session,
+        context=context,
+        matter_id=matter_id,
+        matter_roles=matter_roles,
+        linked_docket_snapshot=linked_docket_snapshot,
+        additional_membership_ids={*recipient_ids, escalation_id},
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_hearing"],
+    )
+    _assert_matter_not_disposed(matter, operation="create a hearing")
     recipients = [
-        _get_company_membership(
-            session,
-            company_id=context.company.id,
+        _active_locked_assignment_membership(
+            locked_memberships,
             membership_id=membership_id,
+            detail="Reminder recipient was not found in the current company.",
         )
         for membership_id in recipient_ids
     ]
     for recipient in recipients:
-        recipient_context = SessionContext(
-            company=context.company,
-            user=recipient.user,
+        _assert_membership_can_access_matter(
+            session,
+            context=context,
+            matter=matter,
             membership=recipient,
+            linked_dockets=linked_dockets,
         )
-        if not can_access(session, context=recipient_context, matter=matter):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A reminder recipient cannot access this Matter.",
-            )
-    escalation_id = (
-        payload.escalation_membership_id
-        or matter.assignee_membership_id
-        or context.membership.id
-    )
-    _get_company_membership(
-        session,
-        company_id=context.company.id,
+    escalation = _active_locked_assignment_membership(
+        locked_memberships,
         membership_id=escalation_id,
+        detail="Escalation recipient was not found in the current company.",
+    )
+    _assert_membership_can_access_matter(
+        session,
+        context=context,
+        matter=matter,
+        membership=escalation,
+        linked_dockets=linked_dockets,
     )
     configured_offsets = payload.reminder_offsets_hours
     if configured_offsets is None:
@@ -4100,6 +5034,13 @@ def create_matter_court_sync_import(
     matter_id: str,
     payload: MatterCourtSyncImportRequest,
 ) -> MatterCourtSyncRunRecord:
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "create_matter_court_sync_import"
+        ],
+    )
     matter = _get_matter_model(
         session,
         context=context,
@@ -4173,6 +5114,13 @@ def create_matter_attachment(
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "create_matter_attachment"
+        ],
+    )
     # Hold the lifecycle row while deriving notice deadlines and enqueueing
     # document work. This serializes attachment mutations with disposal: either
     # the upload commits first and disposal neutralizes its work, or disposal
@@ -4411,6 +5359,13 @@ def update_matter_attachment_metadata(
     attachment_id: str,
     payload: MatterAttachmentMetadataUpdateRequest,
 ) -> MatterAttachmentRecord:
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "update_matter_attachment_metadata"
+        ],
+    )
     matter = _get_matter_model(
         session,
         context=context,
@@ -4598,8 +5553,13 @@ def request_matter_attachment_processing(
     attachment_id: str,
     action: str,
 ) -> tuple[MatterAttachmentRecord, str]:
-    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
-        _raise_processing_permission_error()
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES[
+            "request_matter_attachment_processing"
+        ],
+    )
 
     matter = _get_matter_model(
         session,
@@ -4764,6 +5724,11 @@ def create_time_entry(
     matter_id: str,
     payload: TimeEntryCreateRequest,
 ) -> TimeEntryRecord:
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_time_entry"],
+    )
     matter = _get_matter_model(
         session,
         context=context,
@@ -4836,8 +5801,11 @@ def create_matter_invoice(
     matter_id: str,
     payload: InvoiceCreateRequest,
 ) -> InvoiceRecord:
-    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
-        _raise_billing_permission_error()
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_invoice"],
+    )
 
     matter = _get_matter_model(
         session,

@@ -52,10 +52,12 @@ discipline) remain `Partially implemented` but are not stop-ship.
 
 Current audit: docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md.
 
-Overall release-quality verdict: **NO-GO**. The critical code defects below
-have local regression fixes, but the affected build has not been deployed and
-the canonical monolithic backend verification process exited -1 before
-completion. Do not treat local green tests as production enforcement.
+Release-evidence verdict for the affected July controls: **NO-GO until their
+listed production proof is complete; GO for continued repository
+implementation.** The critical code defects below have local regression fixes,
+but the affected build has not been deployed and the canonical monolithic
+backend verification process exited -1 before completion. Do not treat local
+green tests as production enforcement.
 
 - JUL10-EG-001 **Partially implemented** Portal authentication boundary.
   Local code now hides debug tokens and sends magic links for cloud, staging,
@@ -191,9 +193,10 @@ Current verdict: `NO-GO` for eliminating manual testers today.
 
 Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
-- `AQ-001` `Partially implemented` Backend coverage runs reliably +
-  artifact uploaded; threshold ratchet is the remaining work
-  (revisited 2026-04-25).
+- `AQ-001` `Partially implemented` Backend coverage runs reliably, uploads an
+  artifact, and enforces regression floors (revisited 2026-08-16). Direct
+  per-file floors remain selective even though bucket and total floors cover the
+  broader surface.
   Two corrections vs the original audit:
   1. The "41.54% line / 9.99% branch" figure was a stale per-area
      `coverage.json` artifact, not the full coverage run. Actual
@@ -209,13 +212,14 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   conftest fixture cost re-running per test. Per-session or
   per-class fixture scope would shave ~120-200 s  - flagged for
   follow-on but not stop-ship.
-  Remaining sub-items keep this `Partially implemented`: backend
-  coverage thresholds are not yet enforced (the CI step runs
-  `--cov` but does not gate on a regression floor  - we only have
-  the per-area gates from `scripts/coverage_gate.py` covering 9
-  files, not the 81% total). Close when CI either fails-on-regression
-  for total coverage or the per-area gate is expanded across the
-  full surface.
+  Current gate scope is exact: `scripts/coverage_gate.py` enforces 9 direct
+  per-file floors; line floors across every file grouped into the 5
+  `api`/`core`/`db`/`schemas`/`services` buckets; branch floors for
+  `api`/`core`/`db`/`services` (not `schemas`); and overall line/branch floors.
+  A file outside the 9-file list is indirectly covered by its bucket and the
+  totals but has no individual floor, so aggregate headroom can absorb some
+  file-level regression. Close the remaining sub-item by adding direct floors
+  for other high-risk modules when aggregate gates are too coarse.
 
 - `AQ-002` `Implemented` Frontend coverage gate is reliable + wired
   end-to-end into CI (closed 2026-04-25).
@@ -972,7 +976,8 @@ tracked under `WTD-5.1` / `WTD-5.3`.
 Source: `docs/STRATEGIC_GAP_REVIEW_2026-08-16.md`, verified against `ba869fa2`
 by direct code inspection (243 findings). An external strategy review triggered
 this pass; 35 of its 111 checkable claims were wrong or overstated and were not
-carried forward. Competitor names are deliberately absent from this repository.
+carried forward. The dated April/May benchmark analyses retain the named sources
+and URLs that support their comparisons.
 
 Two methodology rules established by this pass and binding on future audits:
 
@@ -984,6 +989,11 @@ Two methodology rules established by this pass and binding on future audits:
    `infra/cloudrun/deploy.ps1:234` warns against replacing it. Cloud Run *job*
    manifests are applied and may be relied on.
 
+**Scope of severity:** "stop-ship" in `EH-SGR-*` blocks activation, a release
+claim, or pilot use of the named surface until that control passes. It does not
+block unrelated repository implementation, testing, documentation, or parallel
+work listed in `docs/EXECUTION_BACKLOG.md`.
+
 ### EH-SGR-01 - Intra-state invoices issued with the wrong GST head
 
 - **Status:** Missing.
@@ -991,10 +1001,15 @@ Two methodology rules established by this pass and binding on future audits:
   CGST+SGST, and a malformed client GSTIN silently produces the same wrong head.
   Place of supply is a free-text display field that never reaches the tax engine,
   which infers jurisdiction from GSTIN digits alone.
-- **Control required:** place of supply drives the determination; unregistered
-  clients resolve to the supplier's state; regression across every tax head for
-  registered/unregistered x intra/inter-state.
-- **Severity:** stop-ship. Filing-level defect on real client invoices.
+- **Control required:** make place of supply a structured input to the tax-head
+  decision. For ordinary domestic services under IGST Act 2017 §12(2), use the
+  registered recipient's location; for an unregistered recipient use the
+  recipient's address on record when it exists, and the supplier's location only
+  when no such address exists. Validate the applicable rule and fail closed on
+  ambiguous or malformed inputs. Regress registered/unregistered x
+  address-present/address-absent x intra/inter-state.
+- **Severity:** blocks GST invoice activation/pilot use. Filing-level defect on
+  invoices issued through the affected path; unrelated implementation proceeds.
 
 ### EH-SGR-02 - A matter can be made permanently unopenable
 

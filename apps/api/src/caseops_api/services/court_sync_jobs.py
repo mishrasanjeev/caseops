@@ -21,6 +21,7 @@ from caseops_api.services.court_sync_sources import (
     resolve_source_for_court,
 )
 from caseops_api.services.matters import _get_matter_model, _persist_court_sync_import
+from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 
@@ -282,7 +283,7 @@ def run_matter_court_sync_job(job_id: str) -> None:
             )
             if failed_job is not None:
                 failed_job.status = MatterCourtSyncJobStatus.FAILED
-                failed_job.error_message = str(exc)
+                failed_job.error_message = redact_provider_error(exc)
                 failed_job.completed_at = utcnow()
                 session.add(failed_job)
                 session.commit()

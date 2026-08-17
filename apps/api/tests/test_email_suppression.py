@@ -9,8 +9,8 @@ Covers:
 - record_suppression is idempotent — re-applying the same event for
   the same (company_id, recipient_email) refreshes last_event_at /
   reason / source_message_id without creating a duplicate row.
-- run_reminder_worker cancels QUEUED rows whose recipient address is
-  suppressed, instead of paying SendGrid for a known-failed send.
+- the canonical notification worker suppresses linked hearing reminders
+  without calling SendGrid, and the legacy row reflects that terminal state.
 """
 from __future__ import annotations
 
@@ -26,7 +26,10 @@ from caseops_api.db.models import (
     EmailSuppressionReason,
     HearingReminder,
     HearingReminderChannel,
+    HearingReminderDeliveryIntent,
     HearingReminderStatus,
+    NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.communications import (
@@ -40,6 +43,9 @@ from caseops_api.services.email_suppression import (
 from caseops_api.services.hearing_reminders import (
     apply_sendgrid_event,
     run_reminder_worker,
+)
+from caseops_api.services.notification_delivery import (
+    drain_notification_delivery_intents,
 )
 
 
@@ -446,17 +452,26 @@ def test_auth_flow_mailers_bypass_suppression(client: TestClient) -> None:
     )
 
 
-def test_run_reminder_worker_cancels_suppressed_rows(
+def test_notification_worker_suppresses_linked_hearing_reminders(
     client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """BUG-038: the worker must skip rows whose recipient is suppressed
-    in the same tenant. Marks them CANCELLED with an actionable
-    last_error and counts them in `report["suppressed"]` so the
-    operator dashboard surfaces the skip rather than silently failing."""
+    """BUG-038: the canonical worker must suppress without provider I/O.
+
+    The legacy reminder worker is now projection-only. It delegates linked
+    rows to the durable notification intent, whose provider fence rechecks
+    tenant-scoped suppression immediately before dispatch. The legacy row
+    then reflects the terminal failure without becoming a second sender.
+    """
     os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
     os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
     os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
+    os.environ["CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_ENABLED"] = "true"
+    os.environ["CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_PROVIDER"] = "sendgrid"
     try:
+        from caseops_api.core.settings import get_settings
+
+        get_settings.cache_clear()  # type: ignore[attr-defined]
         boot = _bootstrap(client, slug="sup-worker")
         owner_token = str(boot["access_token"])
         company_id, matter_id, hearing_id = _make_matter_with_hearing(
@@ -468,42 +483,85 @@ def test_run_reminder_worker_cancels_suppressed_rows(
             record_suppression(
                 session,
                 company_id=company_id,
-                recipient_email="known-bounce@example.com",
+                recipient_email="owner-sup-worker@example.com",
                 reason=EmailSuppressionReason.BOUNCE,
                 detail="prior bounce",
             )
             session.commit()
 
         with factory() as session:
-            row_id = _insert_reminder(
-                session,
-                company_id=company_id,
-                matter_id=matter_id,
-                hearing_id=hearing_id,
-                recipient_email="known-bounce@example.com",
-                provider_message_id=None,
-                status=HearingReminderStatus.QUEUED,
-            )
+            from tests.test_hearing_reminders import _force_due
+
+            _force_due(session, hearing_id)
+
+        def _unexpected_send(*_args, **_kwargs):
+            raise AssertionError("suppressed reminder reached SendGrid")
+
+        monkeypatch.setattr(
+            "caseops_api.services.communications._send_via_sendgrid",
+            _unexpected_send,
+        )
 
         with factory() as session:
-            from caseops_api.core.settings import get_settings
-
             get_settings.cache_clear()  # type: ignore[attr-defined]
             report = run_reminder_worker(session)
-            session.commit()
+            drained = drain_notification_delivery_intents(session, limit=20)
 
-        assert report["suppressed"] == 1
+        assert report["delegated_to_durable_intent"] == 2
+        assert report["suppressed"] == 0
         assert report["sent"] == 0
+        assert drained["blocked"] >= 2
+        assert drained["external_calls"] == 0
 
         with factory() as session:
-            r = session.get(HearingReminder, row_id)
-            assert r is not None
-            assert r.status == HearingReminderStatus.CANCELLED
-            assert r.last_error and "suppressed" in r.last_error
+            reminders = list(
+                session.scalars(
+                    select(HearingReminder).where(
+                        HearingReminder.hearing_id == hearing_id
+                    )
+                )
+            )
+            assert len(reminders) == 2
+            assert {row.status for row in reminders} == {
+                HearingReminderStatus.FAILED
+            }
+            assert all(
+                row.last_error and "suppressed" in row.last_error
+                for row in reminders
+            )
+            primary_intents = list(
+                session.scalars(
+                    select(NotificationDeliveryIntent)
+                    .join(
+                        HearingReminderDeliveryIntent,
+                        HearingReminderDeliveryIntent.intent_id
+                        == NotificationDeliveryIntent.id,
+                    )
+                    .where(
+                        HearingReminderDeliveryIntent.hearing_reminder_id.in_(
+                            [row.id for row in reminders]
+                        ),
+                        HearingReminderDeliveryIntent.is_primary.is_(True),
+                    )
+                )
+            )
+            assert len(primary_intents) == 2
+            assert {intent.status for intent in primary_intents} == {
+                NotificationDeliveryStatus.SUPPRESSED
+            }
+            assert all(
+                intent.suppression_reason == "email_bounce"
+                for intent in primary_intents
+            )
     finally:
         for k in (
             "CASEOPS_HEARING_REMINDERS_ENABLED",
             "CASEOPS_SENDGRID_API_KEY",
             "CASEOPS_SENDGRID_SENDER_EMAIL",
+            "CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_ENABLED",
+            "CASEOPS_NOTIFICATION_EXTERNAL_DELIVERY_PROVIDER",
         ):
             os.environ.pop(k, None)
+        from caseops_api.core.settings import get_settings
+
+        get_settings.cache_clear()  # type: ignore[attr-defined]

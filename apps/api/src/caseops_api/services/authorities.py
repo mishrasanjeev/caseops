@@ -60,6 +60,7 @@ from caseops_api.services.court_sync_sources import (
 )
 from caseops_api.services.document_processing import _chunk_text
 from caseops_api.services.embeddings import EmbeddingProviderError, build_provider
+from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.retrieval import (
     RetrievalCandidate,
     is_low_quality_ocr_text,
@@ -741,7 +742,7 @@ def ingest_authority_source(
         return _ingestion_run_record(run)
     except Exception as exc:
         run.status = AuthorityIngestionStatus.FAILED
-        run.summary = str(exc)
+        run.summary = redact_provider_error(exc)
         run.completed_at = datetime.now(UTC)
         session.add(run)
         session.commit()

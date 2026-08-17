@@ -67,16 +67,28 @@ from caseops_api.schemas.ip_deadlines import (
     ResponsibilityEvidence,
 )
 from caseops_api.schemas.matters import MatterDeadlineUpdateRequest
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.deadlines import create_deadline, update_deadline
+from caseops_api.services.ip_coverage_projection import (
+    cutover_ip_coverage_projection,
+    tombstone_matter_deadline_calendar_projections,
+)
 from caseops_api.services.ip_deadlines import (
     assert_critical_deadline_coverage,
+    assert_distinct_deadline_coverage,
     assert_rule_can_activate,
     calculate_ip_deadline,
     operational_projection_reference,
 )
 from caseops_api.services.ip_operations import _docket_or_404
-from caseops_api.services.matter_access import can_access
+from caseops_api.services.matter_access import (
+    can_access,
+    can_stably_access_ip_docket,
+)
 from caseops_api.services.notification_delivery import (
     _recipient_context,
     cancel_pending_notification_intents,
@@ -136,6 +148,75 @@ def _membership(
     if row is None or not row.user.is_active:
         raise HTTPException(status_code=400, detail="Active company membership not found.")
     return row
+
+
+def _lock_responsibility_memberships(
+    session: Session,
+    *,
+    context: SessionContext,
+    responsibilities: list[IpResponsibilityInput],
+    required_capability: str,
+) -> None:
+    """Fence every responsibility assignee before deadline/docket locks."""
+
+    membership_ids = {
+        context.membership.id,
+        *(item.membership_id for item in responsibilities),
+    }
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=membership_ids,
+    )
+    if set(memberships) != membership_ids or any(
+        not membership.is_active or not membership.user.is_active
+        for membership in memberships.values()
+    ):
+        raise HTTPException(status_code=400, detail="Active company membership not found.")
+    require_locked_membership_capability(
+        session,
+        memberships[context.membership.id],
+        required_capability,
+    )
+
+
+def _lock_governance_memberships(
+    session: Session,
+    *,
+    context: SessionContext,
+    required_capability: str,
+    participant_ids: set[str | None] | None = None,
+) -> tuple[SessionContext, dict[str, CompanyMembership]]:
+    """Fence the governance actor and any resulting evidence principals."""
+
+    membership_ids = {
+        membership_id
+        for membership_id in (participant_ids or set()) | {context.membership.id}
+        if membership_id
+    }
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=membership_ids,
+    )
+    if set(memberships) != membership_ids or any(
+        not membership.is_active or not membership.user.is_active
+        for membership in memberships.values()
+    ):
+        raise HTTPException(status_code=400, detail="Active company membership not found.")
+    actor = require_locked_membership_capability(
+        session,
+        memberships[context.membership.id],
+        required_capability,
+    )
+    return (
+        SessionContext(
+            company=context.company,
+            membership=actor,
+            user=actor.user,
+        ),
+        memberships,
+    )
 
 
 def _assert_rule_governance_access(
@@ -278,6 +359,11 @@ def propose_rule_version(
     payload: IpRuleVersionProposalRequest,
 ) -> IpRuleVersionRecord:
     _assert_rule_governance_mutation_enabled()
+    context, _memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_propose",
+    )
     key = payload.key.strip().lower()
     rule_set = session.scalar(select(IpRuleSet).where(IpRuleSet.key == key).with_for_update())
     if rule_set is None:
@@ -516,20 +602,56 @@ def activate_rule_version(
     payload: IpRuleActivationRequest,
 ) -> IpRuleVersionRecord:
     _assert_rule_governance_mutation_enabled()
+    candidate = session.execute(
+        select(
+            IpRuleVersion.proposed_by_membership_id,
+            IpRuleVersion.rule_set_id,
+            IpRuleVersion.version,
+            IpRuleVersion.status,
+        ).where(IpRuleVersion.id == rule_version_id)
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Rule version not found.")
+    proposer_company_id = session.scalar(
+        select(CompanyMembership.company_id).where(
+            CompanyMembership.id == candidate.proposed_by_membership_id
+        )
+    )
+    if proposer_company_id != context.company.id:
+        raise HTTPException(status_code=404, detail="Rule version not found.")
+    context, governance_memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_activate",
+        participant_ids={
+            candidate.proposed_by_membership_id,
+            payload.reviewer_membership_id,
+        },
+    )
     row = session.scalar(
         select(IpRuleVersion).where(IpRuleVersion.id == rule_version_id).with_for_update()
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
+    if (
+        row.proposed_by_membership_id,
+        row.rule_set_id,
+        row.version,
+        row.status,
+    ) != (
+        candidate.proposed_by_membership_id,
+        candidate.rule_set_id,
+        candidate.version,
+        candidate.status,
+    ):
+        raise HTTPException(status_code=409, detail="Rule version changed; reload.")
     _assert_rule_governance_access(session, context=context, row=row)
     if row.status != "candidate":
         raise HTTPException(status_code=409, detail="Only a candidate rule can be activated.")
     rule_set = session.get(IpRuleSet, row.rule_set_id)
     assert rule_set is not None
-    proposer = _membership(
-        session, context=context, membership_id=str(row.proposed_by_membership_id)
-    )
-    reviewer = _membership(session, context=context, membership_id=payload.reviewer_membership_id)
+    proposer = governance_memberships[str(row.proposed_by_membership_id)]
+    reviewer = governance_memberships[payload.reviewer_membership_id]
     fixture_ids, passed_ids = _rule_fixture_results(row, rule_set)
     assert_rule_can_activate(
         proposer_membership_id=proposer.id,
@@ -636,6 +758,11 @@ def transition_rule_version(
     payload: IpRuleTransitionRequest,
 ) -> IpRuleVersionRecord:
     _assert_rule_governance_mutation_enabled()
+    context, _memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_activate",
+    )
     row = session.scalar(
         select(IpRuleVersion).where(IpRuleVersion.id == rule_version_id).with_for_update()
     )
@@ -809,6 +936,11 @@ def select_company_rule_version(
     it can never make a candidate, retired, or disabled version authoritative.
     """
 
+    context, _memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_activate",
+    )
     version = session.get(IpRuleVersion, payload.rule_version_id)
     if version is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
@@ -899,6 +1031,11 @@ def propose_calendar_version(
     context: SessionContext,
     payload: LegalCalendarVersionProposalRequest,
 ) -> LegalCalendarVersionRecord:
+    context, _memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_propose",
+    )
     key = payload.key.strip().lower()
     calendar = session.scalar(
         select(LegalWorkingCalendar)
@@ -975,6 +1112,11 @@ def activate_calendar_version(
     calendar_version_id: str,
     payload: LegalCalendarActivationRequest,
 ) -> LegalCalendarVersionRecord:
+    context, _memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_activate",
+    )
     row = session.scalar(
         select(LegalWorkingCalendarVersion)
         .where(
@@ -1042,7 +1184,19 @@ def propose_deadline(
     docket_id: str,
     payload: IpDeadlineProposalRequest,
 ) -> IpDeadlineRecord:
-    docket = _docket_or_404(session, context=context, docket_id=docket_id, for_update=True)
+    _lock_responsibility_memberships(
+        session,
+        context=context,
+        responsibilities=[],
+        required_capability="ip:approve",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     rule = session.get(IpRuleVersion, payload.rule_version_id)
     if rule is None or rule.status != "active":
         raise HTTPException(status_code=409, detail="An active rule version is required.")
@@ -1213,6 +1367,21 @@ def _lock_deadline(
     deadline_id: str,
     expected_version: int,
 ) -> tuple[IpDeadline, object]:
+    candidate = session.execute(
+        select(IpDeadline.docket_id, IpDeadline.version).where(
+            IpDeadline.id == deadline_id,
+            IpDeadline.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="IP deadline not found.")
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=candidate.docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
     row = session.scalar(
         select(IpDeadline)
         .where(IpDeadline.id == deadline_id, IpDeadline.company_id == context.company.id)
@@ -1221,9 +1390,10 @@ def _lock_deadline(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="IP deadline not found.")
+    if row.docket_id != candidate.docket_id:
+        raise HTTPException(status_code=409, detail="Deadline changed; reload and retry.")
     if row.version != expected_version:
         raise HTTPException(status_code=409, detail="Deadline changed; reload and retry.")
-    docket = _docket_or_404(session, context=context, docket_id=row.docket_id, for_update=True)
     return row, docket
 
 
@@ -1232,6 +1402,7 @@ def _validate_responsibilities(
     *,
     context: SessionContext,
     matter: Matter,
+    docket: IpDocketRecord,
     values: list[IpResponsibilityInput],
     critical: bool,
 ) -> tuple[
@@ -1249,16 +1420,45 @@ def _validate_responsibilities(
             status_code=409,
             detail="Exactly one primary responsibility is required.",
         )
+    primary_input = next(item for item in values if item.role == "primary")
+    primary_membership_id = primary_input.membership_id
+    if not primary_input.accepted:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_deadline_primary_acceptance_required",
+                "message": (
+                    "The primary responsibility must be explicitly accepted before "
+                    "a legal deadline can be confirmed."
+                ),
+            },
+        )
+    for item in values:
+        if item.role in {"backup", "supervisor", "docketing"}:
+            # This check precedes membership resolution and every write in
+            # ``_confirm_row``. A critical date cannot acquire apparent cover
+            # that is actually the same person as its responsible owner.
+            assert_distinct_deadline_coverage(
+                responsible_membership_id=primary_membership_id,
+                backup_membership_id=item.membership_id,
+            )
     resolved: list[tuple[IpResponsibilityInput, CompanyMembership]] = []
     for item in values:
         member = _membership(session, context=context, membership_id=item.membership_id)
         member_context = SessionContext(
             company=context.company, user=member.user, membership=member
         )
-        if not can_access(session, context=member_context, matter=matter):
+        if not can_stably_access_ip_docket(
+            session,
+            context=member_context,
+            docket=docket,
+        ):
             raise HTTPException(
                 status_code=409,
-                detail="Responsible user cannot access the Matter.",
+                detail=(
+                    "Responsible user needs stable Matter and IP-record access "
+                    "for the life of the legal deadline."
+                ),
             )
         resolved.append((item, member))
     evidence = [
@@ -1273,7 +1473,11 @@ def _validate_responsibilities(
         assert_critical_deadline_coverage(evidence)
     primary = next(member for item, member in resolved if item.role == "primary")
     backup = next(
-        (member for item, member in resolved if item.role in {"backup", "supervisor", "docketing"}),
+        (
+            member
+            for item, member in resolved
+            if item.role in {"backup", "supervisor", "docketing"} and item.accepted
+        ),
         None,
     )
     return resolved, primary, backup
@@ -1287,14 +1491,27 @@ def _cancel_deadline_impacts(
 ) -> None:
     children = list(
         session.scalars(
-            select(MatterDeadline).where(
+            select(MatterDeadline)
+            .where(
                 MatterDeadline.source_ref_id == row.id,
-                MatterDeadline.source_ref_type.in_(["ip_deadline", "ip_deadline_internal_target"]),
-                MatterDeadline.status.in_(["open", "missed"]),
+                MatterDeadline.source_ref_type.in_(
+                    ["ip_deadline", "ip_deadline_internal_target"]
+                ),
             )
+            .order_by(MatterDeadline.id)
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
         ).all()
     )
     for child in children:
+        _terminalize_ip_deadline_projection(
+            session,
+            context=context,
+            deadline=child,
+            reason=f"ip_deadline_{row.id}_retired",
+        )
+        if str(child.status) not in {"open", "missed"}:
+            continue
         update_deadline(
             session,
             context=context,
@@ -1302,6 +1519,8 @@ def _cancel_deadline_impacts(
             deadline_id=child.id,
             payload=MatterDeadlineUpdateRequest(status="cancelled"),
             commit=False,
+            allow_ip_workflow_mutation=True,
+            required_capability="ip:approve",
         )
     cancel_pending_notification_intents(
         session,
@@ -1309,6 +1528,66 @@ def _cancel_deadline_impacts(
         schedule_source_type="ip_deadline",
         schedule_source_id=row.id,
     )
+
+
+def _terminalize_ip_deadline_projection(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline: MatterDeadline,
+    reason: str,
+) -> MatterDeadline:
+    """Terminalize one typed legal deadline's durable coverage projection.
+
+    The caller already owns the canonical Membership -> Matter -> docket ->
+    IpDeadline chain.  Lock the operational projection before its coverage
+    family, then write calendar tombstones and terminal coverage state in the
+    same transaction.  Provider deletion remains durable asynchronous work.
+    """
+
+    locked_deadline = session.scalar(
+        select(MatterDeadline)
+        .where(
+            MatterDeadline.id == deadline.id,
+            MatterDeadline.company_id == context.company.id,
+        )
+        .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
+    )
+    if locked_deadline is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Operational deadline evidence is missing.",
+        )
+    coverages = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                IpDeadlineCoverage.matter_deadline_id == locked_deadline.id,
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update(of=IpDeadlineCoverage)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    changed_at = datetime.now(UTC)
+    tombstone_matter_deadline_calendar_projections(
+        session,
+        company_id=context.company.id,
+        matter_deadline_id=locked_deadline.id,
+        reason=reason,
+        changed_at=changed_at,
+    )
+    for coverage in coverages:
+        if str(coverage.coverage_status) == "inactive_lifecycle":
+            continue
+        coverage.coverage_status = "completed"
+        coverage.calendar_projection_status = "completed"
+        coverage.updated_at = changed_at
+        session.add(coverage)
+    session.flush()
+    return locked_deadline
 
 
 def _copy_deadline(
@@ -1388,6 +1667,7 @@ def _confirm_row(
         session,
         context=context,
         matter=matter,
+        docket=docket,
         values=responsibilities,
         critical=row.is_critical,
     )
@@ -1405,6 +1685,7 @@ def _confirm_row(
         source_ref_type=source_type,
         source_ref_id=source_id,
         commit=False,
+        required_capability="ip:approve",
     )
     row.matter_deadline_id = operational.id
     now = _now()
@@ -1426,19 +1707,18 @@ def _confirm_row(
                 creator_label_snapshot=_actor_label(context),
             )
         )
-    session.add(
-        IpDeadlineCoverage(
-            company_id=context.company.id,
-            docket_id=row.docket_id,
-            matter_deadline_id=operational.id,
-            responsible_membership_id=primary.id,
-            backup_membership_id=backup.id if backup else None,
-            coverage_status="accepted",
-            calendar_projection_status="projected",
-            accepted_at=now,
-            reassignment_version=1,
-        )
+    coverage = IpDeadlineCoverage(
+        company_id=context.company.id,
+        docket_id=row.docket_id,
+        matter_deadline_id=operational.id,
+        responsible_membership_id=primary.id,
+        backup_membership_id=backup.id if backup else None,
+        coverage_status="accepted",
+        calendar_projection_status="pending",
+        accepted_at=now,
+        reassignment_version=1,
     )
+    session.add(coverage)
     if internal_target_on is not None:
         create_deadline(
             session,
@@ -1453,6 +1733,7 @@ def _confirm_row(
             source_ref_type="ip_deadline_internal_target",
             source_ref_id=row.id,
             commit=False,
+            required_capability="ip:approve",
         )
     zone = ZoneInfo(row.timezone)
     for item, member in resolved:
@@ -1484,6 +1765,19 @@ def _confirm_row(
     row.confirmed_by_membership_id = context.membership.id
     row.confirmer_label_snapshot = _actor_label(context)
     row.confirmed_at = now
+    session.flush()
+    cutover_ip_coverage_projection(
+        session,
+        context=context,
+        docket=docket,
+        coverage=coverage,
+        previous_responsible_membership_id=primary.id,
+        previous_backup_membership_id=coverage.backup_membership_id,
+        reason="Initial confirmed legal-deadline responsibility",
+        replacement_source="deadline_confirmation",
+        responsible_accepted_at=now,
+        changed_at=now,
+    )
 
 
 def _lock_deadline_ancestor_chain(
@@ -1524,6 +1818,12 @@ def confirm_deadline(
     deadline_id: str,
     payload: IpDeadlineConfirmRequest,
 ) -> IpDeadlineRecord:
+    _lock_responsibility_memberships(
+        session,
+        context=context,
+        responsibilities=payload.responsibilities,
+        required_capability="ip:approve",
+    )
     row, docket = _lock_deadline(
         session,
         context=context,
@@ -1641,6 +1941,12 @@ def override_deadline(
     deadline_id: str,
     payload: IpDeadlineOverrideRequest,
 ) -> IpDeadlineRecord:
+    _lock_responsibility_memberships(
+        session,
+        context=context,
+        responsibilities=payload.responsibilities,
+        required_capability="ip:approve",
+    )
     row, docket = _lock_deadline(
         session,
         context=context,
@@ -1715,6 +2021,12 @@ def recalculate_deadline(
     deadline_id: str,
     payload: IpDeadlineRecalculateRequest,
 ) -> IpDeadlineRecord:
+    _lock_responsibility_memberships(
+        session,
+        context=context,
+        responsibilities=[],
+        required_capability="ip:approve",
+    )
     row, docket = _lock_deadline(
         session,
         context=context,
@@ -1791,6 +2103,12 @@ def complete_deadline(
     deadline_id: str,
     payload: IpDeadlineCompleteRequest,
 ) -> IpDeadlineRecord:
+    _lock_responsibility_memberships(
+        session,
+        context=context,
+        responsibilities=[],
+        required_capability="ip:approve",
+    )
     row, docket = _lock_deadline(
         session,
         context=context,
@@ -1800,9 +2118,23 @@ def complete_deadline(
     if row.state not in {"confirmed", "overdue"}:
         raise HTTPException(status_code=409, detail="Only an active legal deadline can complete.")
     if row.matter_deadline_id:
-        operational = session.get(MatterDeadline, row.matter_deadline_id)
+        operational = session.scalar(
+            select(MatterDeadline)
+            .where(
+                MatterDeadline.id == row.matter_deadline_id,
+                MatterDeadline.company_id == context.company.id,
+            )
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
+        )
         if operational is None:
             raise HTTPException(status_code=409, detail="Operational deadline evidence is missing.")
+        operational = _terminalize_ip_deadline_projection(
+            session,
+            context=context,
+            deadline=operational,
+            reason=f"ip_deadline_{row.id}_completed",
+        )
         update_deadline(
             session,
             context=context,
@@ -1810,6 +2142,8 @@ def complete_deadline(
             deadline_id=operational.id,
             payload=MatterDeadlineUpdateRequest(status="done"),
             commit=False,
+            allow_ip_workflow_mutation=True,
+            required_capability="ip:approve",
         )
     row.state = "completed"
     row.version += 1

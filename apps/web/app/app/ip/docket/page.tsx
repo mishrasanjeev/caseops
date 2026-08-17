@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
@@ -85,6 +87,45 @@ function dueLabel(row: IpAssignedCoverage) {
   return `Due ${on} · in ${row.days_until_due} ${row.days_until_due === 1 ? "day" : "days"}`;
 }
 
+function acknowledgementLabel(row: IpAssignedCoverage) {
+  const docket = row.docket_identifier
+    ? `${row.docket_title} (${row.docket_identifier})`
+    : row.docket_title;
+  const deadline = row.deadline_title?.trim() || "Untitled deadline";
+  const due = row.due_on
+    ? `due ${DUE.format(new Date(`${row.due_on}T00:00:00`))}`
+    : "no due date recorded";
+  return `${docket} · ${deadline} · ${due}`;
+}
+
+type AcknowledgementSelection = {
+  expectedVersion: number;
+  label: string;
+};
+
+type AcknowledgementSubmission = {
+  coverageIds: readonly string[];
+  expectedVersions: Readonly<Record<string, number>>;
+  labels: Readonly<Record<string, string>>;
+};
+
+function acknowledgementSubmission(
+  selected: ReadonlyMap<string, AcknowledgementSelection>,
+): AcknowledgementSubmission {
+  const entries = [...selected.entries()];
+  return Object.freeze({
+    coverageIds: Object.freeze(entries.map(([coverageId]) => coverageId)),
+    expectedVersions: Object.freeze(
+      Object.fromEntries(
+        entries.map(([coverageId, snapshot]) => [coverageId, snapshot.expectedVersion]),
+      ),
+    ),
+    labels: Object.freeze(
+      Object.fromEntries(entries.map(([coverageId, snapshot]) => [coverageId, snapshot.label])),
+    ),
+  });
+}
+
 export default function IpDailyDocketPage() {
   // These mirror the API exactly: the daily docket needs ip:read, acting on
   // coverage or queues needs ip:write, and signing off needs ip:approve.
@@ -134,10 +175,21 @@ export default function IpDailyDocketPage() {
       />
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
-        <CapacityCard queues={docket.data?.queues ?? []} />
+        <CapacityCard
+          queues={docket.data?.queues ?? []}
+          isLoading={docket.isPending}
+          isError={docket.isError}
+          error={docket.error}
+          isSuccess={docket.isSuccess}
+          onRetry={() => docket.refetch()}
+        />
         <EscalationsCard
           escalations={docket.data?.escalations ?? []}
-          isLoading={docket.isLoading}
+          isLoading={docket.isPending}
+          isError={docket.isError}
+          error={docket.error}
+          isSuccess={docket.isSuccess}
+          onRetry={() => docket.refetch()}
         />
       </div>
 
@@ -265,19 +317,51 @@ function ProvenanceCard({
   );
 }
 
-function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
+function CapacityCard({
+  queues,
+  isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
+}: {
+  queues: IpDailyDocketQueue[];
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
+}) {
   return (
     <Card className="min-w-0" data-testid="ip-docket-capacity">
       <CardHeader>
         <CardTitle as="h2">Workload and capacity</CardTitle>
       </CardHeader>
       <CardContent className="min-w-0 overflow-x-auto">
-        {queues.length === 0 ? (
+        {isLoading ? (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-capacity-loading"
+          >
+            <span className="sr-only">Loading workload and capacity.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+          </div>
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load workload and capacity"
+            onRetry={onRetry}
+          />
+        ) : isSuccess && queues.length === 0 ? (
           <p className="text-sm text-[var(--color-mute)]">
             No deadline coverage is assigned in this view. Coverage appears here once a deadline
             has a responsible member.
           </p>
-        ) : (
+        ) : isSuccess ? (
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
               <tr className="border-b border-[var(--color-line)] text-left text-xs uppercase tracking-wide text-[var(--color-mute)]">
@@ -325,7 +409,7 @@ function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -334,6 +418,10 @@ function CapacityCard({ queues }: { queues: IpDailyDocketQueue[] }) {
 function EscalationsCard({
   escalations,
   isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
 }: {
   escalations: {
     coverage_id: string;
@@ -343,6 +431,10 @@ function EscalationsCard({
     escalate_to_membership_id: string | null;
   }[];
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
 }) {
   return (
     <Card className="min-w-0" data-testid="ip-docket-escalations">
@@ -351,13 +443,29 @@ function EscalationsCard({
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-2">
         {isLoading ? (
-          <p className="text-sm text-[var(--color-mute)]">Loading…</p>
-        ) : escalations.length === 0 ? (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-escalations-loading"
+          >
+            <span className="sr-only">Loading deadline escalations.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+          </div>
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load deadline escalations"
+            onRetry={onRetry}
+          />
+        ) : isSuccess && escalations.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             Nothing is escalating. Items appear here when a deadline has no active owner, or when a
             critical deadline has not been acknowledged — they cannot be filtered away.
           </p>
-        ) : (
+        ) : isSuccess ? (
           escalations.map((row) => (
             <div
               key={row.coverage_id}
@@ -377,7 +485,7 @@ function EscalationsCard({
               </p>
             </div>
           ))
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -391,8 +499,13 @@ function EscalationsCard({
  * acknowledge must never look like one that did.
  */
 function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [rejected, setRejected] = useState<{ coverage_id: string; reason: string | null }[]>([]);
+  const [selected, setSelected] = useState<Map<string, AcknowledgementSelection>>(new Map());
+  // Each selection retains the label and concurrency version the user saw. The
+  // submit handler freezes an id-to-label map before the mutation starts, so a
+  // pending refetch, rename or removal cannot turn the outcome back into an id.
+  const [rejected, setRejected] = useState<
+    { coverage_id: string; reason: string | null; label: string }[]
+  >([]);
 
   const mine = useQuery({
     queryKey: ["ip-assigned-coverage"],
@@ -410,22 +523,24 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
   }, [mine.data]);
 
   const acknowledge = useMutation({
-    mutationFn: (ids: string[]) =>
+    mutationFn: (submission: AcknowledgementSubmission) =>
       bulkAcknowledgeIpCoverage({
-        coverageIds: ids,
-        expectedVersions: Object.fromEntries(
-          rows
-            .filter((row) => ids.includes(row.coverage_id))
-            .map((row) => [row.coverage_id, row.reassignment_version]),
-        ),
+        coverageIds: [...submission.coverageIds],
+        expectedVersions: { ...submission.expectedVersions },
       }),
-    onSuccess: async (result) => {
+    onSuccess: async (result, submission) => {
       setRejected(
         result.outcomes
           .filter((outcome) => !outcome.acknowledged)
-          .map((outcome) => ({ coverage_id: outcome.coverage_id, reason: outcome.reason })),
+          .map((outcome, index) => ({
+            coverage_id: outcome.coverage_id,
+            reason: outcome.reason,
+            label:
+              submission.labels[outcome.coverage_id] ??
+              `Deadline ${index + 1} from this acknowledgement request`,
+          })),
       );
-      setSelected(new Set());
+      setSelected(new Map());
       if (result.acknowledged_count) {
         toast.success(
           `${result.acknowledged_count} deadline${result.acknowledged_count === 1 ? "" : "s"} acknowledged.`,
@@ -443,22 +558,55 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
       toast.error(apiErrorMessage(error, "Could not acknowledge these deadlines.")),
   });
 
+  function submitSelected() {
+    const submission = acknowledgementSubmission(selected);
+    acknowledge.mutate(submission);
+  }
+
   const selectable = rows.filter((row) => !row.transfer_pending);
 
+  useEffect(() => {
+    if (window.location.hash === "#coverage-acknowledgements") {
+      document.getElementById("coverage-acknowledgements")?.scrollIntoView({
+        block: "start",
+      });
+    }
+  }, []);
+
   return (
-    <Card className="min-w-0" data-testid="ip-docket-acknowledge">
+    <Card
+      id="coverage-acknowledgements"
+      className="min-w-0 scroll-mt-6"
+      data-testid="ip-docket-acknowledge"
+    >
       <CardHeader>
         <CardTitle as="h2">Your unacknowledged deadlines</CardTitle>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
-        {mine.isLoading ? (
-          <p className="text-sm text-[var(--color-mute)]">Loading…</p>
-        ) : rows.length === 0 ? (
+        {mine.isPending ? (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-acknowledgements-loading"
+          >
+            <span className="sr-only">Loading your unacknowledged deadlines.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+          </div>
+        ) : mine.isError ? (
+          <QueryErrorState
+            error={mine.error}
+            title="Could not load your unacknowledged deadlines"
+            onRetry={() => mine.refetch()}
+          />
+        ) : mine.isSuccess && rows.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             You have acknowledged every deadline you hold. Acknowledging is what stops a critical
             deadline escalating, so this list is meant to reach empty.
           </p>
-        ) : (
+        ) : mine.isSuccess ? (
           <>
             {rows.map((row) => {
               const checkboxId = `ack-${row.coverage_id}`;
@@ -475,9 +623,15 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
                     disabled={row.transfer_pending}
                     checked={selected.has(row.coverage_id)}
                     onChange={(event) => {
-                      const next = new Set(selected);
-                      if (event.target.checked) next.add(row.coverage_id);
-                      else next.delete(row.coverage_id);
+                      const next = new Map(selected);
+                      if (event.target.checked) {
+                        next.set(row.coverage_id, {
+                          expectedVersion: row.reassignment_version,
+                          label: acknowledgementLabel(row),
+                        });
+                      } else {
+                        next.delete(row.coverage_id);
+                      }
                       setSelected(next);
                     }}
                   />
@@ -510,7 +664,7 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
               <Button
                 size="sm"
                 disabled={selected.size === 0 || acknowledge.isPending}
-                onClick={() => acknowledge.mutate([...selected])}
+                onClick={submitSelected}
               >
                 Acknowledge selected
               </Button>
@@ -518,13 +672,25 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
                 size="sm"
                 variant="ghost"
                 disabled={selectable.length === 0 || acknowledge.isPending}
-                onClick={() => setSelected(new Set(selectable.map((row) => row.coverage_id)))}
+                onClick={() =>
+                  setSelected(
+                    new Map(
+                      selectable.map((row) => [
+                        row.coverage_id,
+                        {
+                          expectedVersion: row.reassignment_version,
+                          label: acknowledgementLabel(row),
+                        },
+                      ]),
+                    ),
+                  )
+                }
               >
                 Select all {selectable.length}
               </Button>
             </div>
           </>
-        )}
+        ) : null}
 
         {rejected.length ? (
           <div
@@ -535,7 +701,7 @@ function AcknowledgementCard({ onChanged }: { onChanged: () => void }) {
             <ul className="mt-1 flex flex-col gap-1 text-sm text-[var(--color-mute)]">
               {rejected.map((row) => (
                 <li key={row.coverage_id}>
-                  <span className="font-mono text-xs">{row.coverage_id}</span> —{" "}
+                  <span className="font-medium text-[var(--color-ink-2)]">{row.label}</span> —{" "}
                   {ACK_REASON[row.reason ?? ""] ?? "Could not be acknowledged"}
                 </li>
               ))}
@@ -683,12 +849,30 @@ function SavedQueuesCard({
         <CardTitle as="h2">Saved queues</CardTitle>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
-        {rows.length === 0 ? (
+        {queues.isPending ? (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="ip-docket-saved-queues-loading"
+          >
+            <span className="sr-only">Loading saved queues.</span>
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+            <Skeleton className="h-16 w-full" aria-hidden="true" />
+          </div>
+        ) : queues.isError ? (
+          <QueryErrorState
+            error={queues.error}
+            title="Could not load saved queues"
+            onRetry={() => queues.refetch()}
+          />
+        ) : queues.isSuccess && rows.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             No saved queues yet. Save the filters you triage with each morning so the same view is
             one click away, and share it with a team so everyone triages the same list.
           </p>
-        ) : (
+        ) : queues.isSuccess ? (
           rows.map((queue) => (
             <div
               key={queue.id}
@@ -723,9 +907,9 @@ function SavedQueuesCard({
               </div>
             </div>
           ))
-        )}
+        ) : null}
 
-        <form
+        {queues.isSuccess ? <form
           className="flex min-w-0 flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
@@ -744,7 +928,7 @@ function SavedQueuesCard({
           <Button size="sm" type="submit" variant="secondary" disabled={name.trim().length < 2 || save.isPending}>
             Save queue
           </Button>
-        </form>
+        </form> : null}
       </CardContent>
     </Card>
   );

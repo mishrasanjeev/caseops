@@ -10,7 +10,6 @@ from caseops_api.core.cookies import (
     issue_session_cookies,
 )
 from caseops_api.core.rate_limit import limiter, login_rate_limit
-from caseops_api.core.security import create_access_token
 from caseops_api.core.settings import get_settings
 from caseops_api.schemas.auth import AuthContextResponse, AuthSessionResponse, LoginRequest
 from caseops_api.schemas.employees import (
@@ -40,6 +39,7 @@ from caseops_api.services.identity import (
     authenticate_user,
     build_auth_context,
     get_session_context,
+    issue_auth_session_under_fence,
     refresh_auth_session,
 )
 from caseops_api.services.security import (
@@ -60,25 +60,6 @@ def _ttl_seconds() -> int:
     return get_settings().access_token_ttl_minutes * 60
 
 
-def _session_response(session: DbSession, context: SessionContext) -> AuthSessionResponse:
-    from caseops_api.services.capabilities import resolve_membership_capabilities
-
-    token = create_access_token(
-        user_id=context.user.id,
-        company_id=context.company.id,
-        membership_id=context.membership.id,
-        role=context.membership.role,
-    )
-    return AuthSessionResponse(
-        access_token=token,
-        token_type="bearer",
-        company=context.company,
-        user=context.user,
-        membership=context.membership,
-        capabilities=sorted(resolve_membership_capabilities(session, context.membership)),
-    )
-
-
 @router.post("/login", response_model=AuthSessionResponse, summary="Login with email and password")
 @limiter.limit(login_rate_limit)
 async def login(
@@ -94,10 +75,20 @@ async def login(
         password=payload.password,
         company_slug=payload.company_slug,
     )
+    # ``authenticate_user`` mints the token while holding the canonical
+    # Membership -> User fence.  Starlette runs BackgroundTasks before
+    # FastAPI closes this request-scoped session, so end that completed fence
+    # transaction here.  Otherwise the fresh audit session below waits for a
+    # KEY SHARE FK lock on the same membership while this request waits for the
+    # background task: an application-level deadlock invisible to PostgreSQL's
+    # deadlock detector.
+    session.commit()
     # P1-1: defer the employee.login audit + last_login write off the
     # login hot path. Runs after the response is sent, on its own fresh
     # DB session (record_employee_login_async opens one via
-    # get_session_factory) — never the request session.
+    # get_session_factory) — never the request session.  The request session
+    # remains alive until BackgroundTasks finish, but its identity-fence
+    # transaction and row locks have already been released above.
     background.add_task(record_employee_login_async, auth.membership.id)
     context = get_session_context(session, auth.membership.id)
     mfa_state = login_mfa_challenge_state(session, context=context)
@@ -136,7 +127,11 @@ async def account_setup_complete(
     session: DbSession,
 ) -> AuthSessionResponse:
     context = complete_account_setup(session, payload=payload)
-    auth = _session_response(session, context)
+    auth = issue_auth_session_under_fence(
+        session,
+        company_id=context.company.id,
+        membership_id=context.membership.id,
+    )
     issue_session_cookies(
         response,
         access_token=auth.access_token,
@@ -177,7 +172,11 @@ async def password_reset_complete(
     session: DbSession,
 ) -> AuthSessionResponse:
     context = complete_password_reset(session, payload=payload)
-    auth = _session_response(session, context)
+    auth = issue_auth_session_under_fence(
+        session,
+        company_id=context.company.id,
+        membership_id=context.membership.id,
+    )
     issue_session_cookies(
         response,
         access_token=auth.access_token,

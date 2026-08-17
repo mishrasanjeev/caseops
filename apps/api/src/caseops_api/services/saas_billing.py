@@ -45,6 +45,7 @@ from caseops_api.db.models import (
     TrackedCase,
     TrackedCaseBookmark,
 )
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.saas_billing import (
     AddOnCheckoutRequest,
     BillingAccountRecord,
@@ -268,6 +269,19 @@ def _select_price(plan: BillingPlanVersion, interval: str) -> BillingPlanPrice:
 
 
 def ensure_billing_account(session: Session, company: Company) -> BillingAccount:
+    # ``FOR UPDATE`` cannot lock an absent row (and SQLite ignores it), so the
+    # former query-then-insert implementation let concurrent billing reads both
+    # observe absence and race on ``uq_billing_accounts_company``. Acquire the
+    # CaseOps SQLite writer lock before the lookup. On PostgreSQL, lock the
+    # always-present tenant row so account *and subsequent subscription*
+    # creation are serialized even while their child rows are absent.
+    serialize_sqlite_writer(session)
+    locked_company_id = session.scalar(
+        select(Company.id).where(Company.id == company.id).with_for_update()
+    )
+    if locked_company_id is None:
+        raise RuntimeError("Cannot create a billing account for a missing tenant.")
+
     account = session.scalar(
         select(BillingAccount).where(BillingAccount.company_id == company.id).with_for_update()
     )
@@ -480,6 +494,69 @@ def _latest_credit_balance(session: Session, company_id: str) -> int:
         .limit(1)
     )
     return int(row.balance_after if row else 0)
+
+
+def _projected_ai_credit_balance(
+    session: Session,
+    *,
+    subscription: BillingSubscription,
+    entitlements: dict[str, Any],
+) -> int:
+    """Return the balance that grant/expiry materialization would produce.
+
+    AI preflight runs before an external provider call, so it must not flush
+    ledger rows or retain the SQLite writer lock while the provider is in
+    flight.  Mirror the mutation order used by ``debit_ai_credits`` using only
+    reads: add a missing current-period grant, then remove every due grant that
+    has not already received an expiry row.
+    """
+
+    company_id = subscription.company_id
+    balance = _latest_credit_balance(session, company_id)
+    now = _now()
+    included = int(entitlements.get("ai_credits_monthly") or 0)
+    if included > 0:
+        period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
+        period_end = _to_aware(subscription.current_period_end) or _period_end(
+            period_start, subscription.billing_interval
+        )
+        source_id = f"{subscription.id}:{period_start.isoformat()}"
+        current_grant_exists = session.scalar(
+            select(BillingCreditLedger.id).where(
+                BillingCreditLedger.company_id == company_id,
+                BillingCreditLedger.event_type
+                == BillingCreditLedgerEventType.INCLUDED_MONTHLY_GRANT,
+                BillingCreditLedger.source_object_type == "billing_subscription_period",
+                BillingCreditLedger.source_object_id == source_id,
+            )
+        )
+        if current_grant_exists is None:
+            balance += included
+            if period_end <= now:
+                balance = max(balance - included, 0)
+
+    expired_grants = list(
+        session.scalars(
+            select(BillingCreditLedger).where(
+                BillingCreditLedger.company_id == company_id,
+                BillingCreditLedger.delta > 0,
+                BillingCreditLedger.expires_at.is_not(None),
+                BillingCreditLedger.expires_at <= now,
+            )
+        )
+    )
+    for grant in expired_grants:
+        already_expired = session.scalar(
+            select(BillingCreditLedger.id).where(
+                BillingCreditLedger.company_id == company_id,
+                BillingCreditLedger.event_type == BillingCreditLedgerEventType.EXPIRY,
+                BillingCreditLedger.source_object_type == "billing_credit_ledger",
+                BillingCreditLedger.source_object_id == grant.id,
+            )
+        )
+        if already_expired is None:
+            balance = max(balance - grant.delta, 0)
+    return balance
 
 
 def _append_credit_ledger(
@@ -1315,22 +1392,31 @@ def assert_ai_credits_available(
 ) -> None:
     if not company_id or estimated_credits <= 0:
         return
-    company = session.get(Company, company_id)
-    if company is None:
-        return
-    subscription = _subscription_for_gate(session, company)
-    if subscription is None:
-        return
-    entitlements = resolve_entitlements(session, subscription)
-    if entitlements.get("ai_credits_monthly") is None:
-        return
-    grant_included_monthly_credits(session, subscription=subscription, entitlements=entitlements)
-    expire_due_ai_credits(session, company_id=company_id)
-    if _latest_credit_balance(session, company_id) < estimated_credits:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="AI credit balance is insufficient for this action.",
-        )
+    # This check runs immediately before the external provider call.  Keep the
+    # entire preflight read-only so no SQLite writer lock can span provider
+    # latency or block a concurrent lifecycle transaction.  Successful calls
+    # materialize the projected grant/expiry state in ``debit_ai_credits``.
+    with session.no_autoflush:
+        subscription = _latest_subscription(session, company_id)
+        if subscription is None:
+            # Preserve the established unrestricted behaviour for tenants
+            # that have not entered the explicit billing bootstrap workflow.
+            return
+        entitlements = resolve_entitlements(session, subscription)
+        if entitlements.get("ai_credits_monthly") is None:
+            return
+        if (
+            _projected_ai_credit_balance(
+                session,
+                subscription=subscription,
+                entitlements=entitlements,
+            )
+            < estimated_credits
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="AI credit balance is insufficient for this action.",
+            )
 
 
 def debit_ai_credits(
@@ -1377,6 +1463,16 @@ def debit_ai_credits(
             source_id=source_object_id,
         )
         return
+    # Preflight projects these mutations without writing so an external
+    # provider is never called while the SQLite writer lock is retained.
+    # Materialize them only after a successful, schema-valid completion and
+    # immediately before the usage debit.
+    grant_included_monthly_credits(
+        session,
+        subscription=subscription,
+        entitlements=entitlements,
+    )
+    expire_due_ai_credits(session, company_id=company_id)
     _append_credit_ledger(
         session,
         company_id=company_id,

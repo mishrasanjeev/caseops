@@ -22,11 +22,11 @@ The brutal truth:
 
 The competitive bar in 2026 is high:
 
-- Indian research incumbents advertise massive trusted corpora, verified citations, good-law signals, and legal analytics: cited answers grounded in a proprietary database, verified/hyperlinked citations, corpora in the millions of documents, daily updates, good-law flagging, analytics, judge-behaviour insights, case comparison, privacy/no-training language, and DPDP/EU AI Act claims.
-- Established practice-management platforms set user expectations around intake, CRM, time tracking, documents, billing, payments, calendars, secure client communications, and mobile convenience in one workflow.
-- Enterprise legal management platforms in this category set the GC bar around matter-spend view, e-billing, benchmarking analytics, rate management, RFPs, budget controls, and outside counsel scorecards.
-- CLM platforms in this category set the contract bar around AI throughout the lifecycle: smart import, custom AI properties, AI playbooks, negotiation/redline workflows, approvals, insights, and process analytics.
-- Leading legal AI platforms set the AI bar around trusted content, document analysis, drafting, workflow agents, secure collaboration, Microsoft/DMS integrations, audit logs, SAML SSO, and scale claims.
+- Indian research incumbents advertise massive trusted corpora, verified citations, good-law signals, and legal analytics. SCC Online AI Pro advertises cited answers grounded in its database, verified/hyperlinked citations, 65+ lakh documents, privacy/no-training language, and DPDP/EU AI Act claims. Manupatra advertises 10M+ legal documents, daily updates, good-law flagging, analytics, judge behavior insights, and case comparison.
+- Practice management platforms such as Clio set user expectations around intake, CRM, time tracking, documents, billing, payments, calendars, secure client communications, and mobile convenience in one workflow.
+- Enterprise legal management platforms such as Legal Tracker set the GC bar around matter-spend view, e-billing, benchmarking analytics, rate management, RFPs, budget controls, and outside counsel scorecards.
+- CLM platforms such as Ironclad set the contract bar around AI throughout the lifecycle: smart import, custom AI properties, AI playbooks, negotiation/redline workflows, approvals, insights, and process analytics.
+- Legal AI platforms such as CoCounsel and Harvey set the AI bar around trusted content, document analysis, drafting, workflow agents, secure collaboration, Microsoft/DMS integrations, audit logs, SAML SSO, and scale claims.
 
 CaseOps has a legitimate India-specific opportunity, but the benchmark is not "can we ship a route?" The benchmark is "can a lawyer, partner, GC, or client use this under deadline pressure without leaving the system?"
 
@@ -102,7 +102,7 @@ Solo lawyers need speed, affordability, and low setup. They do not want enterpri
 | Drafting | Stronger than many modules. | Must reduce prompts and decisions. Solo lawyers need opinionated templates and "fill missing facts" flow, not a complex studio. | P1 |
 | Billing/payments | Pine Labs/payment paths exist. | Needs simple invoice templates, GST defaults, UPI-first payment UX, payment reminders, and accountant export. | P1 |
 | Mobile use | Some mobile responsive work exists. | Solo lawyers will use phones in court. Needs mobile-first hearing diary, quick notes, document scan/upload, reminders, and search. | P0 |
-| Research | Corpus search exists. | Needs price-sensitive content strategy. If corpus is thin, solo users will compare unfavourably to established Indian research workflows. | P0 |
+| Research | Corpus search exists. | Needs price-sensitive content strategy. If corpus is thin, solo users will compare unfavorably to SCC/Manupatra/Indian Kanoon workflows. | P0 |
 | Support | Docs/guide exist. | Needs in-app onboarding, sample matters, empty-state coaching, and task-based help. | P2 |
 
 Brutal solo assessment: the product is currently too broad and too enterprise-shaped for a solo lawyer. A solo version should be a stripped, fast, guided product: matter diary, deadlines, drafting, research, invoice/payment, mobile.
@@ -503,7 +503,7 @@ Exit criteria:
 
 ### Phase 2: Build The Content Moat
 
-Goal: earn trust against the established Indian legal research incumbents.
+Goal: earn trust against SCC/Manupatra/CaseMine.
 
 Must ship:
 
@@ -645,11 +645,11 @@ Static inspection highlights:
 
 External benchmark sources:
 
-- Indian legal research platform (AI tier) — vendor documentation
-- Indian legal research platform — vendor documentation
-- Practice-management platform feature list — vendor documentation
-- Enterprise legal-spend / outside-counsel management platform — vendor documentation
-- Legal AI assistant platform — vendor documentation
-- Contract lifecycle management AI platform — vendor documentation
-- Legal AI platform for law firms — vendor documentation
+- SCC Online AI Pro: https://www.scconline.com/ai-pro
+- Manupatra legal research: https://www.manupatra.ai/legal-research
+- Clio features: https://www.clio.com/features/
+- Thomson Reuters outside counsel spend: https://legal.thomsonreuters.com/en/legal/financial-management/outside-counsel-spend
+- Thomson Reuters CoCounsel Legal: https://legal.thomsonreuters.com/en/products/cocounsel-legal
+- Ironclad AI overview: https://support.ironcladapp.com/hc/en-us/articles/12947738534935-Ironclad-AI-Overview
+- Harvey platform: https://www.harvey.ai/platform
 

@@ -28,8 +28,10 @@ import { OrderBadges } from "@/components/matters/OrderBadges";
 import { AddCourtOrderDialog } from "@/components/matters/AddCourtOrderDialog";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
@@ -517,6 +519,10 @@ export default function MatterHearingsPage() {
       <NextHearingProvenanceSection
         response={nextHearingHistoryQuery.data}
         isLoading={nextHearingHistoryQuery.isPending}
+        isError={nextHearingHistoryQuery.isError}
+        error={nextHearingHistoryQuery.error}
+        isSuccess={nextHearingHistoryQuery.isSuccess}
+        onRetry={() => nextHearingHistoryQuery.refetch()}
         onDecide={(suggestionId, action) =>
           nextHearingSuggestionMutation.mutate({ suggestionId, action })
         }
@@ -526,6 +532,10 @@ export default function MatterHearingsPage() {
       <ComplianceReviewSection
         response={complianceQuery.data}
         isLoading={complianceQuery.isPending}
+        isError={complianceQuery.isError}
+        error={complianceQuery.error}
+        isSuccess={complianceQuery.isSuccess}
+        onRetry={() => complianceQuery.refetch()}
         onAction={(itemId, action) => complianceMutation.mutate({ itemId, action })}
         isPending={complianceMutation.isPending}
         canRetryAttachmentProcessing={canManageDocuments && !isDisposedMatter}
@@ -972,11 +982,19 @@ function signalDueText(signal: ProceedingSignal): string | null {
 export function NextHearingProvenanceSection({
   response,
   isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
   onDecide,
   isPending,
 }: {
   response: NextHearingHistoryResponse | undefined;
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
   onDecide: (suggestionId: string, action: "accept" | "reject") => void;
   isPending: boolean;
 }) {
@@ -988,62 +1006,110 @@ export function NextHearingProvenanceSection({
         <CardTitle>Next hearing provenance</CardTitle>
         <CardDescription>Review automatic hearing-date suggestions and source history.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4 lg:grid-cols-2">
-        <div>
-          <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">Suggestions</div>
-          {isLoading ? (
-            <p className="text-sm text-[var(--color-mute)]">Loading suggestions...</p>
-          ) : pending.length === 0 ? (
-            <p className="text-sm text-[var(--color-mute)]">No pending suggestions.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {pending.map((suggestion) => (
-                <li key={suggestion.id} className="rounded-lg border border-[var(--color-line)] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+      <CardContent>
+        {isLoading ? (
+          <div
+            className="grid gap-4 lg:grid-cols-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="next-hearing-provenance-loading"
+          >
+            <span className="sr-only">Loading hearing suggestions and source history.</span>
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+            </div>
+          </div>
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load hearing suggestions and history"
+            onRetry={onRetry}
+          />
+        ) : isSuccess ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">
+                Suggestions
+              </div>
+              {pending.length === 0 ? (
+                <p className="text-sm text-[var(--color-mute)]">No pending suggestions.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {pending.map((suggestion) => (
+                    <li
+                      key={suggestion.id}
+                      className="rounded-lg border border-[var(--color-line)] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-[var(--color-ink)]">
+                            {formatDateTime(suggestion.suggested_date)}
+                          </div>
+                          <div className="text-xs text-[var(--color-mute)]">
+                            {suggestion.source} - {suggestion.reason ?? "review required"}
+                          </div>
+                        </div>
+                        <StatusBadge status={suggestion.confidence_label} />
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => onDecide(suggestion.id, "accept")}
+                          disabled={isPending}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onDecide(suggestion.id, "reject")}
+                          disabled={isPending}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">
+                History
+              </div>
+              {history.length === 0 ? (
+                <p className="text-sm text-[var(--color-mute)]">No history recorded yet.</p>
+              ) : (
+                <ul className="flex max-h-64 flex-col gap-2 overflow-auto">
+                  {history.slice(0, 8).map((row) => (
+                    <li
+                      key={row.id}
+                      className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm"
+                    >
                       <div className="font-medium text-[var(--color-ink)]">
-                        {formatDateTime(suggestion.suggested_date)}
+                        {row.old_date ? formatDateTime(row.old_date) : "Not set"}
+                        {" -> "}
+                        {row.new_date ? formatDateTime(row.new_date) : "Not set"}
                       </div>
                       <div className="text-xs text-[var(--color-mute)]">
-                        {suggestion.source} - {suggestion.reason ?? "review required"}
+                        {row.source} - {row.change_reason ?? "updated"}{" "}
+                        {row.manual_lock ? "- manual lock" : ""}
                       </div>
-                    </div>
-                    <StatusBadge status={suggestion.confidence_label} />
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => onDecide(suggestion.id, "accept")} disabled={isPending}>
-                      Accept
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => onDecide(suggestion.id, "reject")} disabled={isPending}>
-                      Reject
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">History</div>
-          {history.length === 0 ? (
-            <p className="text-sm text-[var(--color-mute)]">No history recorded yet.</p>
-          ) : (
-            <ul className="flex max-h-64 flex-col gap-2 overflow-auto">
-              {history.slice(0, 8).map((row) => (
-                <li key={row.id} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
-                  <div className="font-medium text-[var(--color-ink)]">
-                    {row.old_date ? formatDateTime(row.old_date) : "Not set"}
-                    {" -> "}
-                    {row.new_date ? formatDateTime(row.new_date) : "Not set"}
-                  </div>
-                  <div className="text-xs text-[var(--color-mute)]">
-                    {row.source} - {row.change_reason ?? "updated"} {row.manual_lock ? "- manual lock" : ""}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -1052,6 +1118,10 @@ export function NextHearingProvenanceSection({
 export function ComplianceReviewSection({
   response,
   isLoading,
+  isError,
+  error,
+  isSuccess,
+  onRetry,
   onAction,
   isPending,
   canRetryAttachmentProcessing,
@@ -1060,6 +1130,10 @@ export function ComplianceReviewSection({
 }: {
   response: MatterComplianceListResponse | undefined;
   isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  isSuccess: boolean;
+  onRetry: () => Promise<unknown> | unknown;
   onAction: (itemId: string, action: "confirm" | "reject" | "waive" | "complete") => void;
   isPending: boolean;
   canRetryAttachmentProcessing: boolean;
@@ -1079,8 +1153,24 @@ export function ComplianceReviewSection({
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-[var(--color-mute)]">Loading compliance items...</p>
-        ) : (
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="matter-compliance-loading"
+          >
+            <span className="sr-only">Loading compliance items.</span>
+            <Skeleton className="h-12 w-full" aria-hidden="true" />
+            <Skeleton className="h-12 w-full" aria-hidden="true" />
+          </div>
+        ) : isError ? (
+          <QueryErrorState
+            error={error}
+            title="Could not load compliance review"
+            onRetry={onRetry}
+          />
+        ) : isSuccess ? (
           <div className="flex flex-col gap-4">
             <ComplianceExtractionRuns
               runs={recentRuns}
@@ -1135,7 +1225,7 @@ export function ComplianceReviewSection({
               </ul>
             )}
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

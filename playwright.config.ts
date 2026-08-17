@@ -21,9 +21,12 @@ const browserExecutablePath = browserExecutableCandidates.find((candidate) =>
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
-  // The live-tenant A0 canary is permitted only through its dedicated exact-
-  // release config/workflow, never the general local Playwright entrypoint.
-  testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
+  // Live-tenant mutation canaries are permitted only through their dedicated
+  // exact-release configs/workflows, never the general local entrypoint.
+  testIgnore: [
+    /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
+    /iplf-039c-guard-first-2026-08-16-prod\.spec\.ts$/,
+  ],
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

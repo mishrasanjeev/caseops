@@ -190,7 +190,8 @@ def assert_critical_deadline_coverage(
 ) -> None:
     """Require acknowledged primary plus backup/escalation coverage."""
 
-    accepted_roles = {item.role for item in responsibilities if item.active and item.accepted}
+    accepted = [item for item in responsibilities if item.active and item.accepted]
+    accepted_roles = {item.role for item in accepted}
     if "primary" not in accepted_roles:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -200,6 +201,73 @@ def assert_critical_deadline_coverage(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Critical deadline confirmation requires backup or escalation coverage.",
+        )
+    primary_ids = {item.membership_id for item in accepted if item.role == "primary"}
+    backup_ids = {
+        item.membership_id
+        for item in accepted
+        if item.role in {"backup", "supervisor", "docketing"}
+    }
+    if primary_ids & backup_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_distinct_backup_required",
+                "message": (
+                    "Critical deadline responsibility and backup or escalation "
+                    "coverage must be assigned to different people."
+                ),
+            },
+        )
+
+
+def assert_distinct_deadline_coverage(
+    *,
+    responsible_membership_id: str,
+    backup_membership_id: str | None,
+) -> None:
+    """Refuse a coverage row whose primary and backup collapse to one person."""
+
+    if (
+        backup_membership_id is not None
+        and responsible_membership_id == backup_membership_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_distinct_backup_required",
+                "message": (
+                    "Deadline responsibility and backup coverage must be assigned "
+                    "to different people."
+                ),
+            },
+        )
+
+
+def assert_distinct_deadline_escalation(
+    *,
+    escalation_membership_id: str,
+    backup_membership_id: str | None,
+    responsible_membership_id: str | None = None,
+) -> None:
+    """Refuse a fallback that collapses onto primary or backup coverage."""
+
+    if (
+        escalation_membership_id == responsible_membership_id
+        or (
+            backup_membership_id is not None
+            and escalation_membership_id == backup_membership_id
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_coverage_distinct_backup_required",
+                "message": (
+                    "The decline or expiry escalation owner must be different from "
+                    "the resulting deadline responsible owner and backup."
+                ),
+            },
         )
 
 

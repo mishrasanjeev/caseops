@@ -24,7 +24,7 @@ const {
   proposeIpLegalDeadlineMock,
   createIpSharedHearingMock,
   fetchIpAccessPanelMock,
-  listEmployeesMock,
+  listCompanyUsersMock,
   listTeamsMock,
   previewIpAccessChangeMock,
   applyIpAccessChangeMock,
@@ -52,7 +52,7 @@ const {
   proposeIpLegalDeadlineMock: vi.fn(),
   createIpSharedHearingMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
-  listEmployeesMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
   listTeamsMock: vi.fn(),
   previewIpAccessChangeMock: vi.fn(),
   applyIpAccessChangeMock: vi.fn(),
@@ -113,7 +113,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   activateIpDeadlineRule: vi.fn(),
   transitionIpDeadlineRule: vi.fn(),
   fetchIpAccessPanel: fetchIpAccessPanelMock,
-  listEmployees: listEmployeesMock,
+  listCompanyUsers: listCompanyUsersMock,
   listTeams: listTeamsMock,
   previewIpAccessChange: previewIpAccessChangeMock,
   applyIpAccessChange: applyIpAccessChangeMock,
@@ -144,6 +144,7 @@ function withClient(children: ReactNode) {
 
 describe("IpDocketPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/ip");
     fetchIpDocketsMock.mockReset();
     fetchIpDocumentsMock.mockReset();
     fetchIpDocumentTaxonomyMock.mockReset();
@@ -161,7 +162,7 @@ describe("IpDocketPage", () => {
     proposeIpLegalDeadlineMock.mockReset();
     createIpSharedHearingMock.mockReset();
     fetchIpAccessPanelMock.mockReset();
-    listEmployeesMock.mockReset();
+    listCompanyUsersMock.mockReset();
     listTeamsMock.mockReset();
     previewIpAccessChangeMock.mockReset();
     applyIpAccessChangeMock.mockReset();
@@ -210,7 +211,32 @@ describe("IpDocketPage", () => {
     });
     fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [] });
     listCalendarConnectionsMock.mockResolvedValue({ connections: [] });
-    listEmployeesMock.mockResolvedValue({ employees: [], total: 0 });
+    listCompanyUsersMock.mockResolvedValue({
+      company_id: "company-1",
+      company_slug: "firm",
+      users: [
+        {
+          membership_id: "member-1",
+          full_name: "Priya Raghavan",
+          email: "priya@example.com",
+          role: "partner",
+          membership_active: true,
+          user_id: "user-1",
+          user_active: true,
+          created_at: "2026-08-16T00:00:00Z",
+        },
+        {
+          membership_id: "member-2",
+          full_name: "Anand Rao",
+          email: "anand@example.com",
+          role: "member",
+          membership_active: true,
+          user_id: "user-2",
+          user_active: true,
+          created_at: "2026-08-16T00:00:00Z",
+        },
+      ],
+    });
     listTeamsMock.mockResolvedValue({ teams: [], total: 0 });
     fetchIpAccessPanelMock.mockResolvedValue({
       docket_id: "ip-1",
@@ -466,6 +492,20 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    const continuityHeading = await screen.findByRole("heading", {
+      name: "Deadline continuity",
+    });
+    const continuityCard = continuityHeading.parentElement?.parentElement;
+    expect(continuityCard).not.toBeNull();
+    expect(
+      await within(continuityCard!).findByText((_content, element) =>
+        Boolean(
+          element?.classList.contains("font-semibold") &&
+            element.textContent ===
+              "Responsible: Priya Raghavan — priya@example.com",
+        ),
+      ),
+    ).toBeVisible();
     expect(await screen.findByRole("button", { name: "Discover Matter evidence" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Accept and link" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reject" })).toBeVisible();
@@ -552,8 +592,12 @@ describe("IpDocketPage", () => {
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
     expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
-    expect(within(deadlineWorkspace).getByLabelText("Primary membership ID")).toBeVisible();
-    expect(within(deadlineWorkspace).getByLabelText("Backup membership ID")).toBeVisible();
+    // 2026-08-16: these were free-text boxes demanding a membership UUID. They
+    // are now pickers, so the assertion is that a lawyer can name a colleague.
+    const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");
+    expect(primary).toBeVisible();
+    expect(within(primary).getByRole("option", { name: /Priya Raghavan/ })).toBeInTheDocument();
+    expect(within(deadlineWorkspace).getByLabelText("Backup")).toBeVisible();
     expect(within(deadlineWorkspace).getByLabelText("Evidence reference")).toBeVisible();
     expect(within(deadlineWorkspace).getByRole("button", { name: "Confirm legal deadline" })).toBeVisible();
     expect(within(deadlineWorkspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
@@ -632,7 +676,56 @@ describe("IpDocketPage", () => {
 
     expect(await screen.findByText("Portfolio")).toBeVisible();
     // An always-present empty band trains people to ignore the space.
-    expect(screen.queryByTestId("ip-coverage-decisions")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("ip-coverage-decisions")).toBeNull(),
+    );
+  });
+
+  it("keeps a deep-linked decision surface visible while the query is loading", async () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(null, "", "/app/ip#coverage-decisions");
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockReturnValue(new Promise(() => {}));
+
+    try {
+      render(withClient(<IpDocketPage />));
+
+      const card = await screen.findByTestId("ip-coverage-decisions");
+      expect(card).toHaveAttribute("id", "coverage-decisions");
+      const loader = within(card).getByTestId("ip-coverage-decisions-loading");
+      expect(loader).toHaveAttribute("role", "status");
+      expect(loader).toHaveAttribute("aria-busy", "true");
+      expect(within(loader).getByText("Loading coverage decisions.")).toHaveClass("sr-only");
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }),
+      );
+    } finally {
+      if (originalScrollIntoView) {
+        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
+  });
+
+  it("shows a retryable decision error instead of a false empty band", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockRejectedValue(
+      new Error("Coverage decisions unavailable"),
+    );
+
+    render(withClient(<IpDocketPage />));
+
+    const card = await screen.findByTestId("ip-coverage-decisions");
+    expect(await within(card).findByText("Could not load coverage decisions")).toBeVisible();
+    const retry = within(card).getByRole("button", { name: "Try again" });
+    expect(retry).toBeVisible();
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(fetchIpCoverageTransfersAwaitingMeMock).toHaveBeenCalledTimes(2),
+    );
   });
 
   it("lets the named replacement accept a proposed transfer without writing prose", async () => {
@@ -642,8 +735,9 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     const band = await screen.findByTestId("ip-coverage-decisions");
+    expect(band).toHaveAttribute("id", "coverage-decisions");
     // Enough to answer "can I hold this date?" without opening the record.
-    expect(within(band).getByText("ACME WORDMARK")).toBeVisible();
+    expect(await within(band).findByText("ACME WORDMARK")).toBeVisible();
     expect(within(band).getByText("TM 4412330")).toBeVisible();
     expect(within(band).getByText(/Opposition reply/)).toHaveTextContent("in 58 days");
     expect(within(band).getByText("Critical")).toBeVisible();
@@ -659,6 +753,33 @@ describe("IpDocketPage", () => {
     });
   });
 
+  it("scrolls to an asynchronously loaded coverage decision deep link", async () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(null, "", "/app/ip#coverage-decisions");
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({
+      transfers: [PROPOSED_TRANSFER],
+    });
+
+    try {
+      render(withClient(<IpDocketPage />));
+
+      await screen.findByTestId("ip-coverage-decisions");
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }),
+      );
+    } finally {
+      if (originalScrollIntoView) {
+        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown })
+          .scrollIntoView;
+      }
+    }
+  });
+
   it("requires a written reason before a decline is sent", async () => {
     fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
     fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [PROPOSED_TRANSFER] });
@@ -666,7 +787,7 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     const band = await screen.findByTestId("ip-coverage-decisions");
-    fireEvent.click(within(band).getByRole("button", { name: "Decline" }));
+    fireEvent.click(await within(band).findByRole("button", { name: "Decline" }));
 
     const confirm = within(band).getByRole("button", { name: "Confirm decline" });
     expect(confirm).toBeDisabled();
@@ -704,7 +825,9 @@ describe("IpDocketPage", () => {
     // Declining an immediate transfer escalates; saying "remains responsible
     // until you accept" here would be false.
     expect(
-      within(band).getByText(/You already hold this deadline\. Declining moves it to Anand Rao\./),
+      await within(band).findByText(
+        /You already hold this deadline\. Declining moves it to Anand Rao\./,
+      ),
     ).toBeVisible();
   });
 });

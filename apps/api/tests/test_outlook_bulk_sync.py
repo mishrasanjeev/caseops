@@ -15,6 +15,9 @@ from sqlalchemy import select
 
 from caseops_api.db.models import CalendarEventSync
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.calendar_projection_safety import (
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+)
 from caseops_api.services.calendar_sync import set_outlook_provider_for_tests
 from tests.test_auth_company import bootstrap_company
 from tests.test_legalworkspace_calendar_sync import (
@@ -224,13 +227,15 @@ def test_outlook_bulk_sync_respects_matter_id_filter_and_tenant_scope(
         set_outlook_provider_for_tests(None)
 
 
-def test_outlook_bulk_sync_per_hearing_failure_records_failed_status(
+def test_outlook_bulk_sync_per_hearing_unknown_create_dead_letters(
     client: TestClient,
 ) -> None:
-    """A provider failure on one hearing is recorded as ``failed`` on
-    that item; the batch summary reflects the failure and persists
-    ``last_error`` on the CalendarEventSync row. The single-hearing
-    API contract stays unchanged."""
+    """A first-create provider exception has no durable event receipt.
+
+    The remote create may have succeeded before the exception reached CaseOps,
+    so the row must remain a non-replayable manual-reconciliation tombstone
+    instead of becoming an automatically retryable ``failed`` row.
+    """
     provider = StubOutlookProvider(fail=True)
     try:
         bootstrap = bootstrap_company(client)
@@ -250,14 +255,21 @@ def test_outlook_bulk_sync_per_hearing_failure_records_failed_status(
         assert body["updated"] == 0
         assert body["failed"] == 1
         item = body["items"][0]
-        assert item["sync_status"] == "failed"
-        assert item["last_error"] is not None
+        assert item["sync_status"] == "dead_letter"
+        assert item["provider_event_id"] is None
+        assert item["last_error"] == "Calendar provider upsert outcome is unknown."
 
         factory = get_session_factory()
         with factory() as session:
             rows = list(session.scalars(select(CalendarEventSync)))
             assert len(rows) == 1
-            assert rows[0].sync_status == "failed"
-            assert rows[0].last_error
+            assert rows[0].sync_status == "dead_letter"
+            assert rows[0].provider_event_id is None
+            assert rows[0].last_error == "Calendar provider upsert outcome is unknown."
+            assert rows[0].next_attempt_at is None
+            assert (
+                rows[0].dead_letter_reason
+                == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+            )
     finally:
         set_outlook_provider_for_tests(None)

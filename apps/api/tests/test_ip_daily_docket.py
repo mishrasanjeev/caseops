@@ -20,6 +20,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.core.settings import get_settings
+from caseops_api.db.models import (
+    CompanyMembership,
+    IpDocketRecord,
+    MatterAccessGrant,
+    MatterDeadline,
+    MatterDeadlineStatus,
+)
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _member
@@ -91,12 +99,14 @@ def _docket_view(client, headers, **params):
 
 
 def _deactivate(client, owner_headers, membership_id):
-    r = client.patch(
-        f"/api/companies/current/users/{membership_id}",
-        headers=owner_headers,
-        json={"is_active": False},
-    )
-    assert r.status_code in {200, 204}, r.text
+    del client, owner_headers
+    # Model a legacy/external deactivation drift. The live endpoint correctly
+    # requires offboarding while operational IP work remains assigned.
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, membership_id)
+        assert membership is not None
+        membership.is_active = False
+        session.commit()
 
 
 def _setup(client: TestClient):
@@ -161,6 +171,51 @@ def test_uj50_normal_triage_daily_docket_and_workload(client: TestClient) -> Non
     assert queues[primary_id]["critical_count"] == 0
     assert queues[primary_id]["unacknowledged_count"] == 0
     assert body["escalations"] == []
+
+
+@pytest.mark.parametrize("terminal_status", ["done", "cancelled"])
+def test_daily_docket_excludes_coverage_for_terminal_operational_deadline(
+    client: TestClient,
+    terminal_status: str,
+) -> None:
+    """DONE/CANCELLED deadlines are history, never assignable daily work."""
+
+    owner_headers, _owner_id, primary_id, _backup_id, matter = _setup(client)
+    docket = _docket(
+        client,
+        owner_headers,
+        matter_id=matter["id"],
+        title=f"Terminal {terminal_status} deadline",
+    )
+    coverages = _coverage(
+        client,
+        owner_headers,
+        docket["id"],
+        matter_id=matter["id"],
+        responsible=primary_id,
+        status="pending",
+    )
+    coverage = coverages[-1]
+
+    before = _docket_view(client, owner_headers).json()
+    assert next(
+        queue for queue in before["queues"] if queue["membership_id"] == primary_id
+    )["assigned_count"] == 1
+
+    # Seed the historical terminal state directly: the generic endpoint must
+    # refuse lifecycle changes once a deadline is owned by IP coverage.
+    with get_session_factory()() as session:
+        deadline = session.get(MatterDeadline, coverage["matter_deadline_id"])
+        assert deadline is not None
+        deadline.status = MatterDeadlineStatus(terminal_status)
+        session.commit()
+
+    after = _docket_view(client, owner_headers)
+    assert after.status_code == 200, after.text
+    body = after.json()
+    assert body["queues"] == []
+    assert body["escalations"] == []
+    assert coverage["id"] not in after.text
 
 
 def test_uj50_exc02_absent_or_disabled_owner_triggers_backup_policy(
@@ -341,6 +396,20 @@ def test_uj50_exc01_restricted_work_contributes_no_leaked_counts(
         title="Secret Docket Mark",
         restricted=True,
     )
+    with get_session_factory()() as session:
+        secret_docket = session.get(IpDocketRecord, secret["id"])
+        assert secret_docket is not None
+        session.add(
+            MatterAccessGrant(
+                company_id=secret_docket.company_id,
+                ip_docket_id=secret_docket.id,
+                membership_id=primary_id,
+                reason="Durable restricted-record access for the assigned owner.",
+                granted_by_membership_id=owner_id,
+            )
+        )
+        secret_docket.access_policy_version += 1
+        session.commit()
     _coverage(
         client, owner_headers, open_docket["id"], matter_id=matter["id"], responsible=primary_id
     )

@@ -5,14 +5,15 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from urllib.parse import quote, urlencode
+from uuid import uuid4
 
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, status
 from jwt import InvalidTokenError
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.settings import get_settings
@@ -24,6 +25,8 @@ from caseops_api.db.models import (
     CalendarSyncSourceType,
     Company,
     CompanyMembership,
+    IpDeadline,
+    IpDeadlineCoverage,
     IpDocketRecord,
     Matter,
     MatterDeadline,
@@ -55,12 +58,26 @@ from caseops_api.schemas.calendar import (
     OutlookTenantConfigurationResponse,
     OutlookTenantConfigurationUpdateRequest,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.calendar_projection_safety import (
+    CALENDAR_UPSERT_CLAIM_PREFIX,
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+    calendar_sync_has_unreceipted_upsert_claim,
+    calendar_sync_replay_safe_clause,
+    calendar_sync_requires_manual_reconciliation,
+    calendar_sync_upsert_claim_state,
+    materialize_expired_calendar_sync_upsert_claim,
+)
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import (
     assert_access,
+    can_access,
     can_access_ip_docket,
     visible_matters_filter,
 )
@@ -69,6 +86,7 @@ from caseops_api.services.notification_delivery import (
     redact_provider_error,
     retry_delay_for_attempt,
 )
+from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import resolve_shared_work_target
 
@@ -79,6 +97,24 @@ _STATE_KINDS = {
     CalendarProvider.GOOGLE_CALENDAR: "google_calendar_oauth",
 }
 _STATE_TTL_MINUTES = 10
+_CALENDAR_PROVIDER_LEASE = timedelta(minutes=5)
+_CALENDAR_UPSERT_CLAIM_PREFIX = CALENDAR_UPSERT_CLAIM_PREFIX
+_CALENDAR_DELETE_CLAIM_PREFIX = "provider_delete_claim:"
+_CALENDAR_DRIFT_CLAIM_PREFIX = "provider_drift_claim:"
+_CALENDAR_OAUTH_CLAIM_KEY = "_caseops_calendar_oauth_claim"
+_CALENDAR_OAUTH_CLAIM_EXPIRES_KEY = "_caseops_calendar_oauth_claim_expires_at"
+
+# These are the only coverage states that confer live projection authority.
+# Historical or terminal coverage rows still classify the source as IP-owned,
+# but they can never fall back to the generic Matter payload/ACL.
+_IP_OPERATIONAL_COVERAGE_STATUSES = {
+    "accepted",
+    "emergency",
+    "escalated",
+    "pending",
+    "reassigned",
+    "transfer_pending",
+}
 
 
 class CalendarProviderError(RuntimeError):
@@ -146,6 +182,78 @@ class CalendarSourcePayload:
     detail_lines: tuple[str, ...]
     category: str
     private_properties: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _IpCalendarProjectionAuthority:
+    """Stable ids needed to reauthorize an IP projection after provider I/O."""
+
+    source_type: str
+    source_id: str
+    docket_id: str
+    ip_deadline_id: str | None = None
+    matter_deadline_id: str | None = None
+    coverage_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _CalendarSourceSnapshot:
+    """Exact child and payload-parent generation dispatched to a provider."""
+
+    source_type: str
+    source_id: str
+    source_values: tuple[tuple[str, object], ...]
+    matter_values: tuple[tuple[str, object], ...] | None
+    docket_values: tuple[tuple[str, object], ...] | None
+
+
+def _snapshot_value(value: object) -> object:
+    if isinstance(value, datetime):
+        return _aware(value).isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return value
+
+
+def _mapped_values(row: object | None) -> tuple[tuple[str, object], ...] | None:
+    if row is None:
+        return None
+    table = row.__table__
+    return tuple(
+        (column.name, _snapshot_value(getattr(row, column.name)))
+        for column in table.columns
+    )
+
+
+def _calendar_source_snapshot(
+    *,
+    source_type: str,
+    source_id: str,
+    source_row: MatterHearing | MatterTask | MatterDeadline,
+    matter: Matter | None,
+    docket: IpDocketRecord | None,
+) -> _CalendarSourceSnapshot:
+    return _CalendarSourceSnapshot(
+        source_type=source_type,
+        source_id=source_id,
+        source_values=_mapped_values(source_row) or (),
+        matter_values=_mapped_values(matter),
+        docket_values=_mapped_values(docket),
+    )
+
+
+def _calendar_source_model(
+    source_type: str,
+) -> type[MatterHearing] | type[MatterTask] | type[MatterDeadline]:
+    if source_type == CalendarSyncSourceType.MATTER_HEARING.value:
+        return MatterHearing
+    if source_type == CalendarSyncSourceType.MATTER_TASK.value:
+        return MatterTask
+    if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        return MatterDeadline
+    raise CalendarProviderError("Unsupported calendar source type.")
 
 
 class OutlookProvider(Protocol):
@@ -1094,6 +1202,46 @@ def _ip_source_payload(
     )
 
 
+def _assert_linked_ip_calendar_access(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    matter: Matter | None = None,
+) -> Matter | None:
+    """Require the IP ACL and, when present, the independent Matter ACL."""
+
+    if (
+        docket.company_id != context.company.id
+        or not docket.is_active
+        or docket.archived_by_matter_disposal
+        or not can_access_ip_docket(session, context=context, docket=docket)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="IP docket record not found.",
+        )
+    if docket.matter_id is None:
+        return None
+    linked_matter = matter or session.scalar(
+        select(Matter).where(
+            Matter.id == docket.matter_id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if (
+        linked_matter is None
+        or not matter_is_operational(linked_matter)
+        or not can_access(session, context=context, matter=linked_matter)
+    ):
+        # Neither side of the independent ACL boundary is disclosed.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Calendar source not found.",
+        )
+    return linked_matter
+
+
 def _ip_source_payload_for(
     session: Session,
     *,
@@ -1113,6 +1261,97 @@ def _ip_source_payload_for(
     else:
         return None
 
+    if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        coverage_rows = list(
+            session.scalars(
+                select(IpDeadlineCoverage)
+                .where(
+                    IpDeadlineCoverage.company_id == context.company.id,
+                    IpDeadlineCoverage.matter_deadline_id == source_id,
+                )
+                .order_by(IpDeadlineCoverage.id)
+            ).all()
+        )
+        if coverage_rows:
+            operational = [
+                coverage
+                for coverage in coverage_rows
+                if str(coverage.coverage_status)
+                in _IP_OPERATIONAL_COVERAGE_STATUSES
+            ]
+            if len(operational) > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_coverage_projection_shared_deadline_unsupported",
+                        "message": (
+                            "A deadline shared by multiple operational IP dockets "
+                            "requires a group calendar projection."
+                        ),
+                        "matter_deadline_id": source_id,
+                        "blocked_coverage_ids": [row.id for row in operational],
+                        "blocked_docket_ids": sorted(
+                            {row.docket_id for row in operational}
+                        ),
+                    },
+                )
+            if not operational:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "code": "ip_coverage_projection_inactive",
+                        "message": "The IP deadline coverage is no longer operational.",
+                    },
+                )
+            coverage = operational[0]
+            linked = session.execute(
+                select(MatterDeadline, IpDocketRecord, Matter)
+                .select_from(MatterDeadline)
+                .join(
+                    IpDocketRecord,
+                    IpDocketRecord.id == coverage.docket_id,
+                )
+                .join(Matter, Matter.id == MatterDeadline.matter_id)
+                .where(
+                    MatterDeadline.id == source_id,
+                    MatterDeadline.company_id == context.company.id,
+                    MatterDeadline.status.in_(("open", "missed")),
+                    IpDocketRecord.company_id == context.company.id,
+                    IpDocketRecord.matter_id == MatterDeadline.matter_id,
+                    Matter.company_id == context.company.id,
+                )
+            ).first()
+            if linked is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "code": "ip_coverage_projection_source_inactive",
+                        "message": "The IP deadline source is no longer operational.",
+                    },
+                )
+            deadline, docket, matter = linked
+            if context.membership.id not in {
+                coverage.responsible_membership_id,
+                coverage.backup_membership_id,
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Calendar source not found.",
+                )
+            _assert_linked_ip_calendar_access(
+                session,
+                context=context,
+                docket=docket,
+                matter=matter,
+            )
+            return _ip_source_payload(
+                source_type=source_type,
+                source_id=source_id,
+                occurs_on=deadline.due_on,
+                category="Deadline",
+                docket=docket,
+            )
+
     row = session.scalar(
         select(model).where(
             model.id == source_id,
@@ -1121,7 +1360,44 @@ def _ip_source_payload_for(
         )
     )
     if row is None:
-        return None
+        if source_type != CalendarSyncSourceType.MATTER_DEADLINE.value:
+            return None
+        linked = session.execute(
+            select(MatterDeadline, IpDeadline, IpDocketRecord, Matter)
+            .join(
+                IpDeadline,
+                IpDeadline.matter_deadline_id == MatterDeadline.id,
+            )
+            .join(IpDocketRecord, IpDocketRecord.id == IpDeadline.docket_id)
+            .join(Matter, Matter.id == MatterDeadline.matter_id)
+            .where(
+                MatterDeadline.id == source_id,
+                MatterDeadline.company_id == context.company.id,
+                MatterDeadline.ip_docket_id.is_(None),
+                MatterDeadline.source_ref_type == "ip_deadline",
+                MatterDeadline.source_ref_id == IpDeadline.id,
+                IpDeadline.company_id == context.company.id,
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.matter_id == MatterDeadline.matter_id,
+                Matter.company_id == context.company.id,
+            )
+        ).first()
+        if linked is None:
+            return None
+        deadline, _legal_deadline, docket, matter = linked
+        _assert_linked_ip_calendar_access(
+            session,
+            context=context,
+            docket=docket,
+            matter=matter,
+        )
+        return _ip_source_payload(
+            source_type=source_type,
+            source_id=source_id,
+            occurs_on=deadline.due_on,
+            category="Deadline",
+            docket=docket,
+        )
     assert row.ip_docket_id is not None
     target = resolve_shared_work_target(
         session,
@@ -1129,6 +1405,11 @@ def _ip_source_payload_for(
         ip_docket_id=row.ip_docket_id,
     )
     assert target.ip_docket is not None
+    _assert_linked_ip_calendar_access(
+        session,
+        context=context,
+        docket=target.ip_docket,
+    )
     if isinstance(row, MatterHearing) and row.status == MatterHearingStatus.CANCELLED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1181,10 +1462,13 @@ def _source_payload_for(
         hearing, matter = row
         assert_access(session, context=context, matter=matter)
         _assert_calendar_matter_operational(matter)
-        if hearing.status == MatterHearingStatus.CANCELLED:
+        if hearing.status not in {
+            MatterHearingStatus.SCHEDULED,
+            MatterHearingStatus.ADJOURNED,
+        }:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cancelled hearings are removed from provider calendars.",
+                detail="Terminal hearings are removed from provider calendars.",
             )
         return _hearing_source_payload(hearing, matter)
 
@@ -1205,10 +1489,14 @@ def _source_payload_for(
         task, matter = row
         assert_access(session, context=context, matter=matter)
         _assert_calendar_matter_operational(matter)
-        if task.due_on is None:
+        if task.due_on is None or task.status not in {
+            MatterTaskStatus.TODO,
+            MatterTaskStatus.IN_PROGRESS,
+            MatterTaskStatus.BLOCKED,
+        }:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Task has no due date and cannot be synced to calendar.",
+                detail="Terminal or undated tasks cannot be synced to calendar.",
             )
         return _task_source_payload(task, matter)
 
@@ -1229,6 +1517,11 @@ def _source_payload_for(
         deadline, matter = row
         assert_access(session, context=context, matter=matter)
         _assert_calendar_matter_operational(matter)
+        if str(deadline.status) not in {"open", "missed"}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Terminal deadlines are removed from provider calendars.",
+            )
         return _deadline_source_payload(deadline, matter)
 
     raise HTTPException(
@@ -1527,11 +1820,244 @@ def _current_admin_connection(
     )
 
 
+def _test_outlook_tenant_configuration_fenced(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> OutlookReadinessTestResponse:
+    """Claim/probe/finalize readiness without holding locks over Graph I/O."""
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required.")
+    require_locked_membership_capability(session, actor, "workspace:admin")
+    context = SessionContext(company=context.company, membership=actor, user=actor.user)
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="outlook_readiness_probe",
+    )
+    row = _ensure_tenant_outlook_configuration(session, context=context)
+    row = session.scalar(
+        select(TenantOutlookConfiguration)
+        .where(
+            TenantOutlookConfiguration.id == row.id,
+            TenantOutlookConfiguration.company_id == context.company.id,
+        )
+        .with_for_update(of=TenantOutlookConfiguration)
+        .execution_options(populate_existing=True)
+    )
+    assert row is not None
+    tested_at = _current_time()
+    status_summary = outlook_tenant_configuration_status(session, context=context)
+    checks = [
+        *(
+            OutlookReadinessCheckResult(
+                key=item.name,
+                label=item.name,
+                status="passed" if item.configured else "blocked",
+            )
+            for item in status_summary.required_config
+        ),
+        *(
+            OutlookReadinessCheckResult(
+                key=item.key,
+                label=item.label,
+                status="passed" if item.approved else "blocked",
+            )
+            for item in status_summary.required_approvals
+        ),
+    ]
+    if status_summary.missing_config_names or status_summary.missing_approval_keys:
+        row.last_test_status = "blocked"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = "Outlook provider readiness prerequisites are incomplete."
+        session.add(row)
+        session.commit()
+        return OutlookReadinessTestResponse(
+            status="blocked",
+            checks=checks,
+            adp20_readiness="blocked_pending_admin_configuration",
+            tested_at=tested_at,
+        )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == context.membership.id,
+            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+            UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    if connection is None:
+        checks.append(
+            OutlookReadinessCheckResult(
+                key="OUTLOOK_USER_CONNECTION",
+                label="Admin Outlook OAuth connection",
+                status="blocked",
+                detail="Connect an Outlook account before running the end-to-end test.",
+            )
+        )
+        row.last_test_status = "blocked"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = "Outlook OAuth connection is required."
+        session.add(row)
+        session.commit()
+        return OutlookReadinessTestResponse(
+            status="blocked",
+            checks=checks,
+            adp20_readiness="blocked_pending_admin_configuration",
+            tested_at=tested_at,
+        )
+    connection_snapshot = (
+        connection.id,
+        str(connection.status),
+        _aware(connection.updated_at),
+        hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
+        connection.provider_account_id,
+    )
+    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    provider = _provider(session, context=context)
+    claim_marker = f"outlook_readiness_claim:{uuid4().hex}"
+    row.last_test_status = "testing"
+    row.last_tested_at = tested_at
+    row.last_error_redacted = claim_marker
+    session.add(row)
+    row_id = row.id
+    connection_id = connection.id
+    session.commit()
+    probe_error: str | None = None
+    try:
+        provider.validate_connection(token_payload=token_payload)
+    except Exception as exc:  # noqa: BLE001 - provider boundary
+        probe_error = _safe_error(exc)
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required.")
+    require_locked_membership_capability(session, actor, "workspace:admin")
+    context = SessionContext(company=context.company, membership=actor, user=actor.user)
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="outlook_readiness_probe",
+    )
+    row = session.scalar(
+        select(TenantOutlookConfiguration)
+        .where(
+            TenantOutlookConfiguration.id == row_id,
+            TenantOutlookConfiguration.company_id == context.company.id,
+        )
+        .with_for_update(of=TenantOutlookConfiguration)
+        .execution_options(populate_existing=True)
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == context.membership.id,
+            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    current_connection_snapshot = (
+        connection.id,
+        str(connection.status),
+        _aware(connection.updated_at),
+        hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
+        connection.provider_account_id,
+    ) if connection is not None else None
+    if (
+        row is None
+        or row.last_test_status != "testing"
+        or row.last_error_redacted != claim_marker
+        or current_connection_snapshot != connection_snapshot
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "outlook_readiness_probe_stale",
+                "message": (
+                    "Outlook configuration, connection, or authority changed "
+                    "during the probe; its result was discarded."
+                ),
+            },
+        )
+    if probe_error is not None:
+        checks.append(
+            OutlookReadinessCheckResult(
+                key="MICROSOFT_GRAPH_ME",
+                label="Microsoft Graph /me probe",
+                status="failed",
+                detail=probe_error,
+            )
+        )
+        row.last_test_status = "failed"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = probe_error
+        audit_action = "outlook.configuration.test_failed"
+        audit_result = "failed"
+    else:
+        checks.append(
+            OutlookReadinessCheckResult(
+                key="MICROSOFT_GRAPH_ME",
+                label="Microsoft Graph /me probe",
+                status="passed",
+            )
+        )
+        row.last_test_status = "passed"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = None
+        audit_action = "outlook.configuration.test_passed"
+        audit_result = "success"
+    record_from_context(
+        session,
+        context,
+        action=audit_action,
+        target_type="tenant_outlook_configuration",
+        target_id=row.id,
+        result=audit_result,
+        metadata={"provider": CalendarProvider.OUTLOOK, "check_count": len(checks)},
+    )
+    session.commit()
+    return OutlookReadinessTestResponse(
+        status="failed" if probe_error is not None else "passed",
+        checks=checks,
+        adp20_readiness=(
+            "blocked_pending_admin_configuration"
+            if probe_error is not None
+            else "ready_for_adp20_implementation"
+        ),
+        tested_at=tested_at,
+    )
+
+
 def test_outlook_tenant_configuration(
     session: Session,
     *,
     context: SessionContext,
 ) -> OutlookReadinessTestResponse:
+    return _test_outlook_tenant_configuration_fenced(
+        session,
+        context=context,
+    )
+
+    # Unreachable legacy body retained below until the guarded implementation
+    # is fully exercised by compatibility tests.
     row = _ensure_tenant_outlook_configuration(session, context=context)
     tested_at = datetime.now(UTC)
     status_summary = outlook_tenant_configuration_status(session, context=context)
@@ -1590,7 +2116,9 @@ def test_outlook_tenant_configuration(
 
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        _provider(session, context=context).validate_connection(
+        provider = _provider(session, context=context)
+        session.commit()
+        provider.validate_connection(
             token_payload=token_payload,
         )
     except Exception as exc:
@@ -1659,8 +2187,6 @@ _GOOGLE_CALENDAR_SYNC_SOURCE_TYPES = (
     CalendarSyncSourceType.MATTER_TASK.value,
     CalendarSyncSourceType.MATTER_DEADLINE.value,
 )
-
-
 def _current_time() -> datetime:
     return datetime.now(UTC)
 
@@ -1669,6 +2195,763 @@ def _aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value
+
+
+def _calendar_claim_marker(prefix: str) -> str:
+    return f"{prefix}{uuid4().hex}"
+
+
+def _calendar_claim_is_live(
+    sync: CalendarEventSync,
+    *,
+    prefix: str,
+    now: datetime,
+) -> bool:
+    return bool(
+        str(sync.dead_letter_reason or "").startswith(prefix)
+        and sync.next_attempt_at is not None
+        and _aware(sync.next_attempt_at) > now
+    )
+
+
+def _materialize_expired_unreceipted_upsert_claim(
+    session: Session,
+    *,
+    context: SessionContext,
+    sync: CalendarEventSync,
+    calendar_provider: CalendarProvider | str,
+    now: datetime | None = None,
+) -> bool:
+    """Fence an ambiguous create before any authority writer can erase it.
+
+    The caller owns the exact Sync row lock and, for deadline projections, its
+    MatterDeadline parent lock.  A live lease remains the claimant's property;
+    only an expired no-receipt create is classified here.
+    """
+
+    current_time = now or _current_time()
+    if not materialize_expired_calendar_sync_upsert_claim(
+        sync,
+        now=current_time,
+    ):
+        return False
+    session.add(sync)
+    if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=sync.source_id,
+        )
+    record_from_context(
+        session,
+        context,
+        action="calendar.sync.claim_expired",
+        target_type="calendar_event_sync",
+        target_id=sync.id,
+        result="failed",
+        metadata={
+            "provider": str(calendar_provider),
+            "source_type": sync.source_type,
+            "source_ref": redact_identifier(sync.source_id),
+        },
+    )
+    return True
+
+
+def materialize_expired_calendar_upsert_claims(
+    session: Session,
+    *,
+    context: SessionContext,
+    calendar_provider: CalendarProvider | None = None,
+    limit: int = 100,
+    now: datetime | None = None,
+) -> int:
+    """Boundedly type expired no-receipt creates without resolving sources.
+
+    Discovery intentionally ignores source existence, lifecycle, type-specific
+    status, and calendar range. Each candidate is then materialized under the
+    normal Membership/User -> source parent -> Sync order, with zero provider
+    I/O, so cancelled/missing/out-of-range work remains operator-selectable.
+    """
+
+    current_time = now or _current_time()
+    filters = [
+        CalendarEventSync.company_id == context.company.id,
+        CalendarEventSync.provider_event_id.is_(None),
+        CalendarEventSync.dead_letter_reason.startswith(
+            _CALENDAR_UPSERT_CLAIM_PREFIX
+        ),
+        or_(
+            CalendarEventSync.next_attempt_at.is_(None),
+            CalendarEventSync.next_attempt_at <= current_time,
+        ),
+        CalendarEventSync.source_type.in_(_GOOGLE_CALENDAR_SYNC_SOURCE_TYPES),
+    ]
+    if calendar_provider is not None:
+        filters.append(UserCalendarConnection.provider == calendar_provider)
+    candidates = list(
+        session.execute(
+            select(
+                CalendarEventSync.id,
+                CalendarEventSync.source_type,
+                CalendarEventSync.source_id,
+                UserCalendarConnection.membership_id,
+                UserCalendarConnection.provider,
+            )
+            .join(
+                UserCalendarConnection,
+                UserCalendarConnection.id
+                == CalendarEventSync.calendar_connection_id,
+            )
+            .where(*filters)
+            .order_by(CalendarEventSync.next_attempt_at, CalendarEventSync.id)
+            .limit(max(1, limit))
+        )
+    )
+    session.commit()
+    materialized = 0
+    for candidate in candidates:
+        lock_company_memberships_for_assignment(
+            session,
+            company_id=context.company.id,
+            membership_ids=(
+                context.membership.id,
+                candidate.membership_id,
+            ),
+        )
+        _lock_calendar_projection_source_parent(
+            session,
+            company_id=context.company.id,
+            source_type=str(candidate.source_type),
+            source_id=candidate.source_id,
+        )
+        sync = session.scalar(
+            select(CalendarEventSync)
+            .where(
+                CalendarEventSync.id == candidate.id,
+                CalendarEventSync.company_id == context.company.id,
+                CalendarEventSync.source_type == candidate.source_type,
+                CalendarEventSync.source_id == candidate.source_id,
+            )
+            .with_for_update(of=CalendarEventSync)
+            .execution_options(populate_existing=True)
+        )
+        if sync is None or not _materialize_expired_unreceipted_upsert_claim(
+            session,
+            context=context,
+            sync=sync,
+            calendar_provider=candidate.provider,
+            now=current_time,
+        ):
+            session.rollback()
+            continue
+        session.commit()
+        materialized += 1
+    return materialized
+
+
+def _classify_existing_upsert_claim_before_source_resolution(
+    session: Session,
+    *,
+    context: SessionContext,
+    source_type: str,
+    source_id: str,
+    calendar_provider: CalendarProvider,
+) -> CalendarEventSyncResponse | None:
+    """Resolve an existing create claim before payload/authority evaluation.
+
+    Source access can disappear while a provider request is in flight.  Looking
+    up the durable claim by its connection/source identity first prevents a
+    later 404, lifecycle tombstone, or access denial from claiming that the
+    unreceipted remote create is absent.
+    """
+
+    connection = session.scalar(
+        select(UserCalendarConnection).where(
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == context.membership.id,
+            UserCalendarConnection.provider == calendar_provider,
+        )
+    )
+    if connection is None:
+        return None
+    advisory_sync = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.calendar_connection_id == connection.id,
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+    )
+    if (
+        advisory_sync is None
+        or not calendar_sync_has_unreceipted_upsert_claim(advisory_sync)
+    ):
+        return None
+
+    # No row lock was taken by the advisory lookup. Acquire the canonical
+    # Membership/User -> source parent -> Sync order, then re-evaluate.
+    lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(connection.membership_id,),
+    )
+    _lock_calendar_projection_source_parent(
+        session,
+        company_id=context.company.id,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == advisory_sync.id,
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.calendar_connection_id == connection.id,
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    if sync is None or not calendar_sync_has_unreceipted_upsert_claim(sync):
+        session.rollback()
+        return None
+    now = _current_time()
+    if _calendar_claim_is_live(
+        sync,
+        prefix=_CALENDAR_UPSERT_CLAIM_PREFIX,
+        now=now,
+    ):
+        response = CalendarEventSyncResponse(sync=_sync_record(sync))
+        session.rollback()
+        return response
+    if not _materialize_expired_unreceipted_upsert_claim(
+        session,
+        context=context,
+        sync=sync,
+        calendar_provider=calendar_provider,
+        now=now,
+    ):  # pragma: no cover - exact locked predicate above
+        session.rollback()
+        return None
+    response = CalendarEventSyncResponse(sync=_sync_record(sync))
+    session.commit()
+    return response
+
+
+def _lock_calendar_projection_source_parent(
+    session: Session,
+    *,
+    company_id: str,
+    source_type: str,
+    source_id: str,
+) -> None:
+    """Fence deadline projection parents before Sync/Connection child locks.
+
+    Coverage cutover takes MatterDeadline -> coverage family -> Sync ->
+    Connection. Provider deletion and poison-row finalization use the same
+    order so their atomic coverage recompute cannot form the reverse edge.
+    """
+
+    if source_type != CalendarSyncSourceType.MATTER_DEADLINE.value:
+        return
+    session.scalar(
+        select(MatterDeadline)
+        .where(
+            MatterDeadline.id == source_id,
+            MatterDeadline.company_id == company_id,
+        )
+        .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
+    )
+    list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == company_id,
+                IpDeadlineCoverage.matter_deadline_id == source_id,
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update(of=IpDeadlineCoverage)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+def _maybe_clear_revoked_calendar_credential(
+    session: Session,
+    *,
+    connection: UserCalendarConnection | None,
+) -> None:
+    """Drop a revoked token only after every possible remote copy is drained.
+
+    The encrypted token is the bounded revocation credential lease.  It is not
+    exposed to workers until an exact sync row is claimed, and is retained when
+    a provider delete is retrying/dead-lettered so revocation never strands a
+    privileged remote calendar copy merely because the first delete failed.
+    """
+
+    if connection is None or connection.status != CalendarConnectionStatus.REVOKED:
+        return
+    outstanding = list(
+        session.scalars(
+            select(CalendarEventSync).where(
+                CalendarEventSync.calendar_connection_id == connection.id,
+                CalendarEventSync.company_id == connection.company_id,
+            )
+        ).all()
+    )
+    if any(
+        (
+            row.provider_event_id is not None
+            and row.sync_status != CalendarEventSyncStatus.DELETED
+        )
+        or str(row.dead_letter_reason or "").startswith(
+            _CALENDAR_UPSERT_CLAIM_PREFIX
+        )
+        or str(row.dead_letter_reason or "").startswith(
+            _CALENDAR_DELETE_CLAIM_PREFIX
+        )
+        or calendar_sync_requires_manual_reconciliation(row)
+        for row in outstanding
+    ):
+        return
+    connection.encrypted_token_ref = None
+    session.add(connection)
+
+
+def _process_calendar_deletion_tombstone_by_id(
+    session: Session,
+    *,
+    context: SessionContext,
+    sync_id: str,
+    expected_connection_id: str,
+) -> tuple[str, bool]:
+    """Claim, call, and finalize one delete without holding a transaction over I/O."""
+
+    now = _current_time()
+    advisory_sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    if advisory_sync is None:
+        session.rollback()
+        return "skipped", False
+    source_type = str(advisory_sync.source_type)
+    source_id = advisory_sync.source_id
+    session.rollback()
+    _lock_calendar_projection_source_parent(
+        session,
+        company_id=context.company.id,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    if (
+        sync is None
+        or sync.calendar_connection_id != expected_connection_id
+        or sync.sync_status != CalendarEventSyncStatus.DELETE_PENDING
+        or (
+            sync.next_attempt_at is not None
+            and _aware(sync.next_attempt_at) > now
+            and not str(sync.dead_letter_reason or "").startswith(
+                _CALENDAR_UPSERT_CLAIM_PREFIX
+            )
+        )
+    ):
+        session.rollback()
+        return "skipped", False
+    if _calendar_claim_is_live(
+        sync,
+        prefix=_CALENDAR_DELETE_CLAIM_PREFIX,
+        now=now,
+    ):
+        session.rollback()
+        return "skipped", False
+    if _calendar_claim_is_live(
+        sync,
+        prefix=_CALENDAR_UPSERT_CLAIM_PREFIX,
+        now=now,
+    ):
+        # Revocation deliberately preserves an in-flight upsert claim.  Its
+        # callback owns publishing the exact returned provider id; a delete
+        # worker must not erase that fence or destroy the retained credential.
+        session.rollback()
+        return "skipped", False
+
+    provider_event_id = sync.provider_event_id
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == expected_connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    if (
+        str(sync.dead_letter_reason or "").startswith(
+            _CALENDAR_UPSERT_CLAIM_PREFIX
+        )
+        and not provider_event_id
+    ):
+        # The lease expired without a provider receipt.  Retrying the create
+        # could duplicate a privileged calendar copy, while clearing the
+        # credential could make an already-created copy impossible to remove.
+        # Preserve both the row and bounded encrypted revocation credential in
+        # a typed manual-repair state.
+        sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+        sync.last_error = "Calendar provider upsert outcome is unknown."
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        sync.durable_last_attempt_at = now
+        session.add(sync)
+        if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+            _recompute_ip_calendar_projection_status(
+                session,
+                company_id=context.company.id,
+                matter_deadline_id=source_id,
+            )
+        record_from_context(
+            session,
+            context,
+            action="calendar.sync.claim_expired",
+            target_type="calendar_event_sync",
+            target_id=sync.id,
+            result="failed",
+            metadata={
+                "provider": connection.provider if connection is not None else None,
+                "source_type": sync.source_type,
+                "source_ref": redact_identifier(sync.source_id),
+                "credential_retained_for_repair": bool(
+                    connection is not None and connection.encrypted_token_ref
+                ),
+            },
+        )
+        _maybe_clear_revoked_calendar_credential(
+            session,
+            connection=connection,
+        )
+        session.commit()
+        return "dead_lettered", False
+    if not provider_event_id:
+        sync.sync_status = CalendarEventSyncStatus.DELETED
+        sync.last_error = None
+        sync.last_synced_at = now
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = None
+        sync.durable_last_attempt_at = now
+        session.add(sync)
+        if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+            _recompute_ip_calendar_projection_status(
+                session,
+                company_id=context.company.id,
+                matter_deadline_id=source_id,
+            )
+        _maybe_clear_revoked_calendar_credential(
+            session,
+            connection=connection,
+        )
+        session.commit()
+        return "deleted", False
+
+    claim_marker = _calendar_claim_marker(_CALENDAR_DELETE_CLAIM_PREFIX)
+    provider: OutlookProvider | None = None
+    token_payload: dict[str, Any] | None = None
+    claim_error: Exception | None = None
+    try:
+        if connection is None:
+            raise CalendarProviderError("Calendar connection no longer exists.")
+        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+        provider = _provider_for(
+            CalendarProvider(connection.provider),
+            session,
+            context=context,
+        )
+    except Exception as exc:  # noqa: BLE001 - credential/provider boundary
+        claim_error = exc
+
+    if claim_error is None:
+        sync.dead_letter_reason = claim_marker
+        sync.next_attempt_at = now + _CALENDAR_PROVIDER_LEASE
+        sync.durable_last_attempt_at = now
+        session.add(sync)
+        session.commit()
+        assert provider is not None and token_payload is not None
+        try:
+            provider.delete_event(
+                token_payload=token_payload,
+                provider_event_id=provider_event_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - provider/network boundary
+            provider_error: Exception | None = exc
+        else:
+            provider_error = None
+    else:
+        provider_error = claim_error
+
+    # Canonical finalize order remains sync -> connection.  A stale callback
+    # can observe a terminal/replaced row, but it can never revive it. For a
+    # deadline projection, reacquire its parent family first: the claim commit
+    # released those locks before provider I/O.
+    _lock_calendar_projection_source_parent(
+        session,
+        company_id=context.company.id,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == expected_connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    if sync is None:
+        session.rollback()
+        return "skipped", claim_error is None
+    if claim_error is None and (
+        sync.sync_status != CalendarEventSyncStatus.DELETE_PENDING
+        or sync.provider_event_id != provider_event_id
+        or sync.dead_letter_reason != claim_marker
+    ):
+        session.rollback()
+        return "skipped", True
+
+    completed_at = _current_time()
+    if provider_error is None:
+        sync.sync_status = CalendarEventSyncStatus.DELETED
+        sync.last_error = None
+        sync.last_synced_at = completed_at
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = None
+        sync.durable_last_attempt_at = completed_at
+        if connection is not None:
+            connection.last_sync_at = completed_at
+            session.add(connection)
+        outcome = "deleted"
+        record_from_context(
+            session,
+            context,
+            action="calendar.deletion_tombstone.completed",
+            target_type="calendar_event_sync",
+            target_id=sync.id,
+            metadata={
+                "provider": connection.provider if connection is not None else None,
+                "source_type": sync.source_type,
+                "source_ref": redact_identifier(sync.source_id),
+                "provider_event_ref": redact_identifier(sync.provider_event_id),
+            },
+        )
+    else:
+        sync.attempts = min(sync.attempts + 1, sync.max_attempts)
+        sync.last_error = redact_provider_error(provider_error)
+        sync.durable_last_attempt_at = completed_at
+        if sync.attempts >= sync.max_attempts:
+            sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+            sync.next_attempt_at = None
+            sync.dead_letter_reason = "provider_delete_retry_limit_exhausted"
+            outcome = "dead_lettered"
+        else:
+            sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+            sync.next_attempt_at = completed_at + retry_delay_for_attempt(sync.attempts)
+            sync.dead_letter_reason = "provider_delete_retry_scheduled"
+            outcome = "retry_scheduled"
+        record_from_context(
+            session,
+            context,
+            action="calendar.deletion_tombstone.failed",
+            target_type="calendar_event_sync",
+            target_id=sync.id,
+            result="failed",
+            metadata={
+                "provider": connection.provider if connection is not None else None,
+                "source_type": sync.source_type,
+                "source_ref": redact_identifier(sync.source_id),
+                "attempts": sync.attempts,
+                "max_attempts": sync.max_attempts,
+                "error": sync.last_error,
+            },
+        )
+    session.add(sync)
+    if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=source_id,
+        )
+    _maybe_clear_revoked_calendar_credential(
+        session,
+        connection=connection,
+    )
+    session.commit()
+    return outcome, claim_error is None
+
+
+def _recompute_ip_calendar_projection_status(
+    session: Session,
+    *,
+    company_id: str,
+    matter_deadline_id: str,
+) -> str | None:
+    """Derive coverage projection state from every current provider row.
+
+    Coverage cutover creates/tombstones durable work, but it cannot claim the
+    provider side is complete. Provider upsert and deletion workers call this
+    after each result so ``projected`` means every connected responsible or
+    backup calendar is synced and every other historical copy is deleted.
+    """
+
+    session.flush()
+    deadline = session.scalar(
+        select(MatterDeadline)
+        .where(
+            MatterDeadline.id == matter_deadline_id,
+            MatterDeadline.company_id == company_id,
+        )
+        .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
+    )
+    if deadline is None:
+        return None
+    coverages = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == company_id,
+                IpDeadlineCoverage.matter_deadline_id == matter_deadline_id,
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update(of=IpDeadlineCoverage)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    operational = [
+        row
+        for row in coverages
+        if str(row.coverage_status) in _IP_OPERATIONAL_COVERAGE_STATUSES
+    ]
+    if not operational:
+        return None
+
+    sync_rows = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .where(
+                CalendarEventSync.company_id == company_id,
+                CalendarEventSync.source_type
+                == CalendarSyncSourceType.MATTER_DEADLINE.value,
+                CalendarEventSync.source_id == matter_deadline_id,
+            )
+            .order_by(CalendarEventSync.calendar_connection_id, CalendarEventSync.id)
+            .with_for_update(of=CalendarEventSync)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    desired_membership_ids = {
+        membership_id
+        for row in operational
+        for membership_id in (
+            row.responsible_membership_id,
+            row.backup_membership_id,
+        )
+        if membership_id is not None
+    }
+    role_connection_ids = set(
+        session.scalars(
+            select(UserCalendarConnection.id).where(
+                UserCalendarConnection.company_id == company_id,
+                UserCalendarConnection.membership_id.in_(
+                    sorted(desired_membership_ids)
+                ),
+            )
+        ).all()
+    )
+    connection_ids = sorted(
+        role_connection_ids
+        | {row.calendar_connection_id for row in sync_rows}
+    )
+    connections = (
+        list(
+            session.scalars(
+                select(UserCalendarConnection)
+                .where(
+                    UserCalendarConnection.company_id == company_id,
+                    UserCalendarConnection.id.in_(connection_ids),
+                )
+                .order_by(UserCalendarConnection.id)
+                .with_for_update(of=UserCalendarConnection)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if connection_ids
+        else []
+    )
+
+    # Shared operational coverage is not supported by this projection slice.
+    # Never let a provider completion accidentally turn an ambiguous group
+    # projection green.
+    if len(operational) != 1:
+        for row in operational:
+            row.calendar_projection_status = "pending"
+            session.add(row)
+        session.flush()
+        return "pending"
+
+    coverage = operational[0]
+    desired_memberships = {
+        membership_id
+        for membership_id in (
+            coverage.responsible_membership_id,
+            coverage.backup_membership_id,
+        )
+        if membership_id is not None
+    }
+    desired_connection_ids = {
+        row.id
+        for row in connections
+        if row.membership_id in desired_memberships
+        and row.status == CalendarConnectionStatus.CONNECTED
+    }
+    sync_by_connection = {row.calendar_connection_id: row for row in sync_rows}
+    projected = all(
+        connection_id in sync_by_connection
+        and sync_by_connection[connection_id].sync_status
+        == CalendarEventSyncStatus.SYNCED
+        for connection_id in desired_connection_ids
+    ) and all(
+        row.sync_status == CalendarEventSyncStatus.DELETED
+        for row in sync_rows
+        if row.calendar_connection_id not in desired_connection_ids
+    )
+    coverage.calendar_projection_status = "projected" if projected else "pending"
+    session.add(coverage)
+    session.flush()
+    return coverage.calendar_projection_status
 
 
 def process_calendar_deletion_tombstones(
@@ -1688,7 +2971,10 @@ def process_calendar_deletion_tombstones(
 
     now = _current_time()
     stmt = (
-        select(CalendarEventSync.id)
+        select(
+            CalendarEventSync.id,
+            CalendarEventSync.calendar_connection_id,
+        )
         .join(
             UserCalendarConnection,
             UserCalendarConnection.id == CalendarEventSync.calendar_connection_id,
@@ -1706,7 +2992,7 @@ def process_calendar_deletion_tombstones(
     )
     if calendar_provider is not None:
         stmt = stmt.where(UserCalendarConnection.provider == calendar_provider)
-    sync_ids = list(session.scalars(stmt))
+    candidates = list(session.execute(stmt).all())
     counters = {
         "examined": 0,
         "deleted": 0,
@@ -1715,102 +3001,26 @@ def process_calendar_deletion_tombstones(
         "provider_calls": 0,
     }
 
-    for sync_id in sync_ids:
-        sync = session.scalar(
-            select(CalendarEventSync)
-            .where(
-                CalendarEventSync.id == sync_id,
-                CalendarEventSync.company_id == context.company.id,
-            )
-            .with_for_update(of=CalendarEventSync)
-            .execution_options(populate_existing=True)
+    # Candidate discovery must not accidentally keep a read transaction open
+    # across the first provider callback.
+    session.commit()
+    for sync_id, expected_connection_id in candidates:
+        outcome, provider_called = _process_calendar_deletion_tombstone_by_id(
+            session,
+            context=context,
+            sync_id=sync_id,
+            expected_connection_id=expected_connection_id,
         )
-        if sync is None or sync.sync_status != CalendarEventSyncStatus.DELETE_PENDING:
-            continue
-        if (
-            sync.next_attempt_at is not None
-            and _aware(sync.next_attempt_at) > _current_time()
-        ):
+        if outcome == "skipped":
             continue
         counters["examined"] += 1
-        connection = session.get(UserCalendarConnection, sync.calendar_connection_id)
-
-        try:
-            if connection is None:
-                raise CalendarProviderError("Calendar connection no longer exists.")
-            if not sync.provider_event_id:
-                # There is no remote artifact to delete; complete the tombstone
-                # without a provider call.
-                sync.sync_status = CalendarEventSyncStatus.DELETED
-            else:
-                token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-                provider_kind = CalendarProvider(connection.provider)
-                counters["provider_calls"] += 1
-                _provider_for(
-                    provider_kind,
-                    session,
-                    context=context,
-                ).delete_event(
-                    token_payload=token_payload,
-                    provider_event_id=sync.provider_event_id,
-                )
-                sync.sync_status = CalendarEventSyncStatus.DELETED
-            completed_at = _current_time()
-            sync.last_error = None
-            sync.last_synced_at = completed_at
-            sync.next_attempt_at = None
-            sync.dead_letter_reason = None
-            sync.durable_last_attempt_at = completed_at
-            if connection is not None:
-                connection.last_sync_at = completed_at
-                session.add(connection)
+        counters["provider_calls"] += int(provider_called)
+        if outcome == "deleted":
             counters["deleted"] += 1
-            record_from_context(
-                session,
-                context,
-                action="calendar.deletion_tombstone.completed",
-                target_type="calendar_event_sync",
-                target_id=sync.id,
-                metadata={
-                    "provider": connection.provider if connection is not None else None,
-                    "source_type": sync.source_type,
-                    "source_ref": redact_identifier(sync.source_id),
-                    "provider_event_ref": redact_identifier(sync.provider_event_id),
-                },
-            )
-        except Exception as exc:
-            failed_at = _current_time()
-            sync.attempts = min(sync.attempts + 1, sync.max_attempts)
-            sync.last_error = redact_provider_error(exc)
-            sync.durable_last_attempt_at = failed_at
-            if sync.attempts >= sync.max_attempts:
-                sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
-                sync.next_attempt_at = None
-                sync.dead_letter_reason = "provider_delete_retry_limit_exhausted"
-                counters["dead_lettered"] += 1
-            else:
-                sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
-                sync.next_attempt_at = failed_at + retry_delay_for_attempt(sync.attempts)
-                sync.dead_letter_reason = "matter_disposed_delete"
-                counters["retry_scheduled"] += 1
-            record_from_context(
-                session,
-                context,
-                action="calendar.deletion_tombstone.failed",
-                target_type="calendar_event_sync",
-                target_id=sync.id,
-                result="failed",
-                metadata={
-                    "provider": connection.provider if connection is not None else None,
-                    "source_type": sync.source_type,
-                    "source_ref": redact_identifier(sync.source_id),
-                    "attempts": sync.attempts,
-                    "max_attempts": sync.max_attempts,
-                    "error": sync.last_error,
-                },
-            )
-        session.add(sync)
-        session.commit()
+        elif outcome == "retry_scheduled":
+            counters["retry_scheduled"] += 1
+        elif outcome == "dead_lettered":
+            counters["dead_lettered"] += 1
 
     return CalendarDeletionProcessResult(**counters)
 
@@ -1832,28 +3042,192 @@ def _default_durable_range() -> tuple[date, date]:
     return start, start + timedelta(days=_DURABLE_OUTLOOK_SYNC_WINDOW_DAYS)
 
 
-def _record_calendar_sync_retry_failure(
+def _record_calendar_sync_retry_failure_fenced(
     session: Session,
     *,
     sync: CalendarEventSync,
     context: SessionContext,
     raw_error: object,
-    calendar_provider: CalendarProvider = CalendarProvider.OUTLOOK,
-    now: datetime | None = None,
+    calendar_provider: CalendarProvider,
+    now: datetime | None,
 ) -> str:
+    """Retry only the exact post-finalize generation under canonical locks."""
+
     current_time = now or _current_time()
-    sync.attempts = min(sync.attempts + 1, sync.max_attempts)
-    sync.last_error = redact_provider_error(raw_error)
-    sync.durable_last_attempt_at = current_time
-    if sync.attempts >= sync.max_attempts:
-        sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
-        sync.next_attempt_at = None
-        sync.dead_letter_reason = "retry_limit_exhausted"
+    sync_id = sync.id
+    company_id = sync.company_id
+    connection_id = sync.calendar_connection_id
+    source_type = str(sync.source_type)
+    source_id = sync.source_id
+    expected_sync = (
+        str(sync.sync_status),
+        sync.dead_letter_reason,
+        sync.provider_event_id,
+        _aware(sync.updated_at),
+        sync.neutralized_by_ip_lifecycle_event_id,
+        sync.neutralized_by_ip_lifecycle_version,
+        sync.neutralized_at,
+    )
+    source_model = _calendar_source_model(source_type)
+    advisory_source = session.scalar(
+        select(source_model).where(
+            source_model.id == source_id,
+            source_model.company_id == company_id,
+        )
+    )
+    # Calendar children do not share one timestamp contract (MatterHearing,
+    # for example, has no ``updated_at``). Fence the retry write with the same
+    # exact mapped generation used by the provider-finalize path instead of a
+    # model-specific timestamp guess.
+    expected_source_values = _mapped_values(advisory_source)
+    matter_id = advisory_source.matter_id if advisory_source is not None else None
+    connection_membership_id = session.scalar(
+        select(UserCalendarConnection.membership_id).where(
+            UserCalendarConnection.id == connection_id,
+            UserCalendarConnection.company_id == company_id,
+        )
+    )
+    session.rollback()
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=company_id,
+        membership_ids=(context.membership.id, connection_membership_id),
+    )
+    connection_membership = (
+        memberships.get(connection_membership_id)
+        if connection_membership_id is not None
+        else None
+    )
+    capability_authorized = False
+    if connection_membership is not None:
+        try:
+            require_locked_membership_capability(
+                session,
+                connection_membership,
+                "calendar:sync",
+            )
+            capability_authorized = True
+        except HTTPException:
+            capability_authorized = False
+    matter = (
+        session.scalar(
+            select(Matter)
+            .where(Matter.id == matter_id, Matter.company_id == company_id)
+            .with_for_update(of=Matter)
+            .execution_options(populate_existing=True)
+        )
+        if matter_id is not None
+        else None
+    )
+    _lock_calendar_projection_source_parent(
+        session,
+        company_id=company_id,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    locked_source = session.scalar(
+        select(source_model)
+        .where(
+            source_model.id == source_id,
+            source_model.company_id == company_id,
+        )
+        .with_for_update(of=source_model)
+        .execution_options(populate_existing=True)
+    )
+    locked_sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == company_id,
+            CalendarEventSync.calendar_connection_id == connection_id,
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    locked_connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection_id,
+            UserCalendarConnection.company_id == company_id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    if locked_sync is None:
+        session.rollback()
+        return "failed"
+    current_sync = (
+        str(locked_sync.sync_status),
+        locked_sync.dead_letter_reason,
+        locked_sync.provider_event_id,
+        _aware(locked_sync.updated_at),
+        locked_sync.neutralized_by_ip_lifecycle_event_id,
+        locked_sync.neutralized_by_ip_lifecycle_version,
+        locked_sync.neutralized_at,
+    )
+    source_stable = bool(
+        locked_source is not None
+        and expected_source_values is not None
+        and _mapped_values(locked_source) == expected_source_values
+        and matter is not None
+        and matter_is_operational(matter)
+    )
+    if isinstance(locked_source, MatterHearing):
+        source_stable = source_stable and locked_source.status in {
+            MatterHearingStatus.SCHEDULED,
+            MatterHearingStatus.ADJOURNED,
+        }
+    elif isinstance(locked_source, MatterTask):
+        source_stable = source_stable and bool(
+            locked_source.due_on is not None
+            and locked_source.status
+            in {
+                MatterTaskStatus.TODO,
+                MatterTaskStatus.IN_PROGRESS,
+                MatterTaskStatus.BLOCKED,
+            }
+        )
+    elif isinstance(locked_source, MatterDeadline):
+        source_stable = source_stable and str(locked_source.status) in {"open", "missed"}
+    if (
+        current_sync != expected_sync
+        or calendar_sync_upsert_claim_state(locked_sync) != "none"
+        or locked_sync.sync_status
+        in {
+            CalendarEventSyncStatus.SYNCED,
+            CalendarEventSyncStatus.DELETE_PENDING,
+            CalendarEventSyncStatus.DELETED,
+        }
+        or locked_connection is None
+        or locked_connection.status != CalendarConnectionStatus.CONNECTED
+        or not capability_authorized
+        or not source_stable
+    ):
+        status_value = str(locked_sync.sync_status)
+        session.rollback()
+        return status_value
+    locked_sync.attempts = min(locked_sync.attempts + 1, locked_sync.max_attempts)
+    locked_sync.last_error = redact_provider_error(raw_error)
+    locked_sync.durable_last_attempt_at = current_time
+    if locked_sync.attempts >= locked_sync.max_attempts:
+        locked_sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+        locked_sync.next_attempt_at = None
+        locked_sync.dead_letter_reason = "retry_limit_exhausted"
     else:
-        sync.sync_status = CalendarEventSyncStatus.RETRY_SCHEDULED
-        sync.next_attempt_at = current_time + retry_delay_for_attempt(sync.attempts)
-        sync.dead_letter_reason = None
-    session.add(sync)
+        locked_sync.sync_status = CalendarEventSyncStatus.RETRY_SCHEDULED
+        locked_sync.next_attempt_at = current_time + retry_delay_for_attempt(
+            locked_sync.attempts
+        )
+        locked_sync.dead_letter_reason = None
+    session.add(locked_sync)
+    if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=company_id,
+            matter_deadline_id=source_id,
+        )
     action_name = (
         "calendar.durable_google_calendar_sync.failed"
         if calendar_provider == CalendarProvider.GOOGLE_CALENDAR
@@ -1864,24 +3238,45 @@ def _record_calendar_sync_retry_failure(
         context,
         action=action_name,
         target_type="calendar_event_sync",
-        target_id=sync.id,
+        target_id=locked_sync.id,
         result="failed",
         metadata={
             "provider": calendar_provider,
-            "source_type": sync.source_type,
-            "source_ref": redact_identifier(sync.source_id),
-            "sync_status": sync.sync_status,
-            "attempts": sync.attempts,
-            "max_attempts": sync.max_attempts,
+            "source_type": locked_sync.source_type,
+            "source_ref": redact_identifier(locked_sync.source_id),
+            "sync_status": locked_sync.sync_status,
+            "attempts": locked_sync.attempts,
+            "max_attempts": locked_sync.max_attempts,
             "retry_scheduled": (
-                sync.sync_status == CalendarEventSyncStatus.RETRY_SCHEDULED
+                locked_sync.sync_status == CalendarEventSyncStatus.RETRY_SCHEDULED
             ),
-            "dead_lettered": sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER,
-            "error": sync.last_error,
+            "dead_lettered": (
+                locked_sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
+            ),
+            "error": locked_sync.last_error,
         },
     )
     session.commit()
-    return str(sync.sync_status)
+    return str(locked_sync.sync_status)
+
+
+def _record_calendar_sync_retry_failure(
+    session: Session,
+    *,
+    sync: CalendarEventSync,
+    context: SessionContext,
+    raw_error: object,
+    calendar_provider: CalendarProvider = CalendarProvider.OUTLOOK,
+    now: datetime | None = None,
+) -> str:
+    return _record_calendar_sync_retry_failure_fenced(
+        session,
+        sync=sync,
+        context=context,
+        raw_error=raw_error,
+        calendar_provider=calendar_provider,
+        now=now,
+    )
 
 
 def _durable_sync_blocked_result(
@@ -1943,6 +3338,8 @@ def _process_durable_hearing_sync(
     stored = session.get(CalendarEventSync, response.sync.id)
     if stored is None:
         return "failed"
+    if calendar_sync_upsert_claim_state(stored) != "none":
+        return str(stored.sync_status)
     if response.sync.sync_status == CalendarEventSyncStatus.SYNCED:
         return "synced"
     if response.sync.sync_status in {
@@ -2000,6 +3397,8 @@ def _process_durable_source_sync(
     stored = session.get(CalendarEventSync, response.sync.id)
     if stored is None:
         return "failed"
+    if calendar_sync_upsert_claim_state(stored) != "none":
+        return str(stored.sync_status)
     if response.sync.sync_status == CalendarEventSyncStatus.SYNCED:
         return "synced"
     if response.sync.sync_status in {
@@ -2080,6 +3479,7 @@ def _replay_durable_outlook_sync_rows(
                         CalendarEventSyncStatus.DEAD_LETTER,
                     )
                 ),
+                calendar_sync_replay_safe_clause(),
             )
             .order_by(CalendarEventSync.updated_at.asc())
             .limit(limit)
@@ -2087,44 +3487,40 @@ def _replay_durable_outlook_sync_rows(
     )
     for sync in rows:
         counters["examined"] += 1
-        if sync.source_type != CalendarSyncSourceType.MATTER_HEARING:
-            counters["skipped"] += 1
-            continue
-        row = session.execute(
-            select(MatterHearing, Matter)
-            .join(Matter, Matter.id == MatterHearing.matter_id)
-            .where(
-                MatterHearing.id == sync.source_id,
-                Matter.company_id == context.company.id,
-                Matter.is_active.is_(True),
-                Matter.status.notin_(("closed", "disposed")),
-                MatterHearing.status.in_(
-                    (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
-                ),
-            )
-        ).first()
-        if row is None:
-            counters["skipped"] += 1
-            continue
-        hearing, matter = row
         connection_context = _membership_context(
             company=sync.connection.company,
             membership=sync.connection.membership,
         )
         try:
-            assert_access(session, context=connection_context, matter=matter)
-        except HTTPException:
+            _source_payload_for(
+                session,
+                context=connection_context,
+                source_type=sync.source_type,
+                source_id=sync.source_id,
+            )
+            outcome = _process_durable_source_sync(
+                session,
+                context=connection_context,
+                connection=sync.connection,
+                source_type=sync.source_type,
+                source_id=sync.source_id,
+                calendar_provider=CalendarProvider.OUTLOOK,
+                replay=True,
+            )
+        except HTTPException as exc:
+            if _dead_letter_invalid_projection_source(
+                session,
+                context=connection_context,
+                connection_id=sync.calendar_connection_id,
+                source_type=str(sync.source_type),
+                source_id=sync.source_id,
+                error=exc,
+            ):
+                counters["dead_lettered"] += 1
             counters["skipped"] += 1
             continue
         counters["provider_calls"] += 1
         counters["replayed"] += 1
-        outcome = _process_durable_hearing_sync(
-            session,
-            context=connection_context,
-            hearing=hearing,
-            connection=sync.connection,
-            replay=True,
-        )
         if outcome == "synced":
             counters["synced"] += 1
         elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
@@ -2171,6 +3567,12 @@ def process_durable_outlook_sync(
     replay_failed_only: bool = False,
     limit: int = 200,
 ) -> DurableOutlookSyncProcessResult:
+    materialized_claims = materialize_expired_calendar_upsert_claims(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.OUTLOOK,
+        limit=limit,
+    )
     process_calendar_deletion_tombstones(
         session,
         context=context,
@@ -2178,10 +3580,24 @@ def process_durable_outlook_sync(
         limit=limit,
     )
     if replay_failed_only:
-        return _replay_durable_outlook_sync_rows(
+        replay_result = _replay_durable_outlook_sync_rows(
             session,
             context=context,
             limit=limit,
+        )
+        return DurableOutlookSyncProcessResult(
+            status=replay_result.status,
+            adp20_readiness=replay_result.adp20_readiness,
+            missing_config_names=replay_result.missing_config_names,
+            missing_approval_keys=replay_result.missing_approval_keys,
+            examined=replay_result.examined + materialized_claims,
+            synced=replay_result.synced,
+            failed=replay_result.failed,
+            retry_scheduled=replay_result.retry_scheduled,
+            dead_lettered=replay_result.dead_lettered + materialized_claims,
+            skipped=replay_result.skipped,
+            replayed=replay_result.replayed,
+            provider_calls=replay_result.provider_calls,
         )
 
     status_summary = outlook_tenant_configuration_status(session, context=context)
@@ -2201,9 +3617,23 @@ def process_durable_outlook_sync(
             },
         )
         session.commit()
-        return _durable_sync_blocked_result(
+        blocked_result = _durable_sync_blocked_result(
             missing_config_names=status_summary.missing_config_names,
             missing_approval_keys=status_summary.missing_approval_keys,
+        )
+        return DurableOutlookSyncProcessResult(
+            status=blocked_result.status,
+            adp20_readiness=blocked_result.adp20_readiness,
+            missing_config_names=blocked_result.missing_config_names,
+            missing_approval_keys=blocked_result.missing_approval_keys,
+            examined=blocked_result.examined + materialized_claims,
+            synced=blocked_result.synced,
+            failed=blocked_result.failed,
+            retry_scheduled=blocked_result.retry_scheduled,
+            dead_lettered=blocked_result.dead_lettered + materialized_claims,
+            skipped=blocked_result.skipped,
+            replayed=blocked_result.replayed,
+            provider_calls=blocked_result.provider_calls,
         )
 
     if range_from is None or range_to is None:
@@ -2216,11 +3646,11 @@ def process_durable_outlook_sync(
         raise ValueError("Durable Outlook sync range exceeds the bounded window.")
 
     counters = {
-        "examined": 0,
+        "examined": materialized_claims,
         "synced": 0,
         "failed": 0,
         "retry_scheduled": 0,
-        "dead_lettered": 0,
+        "dead_lettered": materialized_claims,
         "skipped": 0,
         "replayed": 0,
         "provider_calls": 0,
@@ -2250,6 +3680,69 @@ def process_durable_outlook_sync(
             company=connection.company,
             membership=connection.membership,
         )
+        # Coverage cutover writes one exact PENDING row per assigned calendar.
+        # Drain those durable legal-deadline rows before the legacy hearing
+        # enumeration; never infer a deadline projection merely because its
+        # Matter happens to be visible to the calendar owner.
+        pending_deadlines = _pending_projection_sources(
+            session,
+            connection=connection,
+            source_types=(CalendarSyncSourceType.MATTER_DEADLINE.value,),
+            limit=remaining,
+            range_from=range_from,
+            range_to=range_to,
+        )
+        for source_type, source_id in pending_deadlines:
+            counters["examined"] += 1
+            remaining -= 1
+            try:
+                item = _source_payload_for(
+                    session,
+                    context=connection_context,
+                    source_type=source_type,
+                    source_id=source_id,
+                )
+                _ip_calendar_authority_for_item(session, item=item)
+                if not range_from <= item.occurs_on <= range_to:
+                    counters["skipped"] += 1
+                    continue
+                outcome = _process_durable_source_sync(
+                    session,
+                    context=connection_context,
+                    connection=connection,
+                    source_type=source_type,
+                    source_id=source_id,
+                    calendar_provider=CalendarProvider.OUTLOOK,
+                    replay=False,
+                )
+            except HTTPException as exc:
+                # A stale/shared/now-inaccessible projection is isolated to
+                # this row and cannot abort the tenant's remaining work.
+                if _dead_letter_invalid_projection_source(
+                    session,
+                    context=connection_context,
+                    connection_id=connection.id,
+                    source_type=source_type,
+                    source_id=source_id,
+                    error=exc,
+                ):
+                    counters["dead_lettered"] += 1
+                counters["skipped"] += 1
+                continue
+            if outcome == "skipped":
+                counters["skipped"] += 1
+                continue
+            counters["provider_calls"] += 1
+            if outcome == "synced":
+                counters["synced"] += 1
+            elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
+                counters["retry_scheduled"] += 1
+            elif outcome == CalendarEventSyncStatus.DEAD_LETTER:
+                counters["dead_lettered"] += 1
+            else:
+                counters["failed"] += 1
+        if remaining <= 0:
+            break
         rows = list(
             session.execute(
                 select(MatterHearing, Matter)
@@ -2300,9 +3793,11 @@ def process_durable_outlook_sync(
         target_id=context.company.id,
         metadata={
             "provider": CalendarProvider.OUTLOOK,
-            "source_types": [CalendarSyncSourceType.MATTER_HEARING],
-            "unsupported_source_types": [
+            "source_types": [
+                CalendarSyncSourceType.MATTER_HEARING,
                 CalendarSyncSourceType.MATTER_DEADLINE,
+            ],
+            "unsupported_source_types": [
                 CalendarSyncSourceType.MATTER_TASK,
             ],
             "examined": counters["examined"],
@@ -2438,6 +3933,7 @@ def _replay_durable_google_calendar_sync_rows(
                         CalendarEventSyncStatus.DEAD_LETTER,
                     )
                 ),
+                calendar_sync_replay_safe_clause(),
             )
             .order_by(CalendarEventSync.updated_at.asc())
             .limit(limit)
@@ -2456,20 +3952,29 @@ def _replay_durable_google_calendar_sync_rows(
                 source_type=sync.source_type,
                 source_id=sync.source_id,
             )
-        except HTTPException:
+            outcome = _process_durable_source_sync(
+                session,
+                context=connection_context,
+                connection=sync.connection,
+                source_type=sync.source_type,
+                source_id=sync.source_id,
+                calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+                replay=True,
+            )
+        except HTTPException as exc:
+            if _dead_letter_invalid_projection_source(
+                session,
+                context=connection_context,
+                connection_id=sync.calendar_connection_id,
+                source_type=str(sync.source_type),
+                source_id=sync.source_id,
+                error=exc,
+            ):
+                counters["dead_lettered"] += 1
             counters["skipped"] += 1
             continue
         counters["provider_calls"] += 1
         counters["replayed"] += 1
-        outcome = _process_durable_source_sync(
-            session,
-            context=connection_context,
-            connection=sync.connection,
-            source_type=sync.source_type,
-            source_id=sync.source_id,
-            calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
-            replay=True,
-        )
         if outcome == "synced":
             counters["synced"] += 1
         elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
@@ -2517,6 +4022,12 @@ def process_durable_google_calendar_sync(
     replay_failed_only: bool = False,
     limit: int = 200,
 ) -> DurableOutlookSyncProcessResult:
+    materialized_claims = materialize_expired_calendar_upsert_claims(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+        limit=limit,
+    )
     process_calendar_deletion_tombstones(
         session,
         context=context,
@@ -2524,10 +4035,24 @@ def process_durable_google_calendar_sync(
         limit=limit,
     )
     if replay_failed_only:
-        return _replay_durable_google_calendar_sync_rows(
+        replay_result = _replay_durable_google_calendar_sync_rows(
             session,
             context=context,
             limit=limit,
+        )
+        return DurableOutlookSyncProcessResult(
+            status=replay_result.status,
+            adp20_readiness=replay_result.adp20_readiness,
+            missing_config_names=replay_result.missing_config_names,
+            missing_approval_keys=replay_result.missing_approval_keys,
+            examined=replay_result.examined + materialized_claims,
+            synced=replay_result.synced,
+            failed=replay_result.failed,
+            retry_scheduled=replay_result.retry_scheduled,
+            dead_lettered=replay_result.dead_lettered + materialized_claims,
+            skipped=replay_result.skipped,
+            replayed=replay_result.replayed,
+            provider_calls=replay_result.provider_calls,
         )
 
     provider = _google_calendar_provider(session, context=context)
@@ -2550,9 +4075,23 @@ def process_durable_google_calendar_sync(
             },
         )
         session.commit()
-        return _durable_sync_blocked_result(
+        blocked_result = _durable_sync_blocked_result(
             missing_config_names=missing,
             missing_approval_keys=[],
+        )
+        return DurableOutlookSyncProcessResult(
+            status=blocked_result.status,
+            adp20_readiness=blocked_result.adp20_readiness,
+            missing_config_names=blocked_result.missing_config_names,
+            missing_approval_keys=blocked_result.missing_approval_keys,
+            examined=blocked_result.examined + materialized_claims,
+            synced=blocked_result.synced,
+            failed=blocked_result.failed,
+            retry_scheduled=blocked_result.retry_scheduled,
+            dead_lettered=blocked_result.dead_lettered + materialized_claims,
+            skipped=blocked_result.skipped,
+            replayed=blocked_result.replayed,
+            provider_calls=blocked_result.provider_calls,
         )
 
     if range_from is None or range_to is None:
@@ -2565,11 +4104,11 @@ def process_durable_google_calendar_sync(
         raise ValueError("Durable Google Calendar sync range exceeds the bounded window.")
 
     counters = {
-        "examined": 0,
+        "examined": materialized_claims,
         "synced": 0,
         "failed": 0,
         "retry_scheduled": 0,
-        "dead_lettered": 0,
+        "dead_lettered": materialized_claims,
         "skipped": 0,
         "replayed": 0,
         "provider_calls": 0,
@@ -2607,29 +4146,95 @@ def process_durable_google_calendar_sync(
                 "limit": remaining,
             }
         )
-        for source_type in _GOOGLE_CALENDAR_SYNC_SOURCE_TYPES:
+        # Exact durable deadline rows take priority over legacy enumeration so
+        # a busy Matter with a small batch limit cannot starve an accepted IP
+        # coverage projection indefinitely.
+        durable_source_types = (
+            CalendarSyncSourceType.MATTER_DEADLINE.value,
+            CalendarSyncSourceType.MATTER_HEARING.value,
+            CalendarSyncSourceType.MATTER_TASK.value,
+        )
+        for source_type in durable_source_types:
             if remaining <= 0:
                 break
-            source_rows = _google_bulk_source_payloads(
-                session,
-                context=connection_context,
-                payload=request,
-                connection=connection,
-                source_type=source_type,
-                limit=remaining,
-            )
+            if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+                # Legal-deadline calendars are explicit coverage projections.
+                # The durable worker drains only their exact PENDING rows; it
+                # must not enumerate every Matter-visible deadline and invent
+                # new external copies.
+                source_rows: list[tuple[CalendarSourcePayload, bool]] = []
+                for pending_type, pending_id in _pending_projection_sources(
+                    session,
+                    connection=connection,
+                    source_types=(CalendarSyncSourceType.MATTER_DEADLINE.value,),
+                    limit=remaining,
+                    range_from=range_from,
+                    range_to=range_to,
+                ):
+                    try:
+                        item = _source_payload_for(
+                            session,
+                            context=connection_context,
+                            source_type=pending_type,
+                            source_id=pending_id,
+                        )
+                        _ip_calendar_authority_for_item(session, item=item)
+                    except HTTPException as exc:
+                        if _dead_letter_invalid_projection_source(
+                            session,
+                            context=connection_context,
+                            connection_id=connection.id,
+                            source_type=pending_type,
+                            source_id=pending_id,
+                            error=exc,
+                        ):
+                            counters["dead_lettered"] += 1
+                        counters["examined"] += 1
+                        counters["skipped"] += 1
+                        remaining -= 1
+                        continue
+                    if not range_from <= item.occurs_on <= range_to:
+                        counters["examined"] += 1
+                        counters["skipped"] += 1
+                        remaining -= 1
+                        continue
+                    source_rows.append((item, True))
+            else:
+                source_rows = _google_bulk_source_payloads(
+                    session,
+                    context=connection_context,
+                    payload=request,
+                    connection=connection,
+                    source_type=source_type,
+                    limit=remaining,
+                )
             for item, _was_existing in source_rows:
                 counters["examined"] += 1
                 remaining -= 1
-                outcome = _process_durable_source_sync(
-                    session,
-                    context=connection_context,
-                    connection=connection,
-                    source_type=item.source_type,
-                    source_id=item.source_id,
-                    calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
-                    replay=False,
-                )
+                try:
+                    outcome = _process_durable_source_sync(
+                        session,
+                        context=connection_context,
+                        connection=connection,
+                        source_type=item.source_type,
+                        source_id=item.source_id,
+                        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+                        replay=False,
+                    )
+                except HTTPException as exc:
+                    # One stale/shared authority row never aborts unrelated
+                    # provider work for the company.
+                    if _dead_letter_invalid_projection_source(
+                        session,
+                        context=connection_context,
+                        connection_id=connection.id,
+                        source_type=item.source_type,
+                        source_id=item.source_id,
+                        error=exc,
+                    ):
+                        counters["dead_lettered"] += 1
+                    counters["skipped"] += 1
+                    continue
                 if outcome == "skipped":
                     counters["skipped"] += 1
                     continue
@@ -2870,6 +4475,42 @@ def complete_google_calendar_connection(
     )
 
 
+def _calendar_connection_has_unresolved_remote_work(
+    syncs: list[CalendarEventSync],
+) -> bool:
+    return any(
+        calendar_sync_upsert_claim_state(sync) != "none"
+        or (
+            sync.provider_event_id is not None
+            and sync.sync_status != CalendarEventSyncStatus.DELETED
+        )
+        or sync.sync_status == CalendarEventSyncStatus.DELETE_PENDING
+        or str(sync.dead_letter_reason or "").startswith(
+            _CALENDAR_DELETE_CLAIM_PREFIX
+        )
+        for sync in syncs
+    )
+
+
+def _oauth_claim_from_connection(
+    connection: UserCalendarConnection,
+) -> tuple[dict[str, Any], str | None, datetime | None]:
+    token_payload = (
+        _decrypt_token_payload(connection.encrypted_token_ref)
+        if connection.encrypted_token_ref
+        else {}
+    )
+    marker = str(token_payload.get(_CALENDAR_OAUTH_CLAIM_KEY) or "") or None
+    expiry_raw = token_payload.get(_CALENDAR_OAUTH_CLAIM_EXPIRES_KEY)
+    try:
+        expires_at = datetime.fromisoformat(str(expiry_raw)) if expiry_raw else None
+    except ValueError:
+        expires_at = None
+    if expires_at is not None:
+        expires_at = _aware(expires_at)
+    return token_payload, marker, expires_at
+
+
 def _complete_connection(
     session: Session,
     *,
@@ -2883,8 +4524,130 @@ def _complete_connection(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=provider.unavailable_reason or "Calendar sync is unavailable.",
-        )
+    )
     _verify_state(context, state, provider=calendar_provider)
+    actor_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor = actor_memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active calendar membership is required.",
+        )
+    require_locked_membership_capability(session, actor, "calendar:sync")
+    context = SessionContext(
+        company=context.company,
+        membership=actor,
+        user=actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="calendar_connection_oauth",
+    )
+    advisory_connection = session.scalar(
+        select(UserCalendarConnection).where(
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == context.membership.id,
+            UserCalendarConnection.provider == calendar_provider,
+        )
+    )
+    syncs: list[CalendarEventSync] = []
+    if advisory_connection is not None:
+        syncs = list(
+            session.scalars(
+                select(CalendarEventSync)
+                .where(
+                    CalendarEventSync.company_id == context.company.id,
+                    CalendarEventSync.calendar_connection_id
+                    == advisory_connection.id,
+                )
+                .order_by(CalendarEventSync.id)
+                .with_for_update(of=CalendarEventSync)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        connection = session.scalar(
+            select(UserCalendarConnection)
+            .where(
+                UserCalendarConnection.id == advisory_connection.id,
+                UserCalendarConnection.company_id == context.company.id,
+                UserCalendarConnection.membership_id == context.membership.id,
+                UserCalendarConnection.provider == calendar_provider,
+            )
+            .with_for_update(of=UserCalendarConnection)
+            .execution_options(populate_existing=True)
+        )
+        if connection is None:  # pragma: no cover - exact advisory identity
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Calendar connection changed; restart OAuth.",
+            )
+        if _calendar_connection_has_unresolved_remote_work(syncs):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "calendar_connection_cleanup_required",
+                    "message": (
+                        "Reconcile or drain every prior-account calendar copy "
+                        "before reconnecting this provider."
+                    ),
+                },
+            )
+        prior_token, prior_claim, prior_claim_expires_at = (
+            _oauth_claim_from_connection(connection)
+        )
+        if (
+            prior_claim is not None
+            and prior_claim_expires_at is not None
+            and prior_claim_expires_at > _current_time()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "calendar_oauth_exchange_in_flight",
+                    "message": "A calendar OAuth exchange is already in flight.",
+                },
+            )
+    else:
+        connection = UserCalendarConnection(
+            company_id=context.company.id,
+            membership_id=context.membership.id,
+            provider=calendar_provider,
+            status=CalendarConnectionStatus.ERROR,
+        )
+        session.add(connection)
+        session.flush()
+        prior_token = {}
+    claim_marker = uuid4().hex
+    claim_expires_at = _current_time() + _CALENDAR_PROVIDER_LEASE
+    claim_payload = {
+        **{
+            key: value
+            for key, value in prior_token.items()
+            if key not in {_CALENDAR_OAUTH_CLAIM_KEY, _CALENDAR_OAUTH_CLAIM_EXPIRES_KEY}
+        },
+        _CALENDAR_OAUTH_CLAIM_KEY: claim_marker,
+        _CALENDAR_OAUTH_CLAIM_EXPIRES_KEY: claim_expires_at.isoformat(),
+    }
+    connection.status = CalendarConnectionStatus.ERROR
+    connection.encrypted_token_ref = _encrypt_token_payload(claim_payload)
+    session.add(connection)
+    record_from_context(
+        session,
+        context,
+        action="calendar.connection.oauth_claimed",
+        target_type="user_calendar_connection",
+        target_id=connection.id,
+        metadata={"provider": calendar_provider},
+    )
+    connection_id = connection.id
+    session.commit()
+
+    # The provider exchange is intentionally outside every DB transaction.
     exchanged = provider.exchange_code(code=code)
     token_payload = exchanged.get("token_payload")
     if not isinstance(token_payload, dict):
@@ -2892,22 +4655,74 @@ def _complete_connection(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Calendar OAuth provider returned an invalid token response.",
         )
-    now = datetime.now(UTC)
+
+    final_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    final_actor = final_memberships.get(context.membership.id)
+    if final_actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active calendar membership is required.",
+        )
+    require_locked_membership_capability(session, final_actor, "calendar:sync")
+    context = SessionContext(
+        company=context.company,
+        membership=final_actor,
+        user=final_actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="calendar_connection_oauth",
+    )
+    syncs = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                CalendarEventSync.calendar_connection_id == connection_id,
+            )
+            .order_by(CalendarEventSync.id)
+            .with_for_update(of=CalendarEventSync)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
     connection = session.scalar(
-        select(UserCalendarConnection).where(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection_id,
             UserCalendarConnection.company_id == context.company.id,
             UserCalendarConnection.membership_id == context.membership.id,
             UserCalendarConnection.provider == calendar_provider,
         )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
     )
     if connection is None:
-        connection = UserCalendarConnection(
-            company_id=context.company.id,
-            membership_id=context.membership.id,
-            provider=calendar_provider,
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Calendar connection changed during OAuth; restart the connection.",
         )
-        session.add(connection)
-        session.flush()
+    _, final_claim, _ = _oauth_claim_from_connection(connection)
+    if (
+        connection.status != CalendarConnectionStatus.ERROR
+        or final_claim != claim_marker
+        or _calendar_connection_has_unresolved_remote_work(syncs)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "calendar_oauth_finalize_stale",
+                "message": (
+                    "Calendar authority or cleanup state changed during OAuth; "
+                    "the exchanged credential was discarded."
+                ),
+            },
+        )
+    now = datetime.now(UTC)
     connection.provider_account_id = str(exchanged.get("provider_account_id") or "") or None
     connection.display_email = str(exchanged.get("display_email") or "") or None
     connection.status = CalendarConnectionStatus.CONNECTED
@@ -2944,31 +4759,442 @@ def revoke_connection(
     context: SessionContext,
     connection_id: str,
 ) -> CalendarConnectionRecord:
-    connection = session.scalar(
+    advisory_connection = session.scalar(
         select(UserCalendarConnection).where(
             UserCalendarConnection.id == connection_id,
             UserCalendarConnection.company_id == context.company.id,
             UserCalendarConnection.membership_id == context.membership.id,
         )
     )
+    if advisory_connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Calendar connection not found.",
+        )
+    actor_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor = actor_memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active calendar membership is required.",
+        )
+    require_locked_membership_capability(session, actor, "calendar:sync")
+    context = SessionContext(
+        company=context.company,
+        membership=actor,
+        user=actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="connector_disconnect",
+    )
+    # Canonical order is sync -> connection. Queue every known remote copy
+    # before revoking, and retain the encrypted credential until those exact
+    # deletes drain. An in-flight upsert claim is also fenced: its callback can
+    # only publish DELETE_PENDING and cannot restore CONNECTED/SYNCED state.
+    syncs = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                CalendarEventSync.calendar_connection_id == connection_id,
+            )
+            .order_by(CalendarEventSync.id)
+            .with_for_update(of=CalendarEventSync)
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == context.membership.id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
     if connection is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Calendar connection not found.",
         )
+    now = _current_time()
+    queued_deletes = 0
+    for sync in syncs:
+        claim_state = calendar_sync_upsert_claim_state(sync, now=now)
+        if claim_state == "expired":
+            if _materialize_expired_unreceipted_upsert_claim(
+                session,
+                context=context,
+                sync=sync,
+                calendar_provider=connection.provider,
+                now=now,
+            ):
+                sync.updated_at = now
+            continue
+        if claim_state in {"live", "manual_reconciliation"}:
+            # Preserve the durable unknown-outcome tombstone. Without a
+            # receipt or verified absence, revocation cannot truthfully mark
+            # it deleted or discard the only remaining cleanup credential.
+            session.add(sync)
+            continue
+        upsert_claimed = str(sync.dead_letter_reason or "").startswith(
+            _CALENDAR_UPSERT_CLAIM_PREFIX
+        )
+        if upsert_claimed:
+            # A known-ID update is not an ambiguous create. Revoke can safely
+            # queue the exact provider id immediately; a stale PATCH finalize
+            # cannot replace this tombstone because its claim marker is gone.
+            sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+            sync.next_attempt_at = now
+            sync.dead_letter_reason = "connection_revoked_delete"
+            queued_deletes += 1
+        elif sync.provider_event_id is not None:
+            sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+            sync.next_attempt_at = now
+            sync.dead_letter_reason = "connection_revoked_delete"
+            queued_deletes += 1
+        else:
+            sync.sync_status = CalendarEventSyncStatus.DELETED
+            sync.next_attempt_at = None
+            sync.dead_letter_reason = None
+        sync.updated_at = now
+        session.add(sync)
     connection.status = CalendarConnectionStatus.REVOKED
-    connection.encrypted_token_ref = None
     session.add(connection)
+    _maybe_clear_revoked_calendar_credential(session, connection=connection)
     record_from_context(
         session,
         context,
         action="calendar.connection.revoked",
         target_type="user_calendar_connection",
         target_id=connection.id,
-        metadata={"provider": connection.provider},
+        metadata={
+            "provider": connection.provider,
+            "queued_remote_deletes": queued_deletes,
+            "credential_retained_for_delete": bool(connection.encrypted_token_ref),
+        },
     )
     session.commit()
     return _connection_record(connection)
+
+
+def reconcile_calendar_unknown_outcome(
+    session: Session,
+    *,
+    context: SessionContext,
+    sync_id: str,
+    action: Literal["attach_remote_event", "attest_remote_absence"],
+    expected_updated_at: datetime,
+    expected_status: str,
+    expected_dead_letter_reason: str,
+    expected_provider: str,
+    expected_connection_id: str,
+    expected_source_type: str,
+    expected_source_id: str,
+    evidence_reference: str,
+    provider_event_id: str | None,
+) -> CalendarEventSync:
+    """Resolve one ambiguous provider create using independently verified evidence.
+
+    This command never calls the provider. It records the operator's exact
+    evidence under the normal canonical parent -> source -> Sync -> Connection
+    lock chain, then either drains a verified remote id or closes a verified
+    absence. Generic replay/resolve APIs deliberately cannot perform this
+    transition.
+    """
+
+    evidence = evidence_reference.strip()
+    if len(evidence) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A non-empty reconciliation evidence reference is required.",
+        )
+    advisory = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+    )
+    if advisory is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    advisory_connection = session.scalar(
+        select(UserCalendarConnection).where(
+            UserCalendarConnection.id == advisory.calendar_connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+        )
+    )
+    source_model = _calendar_source_model(str(advisory.source_type))
+    advisory_source = session.scalar(
+        select(source_model).where(
+            source_model.id == advisory.source_id,
+            source_model.company_id == context.company.id,
+        )
+    )
+    matter_ids: set[str] = set()
+    docket_ids: set[str] = set()
+    ip_deadline_ids: set[str] = set()
+    if advisory_source is not None:
+        matter_id = getattr(advisory_source, "matter_id", None)
+        docket_id = getattr(advisory_source, "ip_docket_id", None)
+        if matter_id:
+            matter_ids.add(str(matter_id))
+        if docket_id:
+            docket_ids.add(str(docket_id))
+    if isinstance(advisory_source, MatterDeadline):
+        advisory_coverages = list(
+            session.scalars(
+                select(IpDeadlineCoverage).where(
+                    IpDeadlineCoverage.company_id == context.company.id,
+                    IpDeadlineCoverage.matter_deadline_id == advisory.source_id,
+                )
+            ).all()
+        )
+        docket_ids.update(row.docket_id for row in advisory_coverages)
+        if (
+            advisory_source.source_ref_type == "ip_deadline"
+            and advisory_source.source_ref_id
+        ):
+            ip_deadline_ids.add(advisory_source.source_ref_id)
+    if docket_ids:
+        advisory_dockets = list(
+            session.scalars(
+                select(IpDocketRecord).where(
+                    IpDocketRecord.company_id == context.company.id,
+                    IpDocketRecord.id.in_(sorted(docket_ids)),
+                )
+            ).all()
+        )
+        matter_ids.update(
+            row.matter_id for row in advisory_dockets if row.matter_id is not None
+        )
+    owner_membership_id = (
+        advisory_connection.membership_id
+        if advisory_connection is not None
+        else context.membership.id
+    )
+    session.rollback()
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id, owner_membership_id),
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Capability 'ip:approve' is required.",
+        )
+    require_locked_membership_capability(session, actor, "ip:approve")
+    context = SessionContext(
+        company=context.company,
+        membership=actor,
+        user=actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="calendar_unknown_outcome_reconciliation",
+    )
+    if matter_ids:
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == context.company.id,
+                    Matter.id.in_(sorted(matter_ids)),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+    if docket_ids:
+        list(
+            session.scalars(
+                select(IpDocketRecord)
+                .where(
+                    IpDocketRecord.company_id == context.company.id,
+                    IpDocketRecord.id.in_(sorted(docket_ids)),
+                )
+                .order_by(IpDocketRecord.id)
+                .with_for_update(of=IpDocketRecord)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+    if ip_deadline_ids:
+        list(
+            session.scalars(
+                select(IpDeadline)
+                .where(
+                    IpDeadline.company_id == context.company.id,
+                    IpDeadline.id.in_(sorted(ip_deadline_ids)),
+                )
+                .order_by(IpDeadline.id)
+                .with_for_update(of=IpDeadline)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+    locked_source = session.scalar(
+        select(source_model)
+        .where(
+            source_model.id == expected_source_id,
+            source_model.company_id == context.company.id,
+        )
+        .with_for_update(of=source_model)
+        .execution_options(populate_existing=True)
+    )
+    if expected_source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        list(
+            session.scalars(
+                select(IpDeadlineCoverage)
+                .where(
+                    IpDeadlineCoverage.company_id == context.company.id,
+                    IpDeadlineCoverage.matter_deadline_id == expected_source_id,
+                )
+                .order_by(IpDeadlineCoverage.id)
+                .with_for_update(of=IpDeadlineCoverage)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+    row = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == expected_connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    if row is None or connection is None or locked_source is None:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Calendar reconciliation target changed. Refresh and retry.",
+        )
+    expected_time = _aware(expected_updated_at)
+    current_time = _aware(row.updated_at)
+    claim_state = calendar_sync_upsert_claim_state(row)
+    logical_status = (
+        str(CalendarEventSyncStatus.DEAD_LETTER)
+        if claim_state == "expired"
+        else str(row.sync_status)
+    )
+    logical_reason = (
+        CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        if claim_state == "expired"
+        else row.dead_letter_reason
+    )
+    matches_expected = bool(
+        row.calendar_connection_id == expected_connection_id
+        and str(connection.provider) == expected_provider
+        and str(row.source_type) == expected_source_type
+        and row.source_id == expected_source_id
+        and logical_status == expected_status
+        and logical_reason == expected_dead_letter_reason
+        and current_time == expected_time
+    )
+    if not matches_expected:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "calendar_reconciliation_stale_state",
+                "message": "Calendar reconciliation target changed. Refresh and retry.",
+            },
+        )
+    if claim_state == "expired":
+        materialize_expired_calendar_sync_upsert_claim(row)
+        session.add(row)
+    if not calendar_sync_requires_manual_reconciliation(row):
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "calendar_reconciliation_invalid_state",
+                "message": "Only an unknown calendar create outcome can be reconciled.",
+            },
+        )
+    now = _current_time()
+    if action == "attach_remote_event":
+        exact_remote_id = str(provider_event_id or "").strip()
+        if not exact_remote_id:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A verified provider event id is required.",
+            )
+        row.provider_event_id = exact_remote_id
+        row.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+        row.dead_letter_reason = "manual_reconciliation_remote_event_attached"
+        row.last_error = None
+        row.next_attempt_at = now
+    elif action == "attest_remote_absence":
+        if provider_event_id is not None:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A provider event id is not allowed for an absence attestation.",
+            )
+        row.provider_event_id = None
+        row.sync_status = CalendarEventSyncStatus.DELETED
+        row.dead_letter_reason = None
+        row.last_error = None
+        row.next_attempt_at = None
+        row.last_synced_at = now
+    else:  # pragma: no cover - schema and type boundary
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unsupported calendar reconciliation action.",
+        )
+    row.durable_last_attempt_at = now
+    row.updated_at = now
+    session.add(row)
+    if row.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=row.source_id,
+        )
+    _maybe_clear_revoked_calendar_credential(session, connection=connection)
+    record_from_context(
+        session,
+        context,
+        action="calendar.sync.unknown_outcome_reconciled",
+        target_type="calendar_event_sync",
+        target_id=row.id,
+        metadata={
+            "provider": str(connection.provider),
+            "reconciliation_action": action,
+            "source_type": str(row.source_type),
+            "source_ref": redact_identifier(row.source_id),
+            "evidence_reference": evidence,
+            "remote_event_attached": action == "attach_remote_event",
+        },
+    )
+    session.commit()
+    return row
 
 
 def _connected_outlook_connection(
@@ -3140,36 +5366,466 @@ def _sync_hearing_to_provider(
     )
 
 
+def _ip_calendar_authority_for_item(
+    session: Session,
+    *,
+    item: CalendarSourcePayload,
+) -> _IpCalendarProjectionAuthority | None:
+    if item.ip_docket is None:
+        return None
+    ip_deadline_id: str | None = None
+    coverage_id: str | None = None
+    matter_deadline_id: str | None = None
+    if item.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        matter_deadline_id = item.source_id
+        ip_deadline_id = session.scalar(
+            select(IpDeadline.id).where(
+                IpDeadline.company_id == item.ip_docket.company_id,
+                IpDeadline.docket_id == item.ip_docket.id,
+                IpDeadline.matter_deadline_id == item.source_id,
+            )
+        )
+        operational_coverages = list(
+            session.execute(
+                select(IpDeadlineCoverage.id, IpDeadlineCoverage.docket_id)
+                .where(
+                    IpDeadlineCoverage.company_id == item.ip_docket.company_id,
+                    IpDeadlineCoverage.matter_deadline_id == item.source_id,
+                    IpDeadlineCoverage.coverage_status.in_(
+                        sorted(_IP_OPERATIONAL_COVERAGE_STATUSES)
+                    ),
+                )
+                .order_by(IpDeadlineCoverage.id)
+            ).all()
+        )
+        if len(operational_coverages) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_coverage_projection_shared_deadline_unsupported",
+                    "message": (
+                        "A deadline shared by multiple operational IP dockets "
+                        "requires a group calendar projection."
+                    ),
+                    "matter_deadline_id": item.source_id,
+                    "blocked_coverage_ids": [
+                        row.id for row in operational_coverages
+                    ],
+                    "blocked_docket_ids": sorted(
+                        {row.docket_id for row in operational_coverages}
+                    ),
+                },
+            )
+        if operational_coverages:
+            only_coverage = operational_coverages[0]
+            if only_coverage.docket_id != item.ip_docket.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_calendar_projection_coverage_mismatch",
+                        "message": (
+                            "The deadline coverage belongs to a different IP docket."
+                        ),
+                        "matter_deadline_id": item.source_id,
+                    },
+                )
+            coverage_id = only_coverage.id
+    return _IpCalendarProjectionAuthority(
+        source_type=item.source_type,
+        source_id=item.source_id,
+        docket_id=item.ip_docket.id,
+        ip_deadline_id=ip_deadline_id,
+        matter_deadline_id=matter_deadline_id,
+        coverage_id=coverage_id,
+    )
+
+
+def _pending_projection_sources(
+    session: Session,
+    *,
+    connection: UserCalendarConnection,
+    source_types: tuple[str, ...],
+    limit: int,
+    range_from: date | None = None,
+    range_to: date | None = None,
+) -> list[tuple[str, str]]:
+    """Return exact durable projection rows; never synthesize legal work."""
+
+    if limit <= 0:
+        return []
+    statement = select(
+        CalendarEventSync.source_type,
+        CalendarEventSync.source_id,
+    ).where(
+        CalendarEventSync.company_id == connection.company_id,
+        CalendarEventSync.calendar_connection_id == connection.id,
+        CalendarEventSync.source_type.in_(source_types),
+        CalendarEventSync.sync_status == CalendarEventSyncStatus.PENDING,
+        or_(
+            CalendarEventSync.next_attempt_at.is_(None),
+            CalendarEventSync.next_attempt_at <= _current_time(),
+        ),
+    )
+    if range_from is not None and range_to is not None:
+        # Apply exact-source date eligibility before LIMIT. Otherwise one old
+        # durable deadline can consume every bounded batch forever while a
+        # later in-range projection never reaches the provider.
+        statement = statement.where(
+            or_(
+                and_(
+                    CalendarEventSync.source_type
+                    == CalendarSyncSourceType.MATTER_HEARING.value,
+                    select(MatterHearing.id)
+                    .where(
+                        MatterHearing.id == CalendarEventSync.source_id,
+                        MatterHearing.company_id == connection.company_id,
+                        MatterHearing.hearing_on >= range_from,
+                        MatterHearing.hearing_on <= range_to,
+                    )
+                    .exists(),
+                ),
+                and_(
+                    CalendarEventSync.source_type
+                    == CalendarSyncSourceType.MATTER_TASK.value,
+                    select(MatterTask.id)
+                    .where(
+                        MatterTask.id == CalendarEventSync.source_id,
+                        MatterTask.company_id == connection.company_id,
+                        MatterTask.due_on >= range_from,
+                        MatterTask.due_on <= range_to,
+                    )
+                    .exists(),
+                ),
+                and_(
+                    CalendarEventSync.source_type
+                    == CalendarSyncSourceType.MATTER_DEADLINE.value,
+                    select(MatterDeadline.id)
+                    .where(
+                        MatterDeadline.id == CalendarEventSync.source_id,
+                        MatterDeadline.company_id == connection.company_id,
+                        MatterDeadline.due_on >= range_from,
+                        MatterDeadline.due_on <= range_to,
+                    )
+                    .exists(),
+                ),
+            )
+        )
+    return [
+        (str(source_type), str(source_id))
+        for source_type, source_id in session.execute(
+            statement.order_by(CalendarEventSync.created_at, CalendarEventSync.id).limit(
+                limit
+            )
+        ).all()
+    ]
+
+
+def _dead_letter_invalid_projection_source(
+    session: Session,
+    *,
+    context: SessionContext,
+    connection_id: str,
+    source_type: str,
+    source_id: str,
+    error: HTTPException,
+) -> bool:
+    """Remove one poison durable row while preserving a repairable history."""
+
+    # `_source_payload_for` performed advisory reads before raising. Release
+    # that transaction, then follow the same parent -> Sync ordering as
+    # coverage cutover and provider finalization.
+    session.rollback()
+    lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    _lock_calendar_projection_source_parent(
+        session,
+        company_id=context.company.id,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.calendar_connection_id == connection_id,
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    if sync is None or sync.sync_status in {
+        CalendarEventSyncStatus.SYNCED,
+        CalendarEventSyncStatus.DELETED,
+        CalendarEventSyncStatus.DELETE_PENDING,
+    }:
+        session.rollback()
+        return False
+    if calendar_sync_has_unreceipted_upsert_claim(sync):
+        if _materialize_expired_unreceipted_upsert_claim(
+            session,
+            context=context,
+            sync=sync,
+            calendar_provider=sync.connection.provider,
+        ):
+            session.commit()
+            return True
+        # A still-live claim belongs to the provider worker. Never replace its
+        # receipt fence with an authority poison reason.
+        session.rollback()
+        return False
+    detail = error.detail
+    code = (
+        str(detail.get("code") or f"http_{error.status_code}")
+        if isinstance(detail, dict)
+        else f"http_{error.status_code}"
+    )
+    now = _current_time()
+    sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+    sync.dead_letter_reason = f"projection_authority_invalid:{code}"[:120]
+    sync.last_error = redact_provider_error(code)
+    sync.next_attempt_at = None
+    sync.durable_last_attempt_at = now
+    session.add(sync)
+    if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=source_id,
+        )
+    record_from_context(
+        session,
+        context,
+        action="calendar.projection.authority_invalid",
+        target_type="calendar_event_sync",
+        target_id=sync.id,
+        result="denied",
+        metadata={
+            "source_type": source_type,
+            "source_ref": redact_identifier(source_id),
+            "reason": code,
+        },
+    )
+    session.commit()
+    return True
+
+
+def _assert_initial_ip_calendar_assignment(
+    session: Session,
+    *,
+    authority: _IpCalendarProjectionAuthority | None,
+    connection: UserCalendarConnection,
+) -> None:
+    if authority is None or authority.coverage_id is None:
+        return
+    coverage = session.scalar(
+        select(IpDeadlineCoverage).where(
+            IpDeadlineCoverage.id == authority.coverage_id,
+            IpDeadlineCoverage.docket_id == authority.docket_id,
+            IpDeadlineCoverage.matter_deadline_id == authority.matter_deadline_id,
+        )
+    )
+    if coverage is None or connection.membership_id not in {
+        coverage.responsible_membership_id,
+        coverage.backup_membership_id,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This calendar connection is not assigned to the IP deadline.",
+        )
+
+
 def _post_provider_deletion_winner(
     session: Session,
     *,
     context: SessionContext,
-    matter_id: str,
-    expected_lifecycle_version: int,
+    matter_id: str | None,
+    expected_lifecycle_version: int | None,
+    expected_source_snapshot: _CalendarSourceSnapshot,
+    ip_authority: _IpCalendarProjectionAuthority | None,
     sync_id: str,
     connection: UserCalendarConnection,
     calendar_provider: CalendarProvider,
     provider: OutlookProvider | None,
     token_payload: dict[str, Any] | None,
     returned_provider_event_id: str | None,
+    claim_marker: str | None = None,
 ) -> CalendarEventSyncResponse | None:
-    """Recheck lifecycle/tombstone state after an external provider call.
+    """Reauthorize source, assignee, connection, and tombstone after provider I/O."""
 
-    Provider I/O is necessarily outside the Matter lock.  Disposal can win
-    during that window, so the response is not allowed to blindly overwrite a
-    tombstone with ``SYNCED``/``FAILED``.  Locking parent then sync mirrors the
-    lifecycle writer and closes that TOCTOU window.
-    """
-
-    matter = session.scalar(
-        select(Matter)
-        .where(
-            Matter.id == matter_id,
-            Matter.company_id == context.company.id,
-        )
-        .with_for_update(of=Matter)
-        .execution_options(populate_existing=True)
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(connection.membership_id,),
     )
+    recipient = memberships.get(connection.membership_id)
+    recipient_user = recipient.user if recipient is not None else None
+    recipient_has_sync_capability = False
+    if (
+        recipient is not None
+        and recipient_user is not None
+        and recipient.is_active
+        and recipient_user.is_active
+    ):
+        try:
+            require_locked_membership_capability(
+                session,
+                recipient,
+                "calendar:sync",
+            )
+            recipient_has_sync_capability = True
+        except HTTPException:
+            # Capability loss must win against disclosure/finalization, while
+            # this same locked path must still persist cleanup/UNKNOWN state.
+            recipient_has_sync_capability = False
+    advisory_docket = (
+        session.scalar(
+            select(IpDocketRecord).where(
+                IpDocketRecord.id == ip_authority.docket_id,
+                IpDocketRecord.company_id == context.company.id,
+            )
+        )
+        if ip_authority is not None
+        else None
+    )
+    matter_ids = sorted(
+        {
+            value
+            for value in (
+                matter_id,
+                advisory_docket.matter_id if advisory_docket is not None else None,
+            )
+            if value is not None
+        }
+    )
+    matters = (
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == context.company.id,
+                    Matter.id.in_(matter_ids),
+                )
+                .order_by(Matter.id)
+                .with_for_update(of=Matter)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if matter_ids
+        else []
+    )
+    matter_by_id = {row.id: row for row in matters}
+    matter = matter_by_id.get(matter_id) if matter_id is not None else None
+    docket = (
+        session.scalar(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.id == ip_authority.docket_id,
+                IpDocketRecord.company_id == context.company.id,
+            )
+            .with_for_update(of=IpDocketRecord)
+            .execution_options(populate_existing=True)
+        )
+        if ip_authority is not None
+        else None
+    )
+    ip_deadline = (
+        session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == ip_authority.ip_deadline_id,
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.docket_id == ip_authority.docket_id,
+            )
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        )
+        if ip_authority is not None and ip_authority.ip_deadline_id is not None
+        else None
+    )
+    deadline = (
+        session.scalar(
+            select(MatterDeadline)
+            .where(
+                MatterDeadline.id == ip_authority.matter_deadline_id,
+                MatterDeadline.company_id == context.company.id,
+            )
+            .with_for_update(of=MatterDeadline)
+            .execution_options(populate_existing=True)
+        )
+        if ip_authority is not None and ip_authority.matter_deadline_id is not None
+        else None
+    )
+    source_model = _calendar_source_model(expected_source_snapshot.source_type)
+    source_row: MatterHearing | MatterTask | MatterDeadline | None
+    if (
+        source_model is MatterDeadline
+        and deadline is not None
+        and deadline.id == expected_source_snapshot.source_id
+    ):
+        source_row = deadline
+    else:
+        source_row = session.scalar(
+            select(source_model)
+            .where(
+                source_model.id == expected_source_snapshot.source_id,
+                source_model.company_id == context.company.id,
+            )
+            .with_for_update(of=source_model)
+            .execution_options(populate_existing=True)
+        )
+    coverage_rows = (
+        list(
+            session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                IpDeadlineCoverage.matter_deadline_id
+                == ip_authority.matter_deadline_id,
+                IpDeadlineCoverage.coverage_status.in_(
+                    sorted(_IP_OPERATIONAL_COVERAGE_STATUSES)
+                ),
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update(of=IpDeadlineCoverage)
+            .execution_options(populate_existing=True)
+            ).all()
+        )
+        if ip_authority is not None and ip_authority.matter_deadline_id is not None
+        else []
+    )
+    coverage = next(
+        (
+            row
+            for row in coverage_rows
+            if row.id == ip_authority.coverage_id
+            and row.docket_id == ip_authority.docket_id
+        ),
+        None,
+    ) if ip_authority is not None and ip_authority.coverage_id is not None else None
+    coverage_set_changed = bool(
+        ip_authority is not None
+        and ip_authority.matter_deadline_id is not None
+        and (
+            len(coverage_rows) > 1
+            or (
+                ip_authority.coverage_id is None
+                and bool(coverage_rows)
+            )
+            or (
+                ip_authority.coverage_id is not None
+                and (
+                    len(coverage_rows) != 1
+                    or coverage is None
+                )
+            )
+        )
+    )
+    # Sync precedes connection everywhere, including coverage cutover and the
+    # deletion worker.  This avoids a Connection <-> Sync wait cycle.
     sync = session.scalar(
         select(CalendarEventSync)
         .where(
@@ -3181,6 +5837,42 @@ def _post_provider_deletion_winner(
     )
     if sync is None:
         raise CalendarProviderError("Calendar sync state disappeared after provider call.")
+    if (
+        claim_marker is None
+        and calendar_sync_has_unreceipted_upsert_claim(sync)
+    ):
+        now = _current_time()
+        if _calendar_claim_is_live(
+            sync,
+            prefix=_CALENDAR_UPSERT_CLAIM_PREFIX,
+            now=now,
+        ):
+            response = CalendarEventSyncResponse(sync=_sync_record(sync))
+            session.rollback()
+            return response
+        if _materialize_expired_unreceipted_upsert_claim(
+            session,
+            context=context,
+            sync=sync,
+            calendar_provider=calendar_provider,
+            now=now,
+        ):
+            response = CalendarEventSyncResponse(sync=_sync_record(sync))
+            session.commit()
+            return response
+    stale_claim = bool(
+        claim_marker is not None and sync.dead_letter_reason != claim_marker
+    )
+    locked_connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection.id,
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == connection.membership_id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
 
     deletion_state = sync.sync_status in {
         CalendarEventSyncStatus.DELETE_PENDING,
@@ -3189,53 +5881,205 @@ def _post_provider_deletion_winner(
         sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
         and str(sync.dead_letter_reason or "").startswith("provider_delete_")
     )
-    lifecycle_changed = (
-        matter is None
-        or not matter_is_operational(matter)
-        or matter.lifecycle_version != expected_lifecycle_version
+    lifecycle_changed = bool(
+        matter_id is not None
+        and (
+            matter is None
+            or not matter_is_operational(matter)
+            or matter.lifecycle_version != expected_lifecycle_version
+        )
     )
-    if not deletion_state and not lifecycle_changed:
+    authority_lost = bool(
+        stale_claim
+        or locked_connection is None
+        or locked_connection.status != CalendarConnectionStatus.CONNECTED
+        or recipient is None
+        or recipient_user is None
+        or not recipient.is_active
+        or not recipient_user.is_active
+        or not recipient_has_sync_capability
+    )
+    source_invalid = source_row is None
+    if isinstance(source_row, MatterHearing):
+        source_invalid = source_row.status not in {
+            MatterHearingStatus.SCHEDULED,
+            MatterHearingStatus.ADJOURNED,
+        }
+    elif isinstance(source_row, MatterTask):
+        source_invalid = bool(
+            source_row.due_on is None
+            or source_row.status
+            not in {
+                MatterTaskStatus.TODO,
+                MatterTaskStatus.IN_PROGRESS,
+                MatterTaskStatus.BLOCKED,
+            }
+        )
+    elif isinstance(source_row, MatterDeadline):
+        source_invalid = str(source_row.status) not in {"open", "missed"}
+    source_changed = bool(
+        source_row is None
+        or _calendar_source_snapshot(
+            source_type=expected_source_snapshot.source_type,
+            source_id=expected_source_snapshot.source_id,
+            source_row=source_row,
+            matter=(
+                matter
+                if expected_source_snapshot.matter_values is not None
+                else None
+            ),
+            docket=(
+                docket
+                if expected_source_snapshot.docket_values is not None
+                else None
+            ),
+        )
+        != expected_source_snapshot
+    )
+    authority_lost = authority_lost or source_invalid or source_changed
+    recipient_context = (
+        SessionContext(
+            company=context.company,
+            membership=recipient,
+            user=recipient_user,
+        )
+        if recipient is not None and recipient_user is not None
+        else None
+    )
+    if ip_authority is None and matter_id is not None:
+        # Membership -> Matter -> exact source -> Sync -> Connection is now
+        # locked. Re-evaluate the canonical visibility predicate here so a
+        # grant/team/wall writer that committed before this claim wins and no
+        # provider disclosure starts from the earlier advisory read.
+        authority_lost = authority_lost or bool(
+            matter is None
+            or recipient_context is None
+            or not can_access(
+                session,
+                context=recipient_context,
+                matter=matter,
+            )
+        )
+    if ip_authority is not None:
+        linked_matter = (
+            matter_by_id.get(docket.matter_id)
+            if docket is not None and docket.matter_id is not None
+            else None
+        )
+        authority_lost = authority_lost or bool(
+            docket is None
+            or not docket.is_active
+            or docket.archived_by_matter_disposal
+            or source_invalid
+            or coverage_set_changed
+            or (
+                docket.matter_id is not None
+                and (linked_matter is None or not matter_is_operational(linked_matter))
+            )
+            or (
+                ip_authority.ip_deadline_id is not None
+                and (
+                    ip_deadline is None
+                    or str(ip_deadline.state) not in {"confirmed", "overdue"}
+                    or ip_deadline.matter_deadline_id
+                    != ip_authority.matter_deadline_id
+                )
+            )
+            or (
+                ip_authority.coverage_id is not None
+                and (
+                    coverage is None
+                    or str(coverage.coverage_status)
+                    in {"inactive_lifecycle", "completed"}
+                    or locked_connection is None
+                    or locked_connection.membership_id
+                    not in {
+                        coverage.responsible_membership_id,
+                        coverage.backup_membership_id,
+                    }
+                    or deadline is None
+                    or deadline.assignee_membership_id
+                    != coverage.responsible_membership_id
+                )
+            )
+            or (
+                recipient_context is not None
+                and docket is not None
+                and not can_access_ip_docket(
+                    session,
+                    context=recipient_context,
+                    docket=docket,
+                )
+            )
+            or (
+                recipient_context is not None
+                and linked_matter is not None
+                and not can_access(
+                    session,
+                    context=recipient_context,
+                    matter=linked_matter,
+                )
+            )
+        )
+    if not deletion_state and not lifecycle_changed and not authority_lost:
         return None
 
     now = _current_time()
     cleanup_error: str | None = None
     if returned_provider_event_id:
         # A provider may have created/updated the event after disposal had
-        # already written the tombstone.  Delete that exact returned artifact;
-        # if deletion fails, retain durable DELETE_PENDING work.
+        # already written the tombstone. Persist the exact returned artifact
+        # before any compensation call. The deletion worker claims and commits
+        # this row before doing provider I/O, so a failed compensation can
+        # never be lost with the lifecycle transaction.
         sync.provider_event_id = returned_provider_event_id
-        try:
-            if provider is None or token_payload is None:
-                raise CalendarProviderError(
-                    "Provider response could not be cleaned up after lifecycle change."
-                )
-            provider.delete_event(
-                token_payload=token_payload,
-                provider_event_id=returned_provider_event_id,
+        sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+        sync.last_error = None
+        sync.next_attempt_at = now
+        sync.dead_letter_reason = "calendar_authority_changed_delete"
+        sync.durable_last_attempt_at = now
+        if (
+            locked_connection is not None
+            and locked_connection.encrypted_token_ref is None
+            and token_payload is not None
+        ):
+            # Revocation may have won immediately after the claim. Preserve an
+            # encrypted snapshot of the already-authorized credential until
+            # this exact returned remote id is deleted.
+            locked_connection.encrypted_token_ref = _encrypt_token_payload(
+                token_payload
             )
-        except Exception as exc:
-            cleanup_error = redact_provider_error(exc)
-            sync.attempts = min(sync.attempts + 1, sync.max_attempts)
-            sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
-            sync.last_error = cleanup_error
-            sync.next_attempt_at = now + retry_delay_for_attempt(sync.attempts)
-            sync.dead_letter_reason = "matter_disposed_delete"
-            sync.durable_last_attempt_at = now
-        else:
-            sync.sync_status = CalendarEventSyncStatus.DELETED
-            sync.last_error = None
-            sync.last_synced_at = now
-            sync.next_attempt_at = None
-            sync.dead_letter_reason = None
-            sync.durable_last_attempt_at = now
-            connection.last_sync_at = now
-            session.add(connection)
+            session.add(locked_connection)
+    elif (
+        provider is not None
+        and claim_marker is not None
+        and sync.provider_event_id is None
+    ):
+        # The provider call ran, but no receipt survived. If authority changed
+        # concurrently, claiming that no remote artifact exists would permit
+        # revocation to destroy the only cleanup credential. Preserve a typed
+        # manual-repair tombstone and the already-authorized token snapshot.
+        sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+        sync.last_error = "Calendar provider upsert outcome is unknown."
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+        sync.durable_last_attempt_at = now
+        cleanup_error = "provider_upsert_outcome_unknown"
+        if (
+            locked_connection is not None
+            and locked_connection.encrypted_token_ref is None
+            and token_payload is not None
+        ):
+            locked_connection.encrypted_token_ref = _encrypt_token_payload(
+                token_payload
+            )
+            session.add(locked_connection)
     elif sync.provider_event_id and sync.sync_status != CalendarEventSyncStatus.DELETED:
         # The upsert failed or returned no new id, but a previously-synced
         # remote event still needs the durable worker to remove it.
         sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
         sync.next_attempt_at = now
-        sync.dead_letter_reason = "matter_disposed_delete"
+        sync.dead_letter_reason = "calendar_authority_changed_delete"
     elif sync.sync_status != CalendarEventSyncStatus.DELETED:
         sync.sync_status = CalendarEventSyncStatus.DELETED
         sync.last_error = None
@@ -3244,13 +6088,23 @@ def _post_provider_deletion_winner(
         sync.dead_letter_reason = None
 
     session.add(sync)
+    if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=sync.source_id,
+        )
     record_from_context(
         session,
         context,
-        action="calendar.sync.lifecycle_change_won",
+        action="calendar.sync.authority_change_won",
         target_type="calendar_event_sync",
         target_id=sync.id,
-        matter_id=matter_id,
+        matter_id=(
+            matter_id
+            or (docket.matter_id if docket is not None else None)
+        ),
+        ip_docket_id=docket.id if docket is not None else None,
         result="denied" if cleanup_error else "success",
         metadata={
             "provider": calendar_provider,
@@ -3258,6 +6112,9 @@ def _post_provider_deletion_winner(
             "source_ref": redact_identifier(sync.source_id),
             "sync_status": sync.sync_status,
             "lifecycle_changed": lifecycle_changed,
+            "authority_lost": authority_lost,
+            "source_changed": source_changed,
+            "stale_claim": stale_claim,
             "cleanup_error": cleanup_error,
         },
     )
@@ -3273,6 +6130,15 @@ def _sync_source_to_provider(
     source_id: str,
     calendar_provider: CalendarProvider,
 ) -> CalendarEventSyncResponse:
+    claimed = _classify_existing_upsert_claim_before_source_resolution(
+        session,
+        context=context,
+        source_type=source_type,
+        source_id=source_id,
+        calendar_provider=calendar_provider,
+    )
+    if claimed is not None:
+        return claimed
     item = _source_payload_for(
         session,
         context=context,
@@ -3283,6 +6149,31 @@ def _sync_source_to_provider(
         session,
         context=context,
         calendar_provider=calendar_provider,
+    )
+    ip_authority = _ip_calendar_authority_for_item(session, item=item)
+    source_model = _calendar_source_model(item.source_type)
+    source_row = session.scalar(
+        select(source_model).where(
+            source_model.id == item.source_id,
+            source_model.company_id == context.company.id,
+        )
+    )
+    if source_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Calendar source not found.",
+        )
+    source_snapshot = _calendar_source_snapshot(
+        source_type=item.source_type,
+        source_id=item.source_id,
+        source_row=source_row,
+        matter=item.matter,
+        docket=item.ip_docket,
+    )
+    _assert_initial_ip_calendar_assignment(
+        session,
+        authority=ip_authority,
+        connection=connection,
     )
     sync = session.scalar(
         select(CalendarEventSync).where(
@@ -3311,50 +6202,358 @@ def _sync_source_to_provider(
         if item.ip_docket is not None
         else {}
     )
+    sync_id = sync.id
+    existing_provider_event_id = sync.provider_event_id
+    # Publish the pending row before provider I/O. Coverage/lifecycle writers
+    # can now tombstone it without waiting on an uncommitted unique-key insert;
+    # the post-provider fence below decides which transaction won.
+    session.commit()
+    fenced_memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(connection.membership_id,),
+    )
+    fenced_membership = fenced_memberships.get(connection.membership_id)
+    fenced_user = fenced_membership.user if fenced_membership is not None else None
+    fenced_context = (
+        SessionContext(
+            company=context.company,
+            membership=fenced_membership,
+            user=fenced_user,
+        )
+        if fenced_membership is not None and fenced_user is not None
+        else context
+    )
+    fresh_connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection.id,
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == connection.membership_id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    pre_provider_authorized = bool(
+        fenced_membership is not None
+        and fenced_user is not None
+        and fenced_membership.is_active
+        and fenced_user.is_active
+        and fresh_connection is not None
+        and fresh_connection.status == CalendarConnectionStatus.CONNECTED
+    )
+    if pre_provider_authorized and fenced_membership is not None:
+        try:
+            require_locked_membership_capability(
+                session,
+                fenced_membership,
+                "calendar:sync",
+            )
+        except HTTPException:
+            pre_provider_authorized = False
+    if pre_provider_authorized and matter_id is not None:
+        fresh_matter = session.scalar(
+            select(Matter)
+            .where(
+                Matter.id == matter_id,
+                Matter.company_id == context.company.id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        pre_provider_authorized = bool(
+            fresh_matter is not None
+            and matter_is_operational(fresh_matter)
+            and fresh_matter.lifecycle_version == expected_lifecycle_version
+            and can_access(session, context=fenced_context, matter=fresh_matter)
+        )
+    if pre_provider_authorized and ip_authority is not None:
+        fresh_docket = session.scalar(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.id == ip_authority.docket_id,
+                IpDocketRecord.company_id == context.company.id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        pre_provider_authorized = bool(
+            fresh_docket is not None
+            and fresh_docket.is_active
+            and not fresh_docket.archived_by_matter_disposal
+            and can_access_ip_docket(
+                session,
+                context=fenced_context,
+                docket=fresh_docket,
+            )
+        )
+        if pre_provider_authorized and fresh_docket is not None and fresh_docket.matter_id:
+            fresh_linked_matter = session.scalar(
+                select(Matter)
+                .where(
+                    Matter.id == fresh_docket.matter_id,
+                    Matter.company_id == context.company.id,
+                )
+                .execution_options(populate_existing=True)
+            )
+            pre_provider_authorized = bool(
+                fresh_linked_matter is not None
+                and matter_is_operational(fresh_linked_matter)
+                and can_access(
+                    session,
+                    context=fenced_context,
+                    matter=fresh_linked_matter,
+                )
+            )
+        fresh_deadline = (
+            session.scalar(
+                select(MatterDeadline)
+                .where(
+                    MatterDeadline.id == ip_authority.matter_deadline_id,
+                    MatterDeadline.company_id == context.company.id,
+                )
+                .execution_options(populate_existing=True)
+            )
+            if pre_provider_authorized
+            and ip_authority.matter_deadline_id is not None
+            else None
+        )
+        fresh_ip_deadline = (
+            session.scalar(
+                select(IpDeadline)
+                .where(
+                    IpDeadline.id == ip_authority.ip_deadline_id,
+                    IpDeadline.company_id == context.company.id,
+                    IpDeadline.docket_id == ip_authority.docket_id,
+                    IpDeadline.matter_deadline_id
+                    == ip_authority.matter_deadline_id,
+                )
+                .execution_options(populate_existing=True)
+            )
+            if pre_provider_authorized
+            and ip_authority.ip_deadline_id is not None
+            else None
+        )
+        if pre_provider_authorized and ip_authority.matter_deadline_id is not None:
+            pre_provider_authorized = bool(
+                fresh_deadline is not None
+                and str(fresh_deadline.status) in {"open", "missed"}
+                and (
+                    ip_authority.ip_deadline_id is None
+                    or (
+                        fresh_ip_deadline is not None
+                        and str(fresh_ip_deadline.state) in {"confirmed", "overdue"}
+                    )
+                )
+            )
+        if pre_provider_authorized and ip_authority.matter_deadline_id is not None:
+            fresh_coverages = list(
+                session.scalars(
+                    select(IpDeadlineCoverage)
+                    .where(
+                        IpDeadlineCoverage.company_id == context.company.id,
+                        IpDeadlineCoverage.matter_deadline_id
+                        == ip_authority.matter_deadline_id,
+                        IpDeadlineCoverage.coverage_status.in_(
+                            sorted(_IP_OPERATIONAL_COVERAGE_STATUSES)
+                        ),
+                    )
+                    .order_by(IpDeadlineCoverage.id)
+                    .execution_options(populate_existing=True)
+                ).all()
+            )
+            fresh_coverage = next(
+                (
+                    row
+                    for row in fresh_coverages
+                    if row.id == ip_authority.coverage_id
+                    and row.docket_id == ip_authority.docket_id
+                ),
+                None,
+            )
+            if ip_authority.coverage_id is None:
+                pre_provider_authorized = not fresh_coverages
+            else:
+                pre_provider_authorized = bool(
+                    len(fresh_coverages) == 1
+                    and fresh_coverage is not None
+                    and fresh_connection is not None
+                    and fresh_connection.membership_id
+                    in {
+                        fresh_coverage.responsible_membership_id,
+                        fresh_coverage.backup_membership_id,
+                    }
+                    and fresh_deadline is not None
+                    and fresh_deadline.assignee_membership_id
+                    == fresh_coverage.responsible_membership_id
+                )
+    if not pre_provider_authorized:
+        deletion_response = _post_provider_deletion_winner(
+            session,
+            context=context,
+            matter_id=matter_id,
+            expected_lifecycle_version=expected_lifecycle_version,
+            expected_source_snapshot=source_snapshot,
+            ip_authority=ip_authority,
+            sync_id=sync_id,
+            connection=connection,
+            calendar_provider=calendar_provider,
+            provider=None,
+            token_payload=None,
+            returned_provider_event_id=None,
+        )
+        if deletion_response is None:  # pragma: no cover - locked checks agree
+            raise CalendarProviderError("Calendar authority changed before provider call.")
+        return deletion_response
+    assert fresh_connection is not None
+
+    # Re-run the authoritative check with the full canonical lock chain, then
+    # persist a bounded claim.  The commit is the serialization point with
+    # lifecycle, coverage, access, employee-deactivation, and connection
+    # revocation writers; no lock or transaction survives into provider I/O.
+    deletion_response = _post_provider_deletion_winner(
+        session,
+        context=context,
+        matter_id=matter_id,
+        expected_lifecycle_version=expected_lifecycle_version,
+        expected_source_snapshot=source_snapshot,
+        ip_authority=ip_authority,
+        sync_id=sync_id,
+        connection=connection,
+        calendar_provider=calendar_provider,
+        provider=None,
+        token_payload=None,
+        returned_provider_event_id=None,
+    )
+    if deletion_response is not None:
+        return deletion_response
+    sync = session.get(CalendarEventSync, sync_id)
+    if sync is None:  # pragma: no cover - locked by the authority check
+        raise CalendarProviderError("Calendar sync state disappeared before provider call.")
+    claim_now = _current_time()
+    if _calendar_claim_is_live(
+        sync,
+        prefix=_CALENDAR_UPSERT_CLAIM_PREFIX,
+        now=claim_now,
+    ):
+        response = CalendarEventSyncResponse(sync=_sync_record(sync))
+        session.rollback()
+        return response
+    if _materialize_expired_unreceipted_upsert_claim(
+        session,
+        context=context,
+        sync=sync,
+        calendar_provider=calendar_provider,
+        now=claim_now,
+    ):
+        session.commit()
+        return CalendarEventSyncResponse(sync=_sync_record(sync))
+    claim_marker = _calendar_claim_marker(_CALENDAR_UPSERT_CLAIM_PREFIX)
+    sync.sync_status = CalendarEventSyncStatus.PENDING
+    sync.dead_letter_reason = claim_marker
+    sync.next_attempt_at = claim_now + _CALENDAR_PROVIDER_LEASE
+    sync.durable_last_attempt_at = claim_now
+    session.add(sync)
+    if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=sync.source_id,
+        )
+    encrypted_token_ref = fresh_connection.encrypted_token_ref
     provider: OutlookProvider | None = None
     token_payload: dict[str, Any] | None = None
     try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+        token_payload = _decrypt_token_payload(encrypted_token_ref)
         provider = _provider_for(calendar_provider, session, context=context)
+    except Exception as exc:
+        sync.sync_status = CalendarEventSyncStatus.FAILED
+        sync.last_error = _safe_error(exc)
+        sync.dead_letter_reason = None
+        sync.next_attempt_at = None
+        session.add(sync)
+        if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+            _recompute_ip_calendar_projection_status(
+                session,
+                company_id=context.company.id,
+                matter_deadline_id=sync.source_id,
+            )
+        session.commit()
+        return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+    # Snapshot every ORM attribute used by provider adapters before commit.
+    # Session factories use expire_on_commit=False, and the callback receives
+    # no operation that can lazily query the database.
+    hearing = (
+        session.get(MatterHearing, item.source_id)
+        if item.matter is not None
+        and item.source_type == CalendarSyncSourceType.MATTER_HEARING.value
+        else None
+    )
+    session.commit()
+    try:
         if (
             item.matter is not None
             and item.source_type == CalendarSyncSourceType.MATTER_HEARING.value
             and hasattr(provider, "upsert_hearing_event")
         ):
-            hearing = session.get(MatterHearing, item.source_id)
             if hearing is None:
                 raise CalendarProviderError("Hearing disappeared before sync.")
             provider_event_id = provider.upsert_hearing_event(
                 token_payload=token_payload,
                 hearing=hearing,
                 matter=item.matter,
-                existing_provider_event_id=sync.provider_event_id,
+                existing_provider_event_id=existing_provider_event_id,
             )
         else:
             provider_event_id = provider.upsert_calendar_item(
                 token_payload=token_payload,
                 item=item,
-                existing_provider_event_id=sync.provider_event_id,
+                existing_provider_event_id=existing_provider_event_id,
             )
     except Exception as exc:
-        if matter_id is not None and expected_lifecycle_version is not None:
-            deletion_response = _post_provider_deletion_winner(
-                session,
-                context=context,
-                matter_id=matter_id,
-                expected_lifecycle_version=expected_lifecycle_version,
-                sync_id=sync.id,
-                connection=connection,
-                calendar_provider=calendar_provider,
-                provider=provider,
-                token_payload=token_payload,
-                returned_provider_event_id=None,
-            )
-            if deletion_response is not None:
-                return deletion_response
-        sync.sync_status = CalendarEventSyncStatus.FAILED
-        sync.last_error = _safe_error(exc)
+        deletion_response = _post_provider_deletion_winner(
+            session,
+            context=context,
+            matter_id=matter_id,
+            expected_lifecycle_version=expected_lifecycle_version,
+            expected_source_snapshot=source_snapshot,
+            ip_authority=ip_authority,
+            sync_id=sync_id,
+            connection=connection,
+            calendar_provider=calendar_provider,
+            provider=provider,
+            token_payload=token_payload,
+            returned_provider_event_id=None,
+            claim_marker=claim_marker,
+        )
+        if deletion_response is not None:
+            return deletion_response
+        sync = session.get(CalendarEventSync, sync_id)
+        if sync is None:  # pragma: no cover - protected by the locked recheck
+            raise CalendarProviderError(
+                "Calendar sync state disappeared after provider call."
+            ) from exc
+        sync.sync_status = (
+            CalendarEventSyncStatus.DEAD_LETTER
+            if existing_provider_event_id is None
+            else CalendarEventSyncStatus.FAILED
+        )
+        sync.last_error = (
+            "Calendar provider upsert outcome is unknown."
+            if existing_provider_event_id is None
+            else _safe_error(exc)
+        )
+        sync.dead_letter_reason = (
+            CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+            if existing_provider_event_id is None
+            else None
+        )
+        sync.next_attempt_at = None
         session.add(sync)
+        if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+            _recompute_ip_calendar_projection_status(
+                session,
+                company_id=context.company.id,
+                matter_deadline_id=sync.source_id,
+            )
         record_from_context(
             session,
             context,
@@ -3374,25 +6573,37 @@ def _sync_source_to_provider(
         session.commit()
         return CalendarEventSyncResponse(sync=_sync_record(sync))
 
-    if matter_id is not None and expected_lifecycle_version is not None:
-        deletion_response = _post_provider_deletion_winner(
-            session,
-            context=context,
-            matter_id=matter_id,
-            expected_lifecycle_version=expected_lifecycle_version,
-            sync_id=sync.id,
-            connection=connection,
-            calendar_provider=calendar_provider,
-            provider=provider,
-            token_payload=token_payload,
-            returned_provider_event_id=provider_event_id,
-        )
-        if deletion_response is not None:
-            return deletion_response
+    deletion_response = _post_provider_deletion_winner(
+        session,
+        context=context,
+        matter_id=matter_id,
+        expected_lifecycle_version=expected_lifecycle_version,
+        expected_source_snapshot=source_snapshot,
+        ip_authority=ip_authority,
+        sync_id=sync_id,
+        connection=connection,
+        calendar_provider=calendar_provider,
+        provider=provider,
+        token_payload=token_payload,
+        returned_provider_event_id=provider_event_id,
+        claim_marker=claim_marker,
+    )
+    if deletion_response is not None:
+        if deletion_response.sync.sync_status == CalendarEventSyncStatus.DELETE_PENDING:
+            _process_calendar_deletion_tombstone_by_id(
+                session,
+                context=context,
+                sync_id=sync_id,
+                expected_connection_id=connection.id,
+            )
+            refreshed = session.get(CalendarEventSync, sync_id)
+            if refreshed is not None:
+                return CalendarEventSyncResponse(sync=_sync_record(refreshed))
+        return deletion_response
 
     # _post_provider_deletion_winner refreshed and locked this row.  Resolve it
     # again from the identity map so the success write targets the fresh state.
-    sync = session.get(CalendarEventSync, sync.id)
+    sync = session.get(CalendarEventSync, sync_id)
     if sync is None:  # pragma: no cover - protected by the locked recheck
         raise CalendarProviderError("Calendar sync state disappeared after provider call.")
     now = datetime.now(UTC)
@@ -3410,6 +6621,12 @@ def _sync_source_to_provider(
     sync.drift_detail = None
     connection.last_sync_at = now
     session.add_all([sync, connection])
+    if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        _recompute_ip_calendar_projection_status(
+            session,
+            company_id=context.company.id,
+            matter_deadline_id=sync.source_id,
+        )
     record_from_context(
         session,
         context,
@@ -3476,63 +6693,37 @@ def _delete_hearing_from_provider(
         )
     if sync.sync_status == CalendarEventSyncStatus.DELETED:
         return CalendarEventSyncResponse(sync=_sync_record(sync))
-
-    try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        _provider_for(
-            calendar_provider,
-            session,
-            context=context,
-        ).delete_event(
-            token_payload=token_payload,
-            provider_event_id=sync.provider_event_id,
-        )
-    except Exception as exc:
-        sync.sync_status = CalendarEventSyncStatus.FAILED
-        sync.last_error = _safe_error(exc)
-        session.add(sync)
+    sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+    sync.next_attempt_at = _current_time()
+    sync.dead_letter_reason = "explicit_hearing_delete"
+    session.add(sync)
+    session.commit()
+    _process_calendar_deletion_tombstone_by_id(
+        session,
+        context=context,
+        sync_id=sync.id,
+        expected_connection_id=connection.id,
+    )
+    refreshed = session.get(CalendarEventSync, sync.id)
+    if refreshed is None:  # pragma: no cover - FK-protected row
+        raise CalendarProviderError("Calendar sync state disappeared during deletion.")
+    if refreshed.sync_status == CalendarEventSyncStatus.DELETED:
         record_from_context(
             session,
             context,
-            action="calendar.sync.delete_failed",
+            action="calendar.sync.deleted",
             target_type="calendar_event_sync",
-            target_id=sync.id,
+            target_id=refreshed.id,
             matter_id=matter.id,
-            result="failed",
             metadata={
                 "provider": calendar_provider,
                 "source_type": CalendarSyncSourceType.MATTER_HEARING,
                 "source_id": hearing.id,
-                "error": sync.last_error,
+                "provider_event_id": refreshed.provider_event_id,
             },
         )
         session.commit()
-        return CalendarEventSyncResponse(sync=_sync_record(sync))
-
-    now = datetime.now(UTC)
-    sync.sync_status = CalendarEventSyncStatus.DELETED
-    sync.last_error = None
-    sync.last_synced_at = now
-    sync.next_attempt_at = None
-    sync.dead_letter_reason = None
-    connection.last_sync_at = now
-    session.add_all([sync, connection])
-    record_from_context(
-        session,
-        context,
-        action="calendar.sync.deleted",
-        target_type="calendar_event_sync",
-        target_id=sync.id,
-        matter_id=matter.id,
-        metadata={
-            "provider": calendar_provider,
-            "source_type": CalendarSyncSourceType.MATTER_HEARING,
-            "source_id": hearing.id,
-            "provider_event_id": sync.provider_event_id,
-        },
-    )
-    session.commit()
-    return CalendarEventSyncResponse(sync=_sync_record(sync))
+    return CalendarEventSyncResponse(sync=_sync_record(refreshed))
 
 
 def delete_synced_hearing_events_for_context(
@@ -3579,60 +6770,26 @@ def delete_synced_hearing_events_for_context(
                 CalendarEventSync.sync_status != CalendarEventSyncStatus.DELETED,
                 UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
             )
+            .order_by(CalendarEventSync.id)
+            .with_for_update(of=CalendarEventSync)
+            .execution_options(populate_existing=True)
         )
     )
-    deleted_count = 0
-    now = datetime.now(UTC)
+    queued: list[tuple[str, str]] = []
+    now = _current_time()
     for sync in syncs:
-        provider_event_id = sync.provider_event_id
-        if not provider_event_id:
+        if not sync.provider_event_id:
             continue
-        try:
-            token_payload = _decrypt_token_payload(sync.connection.encrypted_token_ref)
-            _provider_for(
-                CalendarProvider(sync.connection.provider),
-                session,
-                context=context,
-            ).delete_event(
-                token_payload=token_payload,
-                provider_event_id=provider_event_id,
-            )
-        except Exception as exc:
-            sync.sync_status = CalendarEventSyncStatus.FAILED
-            sync.last_error = _safe_error(exc)
-            sync.updated_at = now
-            session.add(sync)
-            record_from_context(
-                session,
-                context,
-                action="calendar.sync.auto_delete_failed",
-                target_type="calendar_event_sync",
-                target_id=sync.id,
-                matter_id=matter_id,
-                result="failed",
-                metadata={
-                    "provider": sync.connection.provider,
-                    "source_type": CalendarSyncSourceType.MATTER_HEARING,
-                    "source_id": hearing_id,
-                    "reason": "hearing_cancelled",
-                    "error": sync.last_error,
-                    **target_metadata,
-                },
-            )
-            continue
-        sync.sync_status = CalendarEventSyncStatus.DELETED
-        sync.last_error = None
-        sync.last_synced_at = now
-        sync.next_attempt_at = None
-        sync.dead_letter_reason = None
+        sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
+        sync.next_attempt_at = now
+        sync.dead_letter_reason = "hearing_cancelled_delete"
         sync.updated_at = now
-        sync.connection.last_sync_at = now
-        session.add_all([sync, sync.connection])
-        deleted_count += 1
+        session.add(sync)
+        queued.append((sync.id, sync.calendar_connection_id))
         record_from_context(
             session,
             context,
-            action="calendar.sync.auto_deleted",
+            action="calendar.sync.auto_delete_queued",
             target_type="calendar_event_sync",
             target_id=sync.id,
             matter_id=matter_id,
@@ -3641,13 +6798,20 @@ def delete_synced_hearing_events_for_context(
                 "source_type": CalendarSyncSourceType.MATTER_HEARING,
                 "source_id": hearing_id,
                 "reason": "hearing_cancelled",
-                "provider_event_id": provider_event_id,
+                "provider_event_ref": redact_identifier(sync.provider_event_id),
                 **target_metadata,
             },
         )
     if commit:
         session.commit()
-    return deleted_count
+        for sync_id, connection_id in queued:
+            _process_calendar_deletion_tombstone_by_id(
+                session,
+                context=context,
+                sync_id=sync_id,
+                expected_connection_id=connection_id,
+            )
+    return len(queued)
 
 
 def resync_synced_hearing_events_for_context(
@@ -4213,6 +7377,36 @@ class CalendarDriftFinding:
     detail: str
 
 
+@dataclass(frozen=True, slots=True)
+class _CalendarDriftSourceGeneration:
+    """Every authority/payload value covered by one provider read claim."""
+
+    source_snapshot: _CalendarSourceSnapshot
+    ip_authority: _IpCalendarProjectionAuthority
+    linked_matter_values: tuple[tuple[str, object], ...] | None
+    coverage_values: tuple[
+        tuple[str, tuple[tuple[str, object], ...]], ...
+    ]
+    ip_deadline_values: tuple[tuple[str, object], ...] | None
+    occurs_on: date
+
+
+@dataclass(frozen=True, slots=True)
+class _CalendarDriftClaim:
+    """Committed lease and immutable inputs for one provider GET."""
+
+    sync_id: str
+    connection_id: str
+    owner_membership_id: str
+    provider_event_id: str
+    claim_marker: str
+    source_type: str
+    source_id: str
+    generation: _CalendarDriftSourceGeneration
+    connection_snapshot: tuple[object, ...]
+    reader: Any | None
+
+
 def _drift_provider_reader(
     session: Session,
     *,
@@ -4249,7 +7443,501 @@ def _drift_provider_reader(
     return _read
 
 
-def check_ip_calendar_projection_drift(
+def _calendar_drift_source_generation(
+    session: Session,
+    *,
+    context: SessionContext,
+    source_type: str,
+    source_id: str,
+) -> _CalendarDriftSourceGeneration | None:
+    """Resolve every exact IP authority value used by one provider read."""
+
+    payload = _source_payload_for(
+        session,
+        context=context,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    if payload.ip_docket is None:
+        return None
+    source_model = _calendar_source_model(source_type)
+    source_row = session.scalar(
+        select(source_model).where(
+            source_model.id == source_id,
+            source_model.company_id == context.company.id,
+        )
+    )
+    if source_row is None:
+        return None
+    authority = _ip_calendar_authority_for_item(session, item=payload)
+    if authority is None:  # pragma: no cover - payload invariant above
+        return None
+    linked_matter = payload.matter
+    if linked_matter is None and payload.ip_docket.matter_id is not None:
+        linked_matter = session.scalar(
+            select(Matter).where(
+                Matter.id == payload.ip_docket.matter_id,
+                Matter.company_id == context.company.id,
+            )
+        )
+    coverage_rows = (
+        list(
+            session.scalars(
+                select(IpDeadlineCoverage)
+                .where(
+                    IpDeadlineCoverage.company_id == context.company.id,
+                    IpDeadlineCoverage.matter_deadline_id
+                    == authority.matter_deadline_id,
+                )
+                .order_by(IpDeadlineCoverage.id)
+            ).all()
+        )
+        if authority.matter_deadline_id is not None
+        else []
+    )
+    ip_deadline = (
+        session.scalar(
+            select(IpDeadline).where(
+                IpDeadline.id == authority.ip_deadline_id,
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.docket_id == authority.docket_id,
+            )
+        )
+        if authority.ip_deadline_id is not None
+        else None
+    )
+    return _CalendarDriftSourceGeneration(
+        source_snapshot=_calendar_source_snapshot(
+            source_type=source_type,
+            source_id=source_id,
+            source_row=source_row,
+            matter=payload.matter,
+            docket=payload.ip_docket,
+        ),
+        ip_authority=authority,
+        linked_matter_values=_mapped_values(linked_matter),
+        coverage_values=tuple(
+            (row.id, _mapped_values(row) or ()) for row in coverage_rows
+        ),
+        ip_deadline_values=_mapped_values(ip_deadline),
+        occurs_on=payload.occurs_on,
+    )
+
+
+def _calendar_drift_connection_snapshot(
+    connection: UserCalendarConnection,
+) -> tuple[object, ...]:
+    return (
+        connection.id,
+        str(connection.status),
+        str(connection.provider),
+        connection.provider_account_id,
+        _aware(connection.updated_at).isoformat(),
+        hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
+    )
+
+
+def _lock_calendar_drift_graph(
+    session: Session,
+    *,
+    context: SessionContext,
+    actor_membership_id: str,
+    owner_membership_id: str,
+    sync_id: str,
+    connection_id: str,
+    generation: _CalendarDriftSourceGeneration,
+) -> tuple[
+    CompanyMembership | None,
+    CompanyMembership | None,
+    CalendarEventSync | None,
+    UserCalendarConnection | None,
+]:
+    """Lock Membership/User -> Matter/docket/source -> Sync -> Connection."""
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(actor_membership_id, owner_membership_id),
+    )
+    matter_id = dict(generation.linked_matter_values or ()).get("id")
+    if matter_id is not None:
+        session.scalar(
+            select(Matter)
+            .where(
+                Matter.id == str(matter_id),
+                Matter.company_id == context.company.id,
+            )
+            .with_for_update(of=Matter)
+            .execution_options(populate_existing=True)
+        )
+    authority = generation.ip_authority
+    session.scalar(
+        select(IpDocketRecord)
+        .where(
+            IpDocketRecord.id == authority.docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+        .with_for_update(of=IpDocketRecord)
+        .execution_options(populate_existing=True)
+    )
+    if authority.ip_deadline_id is not None:
+        session.scalar(
+            select(IpDeadline)
+            .where(
+                IpDeadline.id == authority.ip_deadline_id,
+                IpDeadline.company_id == context.company.id,
+            )
+            .with_for_update(of=IpDeadline)
+            .execution_options(populate_existing=True)
+        )
+    source_model = _calendar_source_model(generation.source_snapshot.source_type)
+    session.scalar(
+        select(source_model)
+        .where(
+            source_model.id == generation.source_snapshot.source_id,
+            source_model.company_id == context.company.id,
+        )
+        .with_for_update(of=source_model)
+        .execution_options(populate_existing=True)
+    )
+    if authority.matter_deadline_id is not None:
+        list(
+            session.scalars(
+                select(IpDeadlineCoverage)
+                .where(
+                    IpDeadlineCoverage.company_id == context.company.id,
+                    IpDeadlineCoverage.matter_deadline_id
+                    == authority.matter_deadline_id,
+                )
+                .order_by(IpDeadlineCoverage.id)
+                .with_for_update(of=IpDeadlineCoverage)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == owner_membership_id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    return (
+        memberships.get(actor_membership_id),
+        memberships.get(owner_membership_id),
+        sync,
+        connection,
+    )
+
+
+def _locked_calendar_membership_authorized(
+    session: Session,
+    membership: CompanyMembership | None,
+) -> bool:
+    if membership is None:
+        return False
+    try:
+        require_locked_membership_capability(session, membership, "calendar:sync")
+    except HTTPException:
+        return False
+    return True
+
+
+def _claim_calendar_drift_read(
+    session: Session,
+    *,
+    context: SessionContext,
+    sync_id: str,
+) -> _CalendarDriftClaim | None:
+    """Persist one read lease after exact source and authority validation."""
+
+    advisory_sync = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.id == sync_id,
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.sync_status == CalendarEventSyncStatus.SYNCED,
+            CalendarEventSync.provider_event_id.is_not(None),
+        )
+    )
+    if advisory_sync is None:
+        session.rollback()
+        return None
+    advisory_connection = session.scalar(
+        select(UserCalendarConnection).where(
+            UserCalendarConnection.id == advisory_sync.calendar_connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+        )
+    )
+    if advisory_connection is None:
+        session.rollback()
+        return None
+    try:
+        generation = _calendar_drift_source_generation(
+            session,
+            context=context,
+            source_type=str(advisory_sync.source_type),
+            source_id=advisory_sync.source_id,
+        )
+    except HTTPException:
+        session.rollback()
+        return None
+    if generation is None:
+        session.rollback()
+        return None
+    owner_membership_id = advisory_connection.membership_id
+    connection_id = advisory_connection.id
+    provider_event_id = str(advisory_sync.provider_event_id)
+    source_type = str(advisory_sync.source_type)
+    source_id = advisory_sync.source_id
+    session.rollback()
+
+    actor, owner, sync, connection = _lock_calendar_drift_graph(
+        session,
+        context=context,
+        actor_membership_id=context.membership.id,
+        owner_membership_id=owner_membership_id,
+        sync_id=sync_id,
+        connection_id=connection_id,
+        generation=generation,
+    )
+    if not _locked_calendar_membership_authorized(session, actor):
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Capability 'calendar:sync' is required.",
+        )
+    assert actor is not None
+    actor_context = SessionContext(
+        company=context.company,
+        membership=actor,
+        user=actor.user,
+    )
+    require_recent_step_up(
+        session,
+        context=actor_context,
+        purpose="calendar_projection_drift_check",
+    )
+    if (
+        not _locked_calendar_membership_authorized(session, owner)
+        or sync is None
+        or connection is None
+        or sync.calendar_connection_id != connection_id
+        or str(sync.source_type) != source_type
+        or sync.source_id != source_id
+        or sync.sync_status != CalendarEventSyncStatus.SYNCED
+        or str(sync.provider_event_id or "") != provider_event_id
+        or connection.status != CalendarConnectionStatus.CONNECTED
+        or not connection.encrypted_token_ref
+    ):
+        session.rollback()
+        return None
+    assert owner is not None
+    owner_context = SessionContext(
+        company=context.company,
+        membership=owner,
+        user=owner.user,
+    )
+    try:
+        actor_generation = _calendar_drift_source_generation(
+            session,
+            context=actor_context,
+            source_type=source_type,
+            source_id=source_id,
+        )
+        owner_generation = _calendar_drift_source_generation(
+            session,
+            context=owner_context,
+            source_type=source_type,
+            source_id=source_id,
+        )
+    except HTTPException:
+        session.rollback()
+        return None
+    if actor_generation != generation or owner_generation != generation:
+        session.rollback()
+        return None
+    now = _current_time()
+    current_reason = str(sync.dead_letter_reason or "")
+    if current_reason.startswith(_CALENDAR_DRIFT_CLAIM_PREFIX):
+        if sync.next_attempt_at is not None and _aware(sync.next_attempt_at) > now:
+            session.rollback()
+            return None
+    elif current_reason:
+        session.rollback()
+        return None
+    reader = _drift_provider_reader(
+        session,
+        context=actor_context,
+        connection=connection,
+    )
+    claim_marker = _calendar_claim_marker(_CALENDAR_DRIFT_CLAIM_PREFIX)
+    sync.dead_letter_reason = claim_marker
+    sync.next_attempt_at = now + _CALENDAR_PROVIDER_LEASE
+    sync.durable_last_attempt_at = now
+    sync.updated_at = now
+    session.add(sync)
+    connection_snapshot = _calendar_drift_connection_snapshot(connection)
+    session.commit()
+    return _CalendarDriftClaim(
+        sync_id=sync_id,
+        connection_id=connection_id,
+        owner_membership_id=owner_membership_id,
+        provider_event_id=provider_event_id,
+        claim_marker=claim_marker,
+        source_type=source_type,
+        source_id=source_id,
+        generation=generation,
+        connection_snapshot=connection_snapshot,
+        reader=reader,
+    )
+
+
+def _finalize_calendar_drift_read(
+    session: Session,
+    *,
+    context: SessionContext,
+    claim: _CalendarDriftClaim,
+    drift_status: str,
+    detail: str,
+) -> CalendarDriftFinding | None:
+    """Publish a provider read only if the exact claimed authority survives."""
+
+    actor, owner, sync, connection = _lock_calendar_drift_graph(
+        session,
+        context=context,
+        actor_membership_id=context.membership.id,
+        owner_membership_id=claim.owner_membership_id,
+        sync_id=claim.sync_id,
+        connection_id=claim.connection_id,
+        generation=claim.generation,
+    )
+    if sync is None or sync.dead_letter_reason != claim.claim_marker:
+        session.rollback()
+        return None
+    actor_authorized = _locked_calendar_membership_authorized(session, actor)
+    if actor_authorized and actor is not None:
+        actor_context = SessionContext(
+            company=context.company,
+            membership=actor,
+            user=actor.user,
+        )
+        try:
+            require_recent_step_up(
+                session,
+                context=actor_context,
+                purpose="calendar_projection_drift_check",
+            )
+        except HTTPException:
+            actor_authorized = False
+    else:
+        actor_context = context
+    owner_authorized = _locked_calendar_membership_authorized(session, owner)
+    exact_row = bool(
+        sync.calendar_connection_id == claim.connection_id
+        and str(sync.source_type) == claim.source_type
+        and sync.source_id == claim.source_id
+        and sync.sync_status == CalendarEventSyncStatus.SYNCED
+        and str(sync.provider_event_id or "") == claim.provider_event_id
+    )
+    exact_connection = bool(
+        connection is not None
+        and connection.status == CalendarConnectionStatus.CONNECTED
+        and _calendar_drift_connection_snapshot(connection)
+        == claim.connection_snapshot
+    )
+    generation_valid = False
+    if actor_authorized and owner_authorized and exact_row and exact_connection:
+        assert owner is not None
+        owner_context = SessionContext(
+            company=context.company,
+            membership=owner,
+            user=owner.user,
+        )
+        try:
+            actor_generation = _calendar_drift_source_generation(
+                session,
+                context=actor_context,
+                source_type=claim.source_type,
+                source_id=claim.source_id,
+            )
+            owner_generation = _calendar_drift_source_generation(
+                session,
+                context=owner_context,
+                source_type=claim.source_type,
+                source_id=claim.source_id,
+            )
+        except HTTPException:
+            generation_valid = False
+        else:
+            generation_valid = bool(
+                actor_generation == claim.generation
+                and owner_generation == claim.generation
+            )
+    if not (
+        actor_authorized
+        and owner_authorized
+        and exact_row
+        and exact_connection
+        and generation_valid
+    ):
+        if exact_row:
+            sync.dead_letter_reason = None
+            sync.next_attempt_at = None
+            sync.updated_at = _current_time()
+            session.add(sync)
+            session.commit()
+        else:
+            session.rollback()
+        return None
+
+    now = _current_time()
+    sync.drift_status = drift_status
+    sync.drift_checked_at = now
+    sync.drift_detail = detail
+    sync.dead_letter_reason = None
+    sync.next_attempt_at = None
+    sync.updated_at = now
+    session.add(sync)
+    finding = None
+    if drift_status in {"moved", "missing", "unknown"}:
+        finding = CalendarDriftFinding(
+            sync_id=sync.id,
+            connection_id=claim.connection_id,
+            membership_id=claim.owner_membership_id,
+            source_type=claim.source_type,
+            source_id=claim.source_id,
+            ip_docket_id=claim.generation.ip_authority.docket_id,
+            drift_status=drift_status,
+            detail=detail,
+        )
+        record_from_context(
+            session,
+            actor_context,
+            action="calendar_event_sync.drift_detected",
+            target_type="calendar_event_sync",
+            target_id=sync.id,
+            ip_docket_id=claim.generation.ip_authority.docket_id,
+            metadata={
+                "drift_status": drift_status,
+                "source_type": claim.source_type,
+            },
+        )
+    session.commit()
+    return finding
+
+
+def _check_ip_calendar_projection_drift_legacy(
     session: Session,
     *,
     context: SessionContext,
@@ -4340,8 +8028,11 @@ def check_ip_calendar_projection_drift(
             status_value = "unknown"
             detail = "The calendar connection could not be read."
         else:
+            sync_id = row.id
+            expected_provider_event_id = str(row.provider_event_id)
+            session.commit()
             try:
-                event = reader(str(row.provider_event_id))
+                event = reader(expected_provider_event_id)
             except CalendarProviderError as exc:
                 status_value = "unknown"
                 detail = _safe_error(exc)
@@ -4366,6 +8057,25 @@ def check_ip_calendar_projection_drift(
                     else:
                         status_value = "matches"
                         detail = "The event matches the CaseOps date."
+
+            row = session.scalar(
+                select(CalendarEventSync)
+                .where(
+                    CalendarEventSync.id == sync_id,
+                    CalendarEventSync.company_id == context.company.id,
+                )
+                .with_for_update(of=CalendarEventSync)
+                .execution_options(populate_existing=True)
+            )
+            if (
+                row is None
+                or row.sync_status != CalendarEventSyncStatus.SYNCED
+                or str(row.provider_event_id) != expected_provider_event_id
+            ):
+                # Lifecycle/revocation won while the provider was being read.
+                # Drift is advisory and can never revive or rewrite that state.
+                session.rollback()
+                continue
 
         row.drift_status = status_value
         row.drift_checked_at = now
@@ -4396,4 +8106,85 @@ def check_ip_calendar_projection_drift(
             )
 
     session.commit()
+    return findings
+
+
+def check_ip_calendar_projection_drift(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> list[CalendarDriftFinding]:
+    """Claim, read, and conditionally publish IP calendar drift findings."""
+
+    sync_ids = list(
+        session.scalars(
+            select(CalendarEventSync.id)
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                CalendarEventSync.source_type.in_(
+                    [
+                        CalendarSyncSourceType.MATTER_HEARING.value,
+                        CalendarSyncSourceType.MATTER_TASK.value,
+                        CalendarSyncSourceType.MATTER_DEADLINE.value,
+                    ]
+                ),
+                CalendarEventSync.sync_status == CalendarEventSyncStatus.SYNCED,
+                CalendarEventSync.provider_event_id.is_not(None),
+            )
+            .order_by(CalendarEventSync.id)
+        ).all()
+    )
+    # Candidate discovery is advisory. Every exact claim starts from a clean
+    # transaction and acquires the canonical authority graph below.
+    session.rollback()
+    findings: list[CalendarDriftFinding] = []
+    for sync_id in sync_ids:
+        claim = _claim_calendar_drift_read(
+            session,
+            context=context,
+            sync_id=sync_id,
+        )
+        if claim is None:
+            continue
+
+        # `_claim_calendar_drift_read` committed the lease. No ORM access or
+        # database lock crosses this external provider boundary.
+        if claim.reader is None:
+            status_value = "unknown"
+            detail = "The calendar connection could not be read."
+        else:
+            try:
+                event = claim.reader(claim.provider_event_id)
+            except CalendarProviderError as exc:
+                status_value = "unknown"
+                detail = _safe_error(exc)
+            except Exception:  # pragma: no cover - provider adapters are varied
+                status_value = "unknown"
+                detail = "The calendar provider could not be read."
+            else:
+                if event is None or event.get("cancelled"):
+                    status_value = "missing"
+                    detail = "The event is no longer on the calendar."
+                else:
+                    expected = claim.generation.occurs_on.isoformat()
+                    actual = str(event.get("start_date") or "")
+                    if actual and actual != expected:
+                        status_value = "moved"
+                        detail = "The event was moved away from the CaseOps date."
+                    elif not actual:
+                        status_value = "unknown"
+                        detail = "The event carries no readable date."
+                    else:
+                        status_value = "matches"
+                        detail = "The event matches the CaseOps date."
+
+        finding = _finalize_calendar_drift_read(
+            session,
+            context=context,
+            claim=claim,
+            drift_status=status_value,
+            detail=detail,
+        )
+        if finding is not None:
+            findings.append(finding)
     return findings

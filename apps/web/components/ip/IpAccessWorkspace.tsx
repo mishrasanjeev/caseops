@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/Label";
 import {
   applyIpAccessChange,
   fetchIpAccessPanel,
-  listEmployees,
+  listCompanyUsers,
   listTeams,
   previewIpAccessChange,
   type IpAccessChangeInput,
@@ -38,9 +38,9 @@ export function IpAccessWorkspace({
     queryKey: ["ip", "access", docket.id],
     queryFn: () => fetchIpAccessPanel(docket.id),
   });
-  const employees = useQuery({
-    queryKey: ["employees", "ip-access-subjects"],
-    queryFn: () => listEmployees({ status: "active" }),
+  const companyUsers = useQuery({
+    queryKey: ["company-users"],
+    queryFn: () => listCompanyUsers(),
   });
   const teams = useQuery({
     queryKey: ["teams", "ip-access-subjects"],
@@ -63,13 +63,13 @@ export function IpAccessWorkspace({
         .filter((team) => team.is_active)
         .map((team) => ({ id: team.id, label: `${team.name} (${team.member_count})` }));
     }
-    return (employees.data?.employees ?? [])
-      .filter((employee) => employee.membership_active && employee.user_active)
-      .map((employee) => ({
-        id: employee.membership_id,
-        label: `${employee.full_name} · ${employee.email}`,
+    return (companyUsers.data?.users ?? [])
+      .filter((user) => user.membership_active && user.user_active)
+      .map((user) => ({
+        id: user.membership_id,
+        label: `${user.full_name} · ${user.email}`,
       }));
-  }, [employees.data?.employees, subjectType, teams.data?.teams]);
+  }, [companyUsers.data?.users, subjectType, teams.data?.teams]);
 
   const preview = useMutation({
     mutationFn: (input: IpAccessChangeInput) =>
