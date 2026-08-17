@@ -32,6 +32,7 @@ from caseops_api.services.matter_operational_guard import (
     assert_operational_matter,
     matter_is_operational,
 )
+from caseops_api.services.notification_delivery import redact_provider_error
 
 
 def _job_record(job: DocumentProcessingJob) -> DocumentProcessingJobRecord:
@@ -325,7 +326,9 @@ def run_document_processing_job(job_id: str) -> None:
                 select(DocumentProcessingJob).where(DocumentProcessingJob.id == job.id)
             )
             if failed_job is not None:
-                _mark_job_failed(session, failed_job, error_message=str(exc))
+                _mark_job_failed(
+                        session, failed_job, error_message=redact_provider_error(exc)
+                    )
     finally:
         session.close()
 
