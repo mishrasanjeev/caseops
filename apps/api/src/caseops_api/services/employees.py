@@ -3763,9 +3763,11 @@ def record_employee_login_async(membership_id: str) -> None:
     BackgroundTasks so the audit INSERT + last_login UPDATE + commit no
     longer sit on the login critical path.
 
-    The request that triggered login has already returned and its
-    request-scoped session is closed — so this opens a FRESH session
-    via get_session_factory() and never touches the request session.
+    The login route commits its completed identity-fence transaction before
+    registering this task. FastAPI may still keep the request-scoped session
+    open until BackgroundTasks finish, so this opens a FRESH session via
+    get_session_factory() and never touches the request session or waits on
+    its Membership/User row locks.
     Best-effort: a failure to record the login audit must never affect
     the (already-sent) login response, so exceptions are swallowed
     after a rollback. session.commit() is preserved (inside

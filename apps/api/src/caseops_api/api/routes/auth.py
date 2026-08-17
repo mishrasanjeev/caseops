@@ -75,10 +75,20 @@ async def login(
         password=payload.password,
         company_slug=payload.company_slug,
     )
+    # ``authenticate_user`` mints the token while holding the canonical
+    # Membership -> User fence.  Starlette runs BackgroundTasks before
+    # FastAPI closes this request-scoped session, so end that completed fence
+    # transaction here.  Otherwise the fresh audit session below waits for a
+    # KEY SHARE FK lock on the same membership while this request waits for the
+    # background task: an application-level deadlock invisible to PostgreSQL's
+    # deadlock detector.
+    session.commit()
     # P1-1: defer the employee.login audit + last_login write off the
     # login hot path. Runs after the response is sent, on its own fresh
     # DB session (record_employee_login_async opens one via
-    # get_session_factory) — never the request session.
+    # get_session_factory) — never the request session.  The request session
+    # remains alive until BackgroundTasks finish, but its identity-fence
+    # transaction and row locks have already been released above.
     background.add_task(record_employee_login_async, auth.membership.id)
     context = get_session_context(session, auth.membership.id)
     mfa_state = login_mfa_challenge_state(session, context=context)

@@ -13,9 +13,12 @@ These tests prove:
 """
 from __future__ import annotations
 
+import inspect
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from caseops_api.api.routes import auth as auth_routes
 from caseops_api.db.models import AuditEvent, EmployeeProfile
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.employees import record_employee_login_async
@@ -23,6 +26,21 @@ from caseops_api.services.identity import authenticate_user
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 _SLUG = "aster-legal"  # bootstrap_company's fixed slug
+
+
+def test_login_releases_identity_fence_before_registering_background_audit() -> None:
+    """Keep the request/background transaction boundary explicit.
+
+    FastAPI closes yielded dependencies only after Starlette finishes response
+    BackgroundTasks. Registering the fresh-session audit while the login
+    Membership/User fence is still open creates a cross-session self-deadlock
+    that SQLite cannot reproduce, so preserve the exact ordering in source as
+    a fast companion to the real PostgreSQL lock regression.
+    """
+
+    source = inspect.getsource(auth_routes.login)
+
+    assert source.index("session.commit()") < source.index("background.add_task(")
 
 
 def _create_employee(client: TestClient, owner_token: str, email: str) -> str:
