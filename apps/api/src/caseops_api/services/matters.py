@@ -5994,7 +5994,16 @@ def create_matter_invoice(
             payment_adjustment_minor=payload.payment_adjustment_minor,
             # EH-SGR-01: place of supply is what the IGST Act keys the tax head
             # on, so it has to reach the engine rather than only the PDF.
-            place_of_supply=invoice.place_of_supply,
+            #
+            # The payload value, not `invoice.place_of_supply`. The stored field
+            # is back-filled from `billing_profile.default_place_of_supply` when
+            # the user leaves it blank, and the resolver ranks an explicit place
+            # of supply ABOVE the client's GSTIN. Passing the stored value would
+            # therefore let the firm's own default outrank the recipient's GSTIN
+            # and charge CGST+SGST on an inter-state supply. The resolver already
+            # considers the profile default at its own (lower) precedence, so the
+            # blank case still resolves identically.
+            place_of_supply=payload.place_of_supply,
         )
         taxable_value_minor = tax.taxable_value_minor
         tax_amount_minor = tax.tax_amount_minor

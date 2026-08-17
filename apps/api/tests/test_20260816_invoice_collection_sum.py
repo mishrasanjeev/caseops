@@ -166,3 +166,62 @@ class TestAdjustmentsStillApply:
 
         assert invoice.balance_due_minor == 0
         assert invoice.status == "paid"
+
+
+class _FakeSession:
+    """`_apply_payment_result` only stages ORM objects and appends an activity row."""
+
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+    def add_all(self, objs: object) -> None:
+        self.added.extend(objs)  # type: ignore[arg-type]
+
+
+class TestRefundWebhookMovesTheLedger:
+    """`_CREDITED_ATTEMPT_STATUSES` excluding REFUNDED only matters if something
+    recomputes. The webhook wrote `attempt.status = "refunded"` and then took the
+    `elif invoice.status == "draft"` arm, so nothing recalculated: a fully
+    refunded invoice went on reporting the money as collected, and its activity
+    entry agreed. `test_refunded_attempt_does_not_credit` above passes either way,
+    because it calls the recalculation directly rather than through the webhook.
+    """
+
+    def test_refund_webhook_uncredits_the_invoice(self) -> None:
+        from caseops_api.services.payments import _apply_payment_result
+        from caseops_api.services.pine_labs import PineLabsPaymentStatusResult
+
+        invoice = _invoice(100_000)
+        invoice.matter_id = "matter-1"
+        invoice.invoice_number = "INV-0001"
+        attempt = _attempt(100_000)
+        invoice.payment_attempts = [attempt]
+        recalculate_invoice_collection(invoice)
+        assert invoice.amount_received_minor == 100_000, "precondition: fully paid"
+        assert invoice.balance_due_minor == 0
+
+        # services/pine_labs.py maps a `refund_processed` webhook to "refunded".
+        _apply_payment_result(
+            _FakeSession(),  # type: ignore[arg-type]
+            invoice=invoice,
+            attempt=attempt,
+            result=PineLabsPaymentStatusResult(
+                provider_order_id="ord-1",
+                provider_reference="ref-1",
+                status="refunded",
+                amount_received_minor=0,
+                raw_payload={},
+            ),
+            actor_membership_id=None,
+            event_type="matter_invoice_payment_refunded",
+            title="Payment refunded",
+        )
+
+        assert attempt.status == "refunded"
+        assert invoice.amount_received_minor == 0, (
+            "the refunded money must stop being credited to the invoice"
+        )
+        assert invoice.balance_due_minor == 100_000

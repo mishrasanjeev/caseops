@@ -447,6 +447,13 @@ def _apply_payment_result(
         }:
             attempt.amount_received_minor = attempt.amount_minor
         recalculate_invoice_collection(invoice)
+    elif result.status in {PaymentAttemptStatus.REFUNDED, "refunded"}:
+        # A refund removes this attempt's credit, and _CREDITED_ATTEMPT_STATUSES
+        # already excludes REFUNDED - but only recalculation applies that. The
+        # status was written above and then nothing recomputed the invoice, so a
+        # fully refunded invoice went on reporting the money as collected, with
+        # its activity trail agreeing. The ledger has to move when the money does.
+        recalculate_invoice_collection(invoice)
     elif invoice.status == "draft":
         invoice.status = "issued"
 

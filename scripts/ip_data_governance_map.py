@@ -113,6 +113,27 @@ RISKY_SOURCE_PATTERN = re.compile(
     r"|\bstorage\.Client\b|\bOTLPSpanExporter\b|\bcloud.?tasks\b",
     re.IGNORECASE,
 )
+# Anchoring on import/attribute syntax only works in files that HAVE syntax.
+# Deploy manifests are YAML and Terraform: they name a provider boundary as a
+# bare word by nature - an image reference, an env var, a sidecar - so the
+# pattern above matches nothing in them. `infra/` is a RISKY_SOURCE_ROOT, and
+# applying the code pattern there would leave the root advertised but unwatched,
+# which is worse than not listing it. Manifests also carry none of the English
+# prose that made bare-word matching noisy in source files, so the original form
+# is still the right one here.
+_CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+RISKY_MANIFEST_PATTERN = re.compile(
+    rf"\b(?:{_RISKY_MODULES}|storage\.Client|OTLPSpanExporter|cloud.?tasks)\b",
+    re.IGNORECASE,
+)
+
+
+def risky_source_match(path: str, source: str) -> bool:
+    """Detect a provider/storage/telemetry boundary in a changed file."""
+    pattern = (
+        RISKY_SOURCE_PATTERN if path.endswith(_CODE_SUFFIXES) else RISKY_MANIFEST_PATTERN
+    )
+    return bool(pattern.search(source))
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -1258,7 +1279,7 @@ def change_gate_errors(
             continue
         source = source_by_path.get(path, "")
         if path in RISKY_PATHS or (
-            path.startswith(RISKY_SOURCE_ROOTS) and RISKY_SOURCE_PATTERN.search(source)
+            path.startswith(RISKY_SOURCE_ROOTS) and risky_source_match(path, source)
         ):
             risky_paths.append(path)
     errors: list[str] = []
