@@ -690,14 +690,31 @@ def _operational_matter_role_membership_ids(
     }
 
 
+def _coverage_has_live_escalation(coverage: IpDeadlineCoverage) -> bool:
+    """Return whether the stored escalation can still receive responsibility."""
+
+    pending_immediate = (
+        coverage.replacement_decision == "pending"
+        and coverage.pending_replacement_membership_id is not None
+        and coverage.pending_replacement_membership_id
+        == coverage.responsible_membership_id
+        and coverage.emergency_escalation_membership_id is not None
+    )
+    emergency_until = _as_utc(coverage.emergency_until)
+    active_emergency = bool(
+        coverage.coverage_status == "emergency"
+        and emergency_until is not None
+        and emergency_until > datetime.now(UTC)
+    )
+    return pending_immediate or active_emergency
+
+
 def _operational_ip_docket_role_membership_ids(
     session: Session,
     *,
     docket: IpDocketRecord,
 ) -> set[str]:
     """Return every live assignee/recipient whose docket access is authoritative."""
-
-    from caseops_api.services.ip_operations import _coverage_has_live_escalation
 
     membership_ids: set[str] = set()
     if docket.matter_id is not None:

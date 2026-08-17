@@ -619,8 +619,6 @@ def update_team(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Team changed; retry the team update.",
             )
-        role_fence = {}
-        dockets = []
     changes: dict[str, object] = {}
     if payload.name is not None:
         team.name = payload.name.strip()

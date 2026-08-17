@@ -540,10 +540,10 @@ def _collect_offboarding_objects(
     list[IpDocketRecord],
 ]:
     from caseops_api.services.ip_operations import (
-        _coverage_has_live_escalation,
         _membership_can_cover_docket,
         _operational_coverage_ids_for_deadline,
     )
+    from caseops_api.services.matter_access import _coverage_has_live_escalation
 
     company_id = context.company.id
     supported: list[EmployeeOffboardingObject] = []
@@ -1543,10 +1543,8 @@ def _build_offboarding_preview(
     target: CompanyMembership,
     reassign_to: CompanyMembership | None,
 ) -> EmployeeOffboardingPreviewResponse:
-    from caseops_api.services.ip_operations import (
-        _coverage_has_live_escalation,
-        _membership_can_cover_docket,
-    )
+    from caseops_api.services.ip_operations import _membership_can_cover_docket
+    from caseops_api.services.matter_access import _coverage_has_live_escalation
 
     (
         supported,

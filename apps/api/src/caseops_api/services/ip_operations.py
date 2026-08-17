@@ -857,24 +857,6 @@ def _lock_assignment_memberships_or_404(
     return memberships
 
 
-def _coverage_has_live_escalation(coverage: IpDeadlineCoverage) -> bool:
-    """Return whether the stored escalation can still receive responsibility."""
-
-    pending_immediate = (
-        coverage.replacement_decision == "pending"
-        and coverage.pending_replacement_membership_id is not None
-        and coverage.pending_replacement_membership_id
-        == coverage.responsible_membership_id
-        and coverage.emergency_escalation_membership_id is not None
-    )
-    active_emergency = (
-        coverage.coverage_status == "emergency"
-        and coverage.emergency_until is not None
-        and _aware_utc(coverage.emergency_until) > _now()
-    )
-    return pending_immediate or active_emergency
-
-
 def add_ip_notice_link(
     session: Session,
     *,
