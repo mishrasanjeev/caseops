@@ -10058,13 +10058,16 @@
         "apps/web/app/app/ip/docket/page.test.tsx",
         "apps/web/lib/ip/control-review-manifest.test.ts",
         "tests/e2e/iplf-039c-daily-docket-2026-08-15.spec.ts",
+        "tests/e2e/iplf-039c-guard-first-2026-08-16-prod.spec.ts",
         "apps/api/tests/test_ip_calendar_drift.py",
         "apps/api/tests/test_postgres_validation.py"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
         "docs/ip-implementation/evidence/m3/IPLF-039BC-INSPECTION-2026-08-15.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-plan-2026-08-16.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-2026-08-17.log.txt"
       ],
       "approvals": [],
       "blockers": [

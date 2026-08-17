@@ -1,19 +1,22 @@
 # IPLF-039C — guard-first production acceptance plan
 
 - **Prepared:** 2026-08-16
-- **Artifact state:** repaired after a safely failed first attempt; not yet release evidence
-- **Released rebase baseline:** `7642366a8cf7efca2a7f61f353aee2c61d80290f`
-- **Required exact deployed guard-first `main` SHA:** pending
-- **Proof-harness branch:** `codex/pr237-guard-proof-20260816` (local, unmerged)
-- **Migration `20260816_0001`:** pending and nondeployable until this acceptance passes
+- **Accepted:** 2026-08-17
+- **Artifact state:** production release evidence; acceptance and cleanup complete
+- **Released rebase baseline:** `694918e1d8077521366baf93200713e309592a42`
+- **Guard implementation merge:** `78a0edf323042dcc56780c52e10f6e48813678d1` (PR #244)
+- **Exact accepted guard-first `main` SHA:** `48d4cfd708c3a3b33f662c616e3258ad8d3032f5` (PR #245 hotfix merge)
+- **Proof harness:** merged through PR #244; the production config remains isolated from the default suite
+- **Migration `20260816_0001`:** eligible for a separate reviewed release; not present or deployed here
 
 ## Purpose and release order
 
-This is the dated API acceptance required by the mixed-revision fence in
-`coverage-distinct-role-contract-2026-08-16.md`. It verifies the already
-deployed guard-first API before `ck_ip_deadline_coverage_distinct_roles` may be
-installed. It does not query PostgreSQL, inspect the check constraint, or treat
-the migration as deployed evidence.
+This is the dated API acceptance intended for the separately staged,
+not-yet-merged mixed-revision coverage-role fence contract. It verifies the
+already deployed guard-first API before
+`ck_ip_deadline_coverage_distinct_roles` may be installed. It does not query
+PostgreSQL, inspect the check constraint, or treat the migration as deployed
+evidence.
 
 The run is eligible only when the API and web release-identity endpoints both
 equal one exact 40-character `main` SHA before the first write and again after
@@ -21,6 +24,80 @@ the final assertion, and the API revision carries 100% of traffic. A passing
 run is necessary but is not by itself authority to replace the fence's
 `pending`: the Cloud Run revision/traffic capture and reviewed run output must
 be recorded beside it first.
+
+## Accepted production release
+
+The fresh production run passed against exact merged `main` SHA
+`48d4cfd708c3a3b33f662c616e3258ad8d3032f5`. Local `main` and `origin/main`
+both resolved to that SHA before deployment and again after acceptance. The
+release contained no `20260816_0001` migration.
+
+The fail-closed release wrapper completed these exact control-plane steps:
+
+- API Cloud Build `d78f6cd8-0f9d-496f-9892-db24bfbb10a0` produced digest
+  `sha256:036b2a7f6e0877cc524ac701d39a2cf4f60f125e190d8852151288c8fdd5b096`;
+- web Cloud Build `67476169-551d-4f12-a69d-1783a6b14113` produced digest
+  `sha256:66912e5441097dc793e5c1dbac08114075fefa59972d39a96ee205d012a0a197`;
+- migration execution `caseops-migrate-job-k9zfn` completed successfully at the
+  existing Alembic head;
+- the recurring-job inventory reconciled with result `pass`, governance capture
+  remained explicitly `false`, and the ClamAV sidecar check passed;
+- API revision `caseops-api-00301-w65` and web revision
+  `caseops-web-00279-k9v` were both latest-created and latest-ready, Ready,
+  generation-equal-to-observed-generation, and the only untagged 100% traffic
+  target for their service; and
+- the ready revision images exactly matched the two immutable Artifact
+  Registry digests above.
+
+Before any writer acceptance, two immediate QA logins completed with HTTP 200
+in 0.526 and 0.317 seconds, with response bodies discarded. The dedicated
+config collected exactly one test. Fresh run id `20260816-hotfix48d4` then
+completed in 30.8 seconds: one test passed, the hook emitted
+`cleanup complete`, no `MANUAL RECOVERY REQUIRED` signal appeared, and the API
+and web release identities still equalled the exact accepted SHA after the
+final assertions.
+
+The retained redacted text record is
+`guard-first-production-acceptance-2026-08-17.log.txt`; its canonical Git blob
+(LF) SHA-256 is
+`96247777b22b44e7acd4ed1cfe57c53c5db507485eeeb4e785d5b55c49869377`.
+It contains no credential, token, response body, or client data. The release
+agent reviewed it at `2026-08-17T17:07:15+05:30`.
+
+The CI evidence preceding release was also complete. PR #244's immutable head
+passed the full API, PostgreSQL, web, Playwright, security, and CodeQL matrix.
+After the production-only login lifecycle defect described below was repaired,
+PR #245's exact head `0484778389f88f2ae22e6af0073875affb68e8c0`
+finished with 29 passing checks, two expected skips, and no failures; its merge
+commit is the accepted SHA above.
+
+### Safe rollback and hotfix record
+
+The first deployment of PR #244 created API revision
+`caseops-api-00300-8pz` and web revision `caseops-web-00278-q28`. Fresh run id
+`20260816-1679e53ed5` stopped at its initial owner login, before fixture
+creation or any writer mutation, after the API returned a 300-second 504. The
+services were immediately pinned back to known-good SHA
+`9e56353e3de3d45c9602ca2da2ba1221a5fca921` at API revision
+`caseops-api-00299-7m4` and web revision `caseops-web-00277-568`.
+
+Read-only monitoring and a bounded exact lock inspection identified an
+application-level self-deadlock: session mint held Membership/User
+`FOR UPDATE` locks while Starlette awaited a fresh-session background login
+audit whose FK check needed `KEY SHARE` on the same membership. PostgreSQL saw
+only a one-way wait, so its deadlock detector did not fire. The exact blocked
+root request backend was terminated only after strict PID, state, query-age,
+and direct-blocker predicates matched. When one already-queued request advanced
+into the same condition, only its exact blocked audit `INSERT` was cancelled;
+the owning request unwound and the lock inventory returned to zero. No broad
+backend termination occurred. Rolled-back QA login then returned HTTP 200 in
+0.378 seconds.
+
+PR #245 commits the completed identity-fence transaction before registering
+the background audit. Its real PostgreSQL endpoint regression executes
+`FOR KEY SHARE NOWAIT` from the actual BackgroundTask before the audit write,
+so the regressed lifecycle fails immediately rather than hanging CI. The
+failed run id is permanently retired and is not release evidence.
 
 ## Mechanically enforced production boundary
 
@@ -191,8 +268,8 @@ reserved marker, disposed the one committed synthetic Matter through the
 supported lifecycle endpoint, confirmed its docket was operationally `404`,
 and deactivated both exact disposable users. No row was deleted and no unrelated
 tenant data was touched. That run id is permanently retired. The repaired spec
-must use a new run id and must pass in full before this document becomes release
-evidence.
+was required to use a new run id and pass in full before this document could
+become release evidence; `20260816-hotfix48d4` satisfied that requirement.
 
 ## Manual recovery
 
@@ -230,28 +307,25 @@ Redact bearer tokens, passwords, and response bodies before retaining the
 recovery log. Do not reuse the recovered run id: user records are intentionally
 retained inactive, so the next acceptance needs a new run id.
 
-## Local preparation status
+## Final release disposition
 
-The original harness was prepared on
-`956154799e6f2657c70634a482d0598db7f3cc30`; its first production attempt is
-explicitly non-evidence for the reasons above. The repaired harness is being
-validated from exact released-main parent
-`7642366a8cf7efca2a7f61f353aee2c61d80290f` and makes no new deployment claim.
-The schema-free guard implementation must first be semantically replayed onto
-current `main`, pass its full gates, and be deployed at 100% traffic. Only a
-fresh run against that later exact serving SHA can authorize the 0001 anchor.
-Before the replacement run:
+The original `956154799e6f2657c70634a482d0598db7f3cc30` harness and its
+`20260816-p764a1` attempt remain explicit non-evidence. The schema-free guard
+was subsequently replayed onto current `main`, merged through PR #244, and
+validated through the complete repository gates. The production login defect
+found before the first writer mutation was rolled back, repaired through PR
+#245, and revalidated through the same gates plus the exact PostgreSQL
+request/background lock regression.
 
-- the default Playwright config collected none of this production spec, while
-  the dedicated config collected exactly its one test;
-- standalone TypeScript checking of the config and spec passed;
-- the focused production/deploy-hardening contract passed all 31 cases; and
-- `git diff --check` passed.
+The replacement production execution is now complete. Default Playwright
+collection still excludes the dated spec, the dedicated config collected
+exactly one test, exact API/web release identity and Cloud Run traffic were
+verified before and after writes, and cleanup completed. This record therefore
+supplies the release evidence for a future reviewed update of that separately
+staged fence's guard-first `pending` state to accepted SHA
+`48d4cfd708c3a3b33f662c616e3258ad8d3032f5`.
 
-The earlier focused service, Ruff, and web evidence belonged to the stale
-`95615479` integration tree. It must be rerun after the schema-free guard is
-replayed onto current `main`; it is not inherited as evidence for the repaired
-harness or the future release candidate. No replacement production execution
-has been attempted because no eligible guard-first SHA is serving. Local
-evidence cannot substitute for exact release identity, nor can it authorize
-replacing the fence's `pending` value.
+This evidence does **not** deploy or otherwise authorize an in-place database
+constraint change. Migration `20260816_0001`, if introduced, remains a
+separate release requiring its own review, migration ordering, hosted
+PostgreSQL validation, deployment, and post-deploy evidence.
