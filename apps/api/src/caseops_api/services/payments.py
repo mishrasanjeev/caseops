@@ -109,18 +109,75 @@ def _get_invoice(
     return invoice
 
 
-def _update_invoice_collection_state(invoice: MatterInvoice, *, amount_received_minor: int) -> None:
-    invoice.amount_received_minor = max(invoice.amount_received_minor, amount_received_minor)
+# Attempt states whose money has actually been collected. REFUNDED is
+# deliberately absent: that money has been returned, and crediting it would show
+# a settled invoice that is not settled.
+_CREDITED_ATTEMPT_STATUSES: frozenset[str] = frozenset(
+    {
+        PaymentAttemptStatus.PAID.value,
+        PaymentAttemptStatus.PARTIALLY_PAID.value,
+    }
+)
+
+
+def _attempt_collected_minor(attempt: MatterInvoicePaymentAttempt) -> int:
+    """What an attempt actually collected, tolerating pre-fix rows.
+
+    Before EH-SGR-03 the webhook wrote its paid-with-no-amount fallback to the
+    INVOICE and left ``attempt.amount_received_minor`` at 0, because the adjacent
+    line only ever took ``max(attempt.amount_received_minor, result.amount)``.
+    Production therefore holds settled invoices whose attempts record zero.
+
+    Deriving naively from those rows recomputes a paid invoice to nothing and
+    re-opens the full balance - corrupting stored accounting data rather than
+    merely displaying it wrongly. A ``paid`` attempt reporting zero collected is
+    self-contradictory, so it is read as having collected its full amount.
+
+    ``partially_paid`` gets no such treatment: a partial genuinely can be zero so
+    far, and inflating it would mark an unpaid invoice as settled.
+    """
+    status = str(attempt.status)
+    if status not in _CREDITED_ATTEMPT_STATUSES:
+        return 0
+    if attempt.amount_received_minor == 0 and status == PaymentAttemptStatus.PAID.value:
+        return attempt.amount_minor
+    return attempt.amount_received_minor
+
+
+def recalculate_invoice_collection(invoice: MatterInvoice) -> None:
+    """Recompute the invoice's collected total from its payment attempts.
+
+    EH-SGR-03: this previously ratcheted a running maximum -
+
+        invoice.amount_received_minor = max(invoice.amount_received_minor, incoming)
+
+    which kept the largest single attempt rather than the sum. An invoice settled
+    as 600 then 400 was credited 600, leaving the client chased for money already
+    paid.
+
+    Deriving the total from the attempts instead makes the operation idempotent:
+    replaying a webhook, or receiving one out of order, converges on the same
+    answer rather than depending on arrival sequence.
+    """
+    attempts = list(invoice.payment_attempts)
+    if not attempts:
+        # Nothing to derive from. An invoice may carry a receipt recorded
+        # outside the attempt flow, and zeroing it here would re-open a
+        # settled balance against a client who has already paid.
+        return
+
+    collected = sum(_attempt_collected_minor(attempt) for attempt in attempts)
+    invoice.amount_received_minor = collected
     invoice.balance_due_minor = max(
         invoice.total_amount_minor
-        - invoice.amount_received_minor
+        - collected
         - invoice.tds_deducted_minor
         - invoice.payment_adjustment_minor,
         0,
     )
-    if invoice.balance_due_minor == 0:
+    if invoice.balance_due_minor == 0 and (collected or invoice.total_amount_minor == 0):
         invoice.status = "paid"
-    elif invoice.amount_received_minor > 0:
+    elif collected > 0:
         invoice.status = "partially_paid"
     elif invoice.status == "draft":
         invoice.status = "issued"
@@ -381,13 +438,22 @@ def _apply_payment_result(
         "paid",
         "partially_paid",
     }:
-        received_amount = result.amount_received_minor
-        if received_amount == 0 and result.status in {PaymentAttemptStatus.PAID, "paid"}:
-            received_amount = attempt.amount_minor
-        _update_invoice_collection_state(
-            invoice,
-            amount_received_minor=received_amount,
-        )
+        # A `paid` webhook that carries no amount means the full attempt was
+        # collected; record that on the attempt so the invoice total, which is
+        # now derived from the attempts, sees it.
+        if attempt.amount_received_minor == 0 and result.status in {
+            PaymentAttemptStatus.PAID,
+            "paid",
+        }:
+            attempt.amount_received_minor = attempt.amount_minor
+        recalculate_invoice_collection(invoice)
+    elif result.status in {PaymentAttemptStatus.REFUNDED, "refunded"}:
+        # A refund removes this attempt's credit, and _CREDITED_ATTEMPT_STATUSES
+        # already excludes REFUNDED - but only recalculation applies that. The
+        # status was written above and then nothing recomputed the invoice, so a
+        # fully refunded invoice went on reporting the money as collected, with
+        # its activity trail agreeing. The ledger has to move when the money does.
+        recalculate_invoice_collection(invoice)
     elif invoice.status == "draft":
         invoice.status = "issued"
 

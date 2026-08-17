@@ -2702,6 +2702,8 @@ export async function deleteMatterAttachmentAnnotation(input: {
 
 export type InvoiceStatus =
   | "draft"
+  // Written by the outside-counsel portal on invoice submission (EH-SGR-02).
+  | "needs_review"
   | "issued"
   | "partially_paid"
   | "paid"

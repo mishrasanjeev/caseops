@@ -143,6 +143,69 @@ def test_change_gate_requires_map_update_for_new_provider_or_storage_boundary() 
     )
 
 
+def test_change_gate_requires_map_update_for_a_boundary_in_a_deploy_manifest() -> None:
+    # A deploy manifest contains no import statements and no attribute calls, so
+    # a pattern anchored on code syntax matches nothing in one. `infra/` is a
+    # RISKY_SOURCE_ROOT, and a root that is listed but unwatched is worse than a
+    # root that was never listed: the gate reports success either way, so the
+    # absence of an error reads as proof that nothing data-bearing changed.
+    path = "infra/cloudrun/new-worker-job.yaml"
+    source = (
+        "spec:\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - image: gcr.io/caseops/worker\n"
+        "          env:\n"
+        "            - name: CACHE_BACKEND\n"
+        "              value: redis\n"
+    )
+
+    errors = ip_data_governance_map.change_gate_errors(
+        [path], source_by_path={path: source}
+    )
+    assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
+
+    assert (
+        ip_data_governance_map.change_gate_errors(
+            [path, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"],
+            source_by_path={path: source},
+        )
+        == []
+    )
+
+
+def test_change_gate_matches_a_scoped_npm_provider_package() -> None:
+    # Provider SDKs are scoped on npm, so the import a frontend actually writes
+    # is `@opentelemetry/api`, not `opentelemetry`. Anchoring the bare module
+    # name to the opening quote matched none of them.
+    path = "apps/web/lib/telemetry/otel.ts"
+    source = 'import { trace } from "@opentelemetry/api";\n'
+
+    errors = ip_data_governance_map.change_gate_errors(
+        [path], source_by_path={path: source}
+    )
+    assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
+
+
+def test_change_gate_still_ignores_provider_words_in_prose_inside_source_files() -> None:
+    # The manifest rule above must not undo the noise fix it sits beside: bare
+    # provider words in comments and route paths are why code files are matched
+    # on syntax rather than on the word alone.
+    path = "apps/api/src/caseops_api/api/routes/intake.py"
+    source = (
+        "# Inbound legal requests from business units are triaged here.\n"
+        '@router.get("/api/intake/requests")\n'
+        "def list_requests() -> list[str]:\n"
+        "    return []\n"
+    )
+
+    assert (
+        ip_data_governance_map.change_gate_errors([path], source_by_path={path: source})
+        == []
+    )
+
+
 def test_change_gate_ignores_provider_words_in_program_documentation() -> None:
     path = "docs/ip-implementation/PROGRAM_MANIFEST.yaml"
 

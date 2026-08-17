@@ -91,15 +91,52 @@ RISKY_SOURCE_ROOTS = (
     "apps/web/",
     "infra/",
 )
+# Matches a real provider/storage/telemetry boundary, not a passing mention of
+# the word. The bare-word form used to fire on ordinary prose - a comment saying
+# "Inbound legal requests from business units" and the route path
+# `/api/intake/requests` both tripped it - which meant every edit to models.py or
+# endpoints.ts demanded a governance-map regeneration that produced no diff.
+# Anchoring on an import or an attribute access keeps the detection and drops the
+# noise.
+_RISKY_MODULES = (
+    r"google\.cloud|boto3|azure\.storage|openai|anthropic|voyageai|google\.genai|"
+    r"opentelemetry|redis|pubsub|httpx|requests|aiohttp|urllib3"
+)
 RISKY_SOURCE_PATTERN = re.compile(
-    r"\b(?:"
-    r"google\.cloud|boto3|azure\.storage|storage\.Client|"
-    r"openai|anthropic|voyageai|google\.genai|"
-    r"opentelemetry|OTLPSpanExporter|redis|pubsub|cloud.?tasks|"
-    r"httpx|requests|aiohttp|urllib3"
-    r")\b",
+    # `import x`, `from x import ...`, `require('x')`, `from "x"`
+    rf"(?:^|\n)\s*(?:import|from)\s+(?:{_RISKY_MODULES})\b"
+    # The `@?` matters: provider SDKs ship scoped on npm, so the real import is
+    # `from "@opentelemetry/api"`. Anchoring the bare name to the quote missed
+    # every one of them.
+    rf"|require\(\s*['\"]@?(?:{_RISKY_MODULES})"
+    rf"|from\s+['\"]@?(?:{_RISKY_MODULES})"
+    # attribute access on the module, e.g. httpx.post(, redis.Redis(
+    rf"|\b(?:{_RISKY_MODULES})\s*\.\s*\w+\s*\("
+    # unambiguous single-token boundaries that are never ordinary prose
+    r"|\bstorage\.Client\b|\bOTLPSpanExporter\b|\bcloud.?tasks\b",
     re.IGNORECASE,
 )
+# Anchoring on import/attribute syntax only works in files that HAVE syntax.
+# Deploy manifests are YAML and Terraform: they name a provider boundary as a
+# bare word by nature - an image reference, an env var, a sidecar - so the
+# pattern above matches nothing in them. `infra/` is a RISKY_SOURCE_ROOT, and
+# applying the code pattern there would leave the root advertised but unwatched,
+# which is worse than not listing it. Manifests also carry none of the English
+# prose that made bare-word matching noisy in source files, so the original form
+# is still the right one here.
+_CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+RISKY_MANIFEST_PATTERN = re.compile(
+    rf"\b(?:{_RISKY_MODULES}|storage\.Client|OTLPSpanExporter|cloud.?tasks)\b",
+    re.IGNORECASE,
+)
+
+
+def risky_source_match(path: str, source: str) -> bool:
+    """Detect a provider/storage/telemetry boundary in a changed file."""
+    pattern = (
+        RISKY_SOURCE_PATTERN if path.endswith(_CODE_SUFFIXES) else RISKY_MANIFEST_PATTERN
+    )
+    return bool(pattern.search(source))
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -1245,7 +1282,7 @@ def change_gate_errors(
             continue
         source = source_by_path.get(path, "")
         if path in RISKY_PATHS or (
-            path.startswith(RISKY_SOURCE_ROOTS) and RISKY_SOURCE_PATTERN.search(source)
+            path.startswith(RISKY_SOURCE_ROOTS) and risky_source_match(path, source)
         ):
             risky_paths.append(path)
     errors: list[str] = []

@@ -133,6 +133,7 @@ from caseops_api.services.matter_access import (
 from caseops_api.services.matter_billing import (
     calculate_invoice_tax,
     default_invoice_due_on,
+    invoice_number_sequence_query,
     next_invoice_number,
     render_invoice_pdf,
     resolve_time_entry_rate,
@@ -5832,11 +5833,45 @@ def create_matter_invoice(
             .order_by(MatterBillingProfile.updated_at.desc())
             .limit(1)
         )
-    invoice_number = (
-        payload.invoice_number.strip()
-        if payload.invoice_number
-        else next_invoice_number(billing_profile)
-    )
+    if payload.invoice_number:
+        invoice_number = payload.invoice_number.strip()
+    else:
+        # EH-SGR-04: allocating from the sequence is a read-modify-write, so the
+        # profile row is re-read under a lock before it is advanced. Without this
+        # two concurrent creations read the same value and the second insert
+        # violates uq_company_invoice_number as an uncaught IntegrityError.
+        if billing_profile is not None:
+            billing_profile = session.scalar(
+                invoice_number_sequence_query(billing_profile.id, context.company.id)
+            )
+        existing_count = 0
+        if billing_profile is None:
+            # No profile: the fallback used to return a constant, so a tenant
+            # could auto-number exactly one invoice ever. Advance it with the
+            # tenant's own invoice count instead.
+            existing_count = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(MatterInvoice)
+                    .where(MatterInvoice.company_id == context.company.id)
+                )
+                or 0
+            )
+        invoice_number = next_invoice_number(billing_profile, existing_count=existing_count)
+        if billing_profile is None:
+            # EH-SGR-04: the profile-less fallback numbers from the tenant's
+            # invoice COUNT, which can collide when historical numbering has
+            # gaps - two invoices numbered 0002 and 0003 give a count of 2 and
+            # would re-propose 0003. Advance past anything already taken rather
+            # than 409 the user out of an auto-numbered invoice.
+            while session.scalar(
+                select(MatterInvoice.id).where(
+                    MatterInvoice.company_id == context.company.id,
+                    MatterInvoice.invoice_number == invoice_number,
+                )
+            ):
+                existing_count += 1
+                invoice_number = next_invoice_number(None, existing_count=existing_count)
     existing_invoice = session.scalar(
         select(MatterInvoice).where(
             MatterInvoice.company_id == context.company.id,
@@ -5957,6 +5992,18 @@ def create_matter_invoice(
             amount_received_minor=0,
             tds_deducted_minor=payload.tds_deducted_minor,
             payment_adjustment_minor=payload.payment_adjustment_minor,
+            # EH-SGR-01: place of supply is what the IGST Act keys the tax head
+            # on, so it has to reach the engine rather than only the PDF.
+            #
+            # The payload value, not `invoice.place_of_supply`. The stored field
+            # is back-filled from `billing_profile.default_place_of_supply` when
+            # the user leaves it blank, and the resolver ranks an explicit place
+            # of supply ABOVE the client's GSTIN. Passing the stored value would
+            # therefore let the firm's own default outrank the recipient's GSTIN
+            # and charge CGST+SGST on an inter-state supply. The resolver already
+            # considers the profile default at its own (lower) precedence, so the
+            # blank case still resolves identically.
+            place_of_supply=payload.place_of_supply,
         )
         taxable_value_minor = tax.taxable_value_minor
         tax_amount_minor = tax.tax_amount_minor
