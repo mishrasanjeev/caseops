@@ -69,12 +69,31 @@ class VerificationReport:
 
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
-# Grounding fast path: the recommendations prompt numbers each retrieved
-# authority and instructs the model to prefix every citation with the matching
-# bracket tag. When the prefix lands, we resolve by index — deterministic, and
-# we skip both the fuzzy citation gate and the proposition gate (the model has
-# explicitly named the source).
+# Source resolver: the recommendations prompt numbers each retrieved authority
+# and instructs the model to prefix every citation with the matching bracket tag.
+# When the prefix lands, we resolve by index - deterministic, and it survives the
+# model paraphrasing the case name. It answers "which source is this?" and
+# nothing more; the resolved source still has to clear the proposition gate.
 _BRACKET_TAG_RE = re.compile(r"^\s*\[(\d+)\]")
+
+# EH-SGR-07: the proposition gate's docstring promised "non-stopword tokens" but
+# no such list existed, and the length>=3 cut keeps "the", "and", "that", "was".
+# Function words plus the legal boilerplate that appears in nearly every Indian
+# judgment, so overlap has to come from the substance of the proposition rather
+# than from words two unrelated documents share by construction.
+_STOPWORDS = frozenset(
+    {
+        "the", "and", "that", "was", "were", "his", "her", "its", "for", "with",
+        "not", "but", "are", "has", "had", "have", "this", "these", "those",
+        "any", "all", "such", "from", "into", "upon", "under", "over", "than",
+        "then", "there", "their", "them", "they", "which", "who", "whom", "been",
+        "being", "would", "could", "should", "shall", "will", "may", "must",
+        "also", "only", "other", "some", "more", "most", "said", "same",
+        # Boilerplate that carries no discriminating power in a judgment.
+        "court", "case", "matter", "order", "judgment", "para", "paragraph",
+        "hon", "honourable", "learned", "counsel", "appeal", "petition",
+    }
+)
 
 
 def _normalize(text: str) -> str:
@@ -148,28 +167,71 @@ def verify_citations(
     - If the citation cannot be matched to any source, the claim is
       unverified with reason ``unknown_source``.
     - If it matches, and a ``proposition`` was provided, the proposition must
-      share meaningful overlap with the source text. Meaningful overlap is
-      defined as at least two non-stopword tokens (length >= 3) appearing in
-      the source text. This is deliberately strict for legal drafting, and
-      callers that want looser matching can pre-process the proposition.
+      share topical overlap with the source text: at least two DISTINCT
+      non-stopword tokens (length >= 3) appearing in the source.
+
+      Be precise about what this is. It is a **topicality filter**, not a
+      support check. The comparison is bag-of-words and order-insensitive, so it
+      cannot distinguish "X is a ground" from "X is not a ground" - a negated
+      proposition shares every content word with the holding it contradicts.
+      Describing a passing result as "the source supports the claim" overstates
+      it; the honest reading is "the proposition is on-topic with the source".
+      Closing that gap needs an entailment or quoted-span mechanism.
+
+      ``source.text`` is also not the judgment. Both production callers build it
+      as ``title + summary + snippet``, and the snippet is a query-relevant
+      excerpt, so a proposition grounded deep in the body of a judgment but
+      absent from its summary can fail. That is a false-negative risk, not a
+      false-positive one - the gate stays fail-closed - but it means a rejection
+      reads as "not supported by the retrieved excerpt", not "not supported by
+      this authority".
     - If the citation matches and no proposition was provided, the claim is
       verified as a bare citation (``bare_citation``).
     """
     index = _index_sources(sources)
     checks: list[CitationCheck] = []
     for claim in claims:
-        bracket_match = _bracket_tag_lookup(claim.citation, sources)
-        if bracket_match is not None:
-            checks.append(
-                CitationCheck(
-                    claim=claim,
-                    source=bracket_match,
-                    verified=True,
-                    reason="bracket_tag_match",
-                )
-            )
-            continue
-        source = _match_source(claim.citation, index)
+        # EH-SGR-07: the bracket tag RESOLVES a source; it is not a verdict.
+        # It used to short-circuit straight to verified=True, so a citation of
+        # the form "[1] <anything>" passed unconditionally - and because both
+        # production prompts hard-require the tag, that was the only path
+        # production ever took. "Verified" meant "the model emitted an in-range
+        # list index". The tag now feeds the same gate as any other match.
+        #
+        # Tag before text, deliberately. An earlier draft of this change tried
+        # text-first, reasoning that a model which names the case correctly but
+        # miscounts the list should not have its citation checked against
+        # someone else's judgment.
+        #
+        # The reason to prefer the tag is narrower than "it fails closed", and
+        # it is worth stating precisely, because the tempting version is false.
+        # Measured, not assumed: a miscounted tag between two sibling judgments
+        # does NOT get rejected. It resolves to the wrong sibling and the
+        # proposition VERIFIES against it, because the gate is polarity-blind
+        # (see the docstring) and a judgment shares almost all its vocabulary
+        # with the judgment that overturned it. Neither ordering catches that.
+        #
+        # What separates them is where the ambiguity comes from:
+        #
+        #   - Text-first is ambiguous BY CONSTRUCTION. `_match_source` scores
+        #     coverage as overlap/len(query) with no stopword filter, so "State
+        #     of Punjab v. Rakesh Kumar" scores 1.0 against both the 2018 High
+        #     Court judgment and the 2021 Supreme Court judgment that set it
+        #     aside; the tie-break is retrieval order. The resolution is wrong
+        #     even when the model did everything right, and repeat litigants and
+        #     same-case-different-stage pairs are routine in an Indian corpus.
+        #   - Tag-first is deterministic and follows the model's explicit
+        #     pointer into a list we numbered. It can still be wrong, but only
+        #     when the model itself was wrong.
+        #
+        # So: trust the tag when it resolves - both production prompts
+        # hard-require it - and fall back to the text match for citations that
+        # carry no usable tag. Do not read this as safety against
+        # mis-attribution between siblings; that needs the entailment mechanism
+        # the docstring calls for.
+        source = _bracket_tag_lookup(claim.citation, sources)
+        if source is None:
+            source = _match_source(claim.citation, index)
         if source is None:
             checks.append(
                 CitationCheck(
@@ -185,8 +247,34 @@ def verify_citations(
             )
             continue
         source_tokens = set(_tokens(source.text))
-        claim_tokens = [tok for tok in _tokens(claim.proposition) if len(tok) >= 3]
-        meaningful = [tok for tok in claim_tokens if tok in source_tokens]
+        if not source_tokens:
+            # We hold the source but have no text to check against (retrieval
+            # returned an identifier with no title/summary/snippet). Fail closed
+            # per PRD 11.5, but say WHICH thing failed - calling this
+            # "proposition_not_supported" would blame the claim for a gap on our
+            # side, and would hide a retrieval regression behind a wall of
+            # apparently-ungrounded citations.
+            checks.append(
+                CitationCheck(
+                    claim=claim,
+                    source=source,
+                    verified=False,
+                    reason="source_text_unavailable",
+                )
+            )
+            continue
+        # EH-SGR-07: `meaningful` used to be a list built from an unfiltered
+        # token stream, so the gate had two independent holes. The same token
+        # counted twice satisfied the two-token rule, and there was no stopword
+        # list at all despite the docstring promising one - so a proposition
+        # containing "the" twice verified against any source containing "the".
+        # Count DISTINCT, non-stopword tokens.
+        claim_tokens = [
+            tok
+            for tok in _tokens(claim.proposition)
+            if len(tok) >= 3 and tok not in _STOPWORDS
+        ]
+        meaningful = {tok for tok in claim_tokens if tok in source_tokens}
         if len(meaningful) >= 2:
             checks.append(
                 CitationCheck(

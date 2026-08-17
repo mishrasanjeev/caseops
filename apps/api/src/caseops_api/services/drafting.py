@@ -894,7 +894,19 @@ def _verify_version_citations(
     citations: list[str],
 ) -> tuple[list[str], int]:
     """Verify that each citation is an authority we actually hold.
-    Returns (surviving_citations, verified_count)."""
+    Returns (surviving_citations, verified_count).
+
+    EH-SGR-07: passing ``proposition=None`` here is deliberate, not an
+    oversight. Drafting's guarantee is existence - "this authority is in our
+    corpus" - not grounding, and `verified_count` should be read that way. The
+    only proposition available at this point is the draft body itself, and
+    checking a whole draft against a bag of source words would pass on almost
+    any pairing; a gate that cannot fail is worse than no gate, because it
+    reports a confidence nobody earned.
+
+    Grounding for drafts belongs where the draft is composed, per citation and
+    per sentence. Until that exists, this stays an existence check that says so.
+    """
     unique = list(dict.fromkeys(c.strip() for c in citations if c and c.strip()))
     if not unique:
         return [], 0

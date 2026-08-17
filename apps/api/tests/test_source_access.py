@@ -22,7 +22,12 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 def _seed_authority(source_reference: str) -> str:
     with get_session_factory()() as session:
         row = AuthorityDocument(
-            source="official",
+            # 2026-08-16 (FMB-01): this fixture used source="official", a value
+            # no ingest path ever writes. The predicate under test compared
+            # against that literal, so the fixture was the only thing that could
+            # satisfy it - the suite stayed green while production could never
+            # pass. Use a real registry source key instead.
+            source="supreme_court_latest_orders",
             adapter_name="source-access-test",
             court_name="Supreme Court of India",
             forum_level="supreme_court",
@@ -132,7 +137,7 @@ def test_opaque_source_open_is_authenticated_audited_and_url_safe(
             "destination_class": "verified_public",
             "source_state": "available",
             "source_version": metadata["source_version"],
-            "provider": "official",
+            "provider": "supreme_court_latest_orders",
             "source_reference_sha256": hashlib.sha256(
                 reference.encode("utf-8")
             ).hexdigest(),

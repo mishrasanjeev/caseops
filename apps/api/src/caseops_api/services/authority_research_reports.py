@@ -18,7 +18,10 @@ from caseops_api.schemas.authorities import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.source_actions import inspect_source_target_action
+from caseops_api.services.source_actions import (
+    authority_source_verified,
+    inspect_source_target_action,
+)
 
 ANALYSIS_VERSION = "authority-search-v3-2026-08-04"
 
@@ -73,7 +76,8 @@ def create_research_report(
             document.source_reference,
             target_type="authority_document",
             target_id=document.id,
-            verified=(document.source == "official"),
+            # FMB-01: was document.source == "official" (statically dead).
+            verified=authority_source_verified(document.source, document.source_reference),
         )
         snapshot.append(
             AuthorityResearchReportResult(

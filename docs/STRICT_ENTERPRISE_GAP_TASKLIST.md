@@ -1070,18 +1070,60 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 
 ### EH-SGR-07 - Citation verifier does not check the proposition on production paths
 
-- **Status:** Partially implemented.
+- **Status:** Partially implemented. The code control is in place and tested;
+  the missing layer is verification — no measurement of the change against
+  production data, so the size of the correction is unknown. Per this skill's
+  own rule, mixed evidence stays at `Partially implemented` rather than
+  upgrading early. It moves to `Implemented` when the replay below has run.
 - **Gap found:** of three `verified=True` paths in `services/citations.py`, the
-  bracket-tag short-circuit (`:161-171`) reads neither `source.text` nor
-  `claim.proposition`, and both production prompts
-  (`recommendations.py:1249-1256`, `litigation_strategy.py:653-655`) hard-require
-  that tag. Drafting passes `proposition=None` (`drafting.py:925-927`).
-  `tests/test_citations.py:99-115` asserts the bypass as intended behaviour.
-- **Control required:** mandatory proposition gate on production paths; bracket
-  tag demoted to a resolver; the bypass test deleted or inverted; any quality
-  claim that relied on the old number re-baselined.
-- **Severity:** stop-ship. Reliance on fabricated precedent is judicially treated
-  as misconduct.
+  bracket-tag short-circuit read neither `source.text` nor `claim.proposition`,
+  and both production prompts (`recommendations.py`, `litigation_strategy.py`,
+  in the citation-format instruction) hard-require that tag. Any citation the
+  model emitted in the required format therefore bypassed verification
+  entirely: "citation verified" meant "the model emitted an in-range list
+  index". How often production actually emitted the tag is not measured — the
+  prompts require it, which is a strong reason to expect near-total coverage,
+  but that is an inference, not a count. Drafting passes `proposition=None`.
+  `tests/test_citations.py` asserted the bypass as intended behaviour.
+- **Fix landed:** three changes, in the order that made each one safe.
+  1. Gate hardened - distinct non-stopword token counting, `_STOPWORDS` added
+     (the docstring had promised a stopword list that never existed, and the
+     overlap set was a list, so one repeated token satisfied the two-token rule).
+  2. Callers given real propositions - `litigation_strategy.item_proposition()`
+     composes description/rationale/label/stage_label/mitigation/action at all
+     four call sites, replacing the literal `"strategy item citation"`.
+  3. Bracket tag demoted to a resolver: it now answers "which source is this?"
+     and the resolved source clears the same gate as any other match.
+  The two tests that pinned the bypass are inverted, not deleted, and carry the
+  supersession note. `source_text_unavailable` was added so a retrieval gap is
+  not misreported as an ungrounded claim.
+- **Deliberately unchanged:** a claim with no proposition is still
+  `bare_citation`. That is drafting's contract - "we hold this authority", not
+  "it supports this sentence". Forcing a proposition there would feed a whole
+  draft body to a bag-of-words check, which passes trivially and proves nothing.
+- **Known limit, recorded not implied:** the gate is a *topicality filter*, not
+  an entailment check. It is bag-of-words and polarity-blind, so a negated
+  proposition shares every content word with the holding it contradicts. Closing
+  that needs entailment or quoted-span verification. Do not describe a pass as
+  "the source supports the claim".
+- **Still open:** the production re-baseline. `scripts/replay_citation_gate.py`
+  measures how many currently-"verified" citations the real gate rejects; it
+  needs production data and has not been run. Expect recommendation and strategy
+  confidence to drop (`_cap_confidence`) and some citations to stop rendering -
+  that is the gate working, but the magnitude is unmeasured. Any published
+  quality number that predates this change is stale.
+- **Severity:** was stop-ship. Reliance on fabricated precedent is judicially
+  treated as misconduct.
+- **Adjacent, noted not fixed:** refusal ordering in `litigation_strategy`.
+  Citation verification runs before the forbidden-phrase check, so a payload
+  that both contains disallowed language ("will win") and fails the gate is
+  refused as "primary route has no verified authority". Both are 422 and the
+  user is protected either way, but the message names the wrong reason, which
+  will mislead whoever debugs it. Surfaced because a fixture with an ungrounded
+  rationale made the forbidden-phrase test pass for the wrong reason once the
+  gate went live. Out of scope for this change; ordering is pre-existing.
+- **Evidence:** `tests/test_20260816_bracket_tag_is_a_resolver.py`,
+  `tests/test_20260816_proposition_gate_hardening.py`.
 
 ### EH-SGR-08 - Customer-facing claims not backed by running code
 

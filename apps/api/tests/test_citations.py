@@ -97,9 +97,14 @@ def test_case_and_punctuation_variations_match() -> None:
 
 
 def test_bracket_tag_resolves_to_indexed_source() -> None:
-    """Grounding fast path: model emits "[1] ..." → verifier resolves by index
-    and skips the proposition gate. Deterministic, even when the rationale
-    shares no tokens with the source text."""
+    """The tag RESOLVES a source by index; it is not a verdict (EH-SGR-07).
+
+    Resolution still works when the model paraphrases the case name - that is
+    what the tag is for. What changed is that the resolved source now goes
+    through the proposition gate like any other match. This test used to assert
+    the opposite ("skips the proposition gate"), which is precisely how a
+    citation of the form "[1] <anything>" passed unconditionally in production.
+    """
     report = verify_citations(
         [
             Claim(
@@ -109,8 +114,25 @@ def test_bracket_tag_resolves_to_indexed_source() -> None:
         ],
         [SSANGYONG, PATEL],
     )
+    assert not report.all_verified
+    assert report.checks[0].reason == "proposition_not_supported"
+    # Resolution by index still happened - we know WHICH source was rejected.
+    assert report.checks[0].source is SSANGYONG
+
+
+def test_bracket_tag_resolves_a_paraphrased_title_when_grounded() -> None:
+    """The resolver's actual job: survive model-side paraphrase of the title."""
+    report = verify_citations(
+        [
+            Claim(
+                citation="[1] paraphrased title that does not match the source",
+                proposition="patent illegality as a ground under Section 34",
+            ),
+        ],
+        [SSANGYONG, PATEL],
+    )
     assert report.all_verified
-    assert report.checks[0].reason == "bracket_tag_match"
+    assert report.checks[0].reason == "proposition_supported"
     assert report.checks[0].source is SSANGYONG
 
 

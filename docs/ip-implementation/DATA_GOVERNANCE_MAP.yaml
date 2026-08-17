@@ -337,14 +337,15 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "llm-and-embedding-provider-held-content",
       "kind": "provider_held_object",
-      "purpose": "Configured or optional LLM, embedding, and prompt-cache provider request/response content and derived vectors, including bounded authority-metadata extraction and its one-document provider canary.",
+      "purpose": "Configured or optional LLM, embedding, and prompt-cache provider request/response content and derived vectors, including bounded authority-metadata extraction and its one-document provider canary. Provider-returned citations are surfaced and persisted only through the citation verification predicate in services/citations.py; EH-SGR-07 (2026-08-16) changed that predicate's meaning, so a persisted verified-citation count recorded before that date is not comparable with one recorded after, and neither has yet been re-baselined against production data.",
       "sensitivity": "privileged_or_confidential",
       "source_licence_limits": "Provider training, retention, residency, deletion, and permitted-use settings require approved provider and tenant policy before content transmission.",
       "implementation_refs": [
         "apps/api/src/caseops_api/services/llm.py",
         "apps/api/src/caseops_api/scripts/extract_authority_metadata.py",
         "apps/api/src/caseops_api/services/embeddings.py",
-        "apps/api/src/caseops_api/core/settings.py"
+        "apps/api/src/caseops_api/core/settings.py",
+        "apps/api/src/caseops_api/services/citations.py"
       ]
     },
     {

@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import logging
 from collections.abc import Iterable
 
 import pytest
@@ -88,38 +89,115 @@ def _seed_authorities(records: Iterable[dict]) -> None:
         session.commit()
 
 
-def _seed_relevant_authority() -> str:
-    """Seed a single SC authority that grounds an Article 136 SLP route.
+# EH-SGR-07: these fixtures used to seed one anticipatory-bail authority
+# (Sushila Aggarwal, s.438 CrPC) and cite it for every item in a quashing
+# strategy - inherent powers, compromise, SLP escalation, the lot. That passed
+# only because the bracket tag short-circuited verification: any citation of the
+# form "[1] <anything>" verified unconditionally. Once the tag became a resolver
+# and the proposition gate went live, 32 tests in this file failed, because the
+# payload was citing a bail judgment for propositions about BNSS s.528.
+#
+# The tests were not wrong about the behaviour they assert; the fixture was
+# fake-grounded. Seed the authorities that actually hold what the payload
+# claims, and cite each item to the right one. Each is a real judgment and the
+# summaries describe what it genuinely held.
+# A fixture must not put words in a real judgment's mouth. An earlier version of
+# this change kept Sushila Aggarwal (a Constitution Bench decision on
+# anticipatory bail under s.438 CrPC) as the escalation authority and extended
+# its summary and document_text with Article 136 holdings, so that the SLP items
+# would clear the gate. That is inventing a holding to make a test pass — the
+# same defect this whole change exists to remove, relocated into the fixture.
+# The escalation authority is now a case that actually decides the point.
+_QUASHING_AUTHORITY = "State of Haryana v. Bhajan Lal (1992)"
+_COMPROMISE_AUTHORITY = "Gian Singh v. State of Punjab (2012)"
+_SLP_AUTHORITY = "Pritam Singh v. State (1950)"
 
-    Returns the citation identifier the model should reference.
+
+def _seed_relevant_authority() -> str:
+    """Seed the authorities that ground the quashing/escalation strategy.
+
+    Returns the citation identifier for the escalation (Article 136) route,
+    which is what most callers cite. Use ``_QUASHING_AUTHORITY`` and
+    ``_COMPROMISE_AUTHORITY`` for the other two routes.
     """
-    title = "Sushila Aggarwal v. State of NCT of Delhi (2020)"
     _seed_authorities(
         [
             {
-                "title": title,
+                "title": _QUASHING_AUTHORITY,
                 "court_name": "Supreme Court of India",
                 "forum_level": "supreme_court",
                 "document_type": "judgment",
-                "decision_date": datetime.date(2020, 1, 29),
-                "case_reference": title,
+                # Decided 21 Nov 1990; the "(1992)" in the title is the report
+                # year (1992 Supp (1) SCC 335), not the decision date.
+                "decision_date": datetime.date(1990, 11, 21),
+                "case_reference": _QUASHING_AUTHORITY,
                 "summary": (
-                    "Five-judge Constitution Bench held that anticipatory bail "
-                    "under Section 438 CrPC is not time-limited; protection "
-                    "subsists till the end of trial."
+                    "Laid down the categories in which the High Court may "
+                    "exercise its inherent powers to quash a first information "
+                    "report or criminal proceeding."
                 ),
                 "document_text": (
-                    "The Constitution Bench of the Supreme Court held in Sushila "
-                    "Aggarwal that anticipatory bail granted under Section 438 "
-                    "of the Code of Criminal Procedure is not, as a matter of "
-                    "law, time-limited. The Court further held that the "
-                    "protection under Article 136 enables review of the High "
-                    "Court order on substantial questions of law."
+                    "The Supreme Court enumerated the categories of cases in "
+                    "which the High Court may exercise its inherent powers to "
+                    "quash a first information report, including where the "
+                    "allegations, taken at face value, do not constitute an "
+                    "offence, and where the proceeding is manifestly attended "
+                    "with mala fides. A quashing petition invoking the "
+                    "inherent jurisdiction of the High Court is the ordinary "
+                    "route by which such a challenge is brought."
                 ),
-            }
+            },
+            {
+                "title": _COMPROMISE_AUTHORITY,
+                "court_name": "Supreme Court of India",
+                "forum_level": "supreme_court",
+                "document_type": "judgment",
+                "decision_date": datetime.date(2012, 9, 24),
+                "case_reference": _COMPROMISE_AUTHORITY,
+                "summary": (
+                    "Held that the High Court may quash a non-compoundable "
+                    "offence on the basis of a compromise between the parties "
+                    "where the dispute is essentially private in nature."
+                ),
+                "document_text": (
+                    "The Supreme Court held that the inherent power of the "
+                    "High Court permits quashing a criminal proceeding on the "
+                    "basis of a settlement or compromise between the parties "
+                    "where the offence is predominantly private, such as a "
+                    "commercial or matrimonial dispute, even though the "
+                    "offence is not compoundable. A compromise petition filed "
+                    "on that footing is to be assessed on whether continuing "
+                    "the prosecution would serve the ends of justice."
+                ),
+            },
+            {
+                "title": _SLP_AUTHORITY,
+                "court_name": "Supreme Court of India",
+                "forum_level": "supreme_court",
+                "document_type": "judgment",
+                "decision_date": datetime.date(1950, 1, 1),
+                "case_reference": _SLP_AUTHORITY,
+                "summary": (
+                    "Article 136 confers on the Supreme Court a discretionary "
+                    "power to grant special leave to appeal against an order "
+                    "of a High Court. The power is exceptional, to be "
+                    "exercised sparingly, where a substantial question of law "
+                    "or grave injustice is shown."
+                ),
+                "document_text": (
+                    "The Supreme Court held that the power to grant special "
+                    "leave under Article 136 of the Constitution is a "
+                    "discretionary power vested in the Supreme Court, wider "
+                    "than the ordinary appellate jurisdiction but to be "
+                    "exercised sparingly and in exceptional cases. Special "
+                    "leave will not be granted as a matter of course; the "
+                    "applicant must show a substantial question of law or that "
+                    "grave injustice has been done."
+                ),
+            },
         ]
     )
-    return title
+    return _SLP_AUTHORITY
 
 
 def _setup_matter(client: TestClient, *, forum_level: str = "high_court") -> tuple[str, str, str]:
@@ -170,7 +248,7 @@ def _valid_strategy_payload(citation: str) -> dict:
             ),
             "confidence": "medium",
             "availability": "available",
-            "supporting_citations": [f"[1] {citation}"],
+            "supporting_citations": [_QUASHING_AUTHORITY, citation],
             "risk_notes": (
                 "Quashing is discretionary; outcome depends on the HC's "
                 "assessment of bona fides."
@@ -179,10 +257,21 @@ def _valid_strategy_payload(citation: str) -> dict:
         "alternative_routes": [
             {
                 "label": "Settle and file compromise petition",
-                "rationale": "Compromise framework under BNSS s.359 / Gian Singh.",
+                # Gian Singh grounds this on the High Court's INHERENT powers,
+                # and expressly rejects the compounding provision (s.320 CrPC,
+                # now BNSS s.359) as the source of the power - which is the
+                # whole point of the case: it is how a non-compoundable offence
+                # can be quashed on a settlement at all. An earlier draft cited
+                # s.359 here, which contradicted itself in the same sentence.
+                "rationale": (
+                    "Under the High Court's inherent powers the proceeding may "
+                    "be quashed on the basis of a compromise between the "
+                    "parties, the dispute being predominantly private, even "
+                    "where the offence is non-compoundable."
+                ),
                 "confidence": "low",
                 "availability": "uncertain",
-                "supporting_citations": [f"[1] {citation}"],
+                "supporting_citations": [_COMPROMISE_AUTHORITY],
                 "risk_notes": None,
             }
         ],
@@ -191,41 +280,46 @@ def _valid_strategy_payload(citation: str) -> dict:
                 "forum_level": "high_court_single_bench",
                 "stage_label": "Quashing petition",
                 "forum_name": "Delhi High Court",
-                "rationale": "HC inherent powers under BNSS s.528.",
+                "rationale": (
+                    "The High Court may exercise its inherent powers under "
+                    "BNSS s.528 to quash a first information report on this "
+                    "fact pattern."
+                ),
                 "statutory_basis": ["BNSS s.528"],
                 "expected_filings": [
                     "quashing_petition", "vakalatnama", "affidavit",
                 ],
-                "supporting_citations": [f"[1] {citation}"],
+                "supporting_citations": [_QUASHING_AUTHORITY],
             },
             {
                 "forum_level": "supreme_court",
                 "stage_label": "SLP if HC declines",
                 "forum_name": "Supreme Court of India",
                 "rationale": (
-                    "Article 136 SLP grounds — substantial question on the "
-                    "HC's exercise of inherent powers."
+                    "Special leave under Article 136 lets the Supreme Court "
+                    "review the High Court order on a substantial question of "
+                    "law once relief has been declined."
                 ),
                 "statutory_basis": ["Constitution Article 136"],
                 "expected_filings": [
                     "special_leave_petition", "synopsis_list_of_dates",
                     "condonation_of_delay",
                 ],
-                "supporting_citations": [f"[1] {citation}"],
+                "supporting_citations": [citation],
             },
         ],
         "limitation_flags": [
             {
                 "label": "SLP filing window",
                 "description": (
-                    "Article 132 of the Limitation Act prescribes 60 days "
-                    "for criminal SLPs. Date of HC dismissal is not yet on "
-                    "file."
+                    "A special leave petition under Article 136 against the "
+                    "High Court order must be filed within 60 days. The date "
+                    "of dismissal is not yet on file."
                 ),
                 "statutory_basis": "Limitation Act 1963 Article 132",
                 "deadline_iso": None,
                 "severity": "warning",
-                "supporting_citations": [f"[1] {citation}"],
+                "supporting_citations": [citation],
             }
         ],
         "required_documents": [
@@ -254,8 +348,11 @@ def _valid_strategy_payload(citation: str) -> dict:
                 "supporting_citations": [],
             },
             {
-                "action": "If dismissed, prepare SLP within 60 days",
-                "supporting_citations": [f"[1] {citation}"],
+                "action": (
+                    "If the High Court declines relief, prepare a special "
+                    "leave petition under Article 136 within 60 days"
+                ),
+                "supporting_citations": [citation],
             },
         ],
         "rationale": (
@@ -859,9 +956,15 @@ def test_strategy_refuses_when_forbidden_phrase_in_payload(
 
     citation = _seed_relevant_authority()
     payload = _valid_strategy_payload(citation)
-    # Slip a forbidden phrase into the rationale.
+    # Slip a forbidden phrase into the rationale. The rest of the rationale
+    # stays grounded in the quashing authority on purpose: the assertion is
+    # that forbidden language fails closed EVEN WHEN the citations verify. If
+    # the rationale were ungrounded, the primary-route-uncited refusal would
+    # fire first and this test would pass for the wrong reason.
     payload["recommended_route"]["rationale"] = (
-        "This is a perfect strategy that will win on the merits."
+        "The High Court may exercise its inherent powers to quash the first "
+        "information report. This is a perfect strategy that will win on the "
+        "merits."
     )
 
     class _Bad:
@@ -1306,9 +1409,11 @@ def test_strategy_refuses_when_primary_route_uncited_even_if_alternative_cited(
     payload["recommended_route"]["supporting_citations"] = [
         "Made Up v. Nobody (2099)",
     ]
-    # Alternative carries the real, verifiable citation.
+    # Alternative carries the real, verifiable citation. It cites the
+    # compromise authority because that is what its rationale claims - the
+    # gate checks the proposition, so any-real-citation is no longer enough.
     payload["alternative_routes"][0]["supporting_citations"] = [
-        f"[1] {citation}",
+        _COMPROMISE_AUTHORITY,
     ]
 
     class _PrimaryUncited:
@@ -1659,10 +1764,13 @@ def test_strategy_drops_uncited_alternative_routes(
     payload["alternative_routes"] = [
         {
             "label": "Verified compromise route",
-            "rationale": "Settle and compound with cross-reference to seeded authority.",
+            "rationale": (
+                "Quash the proceeding on the basis of a compromise between "
+                "the parties, the dispute being predominantly private."
+            ),
             "confidence": "low",
             "availability": "uncertain",
-            "supporting_citations": [f"[1] {citation}"],
+            "supporting_citations": [_COMPROMISE_AUTHORITY],
             "risk_notes": None,
         },
         {
@@ -1760,8 +1868,11 @@ def test_strategy_marks_bare_string_next_best_actions_unverified(
         },
         # A structured legal claim with a verifiable citation.
         {
-            "action": "Prepare synopsis under SCR Order XXI",
-            "supporting_citations": [f"[1] {citation}"],
+            "action": (
+                "Prepare the special leave petition under Article 136 for "
+                "the Supreme Court"
+            ),
+            "supporting_citations": [citation],
         },
     ]
 
@@ -1887,7 +1998,7 @@ def test_strategy_marks_structured_action_with_uncited_citation_unverified(
 
 
 def test_strategy_drops_unverified_limitation_flag(
-    client: TestClient, monkeypatch,
+    client: TestClient, monkeypatch, caplog,
 ) -> None:
     """An LLM that emits a limitation flag whose citation fails
     verification is offering the lawyer an unverified DEADLINE. The
@@ -1903,13 +2014,13 @@ def test_strategy_drops_unverified_limitation_flag(
         {
             "label": "SLP filing window",
             "description": (
-                "Article 132 of the Limitation Act prescribes 60 days "
-                "for criminal SLPs."
+                "A special leave petition under Article 136 against the "
+                "High Court order must be filed within 60 days."
             ),
             "statutory_basis": "Limitation Act 1963 Article 132",
             "deadline_iso": None,
             "severity": "warning",
-            "supporting_citations": [f"[1] {citation}"],
+            "supporting_citations": [citation],
         },
         {
             "label": "Speculative phantom deadline",
@@ -1945,11 +2056,14 @@ def test_strategy_drops_unverified_limitation_flag(
     )
 
     token, _, matter_id = _setup_matter(client, forum_level="high_court")
-    response = client.post(
-        f"/api/matters/{matter_id}/recommendations",
-        headers=auth_headers(token),
-        json={"type": "litigation_strategy"},
-    )
+    with caplog.at_level(
+        logging.WARNING, logger="caseops_api.services.litigation_strategy"
+    ):
+        response = client.post(
+            f"/api/matters/{matter_id}/recommendations",
+            headers=auth_headers(token),
+            json={"type": "litigation_strategy"},
+        )
     assert response.status_code == 200, response.text
     flags = response.json()["strategy_payload"]["limitation_flags"]
     assert len(flags) == 1, (
@@ -1959,6 +2073,13 @@ def test_strategy_drops_unverified_limitation_flag(
     assert flags[0]["label"] == "SLP filing window"
     assert flags[0]["unverified"] is False
     assert len(flags[0]["supporting_citations"]) >= 1
+    # A silently dropped deadline is the failure mode the warning exists for:
+    # the lawyer never sees the flag, so the only trace is the log line. Without
+    # this assertion the logger block could be deleted and the suite stay green.
+    assert any(
+        "dropped" in record.getMessage() and "limitation flag" in record.getMessage()
+        for record in caplog.records
+    ), "dropping a limitation flag must be announced to operators"
 
 
 def test_strategy_drops_legal_forum_step_with_uncited_citation(
@@ -2336,8 +2457,11 @@ def test_strategy_marks_structured_action_with_empty_citations_unverified(
         },
         # Structured action with a verifiable citation — still verified.
         {
-            "action": "Prepare synopsis under SCR",
-            "supporting_citations": [f"[1] {citation}"],
+            "action": (
+                "Prepare the special leave petition under Article 136 for "
+                "the Supreme Court"
+            ),
+            "supporting_citations": [citation],
         },
     ]
 
@@ -2803,3 +2927,80 @@ def test_recommended_drafts_filters_unknowns_before_slicing_in_mixed_case(
     # No fictitious slug must appear.
     for fake in fake_slugs:
         assert fake not in slugs_in_panel
+
+
+def test_primary_route_cannot_inherit_an_alternative_verdict_for_the_same_citation(
+    client: TestClient, monkeypatch,
+) -> None:
+    """The refusal above uses DIFFERENT citation strings for the two routes.
+
+    `_verify_routes`' flat-map leak only fires when a failing route and a
+    verifying route cite the SAME string: the failing route then inherits the
+    other's verdict and the `rejected_primary_route_uncited` refusal never
+    triggers. With "Made Up v. Nobody (2099)" on one side and Gian Singh on the
+    other there is no shared key, so that test cannot observe the leak it is
+    cited as guarding. Here both routes cite Gian Singh; only the alternative's
+    rationale is actually grounded in it.
+    """
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+
+    payload = _valid_strategy_payload(citation)
+    # Same citation string on both routes - the shared key the leak needs.
+    payload["recommended_route"]["supporting_citations"] = [_COMPROMISE_AUTHORITY]
+    # ...but a rationale sharing no substantive token with Gian Singh, so the
+    # primary route earns nothing on its own.
+    payload["recommended_route"]["rationale"] = (
+        "The limitation period expired before the notice was served, so the "
+        "proceeding is time barred and cannot be sustained."
+    )
+    payload["alternative_routes"][0]["supporting_citations"] = [_COMPROMISE_AUTHORITY]
+
+    class _SharedCitationRoutes:
+        name = "mock"
+        model = "mock-shared-route-cite"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _SharedCitationRoutes(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _SharedCitationRoutes(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+
+    assert response.status_code == 422, response.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        runs = list(
+            session.scalars(
+                select(ModelRun).where(
+                    ModelRun.purpose == "recommendation:litigation_strategy",
+                )
+            )
+        )
+    # Pinned to the specific status: a 422 for any other reason would let this
+    # test pass without exercising the leak at all.
+    assert any(r.status == "rejected_primary_route_uncited" for r in runs), (
+        "the primary route must be judged on its own rationale, not credited "
+        "because an alternative route cited the same authority"
+    )

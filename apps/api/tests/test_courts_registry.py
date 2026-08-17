@@ -272,3 +272,101 @@ def test_judge_profile_suppresses_pattern_language_for_low_sample(
     assert analytics["pattern_claims_suppressed"] is True
     assert analytics["practice_area_trends"] == []
     assert any("Sample size is below" in item for item in analytics["limitations"])
+
+
+def test_judge_profile_case_list_marks_official_and_mirror_sources_differently(
+    client: TestClient,
+) -> None:
+    """FMB-02 at courts.py:392, made observable.
+
+    `test_judge_profile_returns_source_backed_descriptive_analytics` above seeds
+    `source="adp06_test_source"` with an `official.example.test` URL. That fails
+    the old predicate (`bool(row.source_reference)` aside, the registry lookup)
+    and the new one alike, so the case list reads "unverified" before and after
+    and the fix is invisible to it. The verdicts only diverge for a document that
+    is genuinely official: a registry-classified source key AND a .gov.in URL.
+    """
+    from caseops_api.db.models import AuthorityDocument, Court, Judge
+    from caseops_api.db.session import get_session_factory
+
+    token = str(bootstrap_company(client)["access_token"])
+    SessionFactory = get_session_factory()
+    with SessionFactory() as session:
+        sc_court = session.query(Court).filter_by(short_name="SC").first()
+        assert sc_court is not None
+        judge = Judge(
+            court_id=sc_court.id,
+            full_name="Justice Source Trust",
+            honorific="Hon'ble",
+            current_position="Puisne Judge",
+            is_active=True,
+        )
+        session.add(judge)
+        session.flush()
+        # `inspect_source_action` rejects a non-official HOST before it ever
+        # consults `verified`, so a mirror URL reads "unverified" under both the
+        # old and the new predicate. The two only diverge for a document whose
+        # URL is on an official host but whose SOURCE KEY is unknown - a scrape
+        # that happens to link to sci.gov.in. The old `bool(row.source_reference)`
+        # called that verified and offered it as openable.
+        for index in range(5):
+            official = index < 3
+            session.add(
+                AuthorityDocument(
+                    source=(
+                        "supreme_court_latest_orders" if official else "mirror_scrape"
+                    ),
+                    adapter_name="source-trust-test-v1",
+                    court_name=sc_court.name,
+                    forum_level=sc_court.forum_level,
+                    document_type="judgment",
+                    title=f"Source trust authority {index}",
+                    case_reference=f"CRL.A. 90{index}/2026",
+                    bench_name="Justice Source Trust",
+                    neutral_citation=f"2026 INSC 90{index}",
+                    decision_date=date(2026, 2, index + 1),
+                    canonical_key=f"source-trust-{index}",
+                    # Both groups carry an official host on purpose.
+                    source_reference=(
+                        f"https://main.sci.gov.in/supremecourt/2026/90{index}.pdf"
+                    ),
+                    summary="Bounded summary for source trust assertion.",
+                    extracted_char_count=1200,
+                    judges_json=json.dumps(["Source Trust"]),
+                    sections_cited_json=json.dumps(["Section 138 Negotiable Instruments Act"]),
+                )
+            )
+        session.commit()
+        judge_id = judge.id
+
+    resp = client.get(f"/api/courts/judges/{judge_id}", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    case_list = resp.json()["analytics"]["case_list"]
+    assert case_list
+
+    # Both groups share an official host, so they are told apart by case
+    # reference: 900-902 came from the registry source, 903-904 from a scrape.
+    states = {
+        item["case_reference"]: item["source_action"]["state"] for item in case_list
+    }
+    registry_states = {
+        ref: state
+        for ref, state in states.items()
+        if ref in {"CRL.A. 900/2026", "CRL.A. 901/2026", "CRL.A. 902/2026"}
+    }
+    scrape_states = {
+        ref: state
+        for ref, state in states.items()
+        if ref in {"CRL.A. 903/2026", "CRL.A. 904/2026"}
+    }
+    assert registry_states, "expected the registry-sourced documents in the case list"
+    assert scrape_states, "expected the scrape-sourced documents in the case list"
+
+    assert set(registry_states.values()) == {"available"}, (
+        "a registry-official source key with a .gov.in URL must be openable "
+        f"(got {registry_states})"
+    )
+    assert set(scrape_states.values()) == {"unverified"}, (
+        "an unknown source key must NOT be trusted just because its URL happens "
+        f"to sit on an official host (got {scrape_states})"
+    )

@@ -31,7 +31,9 @@ from caseops_api.db.models import (
 from caseops_api.schemas.source_actions import SourceActionRecord
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
+    authority_source_verified,
     inspect_source_target_action,
+    judge_appointment_source_verified,
 )
 
 router = APIRouter()
@@ -385,7 +387,9 @@ def _build_descriptive_analytics(
                         row.source_reference,
                         target_type="authority_document",
                         target_id=row.id,
-                        verified=bool(row.source_reference),
+                        # FMB-02: was bool(row.source_reference), which passed any
+                        # non-empty reference including a bare PDF filename.
+                        verified=authority_source_verified(row.source, row.source_reference),
                     ),
                     practice_area=practice_area,
                     statutes_or_sections=sections[:6],
@@ -949,7 +953,8 @@ def get_judge_profile(
                     row.source_url,
                     target_type="judge_appointment",
                     target_id=row.id,
-                    verified=bool(row.source_url),
+                    # FMB-02: was bool(row.source_url) - any URL counted as verified.
+                    verified=judge_appointment_source_verified(row.source_url),
                 ),
             )
             for row in career_rows
