@@ -175,6 +175,19 @@ def test_change_gate_requires_map_update_for_a_boundary_in_a_deploy_manifest() -
     )
 
 
+def test_change_gate_matches_a_scoped_npm_provider_package() -> None:
+    # Provider SDKs are scoped on npm, so the import a frontend actually writes
+    # is `@opentelemetry/api`, not `opentelemetry`. Anchoring the bare module
+    # name to the opening quote matched none of them.
+    path = "apps/web/lib/telemetry/otel.ts"
+    source = 'import { trace } from "@opentelemetry/api";\n'
+
+    errors = ip_data_governance_map.change_gate_errors(
+        [path], source_by_path={path: source}
+    )
+    assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
+
+
 def test_change_gate_still_ignores_provider_words_in_prose_inside_source_files() -> None:
     # The manifest rule above must not undo the noise fix it sits beside: bare
     # provider words in comments and route paths are why code files are matched

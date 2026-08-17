@@ -105,8 +105,11 @@ _RISKY_MODULES = (
 RISKY_SOURCE_PATTERN = re.compile(
     # `import x`, `from x import ...`, `require('x')`, `from "x"`
     rf"(?:^|\n)\s*(?:import|from)\s+(?:{_RISKY_MODULES})\b"
-    rf"|require\(\s*['\"](?:{_RISKY_MODULES})"
-    rf"|from\s+['\"](?:{_RISKY_MODULES})"
+    # The `@?` matters: provider SDKs ship scoped on npm, so the real import is
+    # `from "@opentelemetry/api"`. Anchoring the bare name to the quote missed
+    # every one of them.
+    rf"|require\(\s*['\"]@?(?:{_RISKY_MODULES})"
+    rf"|from\s+['\"]@?(?:{_RISKY_MODULES})"
     # attribute access on the module, e.g. httpx.post(, redis.Redis(
     rf"|\b(?:{_RISKY_MODULES})\s*\.\s*\w+\s*\("
     # unambiguous single-token boundaries that are never ordinary prose
