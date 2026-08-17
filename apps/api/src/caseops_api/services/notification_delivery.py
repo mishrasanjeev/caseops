@@ -47,7 +47,15 @@ from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_RETRY_MAXIMUM_INTERVAL,
 )
 
-_URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
+# Any scheme, not just http(s). A driver failure quotes its DSN --
+# postgresql://user:password@host:5432/db -- and matching only http(s)
+# let connection strings through with the password intact.
+#
+# The scheme repetition is bounded. Unbounded, CodeQL flags py/polynomial-redos
+# (high): the input is provider-supplied exception text, so a long run of
+# letters with no "://" makes the engine retry from every start position. Real
+# schemes are short -- "postgresql" is 10, "mongodb+srv" is 11.
+_URL_RE = re.compile(r"[a-z][a-z0-9+.\-]{0,15}://[^\s]+", re.IGNORECASE)
 _UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
     re.IGNORECASE,

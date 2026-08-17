@@ -51,6 +51,7 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
 )
 from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -388,7 +389,7 @@ def run_export_job(job_id: str) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.exception("audit export job %s failed", job.id)
             job.status = AuditExportJobStatus.FAILED
-            job.error = str(exc)[:1800]
+            job.error = redact_provider_error(exc)
             job.completed_at = datetime.now(UTC)
             session.commit()
 
