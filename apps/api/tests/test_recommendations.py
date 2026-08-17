@@ -2058,3 +2058,94 @@ def test_strategy_entries_are_tenant_scoped(client: TestClient) -> None:
         json={"title": "Leaked plan", "body": "Should not write."},
     )
     assert cross_tenant_create.status_code == 404
+
+
+def test_shared_citation_is_credited_per_option_when_verdicts_diverge(
+    client: TestClient, monkeypatch
+) -> None:
+    """The per-option attribution fix only bites when the verdicts DIFFER.
+
+    `test_shared_citation_credits_every_option_that_cites_it` above asserts the
+    one-to-many half of the contract, but EH-SGR-07 rewrote its second option to
+    be genuinely grounded, so both options now pass the proposition gate and the
+    test would keep passing if the flat citation-string map came back. What the
+    fix exists to prevent is an UNGROUNDED option inheriting a grounded option's
+    verdict because they happen to cite the same string - silently lending it
+    authority it did not earn.
+    """
+    import json as _json
+
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    _seed_relevant_authority()
+
+    class _DivergentProvider:
+        name = "mock"
+        model = "mock-divergent-cite"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Two routes, one authority",
+                "options": [
+                    {
+                        "label": "Challenge the award",
+                        # Shares substantive tokens with the seeded source.
+                        "rationale": (
+                            "Patent illegality is a ground for setting aside an "
+                            "arbitral award under Section 34."
+                        ),
+                        "confidence": "high",
+                        "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    },
+                    {
+                        "label": "Plead limitation",
+                        # Shares no substantive token with the seeded source. It
+                        # cites the same authority purely by string.
+                        "rationale": (
+                            "The claim is barred because three years elapsed "
+                            "before the notice was issued."
+                        ),
+                        "confidence": "medium",
+                        "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    },
+                ],
+                "primary_recommendation_label": "Challenge the award",
+                "rationale": "Either route works.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "high",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=_json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _DivergentProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    assert response.status_code == 200, response.text
+    options = response.json()["options"]
+    assert len(options) == 2
+
+    assert options[0]["supporting_citations"] == ["Ssangyong Engg v. NHAI (2019)"], (
+        "the grounded option must keep the citation it earned"
+    )
+    assert options[1]["supporting_citations"] == [], (
+        "the ungrounded option must NOT inherit the grounded option's verdict "
+        "just because both cite the same string"
+    )

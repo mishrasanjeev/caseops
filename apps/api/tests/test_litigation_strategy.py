@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import logging
 from collections.abc import Iterable
 
 import pytest
@@ -1997,7 +1998,7 @@ def test_strategy_marks_structured_action_with_uncited_citation_unverified(
 
 
 def test_strategy_drops_unverified_limitation_flag(
-    client: TestClient, monkeypatch,
+    client: TestClient, monkeypatch, caplog,
 ) -> None:
     """An LLM that emits a limitation flag whose citation fails
     verification is offering the lawyer an unverified DEADLINE. The
@@ -2055,11 +2056,14 @@ def test_strategy_drops_unverified_limitation_flag(
     )
 
     token, _, matter_id = _setup_matter(client, forum_level="high_court")
-    response = client.post(
-        f"/api/matters/{matter_id}/recommendations",
-        headers=auth_headers(token),
-        json={"type": "litigation_strategy"},
-    )
+    with caplog.at_level(
+        logging.WARNING, logger="caseops_api.services.litigation_strategy"
+    ):
+        response = client.post(
+            f"/api/matters/{matter_id}/recommendations",
+            headers=auth_headers(token),
+            json={"type": "litigation_strategy"},
+        )
     assert response.status_code == 200, response.text
     flags = response.json()["strategy_payload"]["limitation_flags"]
     assert len(flags) == 1, (
@@ -2069,6 +2073,13 @@ def test_strategy_drops_unverified_limitation_flag(
     assert flags[0]["label"] == "SLP filing window"
     assert flags[0]["unverified"] is False
     assert len(flags[0]["supporting_citations"]) >= 1
+    # A silently dropped deadline is the failure mode the warning exists for:
+    # the lawyer never sees the flag, so the only trace is the log line. Without
+    # this assertion the logger block could be deleted and the suite stay green.
+    assert any(
+        "dropped" in record.getMessage() and "limitation flag" in record.getMessage()
+        for record in caplog.records
+    ), "dropping a limitation flag must be announced to operators"
 
 
 def test_strategy_drops_legal_forum_step_with_uncited_citation(
@@ -2916,3 +2927,80 @@ def test_recommended_drafts_filters_unknowns_before_slicing_in_mixed_case(
     # No fictitious slug must appear.
     for fake in fake_slugs:
         assert fake not in slugs_in_panel
+
+
+def test_primary_route_cannot_inherit_an_alternative_verdict_for_the_same_citation(
+    client: TestClient, monkeypatch,
+) -> None:
+    """The refusal above uses DIFFERENT citation strings for the two routes.
+
+    `_verify_routes`' flat-map leak only fires when a failing route and a
+    verifying route cite the SAME string: the failing route then inherits the
+    other's verdict and the `rejected_primary_route_uncited` refusal never
+    triggers. With "Made Up v. Nobody (2099)" on one side and Gian Singh on the
+    other there is no shared key, so that test cannot observe the leak it is
+    cited as guarding. Here both routes cite Gian Singh; only the alternative's
+    rationale is actually grounded in it.
+    """
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+
+    payload = _valid_strategy_payload(citation)
+    # Same citation string on both routes - the shared key the leak needs.
+    payload["recommended_route"]["supporting_citations"] = [_COMPROMISE_AUTHORITY]
+    # ...but a rationale sharing no substantive token with Gian Singh, so the
+    # primary route earns nothing on its own.
+    payload["recommended_route"]["rationale"] = (
+        "The limitation period expired before the notice was served, so the "
+        "proceeding is time barred and cannot be sustained."
+    )
+    payload["alternative_routes"][0]["supporting_citations"] = [_COMPROMISE_AUTHORITY]
+
+    class _SharedCitationRoutes:
+        name = "mock"
+        model = "mock-shared-route-cite"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _SharedCitationRoutes(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _SharedCitationRoutes(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+
+    assert response.status_code == 422, response.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        runs = list(
+            session.scalars(
+                select(ModelRun).where(
+                    ModelRun.purpose == "recommendation:litigation_strategy",
+                )
+            )
+        )
+    # Pinned to the specific status: a 422 for any other reason would let this
+    # test pass without exercising the leak at all.
+    assert any(r.status == "rejected_primary_route_uncited" for r in runs), (
+        "the primary route must be judged on its own rationale, not credited "
+        "because an alternative route cited the same authority"
+    )

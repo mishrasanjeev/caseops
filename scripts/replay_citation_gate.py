@@ -24,6 +24,17 @@ the option-level rationale, which is what production passes today. An option
 citing three authorities has citations 2 and 3 judged against text written about
 citation 1. That is a systematic false-negative built into the data shape, so the
 measured yield is a LOWER BOUND on what a per-citation proposition would achieve.
+
+Second caveat, and the sharper one. `supporting_citations_json` stores what
+`_filter_and_verify_options` already canonicalised -- `check.source.identifier`,
+not the model's raw string -- so no `[N]` prefix survives into the table this
+script reads. The bracket short-circuit therefore cannot be *observed* here even
+though it is faithfully reconstructed below: rows that were verified by bracket
+alone were rewritten as canonical identifiers before being persisted, and rows
+whose citations never verified were dropped from the list entirely. What this
+replay measures is the surviving population, which is already the post-filter
+one. Read `would NEWLY 422` as a floor, not an estimate. Sizing the bracket-only
+population needs the raw model output, which is not persisted.
 """
 
 from __future__ import annotations
@@ -37,7 +48,12 @@ from sqlalchemy import select
 
 from caseops_api.db.models import AuthorityDocument, RecommendationOption
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.citations import Claim, SourceDoc, verify_citations
+from caseops_api.services.citations import (
+    Claim,
+    SourceDoc,
+    _bracket_tag_lookup,
+    verify_citations,
+)
 
 
 @dataclass
@@ -74,14 +90,29 @@ def _sources_for(session, citations: list[str]) -> list[SourceDoc]:
 
 
 def _verified_count(claims: list[Claim], sources: list[SourceDoc], *, mandatory: bool) -> int:
+    """Count verified citations under the old gate (``mandatory=False``) or the new one.
+
+    The "before" arm must NOT simply call ``verify_citations`` and read
+    ``verified_count``. This change removed the bracket short-circuit from that
+    function, so both arms would run identical logic, differ only by
+    ``bare_citation``, and the replay could never report a loss attributable to
+    the flip -- the one number the script exists to produce. The pre-change gate
+    treated a resolvable bracket tag as a verdict in itself, skipping the
+    proposition gate, so that behaviour is reconstructed here explicitly.
+    """
     report = verify_citations(claims, sources)
-    if not mandatory:
-        return report.verified_count
-    # Mandatory mode: a bracket-tag match alone no longer counts.
+    if mandatory:
+        # New gate: only genuine proposition support counts.
+        return sum(
+            1
+            for check in report.checks
+            if check.verified and check.reason == "proposition_supported"
+        )
     return sum(
         1
         for check in report.checks
-        if check.verified and check.reason == "proposition_supported"
+        if check.verified
+        or _bracket_tag_lookup(check.claim.citation, sources) is not None
     )
 
 
@@ -133,6 +164,13 @@ def main() -> int:
     if tally.verified_today:
         retained = 100.0 * tally.verified_if_mandatory / tally.verified_today
         print(f"option-level retention              : {retained:.1f}%")
+    print()
+    print(
+        "FLOOR, not an estimate: stored citations are post-filter canonical\n"
+        "identifiers, so citations that only ever verified by bracket tag were\n"
+        "either rewritten or dropped before reaching this table. The bracket-only\n"
+        "population cannot be sized from persisted data."
+    )
     if tally.options_with_citations == 0:
         print(
             "\nNO DATA. No persisted option carries citations, so the flip cannot be "
