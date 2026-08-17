@@ -355,7 +355,13 @@ def test_atomic_primary_cutover_preserves_history_and_reconciles_every_projectio
         connection_ids = {key: row.id for key, row in connections.items()}
         sync_ids = {key: row.id for key, row in syncs.items()}
 
-    changed_at = datetime(2026, 8, 17, 12, tzinfo=UTC)
+    # Anchored to the clock rather than written as a literal. A fixed wall-clock
+    # value works only until real time passes it: the environment seeds its
+    # responsibility rows at the actual now(), so once the clock passed this
+    # instant the cutover tried to expire a row before it started and
+    # ck_ip_responsibility_effective_range refused the flush. Anchoring forward
+    # of now keeps the ordering true whenever the suite runs.
+    changed_at = datetime.now(UTC).replace(microsecond=0) + timedelta(minutes=5)
     with factory() as session:
         lock_company_memberships_for_assignment(
             session,
@@ -1132,7 +1138,13 @@ def test_coverage_only_terminal_projection_converges_every_sibling_and_exact_syn
 ) -> None:
     env = _confirmed_deadline_environment(client, monkeypatch)
     factory = get_session_factory()
-    changed_at = datetime(2026, 8, 17, 15, tzinfo=UTC)
+    # Anchored to the clock rather than written as a literal. A fixed wall-clock
+    # value works only until real time passes it: the environment seeds its
+    # responsibility rows at the actual now(), so once the clock passed this
+    # instant the cutover tried to expire a row before it started and
+    # ck_ip_responsibility_effective_range refused the flush. Anchoring forward
+    # of now keeps the ordering true whenever the suite runs.
+    changed_at = datetime.now(UTC).replace(microsecond=0) + timedelta(minutes=5)
     with factory() as session:
         sibling_docket = IpDocketRecord(
             company_id=env["company_id"],
@@ -1300,7 +1312,14 @@ def test_acceptance_versions_live_primary_and_rejects_any_active_secondary_colli
 ) -> None:
     env = _confirmed_deadline_environment(client, monkeypatch)
     factory = get_session_factory()
-    accepted_at = datetime(2026, 8, 17, 14, tzinfo=UTC)
+    # Anchored to the clock rather than written as a literal. This was
+    # datetime(2026, 8, 17, 14, UTC), which was comfortably in the future when
+    # authored and began failing ck_ip_responsibility_effective_range once real
+    # time entered 17 August 2026 but had not yet reached 14:00: the cutover
+    # expires the old assignment at now(), and a row cannot end before it
+    # starts. Microseconds are dropped so the round-trip equality assertion
+    # below survives the SQLite datetime adapter.
+    accepted_at = datetime.now(UTC).replace(microsecond=0) - timedelta(hours=2)
     with factory() as session:
         primary = session.scalar(
             select(IpResponsibilityAssignment).where(
