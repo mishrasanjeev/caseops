@@ -31,11 +31,19 @@ from caseops_api.db.models import (
     EthicalWall,
     HearingPack,
     HearingReminder,
+    HearingReminderStatus,
+    IpDeadline,
     IpDeadlineCoverage,
     IpDocketQueue,
+    IpDocketRecord,
+    IpRelatedRightObligation,
+    IpResponsibilityAssignment,
+    IpWorkspaceConfiguration,
     Matter,
     MatterAccessGrant,
     MatterDeadline,
+    MatterDeadlineStatus,
+    MatterHearing,
     MatterTask,
     MembershipRole,
     Team,
@@ -60,7 +68,20 @@ from caseops_api.schemas.employees import (
     EmployeeUpdateRequest,
     PasswordResetStartResponse,
 )
+from caseops_api.services.assignment_memberships import (
+    has_other_active_company_memberships,
+    lock_company_memberships_for_assignment,
+    lock_user_for_membership_deactivation,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_audit, record_from_context
+from caseops_api.services.employee_deactivation import (
+    assert_no_operational_ip_work_before_deactivation,
+    operational_ip_docket_deadlines_for_membership,
+    operational_ip_live_reference_counts,
+    operational_ip_notification_intents_for_membership,
+    tombstone_membership_calendar_syncs_before_deactivation,
+)
 from caseops_api.services.employee_mailer import send_employee_account_link
 from caseops_api.services.session_context import SessionContext
 
@@ -78,7 +99,10 @@ OFFBOARDING_SUPPORTED_TYPES = (
     "matter_tasks",
     "matter_deadlines",
     "ip_deadline_coverages",
+    "ip_related_right_obligations",
     "ip_docket_queues",
+    # Retained as a response-count compatibility key. Historical reminders are
+    # never retargeted in place; operational IP reminders are blockers below.
     "hearing_reminders",
 )
 OFFBOARDING_UNSUPPORTED_TYPES = (
@@ -87,6 +111,24 @@ OFFBOARDING_UNSUPPORTED_TYPES = (
     "hearing_packs",
     "portal_grants",
     "email_templates",
+    "ip_coverage_pending_replacements",
+    "ip_coverage_emergency_escalations",
+    "ip_coverage_backup_assignments",
+    "ip_coverage_shared_deadlines",
+    "ip_deadline_projection_repairs",
+    "ip_responsibility_assignments",
+    "ip_docket_hearings",
+    "ip_hearing_reminders",
+    "ip_notification_deliveries",
+    "ip_workspace_configuration",
+)
+OFFBOARDING_TERMINAL_COVERAGE_STATUSES = ("inactive_lifecycle", "completed")
+OFFBOARDING_TERMINAL_DOCKET_STATUSES = (
+    "archived",
+    "abandoned",
+    "transferred",
+    "retired",
+    "closed",
 )
 
 
@@ -167,6 +209,73 @@ def _load_employee_membership(
             detail="Employee not found.",
         )
     return membership
+
+
+def _lock_employee_memberships_for_offboarding(
+    session: Session,
+    *,
+    company_id: str,
+    membership_ids: set[str],
+) -> dict[str, CompanyMembership]:
+    """Lock offboarding participants in stable order before assignment work."""
+
+    memberships_by_id = lock_company_memberships_for_assignment(
+        session,
+        company_id=company_id,
+        membership_ids=membership_ids,
+    )
+    for membership in memberships_by_id.values():
+        session.expire(
+            membership,
+            ["employee_profile", "custom_role"],
+        )
+    return memberships_by_id
+
+
+def _lock_employee_writer_context(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership_ids: set[str | None] | None = None,
+) -> tuple[SessionContext, dict[str, CompanyMembership]]:
+    """Fence a directory actor and affected employees before child writes."""
+
+    requested_ids = {
+        membership_id
+        for membership_id in (membership_ids or set()) | {context.membership.id}
+        if membership_id
+    }
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=requested_ids,
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active company membership is required for this employee mutation.",
+        )
+    actor = require_locked_membership_capability(
+        session,
+        actor,
+        "company:manage_users",
+    )
+    if set(memberships) != requested_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found.",
+        )
+    for membership in memberships.values():
+        session.expire(membership, ["employee_profile", "custom_role"])
+    return (
+        SessionContext(
+            company=context.company,
+            membership=actor,
+            user=actor.user,
+        ),
+        memberships,
+    )
 
 
 def _get_or_create_profile(
@@ -340,54 +449,156 @@ def _has_other_active_memberships(
     *,
     membership: CompanyMembership,
 ) -> bool:
-    return (
-        session.scalar(
-            select(CompanyMembership.id)
-            .join(Company, Company.id == CompanyMembership.company_id)
-            .where(
-                CompanyMembership.user_id == membership.user_id,
-                CompanyMembership.id != membership.id,
-                CompanyMembership.is_active.is_(True),
-                Company.is_active.is_(True),
-            )
-            .limit(1)
-        )
-        is not None
+    return has_other_active_company_memberships(session, membership=membership)
+
+
+def _operational_offboarding_ip_coverage_rows(
+    session: Session,
+    *,
+    context: SessionContext,
+    target: CompanyMembership,
+) -> list[tuple[IpDeadlineCoverage, MatterDeadline, IpDocketRecord, Matter | None]]:
+    """Load the exact operational coverage set that the commit path can move.
+
+    The canonical coverage query understands both Matter-backed dockets and
+    standalone IP dockets. Reusing it keeps preview and commit fidelity while
+    the second pass only hydrates labels and revalidates each tenant/target
+    relationship.
+    """
+
+    from caseops_api.services.ip_operations import _coverages_for_member
+
+    coverages = _coverages_for_member(
+        session,
+        context=context,
+        membership_id=target.id,
+        include_auxiliary_roles=True,
     )
+    if not coverages:
+        return []
+
+    dockets = {
+        docket.id: docket
+        for docket in session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id.in_({row.docket_id for row in coverages}),
+            )
+        ).all()
+    }
+    deadlines = {
+        deadline.id: deadline
+        for deadline in session.scalars(
+            select(MatterDeadline).where(
+                MatterDeadline.company_id == context.company.id,
+                MatterDeadline.id.in_({row.matter_deadline_id for row in coverages}),
+            )
+        ).all()
+    }
+    matter_ids = {docket.matter_id for docket in dockets.values() if docket.matter_id}
+    matters = {
+        matter.id: matter
+        for matter in session.scalars(
+            select(Matter).where(
+                Matter.company_id == context.company.id,
+                Matter.id.in_(matter_ids or {""}),
+            )
+        ).all()
+    }
+
+    rows: list[tuple[IpDeadlineCoverage, MatterDeadline, IpDocketRecord, Matter | None]] = []
+    for coverage in coverages:
+        docket = dockets.get(coverage.docket_id)
+        deadline = deadlines.get(coverage.matter_deadline_id)
+        if docket is None or deadline is None:
+            continue
+        docket_owned = deadline.matter_id is None and deadline.ip_docket_id == docket.id
+        matter_owned = (
+            docket.matter_id is not None
+            and deadline.matter_id == docket.matter_id
+            and deadline.ip_docket_id is None
+        )
+        if not docket_owned and not matter_owned:
+            continue
+        matter = matters.get(docket.matter_id) if docket.matter_id else None
+        if docket.matter_id is not None and matter is None:
+            continue
+        rows.append((coverage, deadline, docket, matter))
+    return rows
 
 
 def _collect_offboarding_objects(
     session: Session,
     *,
-    company_id: str,
+    context: SessionContext,
     target: CompanyMembership,
-) -> tuple[list[EmployeeOffboardingObject], list[EmployeeOffboardingObject], set[str]]:
+) -> tuple[
+    list[EmployeeOffboardingObject],
+    list[EmployeeOffboardingObject],
+    set[str],
+    list[IpDeadlineCoverage],
+    list[IpDocketRecord],
+]:
+    from caseops_api.services.ip_operations import (
+        _membership_can_cover_docket,
+        _operational_coverage_ids_for_deadline,
+    )
+    from caseops_api.services.matter_access import _coverage_has_live_escalation
+
+    company_id = context.company.id
     supported: list[EmployeeOffboardingObject] = []
     unsupported: list[EmployeeOffboardingObject] = []
     affected_matter_ids: set[str] = set()
+    affected_operational_dockets: dict[str, IpDocketRecord] = {}
 
     matters = list(
         session.scalars(
             select(Matter)
             .where(
                 Matter.company_id == company_id,
-                Matter.assignee_membership_id == target.id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
+                or_(
+                    Matter.assignee_membership_id == target.id,
+                    Matter.responsible_lawyer_membership_id == target.id,
+                ),
             )
             .order_by(Matter.matter_code.asc(), Matter.id.asc())
         )
     )
     for matter in matters:
+        relations: list[str] = []
+        if matter.assignee_membership_id == target.id:
+            relations.append("assignee")
+        if matter.responsible_lawyer_membership_id == target.id:
+            relations.append("responsible lawyer")
         affected_matter_ids.add(matter.id)
         supported.append(
             _offboarding_object(
                 "matters",
                 matter.id,
                 label=f"{matter.matter_code} - {matter.title}",
-                relation="assignee",
+                relation="/".join(relations),
                 supported=True,
                 matter_id=matter.id,
             )
         )
+    linked_role_dockets = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(
+                IpDocketRecord.company_id == company_id,
+                IpDocketRecord.matter_id.in_({matter.id for matter in matters} or {""}),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+            )
+            .order_by(IpDocketRecord.id)
+        )
+    )
+    affected_operational_dockets.update(
+        {docket.id: docket for docket in linked_role_dockets}
+    )
 
     grant_rows = list(
         session.execute(
@@ -490,7 +701,12 @@ def _collect_offboarding_objects(
             .join(Matter, Matter.id == MatterTask.matter_id)
             .where(
                 Matter.company_id == company_id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
                 MatterTask.owner_membership_id == target.id,
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
             )
             .order_by(Matter.matter_code.asc(), MatterTask.title.asc())
         ).all()
@@ -514,54 +730,682 @@ def _collect_offboarding_objects(
             .join(Matter, Matter.id == MatterDeadline.matter_id)
             .where(
                 Matter.company_id == company_id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
                 MatterDeadline.assignee_membership_id == target.id,
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
             )
             .order_by(Matter.matter_code.asc(), MatterDeadline.due_on.asc())
         ).all()
     )
+    shared_deadline_ids: set[str] = set()
+    shared_coverage_object_ids: set[str] = set()
+    projection_repair_coverage_ids: set[str] = set()
+
+    def add_shared_coverage_blockers(
+        deadline: MatterDeadline,
+        *,
+        label: str,
+        matter_id: str | None,
+    ) -> bool:
+        coverage_ids = _operational_coverage_ids_for_deadline(
+            session,
+            company_id=company_id,
+            deadline=deadline,
+        )
+        if len(coverage_ids) <= 1:
+            return False
+        shared_deadline_ids.add(deadline.id)
+        for coverage_id in coverage_ids:
+            if coverage_id in shared_coverage_object_ids:
+                continue
+            shared_coverage_object_ids.add(coverage_id)
+            unsupported.append(
+                _offboarding_object(
+                    "ip_coverage_shared_deadlines",
+                    coverage_id,
+                    label=label,
+                    relation="shared deadline; group handoff workflow required",
+                    supported=False,
+                    matter_id=matter_id,
+                )
+            )
+        return True
+
+    def has_uncovered_legal_projection(deadline: MatterDeadline) -> bool:
+        coverage_ids = _operational_coverage_ids_for_deadline(
+            session,
+            company_id=company_id,
+            deadline=deadline,
+        )
+        if coverage_ids:
+            return False
+        return (
+            session.scalar(
+                select(IpDeadline.id).where(
+                    IpDeadline.company_id == company_id,
+                    IpDeadline.matter_deadline_id == deadline.id,
+                    IpDeadline.state.in_(("confirmed", "overdue")),
+                )
+            )
+            is not None
+        )
+
+    def has_invalid_retained_coverage_role(
+        deadline: MatterDeadline,
+        *,
+        label: str,
+        matter_id: str | None,
+    ) -> bool:
+        coverage_ids = _operational_coverage_ids_for_deadline(
+            session,
+            company_id=company_id,
+            deadline=deadline,
+        )
+        if len(coverage_ids) != 1:
+            return False
+        coverage = session.get(IpDeadlineCoverage, coverage_ids[0])
+        docket = (
+            session.get(IpDocketRecord, coverage.docket_id)
+            if coverage is not None
+            else None
+        )
+        if coverage is None or docket is None:
+            invalid = True
+        else:
+            retained_ids = {
+                membership_id
+                for membership_id in (
+                    coverage.responsible_membership_id,
+                    coverage.backup_membership_id,
+                )
+                if membership_id is not None and membership_id != target.id
+            }
+            memberships = {
+                membership_id: session.get(CompanyMembership, membership_id)
+                for membership_id in retained_ids
+            }
+            invalid = (
+                coverage.responsible_membership_id
+                == coverage.backup_membership_id
+                or any(
+                    membership is None
+                    or not membership.is_active
+                    or not membership.user.is_active
+                    or not _membership_can_cover_docket(
+                        session,
+                        context=context,
+                        membership=membership,
+                        docket=docket,
+                    )
+                    for membership in memberships.values()
+                )
+            )
+        if not invalid:
+            return False
+        if coverage_ids[0] not in projection_repair_coverage_ids:
+            projection_repair_coverage_ids.add(coverage_ids[0])
+            unsupported.append(
+                _offboarding_object(
+                    "ip_deadline_projection_repairs",
+                    coverage_ids[0],
+                    label=label,
+                    relation=(
+                        "authoritative coverage owner or backup is inactive, "
+                        "inaccessible, or role-collapsed; repair required"
+                    ),
+                    supported=False,
+                    matter_id=matter_id,
+                )
+            )
+        return True
+
     for deadline, matter in deadline_rows:
         affected_matter_ids.add(matter.id)
+        label = f"{matter.matter_code} - {deadline.title}"
+        if add_shared_coverage_blockers(
+            deadline,
+            label=label,
+            matter_id=matter.id,
+        ):
+            continue
+        if has_invalid_retained_coverage_role(
+            deadline,
+            label=label,
+            matter_id=matter.id,
+        ):
+            continue
+        if has_uncovered_legal_projection(deadline):
+            unsupported.append(
+                _offboarding_object(
+                    "ip_deadline_projection_repairs",
+                    deadline.id,
+                    label=label,
+                    relation="legal projection without coverage; repair required",
+                    supported=False,
+                    matter_id=matter.id,
+                )
+            )
+            continue
         supported.append(
             _offboarding_object(
                 "matter_deadlines",
                 deadline.id,
-                label=f"{matter.matter_code} - {deadline.title}",
+                label=label,
                 relation="assignee",
                 supported=True,
                 matter_id=matter.id,
             )
         )
-
-    ip_coverage_rows = list(
-        session.execute(
-            select(IpDeadlineCoverage, MatterDeadline, Matter)
-            .join(MatterDeadline, MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id)
-            .join(Matter, Matter.id == MatterDeadline.matter_id)
-            .where(
-                IpDeadlineCoverage.company_id == company_id,
-                or_(
-                    IpDeadlineCoverage.responsible_membership_id == target.id,
-                    IpDeadlineCoverage.backup_membership_id == target.id,
+    linked_task_dockets = list(
+        session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.company_id == company_id,
+                IpDocketRecord.matter_id.in_(
+                    {matter.id for _task, matter in task_rows} or {""}
                 ),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
             )
-            .order_by(Matter.matter_code.asc(), MatterDeadline.due_on.asc())
-        ).all()
+        )
     )
-    for coverage, deadline, matter in ip_coverage_rows:
-        affected_matter_ids.add(matter.id)
+    affected_operational_dockets.update(
+        {docket.id: docket for docket in linked_task_dockets}
+    )
+    supported_deadline_ids = {deadline.id for deadline, _matter in deadline_rows}
+
+    docket_deadline_rows = operational_ip_docket_deadlines_for_membership(
+        session,
+        company_id=company_id,
+        membership_id=target.id,
+    )
+    for deadline, docket in docket_deadline_rows:
+        affected_operational_dockets[docket.id] = docket
+        if docket.matter_id is not None:
+            affected_matter_ids.add(docket.matter_id)
+        if deadline.id in supported_deadline_ids or deadline.id in shared_deadline_ids:
+            continue
+        label = f"{docket.primary_identifier or docket.title} - {deadline.title}"
+        if add_shared_coverage_blockers(
+            deadline,
+            label=label,
+            matter_id=docket.matter_id,
+        ):
+            continue
+        if has_invalid_retained_coverage_role(
+            deadline,
+            label=label,
+            matter_id=docket.matter_id,
+        ):
+            continue
+        if has_uncovered_legal_projection(deadline):
+            unsupported.append(
+                _offboarding_object(
+                    "ip_deadline_projection_repairs",
+                    deadline.id,
+                    label=label,
+                    relation="legal projection without coverage; repair required",
+                    supported=False,
+                    matter_id=docket.matter_id,
+                )
+            )
+            continue
+        supported.append(
+            _offboarding_object(
+                "matter_deadlines",
+                deadline.id,
+                label=label,
+                relation="assignee",
+                supported=True,
+                matter_id=docket.matter_id,
+            )
+        )
+
+    ip_coverage_rows = _operational_offboarding_ip_coverage_rows(
+        session,
+        context=context,
+        target=target,
+    )
+    for coverage, deadline, docket, matter in ip_coverage_rows:
+        if matter is not None:
+            label = f"{matter.matter_code} - {deadline.title}"
+            matter_id = matter.id
+        else:
+            label = f"{docket.primary_identifier or docket.title} - {deadline.title}"
+            matter_id = None
+        if (
+            coverage.pending_replacement_membership_id == target.id
+            and coverage.replacement_decision == "pending"
+        ):
+            unsupported.append(
+                _offboarding_object(
+                    "ip_coverage_pending_replacements",
+                    coverage.id,
+                    label=label,
+                    relation="pending replacement; resolve before offboarding",
+                    supported=False,
+                    matter_id=matter_id,
+                )
+            )
+        if (
+            coverage.emergency_escalation_membership_id == target.id
+            and _coverage_has_live_escalation(coverage)
+        ):
+            unsupported.append(
+                _offboarding_object(
+                    "ip_coverage_emergency_escalations",
+                    coverage.id,
+                    label=label,
+                    relation="decline escalation; reassign before offboarding",
+                    supported=False,
+                    matter_id=matter_id,
+                )
+            )
+        if coverage.backup_membership_id == target.id:
+            unsupported.append(
+                _offboarding_object(
+                    "ip_coverage_backup_assignments",
+                    coverage.id,
+                    label=label,
+                    relation="backup; accepted backup handoff is required",
+                    supported=False,
+                    matter_id=matter_id,
+                )
+            )
+        shared_coverage_ids = _operational_coverage_ids_for_deadline(
+            session,
+            company_id=company_id,
+            deadline=deadline,
+        )
+        if len(shared_coverage_ids) > 1:
+            add_shared_coverage_blockers(
+                deadline,
+                label=label,
+                matter_id=matter_id,
+            )
+            continue
+        if has_invalid_retained_coverage_role(
+            deadline,
+            label=label,
+            matter_id=matter_id,
+        ):
+            continue
         relations: list[str] = []
         if coverage.responsible_membership_id == target.id:
             relations.append("responsible")
-        if coverage.backup_membership_id == target.id:
-            relations.append("backup")
+        # Backup ownership has no accepted/pending discriminator in the
+        # schema, so it is a fail-closed manual blocker rather than a transfer.
+        if not relations:
+            continue
+        if matter is not None:
+            affected_matter_ids.add(matter.id)
+        affected_operational_dockets[docket.id] = docket
         supported.append(
             _offboarding_object(
                 "ip_deadline_coverages",
                 coverage.id,
-                label=f"{matter.matter_code} - {deadline.title}",
+                label=label,
                 relation="IP deadline " + "/".join(relations),
                 supported=True,
+                matter_id=matter_id,
+            )
+        )
+
+    docket_task_rows = list(
+        session.execute(
+            select(MatterTask, IpDocketRecord, Matter)
+            .join(
+                IpDocketRecord,
+                and_(
+                    IpDocketRecord.id == MatterTask.ip_docket_id,
+                    IpDocketRecord.company_id == MatterTask.company_id,
+                ),
+            )
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .where(
+                MatterTask.company_id == company_id,
+                MatterTask.matter_id.is_(None),
+                MatterTask.owner_membership_id == target.id,
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+            )
+            .order_by(IpDocketRecord.id, MatterTask.title, MatterTask.id)
+        ).all()
+    )
+    for task, docket, matter in docket_task_rows:
+        affected_operational_dockets[docket.id] = docket
+        if matter is not None:
+            affected_matter_ids.add(matter.id)
+        supported.append(
+            _offboarding_object(
+                "matter_tasks",
+                task.id,
+                label=f"{docket.primary_identifier or docket.title} - {task.title}",
+                relation="IP docket task owner",
+                supported=True,
+                matter_id=docket.matter_id,
+            )
+        )
+
+    obligation_rows = list(
+        session.execute(
+            select(IpRelatedRightObligation, IpDocketRecord, Matter)
+            .join(IpDocketRecord, IpDocketRecord.id == IpRelatedRightObligation.docket_id)
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .outerjoin(
+                MatterDeadline,
+                MatterDeadline.id == IpRelatedRightObligation.matter_deadline_id,
+            )
+            .where(
+                IpRelatedRightObligation.company_id == company_id,
+                IpRelatedRightObligation.owner_membership_id == target.id,
+                IpRelatedRightObligation.status == "open",
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+                or_(
+                    IpRelatedRightObligation.matter_deadline_id.is_(None),
+                    and_(
+                        MatterDeadline.status.in_(
+                            (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                        ),
+                        MatterDeadline.neutralized_at.is_(None),
+                        MatterDeadline.cancelled_by_matter_disposal.is_(False),
+                    ),
+                ),
+            )
+            .order_by(IpDocketRecord.id, IpRelatedRightObligation.id)
+        ).all()
+    )
+    for obligation, docket, matter in obligation_rows:
+        affected_operational_dockets[docket.id] = docket
+        if matter is not None:
+            affected_matter_ids.add(matter.id)
+        supported.append(
+            _offboarding_object(
+                "ip_related_right_obligations",
+                obligation.id,
+                label=f"{docket.primary_identifier or docket.title} - {obligation.title}",
+                relation="related-right obligation owner",
+                supported=True,
+                matter_id=docket.matter_id,
+            )
+        )
+
+    def active_hearing_relations(hearing: MatterHearing) -> list[str]:
+        relations: list[str] = []
+        if hearing.responsible_membership_id == target.id:
+            relations.append("responsible")
+        if target.id in (hearing.attendee_membership_ids_json or []):
+            relations.append("attendee")
+        policy = hearing.reminder_policy_json or {}
+        if target.id in (policy.get("recipient_membership_ids") or []):
+            relations.append("reminder recipient")
+        if policy.get("escalation_membership_id") == target.id:
+            relations.append("reminder escalation")
+        return relations
+
+    hearing_rows = list(
+        session.execute(
+            select(MatterHearing, IpDocketRecord, Matter)
+            .join(IpDocketRecord, IpDocketRecord.id == MatterHearing.ip_docket_id)
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .where(
+                MatterHearing.company_id == company_id,
+                MatterHearing.matter_id.is_(None),
+                MatterHearing.status.in_(("scheduled", "adjourned")),
+                MatterHearing.neutralized_at.is_(None),
+                MatterHearing.cancelled_by_matter_disposal.is_(False),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+            )
+            .order_by(IpDocketRecord.id, MatterHearing.hearing_on, MatterHearing.id)
+        ).all()
+    )
+    for hearing, docket, matter in hearing_rows:
+        relations = active_hearing_relations(hearing)
+        if not relations:
+            continue
+        affected_operational_dockets[docket.id] = docket
+        if matter is not None:
+            affected_matter_ids.add(matter.id)
+        unsupported.append(
+            _offboarding_object(
+                "ip_docket_hearings",
+                hearing.id,
+                label=f"{docket.primary_identifier or docket.title} - {hearing.purpose}",
+                relation="/".join(relations) + "; update the hearing first",
+                supported=False,
+                matter_id=docket.matter_id,
+            )
+        )
+
+    linked_matter_hearing_rows = list(
+        session.execute(
+            select(MatterHearing, Matter, IpDocketRecord)
+            .join(
+                Matter,
+                and_(
+                    Matter.id == MatterHearing.matter_id,
+                    Matter.company_id == MatterHearing.company_id,
+                ),
+            )
+            .join(
+                IpDocketRecord,
+                and_(
+                    IpDocketRecord.matter_id == Matter.id,
+                    IpDocketRecord.company_id == Matter.company_id,
+                ),
+            )
+            .where(
+                MatterHearing.company_id == company_id,
+                MatterHearing.matter_id.is_not(None),
+                MatterHearing.status.in_(("scheduled", "adjourned")),
+                MatterHearing.neutralized_at.is_(None),
+                MatterHearing.cancelled_by_matter_disposal.is_(False),
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+            )
+            .order_by(
+                MatterHearing.id,
+                IpDocketRecord.id,
+            )
+        ).all()
+    )
+    linked_hearings: dict[str, tuple[MatterHearing, Matter]] = {}
+    for hearing, matter, docket in linked_matter_hearing_rows:
+        if not active_hearing_relations(hearing):
+            continue
+        linked_hearings[hearing.id] = (hearing, matter)
+        affected_operational_dockets[docket.id] = docket
+    for hearing, matter in linked_hearings.values():
+        relations = active_hearing_relations(hearing)
+        if not relations:
+            continue
+        affected_matter_ids.add(matter.id)
+        unsupported.append(
+            _offboarding_object(
+                "ip_docket_hearings",
+                hearing.id,
+                label=f"{matter.matter_code} - {hearing.purpose}",
+                relation=(
+                    "/".join(relations)
+                    + "; update the linked-IP Matter hearing first"
+                ),
+                supported=False,
                 matter_id=matter.id,
+            )
+        )
+
+    queued_reminders = list(
+        session.scalars(
+            select(HearingReminder)
+            .join(MatterHearing, MatterHearing.id == HearingReminder.hearing_id)
+            .join(IpDocketRecord, IpDocketRecord.id == HearingReminder.ip_docket_id)
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .where(
+                HearingReminder.company_id == company_id,
+                HearingReminder.recipient_membership_id == target.id,
+                HearingReminder.status == HearingReminderStatus.QUEUED,
+                HearingReminder.neutralized_at.is_(None),
+                MatterHearing.status.in_(("scheduled", "adjourned")),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+            )
+            .order_by(HearingReminder.scheduled_for, HearingReminder.id)
+        )
+    )
+    for reminder in queued_reminders:
+        unsupported.append(
+            _offboarding_object(
+                "ip_hearing_reminders",
+                reminder.id,
+                label=f"{reminder.channel} reminder scheduled {reminder.scheduled_for.isoformat()}",
+                relation="queued recipient; update the hearing to regenerate safely",
+                supported=False,
+                matter_id=reminder.matter_id,
+            )
+        )
+
+    coverage_responsible_by_deadline = {
+        coverage.matter_deadline_id
+        for coverage, _deadline, _docket, _matter in ip_coverage_rows
+        if coverage.responsible_membership_id == target.id
+    }
+    queued_intents = operational_ip_notification_intents_for_membership(
+        session,
+        company_id=company_id,
+        membership_id=target.id,
+    )
+    helper_owned_legal_deadline_ids = set(
+        session.scalars(
+            select(IpDeadline.id).where(
+                IpDeadline.company_id == company_id,
+                IpDeadline.matter_deadline_id.in_(
+                    coverage_responsible_by_deadline or {""}
+                ),
+            )
+        ).all()
+    )
+    for intent, docket in queued_intents:
+        if (
+            intent.recipient_membership_id == target.id
+            and intent.schedule_source_type == "ip_deadline"
+            and intent.schedule_source_id in helper_owned_legal_deadline_ids
+        ):
+            continue
+        affected_operational_dockets[docket.id] = docket
+        unsupported.append(
+            _offboarding_object(
+                "ip_notification_deliveries",
+                intent.id,
+                label=intent.title or intent.event_type,
+                relation="queued recipient/escalation; cancel or regenerate before offboarding",
+                supported=False,
+                matter_id=intent.matter_id,
+            )
+        )
+
+    live_responsibilities = list(
+        session.execute(
+            select(IpResponsibilityAssignment, IpDeadline, MatterDeadline, IpDocketRecord)
+            .join(IpDeadline, IpDeadline.id == IpResponsibilityAssignment.deadline_id)
+            .outerjoin(MatterDeadline, MatterDeadline.id == IpDeadline.matter_deadline_id)
+            .join(IpDocketRecord, IpDocketRecord.id == IpResponsibilityAssignment.docket_id)
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .where(
+                IpResponsibilityAssignment.company_id == company_id,
+                IpResponsibilityAssignment.membership_id == target.id,
+                IpResponsibilityAssignment.effective_until.is_(None),
+                IpDeadline.state.in_(("confirmed", "overdue")),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+            )
+            .order_by(IpDeadline.id, IpResponsibilityAssignment.role)
+        ).all()
+    )
+    for responsibility, legal_deadline, deadline, docket in live_responsibilities:
+        if (
+            responsibility.role == "primary"
+            and deadline is not None
+            and deadline.id in coverage_responsible_by_deadline
+        ):
+            continue
+        unsupported.append(
+            _offboarding_object(
+                "ip_responsibility_assignments",
+                responsibility.id,
+                label=f"{docket.primary_identifier or docket.title} - {legal_deadline.title}",
+                relation=f"live {responsibility.role} legal responsibility",
+                supported=False,
+                matter_id=docket.matter_id,
+            )
+        )
+
+    workspace_config = session.scalar(
+        select(IpWorkspaceConfiguration).where(
+            IpWorkspaceConfiguration.company_id == company_id,
+            IpWorkspaceConfiguration.escalation_owner_membership_id == target.id,
+        )
+    )
+    if workspace_config is not None:
+        unsupported.append(
+            _offboarding_object(
+                "ip_workspace_configuration",
+                workspace_config.id,
+                label="IP workspace configuration",
+                relation="escalation owner; update the configuration first",
+                supported=False,
             )
         )
 
@@ -584,30 +1428,6 @@ def _collect_offboarding_objects(
                 label=queue.name,
                 relation="personal docket queue owner",
                 supported=True,
-            )
-        )
-
-    reminder_rows = list(
-        session.execute(
-            select(HearingReminder, Matter)
-            .join(Matter, Matter.id == HearingReminder.matter_id)
-            .where(
-                HearingReminder.company_id == company_id,
-                HearingReminder.recipient_membership_id == target.id,
-            )
-            .order_by(Matter.matter_code.asc(), HearingReminder.scheduled_for.asc())
-        ).all()
-    )
-    for reminder, matter in reminder_rows:
-        affected_matter_ids.add(matter.id)
-        supported.append(
-            _offboarding_object(
-                "hearing_reminders",
-                reminder.id,
-                label=f"{matter.matter_code} - {reminder.channel} reminder",
-                relation="recipient",
-                supported=True,
-                matter_id=matter.id,
             )
         )
 
@@ -688,7 +1508,13 @@ def _collect_offboarding_objects(
             )
         )
 
-    return supported, unsupported, affected_matter_ids
+    return (
+        supported,
+        unsupported,
+        affected_matter_ids,
+        [coverage for coverage, _deadline, _docket, _matter in ip_coverage_rows],
+        list(affected_operational_dockets.values()),
+    )
 
 
 def _ethical_wall_conflict_count(
@@ -717,12 +1543,79 @@ def _build_offboarding_preview(
     target: CompanyMembership,
     reassign_to: CompanyMembership | None,
 ) -> EmployeeOffboardingPreviewResponse:
-    supported, unsupported, affected_matter_ids = _collect_offboarding_objects(
+    from caseops_api.services.ip_operations import _membership_can_cover_docket
+    from caseops_api.services.matter_access import _coverage_has_live_escalation
+
+    (
+        supported,
+        unsupported,
+        affected_matter_ids,
+        operational_coverages,
+        operational_dockets,
+    ) = _collect_offboarding_objects(
         session,
-        company_id=context.company.id,
+        context=context,
         target=target,
     )
     blockers: list[str] = []
+    unsupported_type_counts = _object_counts(
+        unsupported,
+        known_types=OFFBOARDING_UNSUPPORTED_TYPES,
+    )
+
+    pending_coverage_count = sum(
+        coverage.pending_replacement_membership_id == target.id
+        and coverage.replacement_decision == "pending"
+        for coverage in operational_coverages
+    )
+    if pending_coverage_count:
+        blockers.append(
+            "Resolve pending IP coverage replacement proposals naming this employee "
+            "before offboarding."
+        )
+    escalation_coverage_count = sum(
+        coverage.emergency_escalation_membership_id == target.id
+        and _coverage_has_live_escalation(coverage)
+        for coverage in operational_coverages
+    )
+    if escalation_coverage_count:
+        blockers.append(
+            "Reassign active IP coverage decline-escalation duties before offboarding."
+        )
+    if unsupported_type_counts["ip_coverage_backup_assignments"]:
+        blockers.append(
+            "Complete an accepted IP coverage backup handoff before offboarding."
+        )
+    if unsupported_type_counts["ip_coverage_shared_deadlines"]:
+        blockers.append(
+            "Use the group handoff workflow for shared IP coverage deadlines "
+            "before offboarding."
+        )
+    if unsupported_type_counts["ip_deadline_projection_repairs"]:
+        blockers.append(
+            "Repair inconsistent IP legal-deadline responsibility projections "
+            "before offboarding."
+        )
+    if unsupported_type_counts["ip_responsibility_assignments"]:
+        blockers.append(
+            "Reassign active auxiliary IP legal responsibilities before offboarding."
+        )
+    if unsupported_type_counts["ip_docket_hearings"]:
+        blockers.append(
+            "Update scheduled IP hearings to remove this employee from active roles."
+        )
+    if unsupported_type_counts["ip_hearing_reminders"]:
+        blockers.append(
+            "Regenerate queued IP hearing reminders before offboarding."
+        )
+    if unsupported_type_counts["ip_notification_deliveries"]:
+        blockers.append(
+            "Cancel or regenerate queued IP notification deliveries before offboarding."
+        )
+    if unsupported_type_counts["ip_workspace_configuration"]:
+        blockers.append(
+            "Choose a new IP workspace escalation owner before offboarding."
+        )
 
     if target.id == context.membership.id:
         blockers.append("You cannot offboard your own active session membership.")
@@ -731,7 +1624,18 @@ def _build_offboarding_preview(
             blockers.append("Cannot offboard the last active owner.")
         else:
             blockers.append("Owner memberships cannot be offboarded through this flow.")
-    if not target.is_active or not target.user.is_active:
+    # Pre-guard deployments can contain an inactive membership that still owns
+    # operational IP work. Keep the privileged repair path reachable for that
+    # exact legacy state; an ordinary already-inactive employee remains a
+    # no-op/idempotency blocker.
+    has_operational_ip_work = bool(
+        operational_ip_live_reference_counts(
+            session,
+            company_id=context.company.id,
+            membership_id=target.id,
+        )
+    )
+    if (not target.is_active or not target.user.is_active) and not has_operational_ip_work:
         blockers.append("Employee is already inactive.")
     if reassign_to is None:
         blockers.append("Choose an active replacement employee before commit.")
@@ -744,29 +1648,57 @@ def _build_offboarding_preview(
             blockers.append("Replacement employee must belong to this company.")
         if not reassign_to.is_active or not reassign_to.user.is_active:
             blockers.append("Replacement employee must be active.")
-        backup_conflicts = int(
-            session.scalar(
-                select(func.count(IpDeadlineCoverage.id)).where(
-                    IpDeadlineCoverage.company_id == context.company.id,
-                    or_(
-                        and_(
-                            IpDeadlineCoverage.backup_membership_id == target.id,
-                            IpDeadlineCoverage.responsible_membership_id
-                            == reassign_to.id,
-                        ),
-                        and_(
-                            IpDeadlineCoverage.responsible_membership_id == target.id,
-                            IpDeadlineCoverage.backup_membership_id == reassign_to.id,
-                        ),
-                        and_(
-                            IpDeadlineCoverage.responsible_membership_id == target.id,
-                            IpDeadlineCoverage.backup_membership_id
-                            == context.membership.id,
-                        ),
-                    ),
-                )
+        if any(
+            not _membership_can_cover_docket(
+                session,
+                context=context,
+                membership=reassign_to,
+                docket=docket,
             )
-            or 0
+            for docket in operational_dockets
+        ):
+            blockers.append("Replacement employee cannot access every affected IP docket.")
+        if reassign_to.id == context.membership.id and any(
+            coverage.responsible_membership_id == target.id
+            for coverage in operational_coverages
+        ):
+            blockers.append(
+                "Choose a replacement different from the IP coverage "
+                "decline-escalation owner."
+            )
+        responsible_docket_ids = {
+            coverage.docket_id
+            for coverage in operational_coverages
+            if coverage.responsible_membership_id == target.id
+        }
+        if any(
+            docket.id in responsible_docket_ids
+            and not _membership_can_cover_docket(
+                session,
+                context=context,
+                membership=context.membership,
+                docket=docket,
+            )
+            for docket in operational_dockets
+        ):
+            blockers.append(
+                "The decline-escalation owner cannot access every affected IP docket."
+            )
+        backup_conflicts = sum(
+            1
+            for coverage in operational_coverages
+            if (
+                coverage.responsible_membership_id == target.id
+                and coverage.backup_membership_id == target.id
+            )
+            or (
+                coverage.backup_membership_id == target.id
+                and coverage.responsible_membership_id == reassign_to.id
+            )
+            or (
+                coverage.responsible_membership_id == target.id
+                and coverage.backup_membership_id in {reassign_to.id, context.membership.id}
+            )
         )
         if backup_conflicts:
             blockers.append(
@@ -1142,6 +2074,10 @@ def _create_employee_without_commit(
     payload: EmployeeCreateRequest,
     reuse_existing_global_user: bool = False,
 ) -> PendingEmployeeCreate:
+    context, _memberships = _lock_employee_writer_context(
+        session,
+        context=context,
+    )
     _assert_role_assignment_allowed(
         context=context,
         target_membership=None,
@@ -1243,23 +2179,30 @@ def update_employee(
     membership_id: str,
     payload: EmployeeUpdateRequest,
 ) -> EmployeeRecord:
-    membership = _load_employee_membership(
+    candidate_membership = _load_employee_membership(
         session,
         company_id=context.company.id,
         membership_id=membership_id,
     )
-    profile = _get_or_create_profile(session, membership=membership)
+    context, locked_memberships = _lock_employee_writer_context(
+        session,
+        context=context,
+        membership_ids={candidate_membership.id},
+    )
+    membership = locked_memberships[candidate_membership.id]
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         return _employee_record(session, membership)
 
+    authorization_context = context
+
     if "role" in updates:
         _assert_role_assignment_allowed(
-            context=context,
+            context=authorization_context,
             target_membership=membership,
             role=payload.role,
         )
-    elif context.membership.role == MembershipRole.ADMIN:
+    elif authorization_context.membership.role == MembershipRole.ADMIN:
         # Admins may edit directory metadata, but role and lifecycle
         # changes stay owner-only to preserve the old membership rules.
         pass
@@ -1267,17 +2210,32 @@ def update_employee(
     if (
         "employment_status" in updates
         and updates["employment_status"] == EmployeeEmploymentStatus.INACTIVE
-        and membership.id == context.membership.id
+        and membership.id == authorization_context.membership.id
     ):
         _raise_bad_request("You cannot mark your own employee record inactive.")
     if membership.role == MembershipRole.OWNER and (
         "role" in updates or "employment_status" in updates
     ):
         _raise_forbidden("Owner memberships cannot be modified here.")
-    if context.membership.role != MembershipRole.OWNER and (
+    if authorization_context.membership.role != MembershipRole.OWNER and (
         "role" in updates or "employment_status" in updates
     ):
         _raise_forbidden("Only owners can change employee role or status.")
+
+    if updates.get("employment_status") == EmployeeEmploymentStatus.INACTIVE:
+        lock_user_for_membership_deactivation(session, membership=membership)
+        assert_no_operational_ip_work_before_deactivation(
+            session,
+            context=authorization_context,
+            membership=membership,
+        )
+        tombstone_membership_calendar_syncs_before_deactivation(
+            session,
+            company_id=context.company.id,
+            membership_id=membership.id,
+        )
+
+    profile = _get_or_create_profile(session, membership=membership)
 
     before = _employee_record(session, membership).model_dump(mode="json")
 
@@ -1363,16 +2321,21 @@ def preview_employee_offboarding(
     membership_id: str,
     payload: EmployeeOffboardingRequest,
 ) -> EmployeeOffboardingPreviewResponse:
-    target = _load_employee_membership(
+    context, locked_memberships = _lock_employee_writer_context(
         session,
-        company_id=context.company.id,
-        membership_id=membership_id,
+        context=context,
+        membership_ids={membership_id, payload.reassign_to_membership_id},
     )
-    reassign_to = _load_reassignment_membership(
-        session,
-        company_id=context.company.id,
-        membership_id=payload.reassign_to_membership_id,
+    target = locked_memberships[membership_id]
+    reassign_to = (
+        locked_memberships[payload.reassign_to_membership_id]
+        if payload.reassign_to_membership_id
+        else None
     )
+    if reassign_to is not None and (
+        not reassign_to.is_active or not reassign_to.user.is_active
+    ):
+        _raise_bad_request("Replacement employee must be active.")
     preview = _build_offboarding_preview(
         session,
         context=context,
@@ -1466,6 +2429,426 @@ def _merge_or_reassign_team_memberships(
     return changed
 
 
+def _lock_offboarding_ip_work(
+    session: Session,
+    *,
+    company_id: str,
+    target_id: str,
+) -> tuple[list[MatterDeadline], list[IpDocketRecord]]:
+    """Prelock the complete IP work set in canonical lifecycle order.
+
+    Candidate discovery is lock-free and identifiers only. The authoritative
+    pass locks every candidate Matter, then docket, then deadline; the coverage
+    service runs next and acquires coverage locks last. Docket-owned deadlines
+    are revalidated after their parent/child locks and can be returned even
+    when they have no coverage row.
+    """
+
+    coverage_candidates = list(
+        session.execute(
+            select(
+                IpDeadlineCoverage.docket_id,
+                IpDeadlineCoverage.matter_deadline_id,
+            )
+            .where(
+                IpDeadlineCoverage.company_id == company_id,
+                or_(
+                    IpDeadlineCoverage.responsible_membership_id == target_id,
+                    IpDeadlineCoverage.backup_membership_id == target_id,
+                ),
+                IpDeadlineCoverage.coverage_status.notin_(OFFBOARDING_TERMINAL_COVERAGE_STATUSES),
+            )
+            .order_by(IpDeadlineCoverage.id)
+        ).all()
+    )
+    docket_deadline_candidates = list(
+        session.execute(
+            select(MatterDeadline.id, MatterDeadline.ip_docket_id)
+            .join(
+                IpDocketRecord,
+                and_(
+                    IpDocketRecord.id == MatterDeadline.ip_docket_id,
+                    IpDocketRecord.company_id == MatterDeadline.company_id,
+                ),
+            )
+            .where(
+                MatterDeadline.company_id == company_id,
+                MatterDeadline.matter_id.is_(None),
+                MatterDeadline.assignee_membership_id == target_id,
+                IpDocketRecord.company_id == company_id,
+            )
+            .order_by(IpDocketRecord.id, MatterDeadline.id)
+        ).all()
+    )
+    task_docket_ids = set(
+        session.scalars(
+            select(MatterTask.ip_docket_id).where(
+                MatterTask.company_id == company_id,
+                MatterTask.matter_id.is_(None),
+                MatterTask.owner_membership_id == target_id,
+                MatterTask.ip_docket_id.is_not(None),
+            )
+        ).all()
+    )
+    obligation_docket_ids = set(
+        session.scalars(
+            select(IpRelatedRightObligation.docket_id).where(
+                IpRelatedRightObligation.company_id == company_id,
+                IpRelatedRightObligation.owner_membership_id == target_id,
+            )
+        ).all()
+    )
+    linked_matter_docket_ids = set(
+        session.scalars(
+            select(IpDocketRecord.id)
+            .join(Matter, Matter.id == IpDocketRecord.matter_id)
+            .where(
+                IpDocketRecord.company_id == company_id,
+                or_(
+                    Matter.assignee_membership_id == target_id,
+                    Matter.responsible_lawyer_membership_id == target_id,
+                ),
+            )
+        ).all()
+    )
+    generic_matter_ids = set(
+        session.scalars(
+            select(Matter.id).where(
+                Matter.company_id == company_id,
+                or_(
+                    Matter.assignee_membership_id == target_id,
+                    Matter.responsible_lawyer_membership_id == target_id,
+                ),
+            )
+        ).all()
+    )
+    generic_matter_ids.update(
+        session.scalars(
+            select(MatterTask.matter_id).where(
+                MatterTask.company_id == company_id,
+                MatterTask.owner_membership_id == target_id,
+                MatterTask.matter_id.is_not(None),
+            )
+        ).all()
+    )
+    generic_deadline_candidates = list(
+        session.execute(
+            select(MatterDeadline.id, MatterDeadline.matter_id).where(
+                MatterDeadline.company_id == company_id,
+                MatterDeadline.assignee_membership_id == target_id,
+                MatterDeadline.matter_id.is_not(None),
+            )
+        ).all()
+    )
+    generic_deadline_matter_ids = sorted(
+        {
+            matter_id
+            for _deadline_id, matter_id in generic_deadline_candidates
+            if matter_id is not None
+        }
+    )
+    generic_matter_ids.update(
+        generic_deadline_matter_ids
+    )
+    generic_deadline_docket_family = (
+        tuple(
+            session.execute(
+                select(
+                    IpDocketRecord.id,
+                    IpDocketRecord.matter_id,
+                    IpDocketRecord.status,
+                    IpDocketRecord.is_active,
+                    IpDocketRecord.archived_by_matter_disposal,
+                    IpDocketRecord.access_policy_version,
+                )
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.matter_id.in_(generic_deadline_matter_ids),
+                    IpDocketRecord.is_active.is_(True),
+                    IpDocketRecord.archived_by_matter_disposal.is_(False),
+                    IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                )
+                .order_by(IpDocketRecord.id)
+            ).all()
+        )
+        if generic_deadline_matter_ids
+        else ()
+    )
+    assignee_deadline_ids = {
+        deadline_id for deadline_id, _docket_id in docket_deadline_candidates
+    } | {
+        deadline_id for deadline_id, _matter_id in generic_deadline_candidates
+    }
+    projection_coverage_candidates = list(
+        session.execute(
+            select(
+                IpDeadlineCoverage.id,
+                IpDeadlineCoverage.docket_id,
+                IpDeadlineCoverage.matter_deadline_id,
+            ).where(
+                IpDeadlineCoverage.company_id == company_id,
+                IpDeadlineCoverage.matter_deadline_id.in_(
+                    assignee_deadline_ids or {""}
+                ),
+                IpDeadlineCoverage.coverage_status.notin_(
+                    OFFBOARDING_TERMINAL_COVERAGE_STATUSES
+                ),
+            )
+        ).all()
+    )
+    legal_projection_candidates = list(
+        session.execute(
+            select(
+                IpDeadline.id,
+                IpDeadline.docket_id,
+                IpDeadline.matter_deadline_id,
+            ).where(
+                IpDeadline.company_id == company_id,
+                IpDeadline.matter_deadline_id.in_(assignee_deadline_ids or {""}),
+                IpDeadline.state.in_(("confirmed", "overdue")),
+            )
+        ).all()
+    )
+    docket_ids = sorted(
+        {docket_id for docket_id, _deadline_id in coverage_candidates}
+        | {
+            docket_id
+            for _deadline_id, docket_id in docket_deadline_candidates
+            if docket_id is not None
+        }
+        | {docket_id for docket_id in task_docket_ids if docket_id is not None}
+        | obligation_docket_ids
+        | linked_matter_docket_ids
+        | {
+            docket_id
+            for _coverage_id, docket_id, _deadline_id in projection_coverage_candidates
+        }
+        | {
+            docket_id
+            for _legal_id, docket_id, _deadline_id in legal_projection_candidates
+        }
+        | {
+            docket_id
+            for (
+                docket_id,
+                _matter_id,
+                _docket_status,
+                _is_active,
+                _archived,
+                _access_policy_version,
+            ) in generic_deadline_docket_family
+        }
+    )
+    deadline_ids = sorted(
+        {deadline_id for _docket_id, deadline_id in coverage_candidates}
+        | {deadline_id for deadline_id, _docket_id in docket_deadline_candidates}
+        | {deadline_id for deadline_id, _matter_id in generic_deadline_candidates}
+    )
+    if not docket_ids and not generic_matter_ids:
+        return [], []
+
+    docket_parents = (
+        list(
+            session.execute(
+                select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.id.in_(docket_ids),
+                )
+            ).all()
+        )
+        if docket_ids
+        else []
+    )
+    matter_ids = sorted(
+        {matter_id for _docket_id, matter_id in docket_parents if matter_id is not None}
+        | {matter_id for matter_id in generic_matter_ids if matter_id is not None}
+    )
+    locked_matters = (
+        list(
+            session.scalars(
+                select(Matter)
+                .where(
+                    Matter.company_id == company_id,
+                    Matter.id.in_(matter_ids),
+                )
+                .order_by(Matter.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if matter_ids
+        else []
+    )
+    refreshed_generic_deadline_docket_family = (
+        tuple(
+            session.execute(
+                select(
+                    IpDocketRecord.id,
+                    IpDocketRecord.matter_id,
+                    IpDocketRecord.status,
+                    IpDocketRecord.is_active,
+                    IpDocketRecord.archived_by_matter_disposal,
+                    IpDocketRecord.access_policy_version,
+                )
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.matter_id.in_(generic_deadline_matter_ids),
+                    IpDocketRecord.is_active.is_(True),
+                    IpDocketRecord.archived_by_matter_disposal.is_(False),
+                    IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                )
+                .order_by(IpDocketRecord.id)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if generic_deadline_matter_ids
+        else ()
+    )
+    if refreshed_generic_deadline_docket_family != generic_deadline_docket_family:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_linked_docket_family_changed",
+                "message": (
+                    "Linked IP records or their access policy changed; preview "
+                    "offboarding again."
+                ),
+            },
+        )
+    docket_ids = sorted(
+        set(docket_ids)
+        | {
+            docket_id
+            for (
+                docket_id,
+                _matter_id,
+                _docket_status,
+                _is_active,
+                _archived,
+                _access_policy_version,
+            ) in refreshed_generic_deadline_docket_family
+        }
+    )
+    locked_dockets = (
+        list(
+            session.scalars(
+                select(IpDocketRecord)
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.id.in_(docket_ids),
+                )
+                .order_by(IpDocketRecord.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if docket_ids
+        else []
+    )
+    from caseops_api.services.ip_operations import (
+        _lock_legal_deadlines_for_operational_deadlines,
+    )
+
+    legal_deadlines = _lock_legal_deadlines_for_operational_deadlines(
+        session,
+        company_id=company_id,
+        matter_deadline_ids=deadline_ids,
+    )
+    if any(
+        legal_deadline.docket_id not in docket_ids
+        for legal_deadline in legal_deadlines.values()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="IP legal-deadline projection changed; reload and retry.",
+        )
+    locked_deadlines = (
+        list(
+            session.scalars(
+                select(MatterDeadline)
+                .where(
+                    MatterDeadline.company_id == company_id,
+                    MatterDeadline.id.in_(deadline_ids),
+                )
+                .order_by(MatterDeadline.id)
+                .with_for_update(of=MatterDeadline)
+                .execution_options(populate_existing=True)
+            ).all()
+        )
+        if deadline_ids
+        else []
+    )
+    projection_coverage_ids = sorted(
+        {
+            coverage_id
+            for coverage_id, _docket_id, _deadline_id in projection_coverage_candidates
+        }
+    )
+    if projection_coverage_ids:
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == company_id,
+                IpDeadlineCoverage.id.in_(projection_coverage_ids),
+            )
+            .order_by(IpDeadlineCoverage.id)
+            .with_for_update(of=IpDeadlineCoverage)
+            .execution_options(populate_existing=True)
+        ).all()
+    dockets_by_id = {docket.id: docket for docket in locked_dockets}
+    deadlines_by_id = {deadline.id: deadline for deadline in locked_deadlines}
+    matters_by_id = {matter.id: matter for matter in locked_matters}
+    operational_deadlines: dict[str, MatterDeadline] = {}
+    operational_dockets: dict[str, IpDocketRecord] = {}
+    for docket in locked_dockets:
+        matter = matters_by_id.get(docket.matter_id) if docket.matter_id else None
+        if (
+            docket.is_active
+            and not docket.archived_by_matter_disposal
+            and docket.status not in OFFBOARDING_TERMINAL_DOCKET_STATUSES
+            and (
+                docket.matter_id is None
+                or (
+                    matter is not None
+                    and matter.is_active
+                    and matter.status not in {"disposed", "closed"}
+                )
+            )
+        ):
+            operational_dockets[docket.id] = docket
+    for deadline_id, docket_id in docket_deadline_candidates:
+        if docket_id is None:
+            continue
+        docket = dockets_by_id.get(docket_id)
+        deadline = deadlines_by_id.get(deadline_id)
+        if docket is None or deadline is None:
+            continue
+        matter = matters_by_id.get(docket.matter_id) if docket.matter_id else None
+        if (
+            not docket.is_active
+            or docket.archived_by_matter_disposal
+            or docket.status in OFFBOARDING_TERMINAL_DOCKET_STATUSES
+            or (
+                docket.matter_id is not None
+                and (
+                    matter is None
+                    or not matter.is_active
+                    or matter.status in {"disposed", "closed"}
+                )
+            )
+            or deadline.company_id != company_id
+            or deadline.matter_id is not None
+            or deadline.ip_docket_id != docket.id
+            or deadline.assignee_membership_id != target_id
+            or deadline.status not in (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+            or deadline.neutralized_at is not None
+            or deadline.cancelled_by_matter_disposal
+        ):
+            continue
+        operational_deadlines[deadline.id] = deadline
+    return list(operational_deadlines.values()), list(operational_dockets.values())
+
+
 def _reassign_offboarding_objects(
     session: Session,
     *,
@@ -1476,16 +2859,185 @@ def _reassign_offboarding_objects(
 ) -> dict[str, int]:
     counts = {object_type: 0 for object_type in OFFBOARDING_SUPPORTED_TYPES}
 
+    from caseops_api.schemas.ip_operations import IpCoverageBulkReassignRequest
+    from caseops_api.services.ip_coverage_projection import (
+        cutover_ip_coverage_projection,
+    )
+    from caseops_api.services.ip_operations import (
+        _membership_can_cover_docket,
+        _operational_coverage_ids_for_deadline,
+        bulk_reassign_ip_deadline_coverages,
+    )
+
+    docket_deadlines, docket_deadline_dockets = _lock_offboarding_ip_work(
+        session,
+        company_id=company_id,
+        target_id=target_id,
+    )
+    replacement = _load_employee_membership(
+        session,
+        company_id=company_id,
+        membership_id=replacement_id,
+    )
+    if any(
+        not _membership_can_cover_docket(
+            session,
+            context=context,
+            membership=replacement,
+            docket=docket,
+        )
+        for docket in docket_deadline_dockets
+    ):
+        _raise_bad_request("Replacement employee cannot access every affected IP docket.")
+
+    # The prelock owns Matter -> docket -> deadline. Coverage now locks its
+    # children last and revalidates its exact operational row set before any
+    # assignment is changed.
+    ip_reassignment = bulk_reassign_ip_deadline_coverages(
+        session,
+        context=context,
+        payload=IpCoverageBulkReassignRequest(
+            from_membership_id=target_id,
+            to_membership_id=replacement_id,
+            reason="Employee offboarding coverage transfer",
+            # The departing person cannot be waited on, so responsibility moves
+            # now. It is still recorded as awaiting the replacement's
+            # acknowledgement rather than as an acceptance they never gave, and
+            # the admin running the offboarding is who a decline escalates to.
+            transfer_mode="immediate",
+            escalation_membership_id=context.membership.id,
+        ),
+        commit=False,
+        replacement_source="employee_offboarding",
+    )
+    counts["ip_deadline_coverages"] = ip_reassignment.reassigned_count
+
+    def reassign_or_repair_deadline(deadline: MatterDeadline) -> None:
+        if deadline.assignee_membership_id != target_id:
+            return
+        operational_coverage_ids = _operational_coverage_ids_for_deadline(
+            session,
+            company_id=company_id,
+            deadline=deadline,
+        )
+        if len(operational_coverage_ids) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_coverage_shared_deadline_handoff_required",
+                    "message": "Shared IP deadline responsibility requires a group handoff.",
+                    "matter_deadline_id": deadline.id,
+                },
+            )
+        if operational_coverage_ids:
+            coverage = session.get(IpDeadlineCoverage, operational_coverage_ids[0])
+            if coverage is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Coverage projection changed; reload before offboarding.",
+                )
+            docket = session.get(IpDocketRecord, coverage.docket_id)
+            if docket is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="IP docket projection changed; reload before offboarding.",
+                )
+            # Repair a legacy split-brain assignee to the already-authoritative
+            # coverage owner. Never invent a third owner from the offboarding
+            # request. The projection helper reconciles every calendar row.
+            authoritative_id = coverage.responsible_membership_id
+            resulting_role_ids = {
+                membership_id
+                for membership_id in (
+                    authoritative_id,
+                    coverage.backup_membership_id,
+                )
+                if membership_id is not None
+            }
+            resulting_memberships = {
+                membership_id: session.get(CompanyMembership, membership_id)
+                for membership_id in resulting_role_ids
+            }
+            if any(
+                membership is None
+                or not membership.is_active
+                or not membership.user.is_active
+                or not _membership_can_cover_docket(
+                    session,
+                    context=context,
+                    membership=membership,
+                    docket=docket,
+                )
+                for membership in resulting_memberships.values()
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_coverage_projection_owner_invalid",
+                        "message": (
+                            "The authoritative coverage owner or backup is inactive "
+                            "or cannot access the linked record; repair coverage first."
+                        ),
+                        "matter_deadline_id": deadline.id,
+                    },
+                )
+            deadline.assignee_membership_id = authoritative_id
+            session.flush()
+            cutover_ip_coverage_projection(
+                session,
+                context=context,
+                docket=docket,
+                coverage=coverage,
+                previous_responsible_membership_id=authoritative_id,
+                previous_backup_membership_id=coverage.backup_membership_id,
+                reason="Employee offboarding projection repair",
+                replacement_source="offboarding_projection_repair",
+                responsible_accepted_at=coverage.accepted_at,
+            )
+            return
+        legal_projection = session.scalar(
+            select(IpDeadline.id).where(
+                IpDeadline.company_id == company_id,
+                IpDeadline.matter_deadline_id == deadline.id,
+                IpDeadline.state.in_(("confirmed", "overdue")),
+            )
+        )
+        if legal_projection is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_deadline_projection_repair_required",
+                    "message": (
+                        "A legal deadline without canonical coverage must be repaired "
+                        "before this employee can be offboarded."
+                    ),
+                    "matter_deadline_id": deadline.id,
+                },
+            )
+        deadline.assignee_membership_id = replacement_id
+
+    for deadline in docket_deadlines:
+        reassign_or_repair_deadline(deadline)
+    docket_deadline_count = len(docket_deadlines)
+
     matters = list(
         session.scalars(
             select(Matter).where(
                 Matter.company_id == company_id,
-                Matter.assignee_membership_id == target_id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
+                or_(
+                    Matter.assignee_membership_id == target_id,
+                    Matter.responsible_lawyer_membership_id == target_id,
+                ),
             )
         )
     )
     for matter in matters:
-        matter.assignee_membership_id = replacement_id
+        if matter.assignee_membership_id == target_id:
+            matter.assignee_membership_id = replacement_id
+        if matter.responsible_lawyer_membership_id == target_id:
+            matter.responsible_lawyer_membership_id = replacement_id
     counts["matters"] = len(matters)
 
     counts["restricted_access_grants"] = _merge_or_reassign_matter_grants(
@@ -1533,13 +3085,45 @@ def _reassign_offboarding_objects(
             .join(Matter, Matter.id == MatterTask.matter_id)
             .where(
                 Matter.company_id == company_id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
                 MatterTask.owner_membership_id == target_id,
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
             )
         )
     )
     for task in tasks:
         task.owner_membership_id = replacement_id
-    counts["matter_tasks"] = len(tasks)
+    docket_tasks = list(
+        session.scalars(
+            select(MatterTask)
+            .join(IpDocketRecord, IpDocketRecord.id == MatterTask.ip_docket_id)
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .where(
+                MatterTask.company_id == company_id,
+                MatterTask.matter_id.is_(None),
+                MatterTask.owner_membership_id == target_id,
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+            )
+        )
+    )
+    for task in docket_tasks:
+        task.owner_membership_id = replacement_id
+    counts["matter_tasks"] = len(tasks) + len(docket_tasks)
 
     deadlines = list(
         session.scalars(
@@ -1547,34 +3131,60 @@ def _reassign_offboarding_objects(
             .join(Matter, Matter.id == MatterDeadline.matter_id)
             .where(
                 Matter.company_id == company_id,
+                Matter.is_active.is_(True),
+                Matter.status.notin_(("disposed", "closed")),
                 MatterDeadline.assignee_membership_id == target_id,
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
             )
         )
     )
     for deadline in deadlines:
-        deadline.assignee_membership_id = replacement_id
-    counts["matter_deadlines"] = len(deadlines)
+        reassign_or_repair_deadline(deadline)
+    counts["matter_deadlines"] = len(deadlines) + docket_deadline_count
 
-    from caseops_api.schemas.ip_operations import IpCoverageBulkReassignRequest
-    from caseops_api.services.ip_operations import bulk_reassign_ip_deadline_coverages
-
-    ip_reassignment = bulk_reassign_ip_deadline_coverages(
-        session,
-        context=context,
-        payload=IpCoverageBulkReassignRequest(
-            from_membership_id=target_id,
-            to_membership_id=replacement_id,
-            reason="Employee offboarding coverage transfer",
-            # The departing person cannot be waited on, so responsibility moves
-            # now. It is still recorded as awaiting the replacement's
-            # acknowledgement rather than as an acceptance they never gave, and
-            # the admin running the offboarding is who a decline escalates to.
-            transfer_mode="immediate",
-            escalation_membership_id=context.membership.id,
-        ),
-        commit=False,
+    ip_obligations = list(
+        session.scalars(
+            select(IpRelatedRightObligation)
+            .join(IpDocketRecord, IpDocketRecord.id == IpRelatedRightObligation.docket_id)
+            .outerjoin(Matter, Matter.id == IpDocketRecord.matter_id)
+            .outerjoin(
+                MatterDeadline,
+                MatterDeadline.id == IpRelatedRightObligation.matter_deadline_id,
+            )
+            .where(
+                IpRelatedRightObligation.company_id == company_id,
+                IpRelatedRightObligation.owner_membership_id == target_id,
+                IpRelatedRightObligation.status == "open",
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                IpDocketRecord.status.notin_(OFFBOARDING_TERMINAL_DOCKET_STATUSES),
+                or_(
+                    IpDocketRecord.matter_id.is_(None),
+                    and_(
+                        Matter.is_active.is_(True),
+                        Matter.status.notin_(("disposed", "closed")),
+                    ),
+                ),
+                or_(
+                    IpRelatedRightObligation.matter_deadline_id.is_(None),
+                    and_(
+                        MatterDeadline.status.in_(
+                            (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                        ),
+                        MatterDeadline.neutralized_at.is_(None),
+                        MatterDeadline.cancelled_by_matter_disposal.is_(False),
+                    ),
+                ),
+            )
+        )
     )
-    counts["ip_deadline_coverages"] = ip_reassignment.reassigned_count
+    for obligation in ip_obligations:
+        obligation.owner_membership_id = replacement_id
+    counts["ip_related_right_obligations"] = len(ip_obligations)
 
     personal_queues = list(
         session.scalars(
@@ -1588,18 +3198,6 @@ def _reassign_offboarding_objects(
     for queue in personal_queues:
         queue.owner_membership_id = replacement_id
     counts["ip_docket_queues"] = len(personal_queues)
-
-    reminders = list(
-        session.scalars(
-            select(HearingReminder).where(
-                HearingReminder.company_id == company_id,
-                HearingReminder.recipient_membership_id == target_id,
-            )
-        )
-    )
-    for reminder in reminders:
-        reminder.recipient_membership_id = replacement_id
-    counts["hearing_reminders"] = len(reminders)
 
     return counts
 
@@ -1615,18 +3213,84 @@ def commit_employee_offboarding(
         _raise_forbidden("Only fixed owners or admins can commit employee offboarding.")
     if not payload.deactivate or not payload.revoke_sessions:
         _raise_bad_request("Offboarding commit must deactivate and revoke sessions.")
-    target = _load_employee_membership(
-        session,
-        company_id=context.company.id,
-        membership_id=membership_id,
-    )
-    reassign_to = _load_reassignment_membership(
-        session,
-        company_id=context.company.id,
-        membership_id=payload.reassign_to_membership_id,
-    )
-    if reassign_to is None:
+    if payload.reassign_to_membership_id is None:
         _raise_bad_request("Choose an active replacement employee before commit.")
+    coverage_participants = session.execute(
+        select(
+            IpDeadlineCoverage.responsible_membership_id,
+            IpDeadlineCoverage.backup_membership_id,
+            IpDeadlineCoverage.pending_replacement_membership_id,
+            IpDeadlineCoverage.emergency_escalation_membership_id,
+        ).where(
+            IpDeadlineCoverage.company_id == context.company.id,
+            or_(
+                IpDeadlineCoverage.responsible_membership_id == membership_id,
+                IpDeadlineCoverage.backup_membership_id == membership_id,
+            ),
+            IpDeadlineCoverage.coverage_status.notin_(
+                OFFBOARDING_TERMINAL_COVERAGE_STATUSES
+            ),
+        )
+    ).all()
+    coverage_participants.extend(
+        session.execute(
+            select(
+                IpDeadlineCoverage.responsible_membership_id,
+                IpDeadlineCoverage.backup_membership_id,
+                IpDeadlineCoverage.pending_replacement_membership_id,
+                IpDeadlineCoverage.emergency_escalation_membership_id,
+            )
+            .join(
+                MatterDeadline,
+                MatterDeadline.id == IpDeadlineCoverage.matter_deadline_id,
+            )
+            .where(
+                IpDeadlineCoverage.company_id == context.company.id,
+                MatterDeadline.company_id == context.company.id,
+                MatterDeadline.assignee_membership_id == membership_id,
+                IpDeadlineCoverage.coverage_status.notin_(
+                    OFFBOARDING_TERMINAL_COVERAGE_STATUSES
+                ),
+            )
+        ).all()
+    )
+    participant_ids = {
+        participant_id
+        for row in coverage_participants
+        for participant_id in row
+        if participant_id is not None
+    }
+    participant_ids.update(
+        {
+            membership_id,
+            payload.reassign_to_membership_id,
+            context.membership.id,
+        }
+    )
+    locked_memberships = _lock_employee_memberships_for_offboarding(
+        session,
+        company_id=context.company.id,
+        membership_ids=participant_ids,
+    )
+    target = locked_memberships.get(membership_id)
+    reassign_to = locked_memberships.get(payload.reassign_to_membership_id)
+    locked_actor = locked_memberships.get(context.membership.id)
+    if target is None or reassign_to is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found.",
+        )
+    if (
+        locked_actor is None
+        or not locked_actor.is_active
+        or not locked_actor.user.is_active
+        or locked_actor.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}
+    ):
+        _raise_forbidden("Only active owners or admins can commit employee offboarding.")
+    lock_user_for_membership_deactivation(session, membership=target)
+    if not reassign_to.is_active or not reassign_to.user.is_active:
+        _raise_bad_request("Replacement employee must be active.")
+    legacy_inactive_ip_repair = not target.is_active or not target.user.is_active
     preview = _build_offboarding_preview(
         session,
         context=context,
@@ -1644,6 +3308,29 @@ def commit_employee_offboarding(
         target_id=target.id,
         replacement_id=reassign_to.id,
     )
+    tombstone_membership_calendar_syncs_before_deactivation(
+        session,
+        company_id=context.company.id,
+        membership_id=target.id,
+    )
+    session.flush()
+    remaining_ip_references = operational_ip_live_reference_counts(
+        session,
+        company_id=context.company.id,
+        membership_id=target.id,
+    )
+    if remaining_ip_references:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "employee_offboarding_incomplete",
+                "message": (
+                    "Operational IP responsibilities remain assigned to this employee; "
+                    "reload the preview and resolve every blocker before deactivation."
+                ),
+                "live_reference_counts": remaining_ip_references,
+            },
+        )
     profile = _get_or_create_profile(session, membership=target)
     now = _utcnow()
     profile.employment_status = EmployeeEmploymentStatus.INACTIVE
@@ -1668,6 +3355,7 @@ def commit_employee_offboarding(
         ],
         "notes": payload.notes,
         "sessions_revoked": True,
+        "legacy_inactive_ip_repair": legacy_inactive_ip_repair,
     }
     record_from_context(
         session,
@@ -1680,6 +3368,7 @@ def commit_employee_offboarding(
             "sessions_valid_after": now.isoformat(),
             "via": "offboarding",
             "global_user_deactivated": user_deactivated,
+            "legacy_inactive_ip_repair": legacy_inactive_ip_repair,
         },
     )
     record_from_context(
@@ -1780,11 +3469,17 @@ def resend_employee_setup(
     context: SessionContext,
     membership_id: str,
 ) -> EmployeeTokenDelivery:
-    membership = _load_employee_membership(
+    candidate_membership = _load_employee_membership(
         session,
         company_id=context.company.id,
         membership_id=membership_id,
     )
+    context, memberships = _lock_employee_writer_context(
+        session,
+        context=context,
+        membership_ids={candidate_membership.id},
+    )
+    membership = memberships[candidate_membership.id]
     profile = _get_or_create_profile(
         session,
         membership=membership,
@@ -1815,11 +3510,17 @@ def issue_employee_password_reset(
     context: SessionContext,
     membership_id: str,
 ) -> EmployeeTokenDelivery:
-    membership = _load_employee_membership(
+    candidate_membership = _load_employee_membership(
         session,
         company_id=context.company.id,
         membership_id=membership_id,
     )
+    context, memberships = _lock_employee_writer_context(
+        session,
+        context=context,
+        membership_ids={candidate_membership.id},
+    )
+    membership = memberships[candidate_membership.id]
     if not membership.is_active or not membership.user.is_active:
         _raise_bad_request("Inactive employees cannot receive password reset links.")
     issued = _issue_account_token(
@@ -1934,6 +3635,29 @@ def _complete_account_token(
     except WeakPasswordError as exc:
         _raise_bad_request(str(exc))
     row, membership = _consume_token(session, token=payload.token, purpose=purpose)
+    membership = lock_company_memberships_for_assignment(
+        session,
+        company_id=membership.company_id,
+        membership_ids=(membership.id,),
+    ).get(membership.id)
+    if membership is None or not membership.is_active or not membership.user.is_active:
+        raise InvalidAccountToken()
+    lock_user_for_membership_deactivation(session, membership=membership)
+    if not membership.is_active or not membership.user.is_active:
+        raise InvalidAccountToken()
+    # The token lookup above is intentionally lock-free with respect to the
+    # membership. Re-read the setup lifecycle after the shared membership ->
+    # User fence so a concurrent offboarding cannot be followed by a stale
+    # setup completion that resurrects the employee profile.
+    session.expire(membership, ["employee_profile", "company"])
+    if purpose == AccountSetupTokenPurpose.ACCOUNT_SETUP:
+        locked_profile = membership.employee_profile
+        if (
+            locked_profile is None
+            or locked_profile.employment_status != EmployeeEmploymentStatus.INVITED
+            or locked_profile.setup_completed_at is not None
+        ):
+            raise InvalidAccountToken()
     profile = _get_or_create_profile(session, membership=membership)
     now = _utcnow()
     membership.user.password_hash = hash_password(payload.password)

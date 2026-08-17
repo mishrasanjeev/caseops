@@ -41,10 +41,12 @@ from caseops_api.db.models import (
     CompanyMembership,
     HearingReminder,
     HearingReminderChannel,
+    HearingReminderDeliveryIntent,
     HearingReminderStatus,
     IpDocketRecord,
     Matter,
     MatterHearing,
+    NotificationDeliveryIntent,
     User,
 )
 from caseops_api.services.matter_access import can_access
@@ -627,6 +629,136 @@ def run_reminder_worker(
     limit: int = 100,
     mode: Literal["auto", "dry_run", "live"] = "auto",
 ) -> dict:
+    """Project due legacy rows from their canonical delivery intents.
+
+    This compatibility worker never invokes SendGrid, Twilio, or another
+    external provider. Scheduling creates the linked durable intent; the
+    canonical notification worker owns claim/commit/provider/finalize. Running
+    the two workers in either order is therefore exactly-once at this boundary.
+    """
+
+    current_time = _as_utc(now or datetime.now(UTC))
+    current_time_for_db = current_time.replace(tzinfo=None)
+    due = list(
+        session.scalars(
+            select(HearingReminder)
+            .where(
+                HearingReminder.status == HearingReminderStatus.QUEUED,
+                HearingReminder.scheduled_for <= current_time_for_db,
+            )
+            .order_by(HearingReminder.scheduled_for.asc(), HearingReminder.id.asc())
+            .limit(limit)
+        )
+    )
+    report = {
+        "mode": mode,
+        "effective_live": False,
+        "enabled_flag": get_settings().hearing_reminders_enabled,
+        "provider_configured": _sendgrid_configured(),
+        "sms_provider_configured": _twilio_sms_configured(),
+        "whatsapp_provider_configured": _whatsapp_configured(),
+        "due_count": len(due),
+        "sent": 0,
+        "would_send": 0,
+        "failed": 0,
+        "skipped_missing_email": 0,
+        "skipped_missing_phone": 0,
+        "skipped_provider_disabled": 0,
+        "suppressed": 0,
+        "delegated_to_durable_intent": 0,
+        "missing_canonical_intent": 0,
+    }
+
+    from caseops_api.services.notification_delivery import (
+        cancel_linked_hearing_reminder_intent_for_inactive_recipient,
+        project_linked_hearing_reminder_intent,
+    )
+
+    for candidate in due:
+        link = session.scalar(
+            select(HearingReminderDeliveryIntent)
+            .where(
+                HearingReminderDeliveryIntent.hearing_reminder_id == candidate.id,
+                HearingReminderDeliveryIntent.is_primary.is_(True),
+            )
+            .order_by(
+                HearingReminderDeliveryIntent.created_at.asc(),
+                HearingReminderDeliveryIntent.id.asc(),
+            )
+            .limit(1)
+        )
+        if link is None:
+            # Historical rows without migration lineage remain repairable but
+            # cannot bypass canonical delivery authorization.
+            if mode == "dry_run":
+                report["would_send"] += 1
+            else:
+                reminder = session.scalar(
+                    select(HearingReminder)
+                    .where(HearingReminder.id == candidate.id)
+                    .with_for_update(of=HearingReminder)
+                    .execution_options(populate_existing=True)
+                )
+                if (
+                    reminder is not None
+                    and reminder.status == HearingReminderStatus.QUEUED
+                ):
+                    reminder.last_error = (
+                        "Canonical notification intent linkage is missing; "
+                        "external delivery was not attempted."
+                    )
+                    reminder.updated_at = current_time
+                    session.add(reminder)
+            report["missing_canonical_intent"] += 1
+            continue
+        if mode == "dry_run":
+            intent = session.get(NotificationDeliveryIntent, link.intent_id)
+            recipient = (
+                session.get(CompanyMembership, intent.recipient_membership_id)
+                if intent is not None and intent.recipient_membership_id is not None
+                else None
+            )
+            recipient_user = (
+                session.get(User, recipient.user_id) if recipient is not None else None
+            )
+            if intent is not None and (
+                recipient is None
+                or recipient_user is None
+                or not recipient.is_active
+                or not recipient_user.is_active
+            ):
+                # The canonical intent fence runs before provider readiness
+                # or dispatch. This state-only cancellation
+                # can therefore converge an already-revoked intent during a
+                # dry run without any provider I/O; active intents remain
+                # observational only.
+                cancel_linked_hearing_reminder_intent_for_inactive_recipient(
+                    session,
+                    intent_id=intent.id,
+                )
+                project_linked_hearing_reminder_intent(
+                    session,
+                    intent_id=intent.id,
+                )
+            report["would_send"] += 1
+            continue
+        project_linked_hearing_reminder_intent(
+            session,
+            intent_id=link.intent_id,
+        )
+        report["delegated_to_durable_intent"] += 1
+
+    session.commit()
+    return report
+
+
+def _retired_direct_reminder_worker(
+    session: Session,
+    *,
+    now: datetime | None = None,
+    limit: int = 100,
+    mode: Literal["auto", "dry_run", "live"] = "auto",
+) -> dict:
     """Pull QUEUED reminders whose ``scheduled_for`` has passed and
     dispatch them. Returns a telemetry dict.
 
@@ -640,6 +772,9 @@ def run_reminder_worker(
     Safe to call repeatedly — every row is status-scoped so the next
     call skips ones already SENT / DELIVERED / FAILED / CANCELLED.
     """
+    raise RuntimeError(
+        "Direct reminder provider delivery is retired; drain canonical intents."
+    )
     settings = get_settings()
     now = _as_utc(now or datetime.now(UTC))
     # SQLite is tz-naive (stores a bare ISO string), so we bind a

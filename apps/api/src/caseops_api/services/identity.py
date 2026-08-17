@@ -19,6 +19,15 @@ from caseops_api.schemas.companies import (
     CompanyUsersResponse,
     CompanyUserUpdateRequest,
 )
+from caseops_api.services.assignment_memberships import (
+    has_other_active_company_memberships,
+    lock_company_memberships_for_assignment,
+    lock_user_for_membership_deactivation,
+)
+from caseops_api.services.employee_deactivation import (
+    assert_no_operational_ip_work_before_deactivation,
+    tombstone_membership_calendar_syncs_before_deactivation,
+)
 from caseops_api.services.session_context import SessionContext
 
 
@@ -61,6 +70,76 @@ def _build_auth_response(session: Session, context: SessionContext) -> AuthSessi
     )
 
 
+def _token_precedes_membership_cutoff(
+    membership: CompanyMembership,
+    *,
+    token_issued_at: float,
+) -> bool:
+    valid_after = membership.sessions_valid_after
+    if valid_after is None:
+        return False
+    if valid_after.tzinfo is None:
+        valid_after = valid_after.replace(tzinfo=UTC)
+    return token_issued_at < valid_after.timestamp()
+
+
+def issue_auth_session_under_fence(
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
+    submitted_password: str | None = None,
+    source_token_issued_at: float | None = None,
+) -> AuthSessionResponse:
+    """Mint a session only while holding the canonical identity fence.
+
+    The earlier authentication/context lookup is advisory. A password reset,
+    offboarding, or generic membership deactivation can commit after that
+    lookup. Re-lock and populate-refresh Membership -> User immediately before
+    resolving capabilities and minting the JWT so the response is serialized
+    against those cutoffs.
+
+    Login supplies ``submitted_password`` so a reset that wins the fence also
+    changes the refreshed hash and makes the stale login fail. Refresh supplies
+    ``source_token_issued_at`` so a cutoff that wins cannot be bypassed by
+    minting a newer token from an already-revoked session.
+    """
+
+    membership = lock_company_memberships_for_assignment(
+        session,
+        company_id=company_id,
+        membership_ids=(membership_id,),
+    ).get(membership_id)
+    if membership is None:
+        _raise_unauthorized("The current session is no longer valid.")
+
+    user = lock_user_for_membership_deactivation(session, membership=membership)
+    company = session.scalar(
+        select(Company)
+        .where(Company.id == membership.company_id)
+        .execution_options(populate_existing=True)
+    )
+    if company is None:
+        _raise_unauthorized("The current session is no longer valid.")
+    if not membership.is_active or not user.is_active or not company.is_active:
+        _raise_forbidden("The current session is no longer active.")
+    if submitted_password is not None and not verify_password(
+        submitted_password,
+        user.password_hash,
+    ):
+        _raise_unauthorized("Invalid email or password.")
+    if source_token_issued_at is not None and _token_precedes_membership_cutoff(
+        membership,
+        token_issued_at=source_token_issued_at,
+    ):
+        _raise_unauthorized("This session has been revoked. Please sign in again.")
+
+    return _build_auth_response(
+        session,
+        SessionContext(company=company, user=user, membership=membership),
+    )
+
+
 def build_auth_context(session: Session, context: SessionContext) -> AuthContextResponse:
     return AuthContextResponse(
         company=context.company,
@@ -77,7 +156,14 @@ def refresh_auth_session(session: Session, context: SessionContext) -> AuthSessi
     only live sessions can extend themselves; once a token has hard-
     expired, the client must sign in again.
     """
-    return _build_auth_response(session, context)
+    if context.token_issued_at is None:
+        _raise_unauthorized("The source session is missing its issuance timestamp.")
+    return issue_auth_session_under_fence(
+        session,
+        company_id=context.company.id,
+        membership_id=context.membership.id,
+        source_token_issued_at=context.token_issued_at,
+    )
 
 
 def _require_policy_compliant_password(password: str) -> None:
@@ -183,9 +269,11 @@ def authenticate_user(
 
     ensure_configured_platform_super_admin(session)
     session.commit()
-    return _build_auth_response(
+    return issue_auth_session_under_fence(
         session,
-        SessionContext(company=membership.company, user=membership.user, membership=membership)
+        company_id=membership.company_id,
+        membership_id=membership.id,
+        submitted_password=password,
     )
 
 
@@ -210,14 +298,18 @@ def get_session_context(
     ):
         _raise_forbidden("The current session is no longer active.")
 
-    if token_issued_at is not None and membership.sessions_valid_after is not None:
-        valid_after = membership.sessions_valid_after
-        if valid_after.tzinfo is None:
-            valid_after = valid_after.replace(tzinfo=UTC)
-        if token_issued_at < valid_after.timestamp():
-            _raise_unauthorized("This session has been revoked. Please sign in again.")
+    if token_issued_at is not None and _token_precedes_membership_cutoff(
+        membership,
+        token_issued_at=token_issued_at,
+    ):
+        _raise_unauthorized("This session has been revoked. Please sign in again.")
 
-    return SessionContext(company=membership.company, user=membership.user, membership=membership)
+    return SessionContext(
+        company=membership.company,
+        user=membership.user,
+        membership=membership,
+        token_issued_at=token_issued_at,
+    )
 
 
 def _revoke_membership_sessions(
@@ -404,23 +496,62 @@ def update_company_user(
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company user not found.")
 
-    if context.membership.id == membership.id and payload.is_active is False:
+    actor_membership = context.membership
+    if payload.role is not None or payload.is_active is not None:
+        locked_memberships = lock_company_memberships_for_assignment(
+            session,
+            company_id=context.company.id,
+            membership_ids=(membership.id, context.membership.id),
+        )
+        membership = locked_memberships.get(membership.id)
+        actor_membership = locked_memberships.get(context.membership.id)
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company user not found.",
+            )
+        if (
+            actor_membership is None
+            or not actor_membership.is_active
+            or not actor_membership.user.is_active
+        ):
+            _raise_forbidden("Your company membership is no longer active.")
+
+    if actor_membership.id == membership.id and payload.is_active is False:
         _raise_bad_request("You cannot deactivate your own active session membership.")
 
     if membership.role == MembershipRole.OWNER:
         _raise_forbidden("Owner memberships cannot be modified through this endpoint.")
 
-    if context.membership.role == MembershipRole.ADMIN:
+    if actor_membership.role != MembershipRole.OWNER:
         _raise_forbidden("Only owners can update company memberships.")
+
+    if payload.is_active is False:
+        lock_user_for_membership_deactivation(session, membership=membership)
+        assert_no_operational_ip_work_before_deactivation(
+            session,
+            context=context,
+            membership=membership,
+        )
+        tombstone_membership_calendar_syncs_before_deactivation(
+            session,
+            company_id=context.company.id,
+            membership_id=membership.id,
+        )
 
     if payload.role is not None:
         membership.role = MembershipRole(payload.role)
 
     if payload.is_active is not None:
         membership.is_active = payload.is_active
-        membership.user.is_active = payload.is_active
         if payload.is_active is False:
             membership.sessions_valid_after = datetime.now(UTC)
+            membership.user.is_active = has_other_active_company_memberships(
+                session,
+                membership=membership,
+            )
+        else:
+            membership.user.is_active = True
         from caseops_api.db.models import EmployeeEmploymentStatus, EmployeeProfile
 
         profile = session.scalar(

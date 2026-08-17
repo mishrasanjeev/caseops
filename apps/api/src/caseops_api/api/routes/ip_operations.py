@@ -163,6 +163,7 @@ from caseops_api.schemas.shared_work import (
     IpOperationalDeadlineCreateRequest,
     IpOperationalDeadlineListResponse,
     IpOperationalDeadlineRecord,
+    IpOperationalDeadlineTransitionRequest,
     IpOperationalDeadlineUpdateRequest,
     IpSharedHearingCreateRequest,
     IpSharedHearingListResponse,
@@ -308,6 +309,7 @@ from caseops_api.services.shared_work import (
     list_ip_shared_tasks,
     reconcile_shared_work_owners,
     shared_work_foundation_contract,
+    transition_ip_covered_operational_deadline,
     update_ip_operational_deadline,
     update_ip_shared_hearing,
     update_ip_shared_task,
@@ -553,6 +555,24 @@ async def patch_ip_operational_deadline(
 ) -> IpOperationalDeadlineRecord:
     return update_ip_operational_deadline(
         session, context=context, deadline_id=deadline_id, payload=payload
+    )
+
+
+@router.post(
+    "/operational-deadlines/{deadline_id}/terminalize",
+    response_model=IpOperationalDeadlineRecord,
+)
+async def post_ip_covered_deadline_terminalization(
+    deadline_id: str,
+    payload: IpOperationalDeadlineTransitionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpOperationalDeadlineRecord:
+    return transition_ip_covered_operational_deadline(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+        payload=payload,
     )
 
 

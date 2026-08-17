@@ -19,6 +19,8 @@ from sqlalchemy.orm import Session, joinedload
 from caseops_api.db.models import (
     CompanyMembership,
     HearingReminder,
+    IpDeadline,
+    IpDeadlineCoverage,
     IpDocketRecord,
     Matter,
     MatterDeadline,
@@ -27,13 +29,13 @@ from caseops_api.db.models import (
     MatterNextHearingSuggestion,
     MatterTask,
     NotificationDeliveryIntent,
-    User,
 )
 from caseops_api.schemas.shared_work import (
     IpHearingReminderRecord,
     IpOperationalDeadlineCreateRequest,
     IpOperationalDeadlineListResponse,
     IpOperationalDeadlineRecord,
+    IpOperationalDeadlineTransitionRequest,
     IpOperationalDeadlineUpdateRequest,
     IpSharedHearingCreateRequest,
     IpSharedHearingListResponse,
@@ -48,8 +50,12 @@ from caseops_api.schemas.shared_work import (
     SharedWorkOwnerReconciliation,
     SharedWorkReconciliationReport,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.ip_operations import _docket_or_404
+from caseops_api.services.ip_operations import _docket_or_404, _membership_can_cover_docket
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -148,27 +154,149 @@ def shared_target_predicate(model, target: SharedWorkTarget):
 
 
 def _active_membership(
-    session: Session, *, company_id: str, membership_id: str | None
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str | None,
+    for_update: bool = False,
 ) -> CompanyMembership | None:
     if membership_id is None:
         return None
-    membership = session.scalar(
-        select(CompanyMembership)
-        .join(User, CompanyMembership.user_id == User.id)
-        .options(joinedload(CompanyMembership.user))
-        .where(
-            CompanyMembership.id == membership_id,
-            CompanyMembership.company_id == company_id,
-            CompanyMembership.is_active.is_(True),
-            User.is_active.is_(True),
+    if for_update:
+        membership = lock_company_memberships_for_assignment(
+            session,
+            company_id=company_id,
+            membership_ids=(membership_id,),
+        ).get(membership_id)
+    else:
+        membership = session.scalar(
+            select(CompanyMembership)
+            .where(
+                CompanyMembership.id == membership_id,
+                CompanyMembership.company_id == company_id,
+            )
+            .options(joinedload(CompanyMembership.user))
         )
-    )
-    if membership is None:
+    if membership is None or not membership.is_active or not membership.user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Assignee does not belong to this company.",
         )
     return membership
+
+
+def _assert_deadline_assignee_can_access_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership: CompanyMembership,
+    docket: IpDocketRecord,
+) -> None:
+    if not _membership_can_cover_docket(
+        session,
+        context=context,
+        membership=membership,
+        docket=docket,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_deadline_assignee_lacks_access",
+                "message": "The assignee cannot access the IP record.",
+                "blocked_docket_ids": [docket.id],
+            },
+        )
+
+
+def _lock_shared_work_memberships(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership_ids: set[str | None],
+    required_active_ids: set[str | None],
+    required_capability: str,
+) -> dict[str, CompanyMembership]:
+    requested_ids = {
+        membership_id for membership_id in membership_ids if membership_id
+    } | {context.membership.id}
+    active_ids = {
+        membership_id for membership_id in required_active_ids if membership_id
+    } | {context.membership.id}
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=requested_ids | active_ids,
+    )
+    if set(memberships) != requested_ids | active_ids or any(
+        not memberships[membership_id].is_active
+        or not memberships[membership_id].user.is_active
+        for membership_id in active_ids
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee does not belong to this company.",
+        )
+    require_locked_membership_capability(
+        session,
+        memberships[context.membership.id],
+        required_capability,
+    )
+    return memberships
+
+
+def _assert_shared_work_memberships_can_access_docket(
+    session: Session,
+    *,
+    context: SessionContext,
+    memberships: list[CompanyMembership],
+    docket: IpDocketRecord,
+) -> None:
+    blocked_ids = sorted(
+        membership.id
+        for membership in memberships
+        if not _membership_can_cover_docket(
+            session,
+            context=context,
+            membership=membership,
+            docket=docket,
+        )
+    )
+    if blocked_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_shared_work_assignee_lacks_access",
+                "message": "Every operational assignee must be able to access the IP record.",
+                "blocked_membership_ids": blocked_ids,
+                "blocked_docket_ids": [docket.id],
+            },
+        )
+
+
+def _assert_ip_lifecycle_history_is_immutable(
+    row: MatterTask | MatterHearing | MatterDeadline,
+) -> None:
+    """Never let a generic PATCH resurrect lifecycle-neutralized history."""
+
+    if (
+        row.neutralized_at is None
+        and not row.cancelled_by_matter_disposal
+        and row.neutralized_by_ip_lifecycle_event_id is None
+        and row.neutralized_by_ip_lifecycle_version is None
+    ):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "ip_lifecycle_history_immutable",
+            "message": (
+                "Lifecycle-neutralized shared work is immutable after a docket "
+                "reopens. Create a new operational record instead."
+            ),
+            "object_type": row.__class__.__name__,
+            "object_id": row.id,
+        },
+    )
 
 
 def _task_record(task: MatterTask) -> IpSharedTaskRecord:
@@ -194,14 +322,25 @@ def _task_record(task: MatterTask) -> IpSharedTaskRecord:
 def create_ip_shared_task(
     session: Session, *, context: SessionContext, payload: IpSharedTaskCreateRequest
 ) -> IpSharedTaskRecord:
+    operational = payload.status not in {"completed", "cancelled"}
+    memberships = _lock_shared_work_memberships(
+        session,
+        context=context,
+        membership_ids={payload.owner_membership_id},
+        required_active_ids={payload.owner_membership_id} if operational else set(),
+        required_capability="ip:write",
+    )
     target = resolve_shared_work_target(
         session, context=context, ip_docket_id=payload.docket_id, for_update=True
     )
-    _active_membership(
-        session,
-        company_id=target.company_id,
-        membership_id=payload.owner_membership_id,
-    )
+    if operational and payload.owner_membership_id is not None:
+        assert target.ip_docket is not None
+        _assert_shared_work_memberships_can_access_docket(
+            session,
+            context=context,
+            memberships=[memberships[payload.owner_membership_id]],
+            docket=target.ip_docket,
+        )
     completed_at = (
         datetime.now(UTC) if payload.status in {"completed", "cancelled"} else None
     )
@@ -261,6 +400,27 @@ def update_ip_shared_task(
     task_id: str,
     payload: IpSharedTaskUpdateRequest,
 ) -> IpSharedTaskRecord:
+    candidate = session.execute(
+        select(MatterTask.owner_membership_id, MatterTask.status).where(
+            MatterTask.id == task_id,
+            MatterTask.company_id == context.company.id,
+            MatterTask.matter_id.is_(None),
+            MatterTask.ip_docket_id == payload.docket_id,
+        )
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Shared task not found.")
+    updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
+    resulting_owner_id = updates.get("owner_membership_id", candidate.owner_membership_id)
+    resulting_status = updates.get("status", candidate.status)
+    operational = resulting_status not in {"completed", "cancelled"}
+    memberships = _lock_shared_work_memberships(
+        session,
+        context=context,
+        membership_ids={candidate.owner_membership_id, resulting_owner_id},
+        required_active_ids={resulting_owner_id} if operational else set(),
+        required_capability="ip:write",
+    )
     target = resolve_shared_work_target(
         session, context=context, ip_docket_id=payload.docket_id, for_update=True
     )
@@ -268,15 +428,26 @@ def update_ip_shared_task(
         select(MatterTask)
         .where(MatterTask.id == task_id, shared_target_predicate(MatterTask, target))
         .with_for_update(of=MatterTask)
+        .execution_options(populate_existing=True)
     )
     if task is None:
         raise HTTPException(status_code=404, detail="Shared task not found.")
-    updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
-    if "owner_membership_id" in updates:
-        _active_membership(
+    _assert_ip_lifecycle_history_is_immutable(task)
+    if (task.owner_membership_id, task.status) != (
+        candidate.owner_membership_id,
+        candidate.status,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shared task assignment changed; reload before updating.",
+        )
+    if operational and resulting_owner_id is not None:
+        assert target.ip_docket is not None
+        _assert_shared_work_memberships_can_access_docket(
             session,
-            company_id=target.company_id,
-            membership_id=updates["owner_membership_id"],
+            context=context,
+            memberships=[memberships[resulting_owner_id]],
+            docket=target.ip_docket,
         )
     for field, value in updates.items():
         if field in {"title", "description"} and isinstance(value, str):
@@ -357,23 +528,35 @@ def _hearing_record(session: Session, hearing: MatterHearing) -> IpSharedHearing
 
 
 def _validated_reminder_policy(
-    session: Session,
-    *,
-    company_id: str,
     policy,
 ) -> dict | None:
     if policy is None:
         return None
-    for membership_id in policy.recipient_membership_ids:
-        _active_membership(
-            session, company_id=company_id, membership_id=membership_id
-        )
-    _active_membership(
-        session,
-        company_id=company_id,
-        membership_id=policy.escalation_membership_id,
-    )
     return policy.model_dump(mode="json")
+
+
+def _hearing_participant_ids(
+    *,
+    responsible_membership_id: str | None,
+    attendee_membership_ids: list[str] | None,
+    reminder_policy,
+) -> set[str]:
+    participant_ids = {
+        membership_id
+        for membership_id in [responsible_membership_id, *(attendee_membership_ids or [])]
+        if membership_id
+    }
+    if reminder_policy is not None:
+        if isinstance(reminder_policy, dict):
+            recipients = reminder_policy.get("recipient_membership_ids") or []
+            escalation = reminder_policy.get("escalation_membership_id")
+        else:
+            recipients = reminder_policy.recipient_membership_ids
+            escalation = reminder_policy.escalation_membership_id
+        participant_ids.update(membership_id for membership_id in recipients if membership_id)
+        if escalation:
+            participant_ids.add(escalation)
+    return participant_ids
 
 
 def _append_ip_next_hearing_history(
@@ -412,23 +595,33 @@ def create_ip_shared_hearing(
 ) -> IpSharedHearingRecord:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-    target = resolve_shared_work_target(
-        session, context=context, ip_docket_id=payload.docket_id, for_update=True
-    )
     try:
         ZoneInfo(payload.timezone)
     except ZoneInfoNotFoundError as exc:
         raise HTTPException(status_code=400, detail="Unknown IANA hearing timezone.") from exc
-    _active_membership(
-        session,
-        company_id=target.company_id,
-        membership_id=payload.responsible_membership_id,
+    participant_ids = _hearing_participant_ids(
+        responsible_membership_id=payload.responsible_membership_id,
+        attendee_membership_ids=payload.attendee_membership_ids,
+        reminder_policy=payload.reminder_policy,
     )
-    for membership_id in payload.attendee_membership_ids:
-        _active_membership(
+    operational = payload.status in {"scheduled", "adjourned"}
+    memberships = _lock_shared_work_memberships(
+        session,
+        context=context,
+        membership_ids=set(participant_ids),
+        required_active_ids=set(participant_ids) if operational else set(),
+        required_capability="ip:write",
+    )
+    target = resolve_shared_work_target(
+        session, context=context, ip_docket_id=payload.docket_id, for_update=True
+    )
+    if operational:
+        assert target.ip_docket is not None
+        _assert_shared_work_memberships_can_access_docket(
             session,
-            company_id=target.company_id,
-            membership_id=membership_id,
+            context=context,
+            memberships=[memberships[membership_id] for membership_id in sorted(participant_ids)],
+            docket=target.ip_docket,
         )
     hearing = MatterHearing(
         company_id=target.company_id,
@@ -446,11 +639,7 @@ def create_ip_shared_hearing(
         source_ref_type=payload.source_ref_type,
         source_ref_id=payload.source_ref_id,
         responsible_membership_id=payload.responsible_membership_id,
-        reminder_policy_json=_validated_reminder_policy(
-            session,
-            company_id=target.company_id,
-            policy=payload.reminder_policy,
-        ),
+        reminder_policy_json=_validated_reminder_policy(payload.reminder_policy),
         forum_name=payload.forum_name.strip(),
         judge_name=payload.judge_name.strip() if payload.judge_name else None,
         purpose=payload.purpose.strip(),
@@ -511,6 +700,48 @@ def update_ip_shared_hearing(
     hearing_id: str,
     payload: IpSharedHearingUpdateRequest,
 ) -> IpSharedHearingRecord:
+    candidate = session.execute(
+        select(
+            MatterHearing.responsible_membership_id,
+            MatterHearing.attendee_membership_ids_json,
+            MatterHearing.reminder_policy_json,
+            MatterHearing.status,
+        ).where(
+            MatterHearing.id == hearing_id,
+            MatterHearing.company_id == context.company.id,
+            MatterHearing.matter_id.is_(None),
+            MatterHearing.ip_docket_id == payload.docket_id,
+        )
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Shared hearing not found.")
+    updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
+    resulting_responsible_id = updates.get(
+        "responsible_membership_id", candidate.responsible_membership_id
+    )
+    resulting_attendee_ids = updates.get(
+        "attendee_membership_ids", candidate.attendee_membership_ids_json or []
+    )
+    resulting_policy = updates.get("reminder_policy", candidate.reminder_policy_json)
+    resulting_status = updates.get("status", candidate.status)
+    current_participant_ids = _hearing_participant_ids(
+        responsible_membership_id=candidate.responsible_membership_id,
+        attendee_membership_ids=candidate.attendee_membership_ids_json,
+        reminder_policy=candidate.reminder_policy_json,
+    )
+    resulting_participant_ids = _hearing_participant_ids(
+        responsible_membership_id=resulting_responsible_id,
+        attendee_membership_ids=resulting_attendee_ids,
+        reminder_policy=resulting_policy,
+    )
+    operational = resulting_status in {"scheduled", "adjourned"}
+    memberships = _lock_shared_work_memberships(
+        session,
+        context=context,
+        membership_ids=current_participant_ids | resulting_participant_ids,
+        required_active_ids=resulting_participant_ids if operational else set(),
+        required_capability="ip:write",
+    )
     target = resolve_shared_work_target(
         session, context=context, ip_docket_id=payload.docket_id, for_update=True
     )
@@ -521,31 +752,42 @@ def update_ip_shared_hearing(
             shared_target_predicate(MatterHearing, target),
         )
         .with_for_update(of=MatterHearing)
+        .execution_options(populate_existing=True)
     )
     if hearing is None:
         raise HTTPException(status_code=404, detail="Shared hearing not found.")
-    updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
-    if "responsible_membership_id" in updates:
-        _active_membership(
+    _assert_ip_lifecycle_history_is_immutable(hearing)
+    if (
+        hearing.responsible_membership_id,
+        list(hearing.attendee_membership_ids_json or []),
+        hearing.reminder_policy_json,
+        hearing.status,
+    ) != (
+        candidate.responsible_membership_id,
+        list(candidate.attendee_membership_ids_json or []),
+        candidate.reminder_policy_json,
+        candidate.status,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shared hearing assignment changed; reload before updating.",
+        )
+    if operational:
+        assert target.ip_docket is not None
+        _assert_shared_work_memberships_can_access_docket(
             session,
-            company_id=target.company_id,
-            membership_id=updates["responsible_membership_id"],
+            context=context,
+            memberships=[
+                memberships[membership_id]
+                for membership_id in sorted(resulting_participant_ids)
+            ],
+            docket=target.ip_docket,
         )
     if "attendee_membership_ids" in updates:
         attendee_ids = updates.pop("attendee_membership_ids") or []
-        for membership_id in attendee_ids:
-            _active_membership(
-                session,
-                company_id=target.company_id,
-                membership_id=membership_id,
-            )
         updates["attendee_membership_ids_json"] = attendee_ids
     if "reminder_policy" in updates:
-        updates["reminder_policy_json"] = _validated_reminder_policy(
-            session,
-            company_id=target.company_id,
-            policy=payload.reminder_policy,
-        )
+        updates["reminder_policy_json"] = _validated_reminder_policy(payload.reminder_policy)
         updates.pop("reminder_policy", None)
     old_date = hearing.hearing_on
     old_status = hearing.status
@@ -643,13 +885,18 @@ def update_ip_shared_hearing(
     return _hearing_record(session, hearing)
 
 
-def _deadline_record(deadline: MatterDeadline) -> IpOperationalDeadlineRecord:
-    assert deadline.company_id is not None and deadline.ip_docket_id is not None
+def _deadline_record(
+    deadline: MatterDeadline,
+    *,
+    ip_docket_id: str | None = None,
+) -> IpOperationalDeadlineRecord:
+    target_docket_id = ip_docket_id or deadline.ip_docket_id
+    assert deadline.company_id is not None and target_docket_id is not None
     return IpOperationalDeadlineRecord(
         id=deadline.id,
         company_id=deadline.company_id,
-        target_id=deadline.ip_docket_id,
-        ip_docket_id=deadline.ip_docket_id,
+        target_id=target_docket_id,
+        ip_docket_id=target_docket_id,
         source=deadline.source,
         kind=deadline.kind,
         title=deadline.title,
@@ -672,13 +919,23 @@ def create_ip_operational_deadline(
     context: SessionContext,
     payload: IpOperationalDeadlineCreateRequest,
 ) -> IpOperationalDeadlineRecord:
+    memberships = _lock_shared_work_memberships(
+        session,
+        context=context,
+        membership_ids={payload.assignee_membership_id},
+        required_active_ids={payload.assignee_membership_id},
+        required_capability="ip:write",
+    )
+    assignee = memberships.get(payload.assignee_membership_id)
     target = resolve_shared_work_target(
         session, context=context, ip_docket_id=payload.docket_id, for_update=True
     )
-    _active_membership(
+    assert assignee is not None and target.ip_docket is not None
+    _assert_deadline_assignee_can_access_docket(
         session,
-        company_id=target.company_id,
-        membership_id=payload.assignee_membership_id,
+        context=context,
+        membership=assignee,
+        docket=target.ip_docket,
     )
     deadline = MatterDeadline(
         company_id=target.company_id,
@@ -707,6 +964,29 @@ def create_ip_operational_deadline(
     return _deadline_record(deadline)
 
 
+def transition_ip_covered_operational_deadline(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+    payload: IpOperationalDeadlineTransitionRequest,
+) -> IpOperationalDeadlineRecord:
+    """Complete/cancel a coverage-only deadline through its typed IP boundary."""
+
+    from caseops_api.services.deadlines import transition_deadline
+
+    deadline = transition_deadline(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+        action=payload.action,
+        expected_ip_docket_id=payload.docket_id,
+        require_ip_coverage=True,
+        required_capability="ip:write",
+    )
+    return _deadline_record(deadline, ip_docket_id=payload.docket_id)
+
+
 def list_ip_operational_deadlines(
     session: Session, *, context: SessionContext, docket_id: str, include_done: bool = False
 ) -> IpOperationalDeadlineListResponse:
@@ -730,8 +1010,54 @@ def update_ip_operational_deadline(
     deadline_id: str,
     payload: IpOperationalDeadlineUpdateRequest,
 ) -> IpOperationalDeadlineRecord:
-    from caseops_api.db.models import IpDeadline
-
+    updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
+    candidate = session.execute(
+        select(
+            MatterDeadline.assignee_membership_id,
+            MatterDeadline.status,
+        ).where(
+            MatterDeadline.id == deadline_id,
+            MatterDeadline.company_id == context.company.id,
+            MatterDeadline.matter_id.is_(None),
+            MatterDeadline.ip_docket_id == payload.docket_id,
+        )
+    ).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Operational deadline not found.")
+    requested_assignee_id = updates.get(
+        "assignee_membership_id",
+        candidate.assignee_membership_id,
+    )
+    resulting_status = updates.get("status", candidate.status)
+    membership_ids = {
+        candidate.assignee_membership_id,
+        requested_assignee_id,
+    }
+    required_active_ids = set()
+    if "assignee_membership_id" in updates and requested_assignee_id is not None:
+        required_active_ids.add(requested_assignee_id)
+    if (
+        resulting_status in {"open", "missed"}
+        and requested_assignee_id is not None
+    ):
+        required_active_ids.add(requested_assignee_id)
+    memberships = _lock_shared_work_memberships(
+        session,
+        context=context,
+        membership_ids=membership_ids,
+        required_active_ids=required_active_ids,
+        required_capability="ip:write",
+    )
+    if any(
+        membership_id not in memberships
+        or not memberships[membership_id].is_active
+        or not memberships[membership_id].user.is_active
+        for membership_id in required_active_ids
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee does not belong to this company.",
+        )
     target = resolve_shared_work_target(
         session, context=context, ip_docket_id=payload.docket_id, for_update=True
     )
@@ -742,21 +1068,44 @@ def update_ip_operational_deadline(
             shared_target_predicate(MatterDeadline, target),
         )
         .with_for_update(of=MatterDeadline)
+        .execution_options(populate_existing=True)
     )
     if deadline is None:
         raise HTTPException(status_code=404, detail="Operational deadline not found.")
-    if session.scalar(select(IpDeadline.id).where(IpDeadline.matter_deadline_id == deadline.id)):
+    _assert_ip_lifecycle_history_is_immutable(deadline)
+    if (
+        deadline.assignee_membership_id,
+        deadline.status,
+    ) != (
+        candidate.assignee_membership_id,
+        candidate.status,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Operational deadline changed; reload before updating.",
+        )
+    linked_ip_deadline = session.scalar(
+        select(IpDeadline.id).where(IpDeadline.matter_deadline_id == deadline.id).limit(1)
+    )
+    linked_ip_coverage = session.scalar(
+        select(IpDeadlineCoverage.id)
+        .where(IpDeadlineCoverage.matter_deadline_id == deadline.id)
+        .limit(1)
+    )
+    if linked_ip_deadline is not None or linked_ip_coverage is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Linked legal deadline changes must use the IP legal-deadline workflow.",
         )
-    updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
-    if "assignee_membership_id" in updates:
-        _active_membership(
-            session,
-            company_id=target.company_id,
-            membership_id=updates["assignee_membership_id"],
-        )
+    if required_active_ids:
+        assert target.ip_docket is not None
+        for membership_id in sorted(required_active_ids):
+            _assert_deadline_assignee_can_access_docket(
+                session,
+                context=context,
+                membership=memberships[membership_id],
+                docket=target.ip_docket,
+            )
     for field, value in updates.items():
         if field in {"title", "notes"} and isinstance(value, str):
             value = value.strip() or None

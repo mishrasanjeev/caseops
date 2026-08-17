@@ -621,6 +621,7 @@ class IpCoverageAcknowledgeOutcome(BaseModel):
             "not_responsible",
             "version_conflict",
             "transfer_pending",
+            "inactive_lifecycle",
         ]
         | None
     ) = None

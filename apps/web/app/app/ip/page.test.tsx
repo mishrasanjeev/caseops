@@ -144,6 +144,7 @@ function withClient(children: ReactNode) {
 
 describe("IpDocketPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/ip");
     fetchIpDocketsMock.mockReset();
     fetchIpDocumentsMock.mockReset();
     fetchIpDocumentTaxonomyMock.mockReset();
@@ -675,7 +676,56 @@ describe("IpDocketPage", () => {
 
     expect(await screen.findByText("Portfolio")).toBeVisible();
     // An always-present empty band trains people to ignore the space.
-    expect(screen.queryByTestId("ip-coverage-decisions")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("ip-coverage-decisions")).toBeNull(),
+    );
+  });
+
+  it("keeps a deep-linked decision surface visible while the query is loading", async () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(null, "", "/app/ip#coverage-decisions");
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockReturnValue(new Promise(() => {}));
+
+    try {
+      render(withClient(<IpDocketPage />));
+
+      const card = await screen.findByTestId("ip-coverage-decisions");
+      expect(card).toHaveAttribute("id", "coverage-decisions");
+      const loader = within(card).getByTestId("ip-coverage-decisions-loading");
+      expect(loader).toHaveAttribute("role", "status");
+      expect(loader).toHaveAttribute("aria-busy", "true");
+      expect(within(loader).getByText("Loading coverage decisions.")).toHaveClass("sr-only");
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }),
+      );
+    } finally {
+      if (originalScrollIntoView) {
+        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
+  });
+
+  it("shows a retryable decision error instead of a false empty band", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockRejectedValue(
+      new Error("Coverage decisions unavailable"),
+    );
+
+    render(withClient(<IpDocketPage />));
+
+    const card = await screen.findByTestId("ip-coverage-decisions");
+    expect(await within(card).findByText("Could not load coverage decisions")).toBeVisible();
+    const retry = within(card).getByRole("button", { name: "Try again" });
+    expect(retry).toBeVisible();
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(fetchIpCoverageTransfersAwaitingMeMock).toHaveBeenCalledTimes(2),
+    );
   });
 
   it("lets the named replacement accept a proposed transfer without writing prose", async () => {
@@ -685,8 +735,9 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     const band = await screen.findByTestId("ip-coverage-decisions");
+    expect(band).toHaveAttribute("id", "coverage-decisions");
     // Enough to answer "can I hold this date?" without opening the record.
-    expect(within(band).getByText("ACME WORDMARK")).toBeVisible();
+    expect(await within(band).findByText("ACME WORDMARK")).toBeVisible();
     expect(within(band).getByText("TM 4412330")).toBeVisible();
     expect(within(band).getByText(/Opposition reply/)).toHaveTextContent("in 58 days");
     expect(within(band).getByText("Critical")).toBeVisible();
@@ -702,6 +753,33 @@ describe("IpDocketPage", () => {
     });
   });
 
+  it("scrolls to an asynchronously loaded coverage decision deep link", async () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState(null, "", "/app/ip#coverage-decisions");
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({
+      transfers: [PROPOSED_TRANSFER],
+    });
+
+    try {
+      render(withClient(<IpDocketPage />));
+
+      await screen.findByTestId("ip-coverage-decisions");
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }),
+      );
+    } finally {
+      if (originalScrollIntoView) {
+        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown })
+          .scrollIntoView;
+      }
+    }
+  });
+
   it("requires a written reason before a decline is sent", async () => {
     fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
     fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [PROPOSED_TRANSFER] });
@@ -709,7 +787,7 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     const band = await screen.findByTestId("ip-coverage-decisions");
-    fireEvent.click(within(band).getByRole("button", { name: "Decline" }));
+    fireEvent.click(await within(band).findByRole("button", { name: "Decline" }));
 
     const confirm = within(band).getByRole("button", { name: "Confirm decline" });
     expect(confirm).toBeDisabled();
@@ -747,7 +825,9 @@ describe("IpDocketPage", () => {
     // Declining an immediate transfer escalates; saying "remains responsible
     // until you accept" here would be false.
     expect(
-      within(band).getByText(/You already hold this deadline\. Declining moves it to Anand Rao\./),
+      await within(band).findByText(
+        /You already hold this deadline\. Declining moves it to Anand Rao\./,
+      ),
     ).toBeVisible();
   });
 });

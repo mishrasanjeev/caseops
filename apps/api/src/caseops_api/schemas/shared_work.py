@@ -282,6 +282,11 @@ class IpOperationalDeadlineUpdateRequest(BaseModel):
         return self
 
 
+class IpOperationalDeadlineTransitionRequest(BaseModel):
+    docket_id: str
+    action: Literal["complete", "cancel"]
+
+
 class IpOperationalDeadlineRecord(BaseModel):
     id: str
     company_id: str

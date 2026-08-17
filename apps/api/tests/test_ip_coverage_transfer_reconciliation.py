@@ -362,7 +362,7 @@ def test_uj57_recon03_initial_writers_refuse_backup_as_decline_escalation(
         },
     )
     assert emergency.status_code == 409, emergency.text
-    assert emergency.json()["code"] == "ip_coverage_distinct_backup_required"
+    assert emergency.json()["code"] == "ip_coverage_emergency_expiry_unavailable"
 
     after = client.get(f"/api/ip/dockets/{docket_id}", headers=owner_headers).json()[
         "deadline_coverages"
@@ -395,6 +395,10 @@ def test_uj57_recon05_only_the_decision_path_may_record_an_acceptance() -> None:
             continue
         writes = any(
             isinstance(node, ast.Assign)
+            and not (
+                isinstance(node.value, ast.Constant)
+                and node.value.value is None
+            )
             and any(
                 isinstance(target, ast.Attribute)
                 and target.attr == "accepted_at"

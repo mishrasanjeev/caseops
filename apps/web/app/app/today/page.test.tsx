@@ -160,6 +160,33 @@ describe("TodayPage smoke", () => {
     expect(within(card).getByText(/Opposition reply/)).toBeVisible();
     expect(within(card).getByText("Acknowledge")).toBeVisible();
     expect(within(card).getByText(/You hold this and have not acknowledged it/)).toBeVisible();
+    expect(within(card).getByTestId("today-ip-action-cov-1")).toHaveAttribute(
+      "href",
+      "/app/ip/docket#coverage-acknowledgements",
+    );
+  });
+
+  it("routes a capped IP stream to the real decision and acknowledgement surfaces", async () => {
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue({
+      ...ipView([ipAction()]),
+      stream_limits: { ip_coverage_actions: 1 },
+      stream_counts: { ip_coverage_actions: 2 },
+      stream_truncated: { ip_coverage_actions: true },
+    } as unknown as endpoints.TodayView);
+    renderWithQuery(<TodayPage />);
+
+    const card = await screen.findByTestId("today-ip-coverage-actions");
+    const note = within(card).getByTestId("today-stream-truncated");
+    expect(note).toHaveTextContent("Showing the first 1");
+    expect(note).not.toHaveTextContent(/matter list views/i);
+    expect(within(note).getByRole("link", { name: "coverage decisions" })).toHaveAttribute(
+      "href",
+      "/app/ip#coverage-decisions",
+    );
+    expect(within(note).getByRole("link", { name: "acknowledgements" })).toHaveAttribute(
+      "href",
+      "/app/ip/docket#coverage-acknowledgements",
+    );
   });
 
   it("says a colleague is waiting when a transfer needs a decision", async () => {
@@ -179,6 +206,10 @@ describe("TodayPage smoke", () => {
     expect(within(card).getByText("Decision needed")).toBeVisible();
     expect(within(card).getByText(/1 colleague is waiting on your decision/)).toBeVisible();
     expect(within(card).getByText(/Priya Raghavan holds this until you accept/)).toBeVisible();
+    expect(within(card).getByTestId("today-ip-action-cov-1")).toHaveAttribute(
+      "href",
+      "/app/ip#coverage-decisions",
+    );
   });
 
   it("does not claim nothing is due while IP coverage is waiting", async () => {
@@ -199,5 +230,25 @@ describe("TodayPage smoke", () => {
       expect(screen.getByText("Nothing demanding attention today")).toBeVisible();
     });
     expect(screen.queryByTestId("today-ip-coverage-actions")).toBeNull();
+  });
+
+  it("keeps a VIEWER's informational Today feed without impossible IP actions", async () => {
+    const viewerView = oneHearingView(false);
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue({
+      ...viewerView,
+      ip_coverage_actions: [],
+    });
+    renderWithQuery(<TodayPage />);
+
+    expect(await screen.findByText(/Matter One/)).toBeVisible();
+    expect(screen.queryByTestId("today-ip-coverage-actions")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Decision needed|Acknowledge/i }),
+    ).toBeNull();
+    expect(
+      screen.queryAllByRole("link").some((link) =>
+        (link.getAttribute("href") ?? "").startsWith("/app/ip"),
+      ),
+    ).toBe(false);
   });
 });

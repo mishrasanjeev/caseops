@@ -248,12 +248,16 @@ def assert_distinct_deadline_escalation(
     *,
     escalation_membership_id: str,
     backup_membership_id: str | None,
+    responsible_membership_id: str | None = None,
 ) -> None:
-    """Refuse a fallback that would collapse responsibility onto the backup."""
+    """Refuse a fallback that collapses onto primary or backup coverage."""
 
     if (
-        backup_membership_id is not None
-        and escalation_membership_id == backup_membership_id
+        escalation_membership_id == responsible_membership_id
+        or (
+            backup_membership_id is not None
+            and escalation_membership_id == backup_membership_id
+        )
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -261,7 +265,7 @@ def assert_distinct_deadline_escalation(
                 "code": "ip_coverage_distinct_backup_required",
                 "message": (
                     "The decline or expiry escalation owner must be different from "
-                    "the resulting deadline backup."
+                    "the resulting deadline responsible owner and backup."
                 ),
             },
         )

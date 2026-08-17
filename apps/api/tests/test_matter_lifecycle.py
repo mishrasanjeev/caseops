@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -33,6 +33,9 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.matters import MatterCreateRequest
+from caseops_api.services.calendar_projection_safety import (
+    CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+)
 from caseops_api.services.matters import (
     _assert_matter_not_disposed,
     _matter_lock_statement,
@@ -894,6 +897,210 @@ def test_reopen_neutralizes_open_children_on_legacy_disposed_row(
         ),
     ]
     assert [response.status_code for response in resurrection_attempts] == [409, 409, 409]
+
+
+def test_matter_disposal_preserves_live_calendar_claims_and_materializes_expired_claims(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services import calendar_sync
+    from tests.test_google_calendar_sync import StubGoogleCalendarProvider
+    from tests.test_legalworkspace_calendar_sync import StubOutlookProvider
+
+    google_provider = StubGoogleCalendarProvider()
+    outlook_provider = StubOutlookProvider()
+    monkeypatch.setattr(
+        calendar_sync,
+        "_google_calendar_provider_override",
+        google_provider,
+    )
+    monkeypatch.setattr(
+        calendar_sync,
+        "_outlook_provider_override",
+        outlook_provider,
+    )
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, code="LIFE-CALENDAR-CLAIMS")
+    tasks = [
+        client.post(
+            f"/api/matters/{matter['id']}/tasks",
+            headers=auth_headers(token),
+            json={"title": f"Calendar claim lifecycle {index}"},
+        ).json()
+        for index in range(6)
+    ]
+    now = datetime.now(UTC)
+    with get_session_factory()() as session:
+        row = session.get(Matter, matter["id"])
+        assert row is not None
+        membership_id = session.scalar(
+            select(CompanyMembership.id).where(
+                CompanyMembership.company_id == row.company_id
+            )
+        )
+        assert membership_id is not None
+        google = UserCalendarConnection(
+            company_id=row.company_id,
+            membership_id=membership_id,
+            provider="google_calendar",
+            provider_account_id="matter-claim-google",
+            status="connected",
+            encrypted_token_ref="matter-google-reconciliation-credential",
+        )
+        outlook = UserCalendarConnection(
+            company_id=row.company_id,
+            membership_id=membership_id,
+            provider="outlook",
+            provider_account_id="matter-claim-outlook",
+            status="connected",
+            encrypted_token_ref="matter-outlook-reconciliation-credential",
+        )
+        session.add_all([google, outlook])
+        session.flush()
+        syncs = {
+            "google_live": CalendarEventSync(
+                company_id=row.company_id,
+                calendar_connection_id=google.id,
+                source_type="matter_task",
+                source_id=tasks[0]["id"],
+                sync_status=CalendarEventSyncStatus.PENDING,
+                dead_letter_reason="provider_upsert_claim:matter-google-live",
+                next_attempt_at=now + timedelta(minutes=30),
+                attempts=2,
+                last_error="in-flight-google",
+            ),
+            "google_expired": CalendarEventSync(
+                company_id=row.company_id,
+                calendar_connection_id=google.id,
+                source_type="matter_task",
+                source_id=tasks[1]["id"],
+                sync_status=CalendarEventSyncStatus.PENDING,
+                dead_letter_reason="provider_upsert_claim:matter-google-expired",
+                next_attempt_at=now - timedelta(minutes=1),
+            ),
+            "outlook_live": CalendarEventSync(
+                company_id=row.company_id,
+                calendar_connection_id=outlook.id,
+                source_type="matter_task",
+                source_id=tasks[2]["id"],
+                sync_status=CalendarEventSyncStatus.PENDING,
+                dead_letter_reason="provider_upsert_claim:matter-outlook-live",
+                next_attempt_at=now + timedelta(minutes=30),
+                attempts=4,
+                last_error="in-flight-outlook",
+            ),
+            "outlook_expired": CalendarEventSync(
+                company_id=row.company_id,
+                calendar_connection_id=outlook.id,
+                source_type="matter_task",
+                source_id=tasks[3]["id"],
+                sync_status=CalendarEventSyncStatus.PENDING,
+                dead_letter_reason="provider_upsert_claim:matter-outlook-expired",
+                next_attempt_at=now - timedelta(minutes=1),
+            ),
+            "typed_unknown": CalendarEventSync(
+                company_id=row.company_id,
+                calendar_connection_id=google.id,
+                source_type="matter_task",
+                source_id=tasks[4]["id"],
+                sync_status=CalendarEventSyncStatus.DEAD_LETTER,
+                dead_letter_reason=CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
+                last_error="Calendar provider upsert outcome is unknown.",
+                attempts=5,
+            ),
+            "known_remote": CalendarEventSync(
+                company_id=row.company_id,
+                calendar_connection_id=outlook.id,
+                source_type="matter_task",
+                source_id=tasks[5]["id"],
+                provider_event_id="matter-known-remote-event",
+                sync_status=CalendarEventSyncStatus.SYNCED,
+            ),
+        }
+        session.add_all(syncs.values())
+        session.commit()
+        sync_ids = {name: sync.id for name, sync in syncs.items()}
+        connection_ids = (google.id, outlook.id)
+
+    disposed = _lifecycle(client, token, matter, to_status="disposed")
+    assert disposed.status_code == 200, disposed.text
+
+    def assert_calendar_claim_states() -> None:
+        with get_session_factory()() as session:
+            stored = {
+                name: session.get(CalendarEventSync, sync_id)
+                for name, sync_id in sync_ids.items()
+            }
+            assert all(value is not None for value in stored.values())
+            for name, marker, attempts, last_error in (
+                (
+                    "google_live",
+                    "provider_upsert_claim:matter-google-live",
+                    2,
+                    "in-flight-google",
+                ),
+                (
+                    "outlook_live",
+                    "provider_upsert_claim:matter-outlook-live",
+                    4,
+                    "in-flight-outlook",
+                ),
+            ):
+                live = stored[name]
+                assert live is not None
+                assert live.sync_status == CalendarEventSyncStatus.PENDING
+                assert live.dead_letter_reason == marker
+                assert live.next_attempt_at is not None
+                assert live.attempts == attempts
+                assert live.last_error == last_error
+            for name in ("google_expired", "outlook_expired", "typed_unknown"):
+                unknown = stored[name]
+                assert unknown is not None
+                assert unknown.provider_event_id is None
+                assert unknown.sync_status == CalendarEventSyncStatus.DEAD_LETTER
+                assert unknown.dead_letter_reason == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
+                assert unknown.next_attempt_at is None
+            typed = stored["typed_unknown"]
+            assert typed is not None and typed.attempts == 5
+            assert typed.last_error == "Calendar provider upsert outcome is unknown."
+            known = stored["known_remote"]
+            assert known is not None
+            assert known.sync_status == CalendarEventSyncStatus.DELETE_PENDING
+            assert known.provider_event_id == "matter-known-remote-event"
+            assert known.dead_letter_reason == "matter_disposed_delete"
+            for connection_id in connection_ids:
+                connection = session.get(UserCalendarConnection, connection_id)
+                assert connection is not None and connection.encrypted_token_ref is not None
+
+    assert_calendar_claim_states()
+    with get_session_factory()() as session:
+        disposal_audit = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "matter.lifecycle.disposed",
+                AuditEvent.target_id == matter["id"],
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+        assert disposal_audit is not None
+        side_effects = json.loads(disposal_audit.metadata_json)["side_effects"]
+        assert side_effects["neutralized_calendar_syncs"] == 1
+        assert side_effects["blocked_unknown_calendar_syncs"] == 5
+    for name in ("google_expired", "outlook_expired", "typed_unknown"):
+        operation = client.get(
+            f"/api/admin/provider-operations/jobs/calendar_sync:{sync_ids[name]}",
+            headers=auth_headers(token),
+        )
+        assert operation.status_code == 200, operation.text
+        assert operation.json()["manual_reconciliation_required"] is True
+        assert operation.json()["replay_available"] is False
+
+    reopened = _lifecycle(client, token, disposed.json(), to_status="intake")
+    assert reopened.status_code == 200, reopened.text
+    assert_calendar_claim_states()
+    assert google_provider.calls == [] and google_provider.delete_calls == []
+    assert outlook_provider.calls == []
 
 
 def test_reopen_allows_resuming_manually_cancelled_children(client: TestClient) -> None:

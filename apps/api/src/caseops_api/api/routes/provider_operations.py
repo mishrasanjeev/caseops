@@ -6,10 +6,13 @@ from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.provider_operations import (
+    CalendarUnknownOutcomeReconciliationRequest,
+    CalendarUnknownOutcomeReconciliationResponse,
     ProviderIncidentResolutionRequest,
     ProviderOperationActionRequest,
     ProviderOperationActionResponse,
     ProviderOperationListResponse,
+    ProviderOperationRecord,
     ProviderOperationReplayBatchResponse,
     ProviderOperationReplayConfirmRequest,
     ProviderOperationReplayPreviewRequest,
@@ -18,17 +21,19 @@ from caseops_api.schemas.provider_operations import (
 )
 from caseops_api.services.provider_operations import (
     confirm_provider_operation_replay,
+    get_provider_operation,
     list_provider_operations,
     preview_provider_operation_replay,
     provider_readiness_status,
+    reconcile_calendar_provider_unknown_outcome,
     resolve_case_tracking_incident,
     update_provider_operation_state,
 )
-from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
+IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
 
 
 @router.get(
@@ -89,11 +94,6 @@ def post_provider_operation_replay_batch(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> ProviderOperationReplayBatchResponse:
-    require_recent_step_up(
-        session,
-        context=context,
-        purpose="provider_operation_replay",
-    )
     return confirm_provider_operation_replay(
         session,
         context=context,
@@ -113,11 +113,6 @@ def post_provider_operation_replay(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> ProviderOperationActionResponse:
-    require_recent_step_up(
-        session,
-        context=context,
-        purpose="provider_operation_replay",
-    )
     response = confirm_provider_operation_replay(
         session,
         context=context,
@@ -168,6 +163,42 @@ def post_provider_operation_mark_resolved(
     )
 
 
+@router.get(
+    "/jobs/{operation_id}",
+    response_model=ProviderOperationRecord,
+    summary="Get one exact tenant-scoped provider operation.",
+)
+def get_provider_operation_job(
+    operation_id: str,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> ProviderOperationRecord:
+    return get_provider_operation(
+        session,
+        context=context,
+        operation_id=operation_id,
+    )
+
+
+@router.post(
+    "/jobs/{operation_id}/reconcile-calendar-unknown-outcome",
+    response_model=CalendarUnknownOutcomeReconciliationResponse,
+    summary="Reconcile an ambiguous calendar create using verified remote evidence.",
+)
+def post_calendar_unknown_outcome_reconciliation(
+    operation_id: str,
+    payload: CalendarUnknownOutcomeReconciliationRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> CalendarUnknownOutcomeReconciliationResponse:
+    return reconcile_calendar_provider_unknown_outcome(
+        session,
+        context=context,
+        operation_id=operation_id,
+        **payload.model_dump(),
+    )
+
+
 @router.post(
     "/jobs/{operation_id}/resolve-incident",
     response_model=ProviderOperationActionResponse,
@@ -179,11 +210,6 @@ def post_case_tracking_incident_resolution(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> ProviderOperationActionResponse:
-    require_recent_step_up(
-        session,
-        context=context,
-        purpose="provider_incident_resolution",
-    )
     return resolve_case_tracking_incident(
         session,
         context=context,

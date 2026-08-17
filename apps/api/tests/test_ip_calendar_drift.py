@@ -783,3 +783,74 @@ def test_uj62_exc03_the_drift_check_route_reports_findings(
     clean = client.post("/api/ip/calendar-projections/drift-check", headers=seeded["headers"])
     assert clean.status_code == 200, clean.text
     assert clean.json()["findings"] == []
+
+
+@pytest.mark.parametrize("winner", ["source", "connection", "actor"])
+def test_drift_provider_read_discards_stale_authority_without_open_transaction(
+    client: TestClient,
+    winner: str,
+) -> None:
+    from caseops_api.db.models import (
+        Company,
+        CompanyMembership,
+        MatterDeadline,
+        MembershipRole,
+    )
+
+    seeded = _seed(client)
+    company_id, membership_id = seeded["context_ids"]
+    worker_sessions: list = []
+
+    class AuthorityChangingReader(_Reader):
+        def fetch_event(self, *, token_payload: dict, provider_event_id: str):
+            assert worker_sessions
+            # The read claim is durable and every row lock is released before
+            # the external provider callback begins.
+            assert worker_sessions[0].in_transaction() is False
+            with get_session_factory()() as concurrent:
+                if winner == "source":
+                    source = concurrent.get(MatterDeadline, seeded["deadline_id"])
+                    assert source is not None
+                    source.due_on = source.due_on + timedelta(days=1)
+                elif winner == "connection":
+                    connection = concurrent.get(
+                        UserCalendarConnection,
+                        seeded["connection_id"],
+                    )
+                    assert connection is not None
+                    connection.status = CalendarConnectionStatus.REVOKED
+                    connection.encrypted_token_ref = None
+                else:
+                    membership = concurrent.get(CompanyMembership, membership_id)
+                    assert membership is not None
+                    membership.role = MembershipRole.VIEWER
+                concurrent.commit()
+            return super().fetch_event(
+                token_payload=token_payload,
+                provider_event_id=provider_event_id,
+            )
+
+    reader = AuthorityChangingReader(
+        {
+            "id": "provider-event-1",
+            "start_date": DUE.isoformat(),
+            "cancelled": False,
+        }
+    )
+    calendar_sync.set_google_calendar_provider_for_tests(reader)
+    try:
+        with get_session_factory()() as worker:
+            worker_sessions.append(worker)
+            company = worker.get(Company, company_id)
+            membership = worker.get(CompanyMembership, membership_id)
+            assert company is not None and membership is not None
+            context = SessionContext(
+                company=company,
+                membership=membership,
+                user=membership.user,
+            )
+            assert check_ip_calendar_projection_drift(worker, context=context) == []
+        assert reader.calls == ["provider-event-1"]
+        assert _drift_status(seeded["sync_id"]) == ("unchecked", None)
+    finally:
+        calendar_sync.set_google_calendar_provider_for_tests(None)

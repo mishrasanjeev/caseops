@@ -21,11 +21,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-# Hosted-runner evidence on 2026-08-16 showed database-backed test setup taking
-# roughly the same time as dozens of source lines.  Keep this static and
-# history-independent: it adapts automatically as tests are added, while AST
-# parsing avoids importing test modules or depending on a prior CI artifact.
-TEST_DEFINITION_WEIGHT = 100
+# Hosted-runner evidence shows test-case density predicts cost that source-line
+# count misses: fixture setup, parametrization, and request/database execution
+# all add per-test work. Keep a coarse static allowance so dense modules remain
+# expensive as the suite grows; AST parsing still avoids importing test modules
+# or depending on a prior CI artifact.
+TEST_DEFINITION_WEIGHT = 250
 
 
 @dataclass(frozen=True)

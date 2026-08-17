@@ -193,13 +193,14 @@ test("IPLF-039C acknowledges and exports, but cannot sign an exception-bearing d
     },
   });
   expect(deadline.status(), await deadline.text()).toBe(200);
+  const deadlineId = (await deadline.json()).id as string;
 
   const coverage = await api.post(
     `${apiBaseUrl}/api/ip/dockets/${docketId}/deadline-coverages`,
     {
       headers: ownerHeaders,
       data: {
-        matter_deadline_id: (await deadline.json()).id,
+        matter_deadline_id: deadlineId,
         responsible_membership_id: tenant.membership.id,
         // Seeded unacknowledged: taking it on is what this test exercises.
         coverage_status: "pending",
@@ -207,6 +208,20 @@ test("IPLF-039C acknowledges and exports, but cannot sign an exception-bearing d
     },
   );
   expect(coverage.status(), await coverage.text()).toBe(200);
+
+  const incident = await api.post(
+    `${apiBaseUrl}/api/ip/dockets/${docketId}/deadline-incidents`,
+    {
+      headers: ownerHeaders,
+      data: {
+        matter_deadline_id: deadlineId,
+        severity: "high",
+        summary: "Open control-review incident for fail-closed sign-off proof.",
+        impact: {},
+      },
+    },
+  );
+  expect(incident.status(), await incident.text()).toBe(200);
 
   await signIn(page, tenant.slug as string, tenant.email as string);
   await page.goto("/app/ip/docket");
@@ -273,14 +288,15 @@ test("IPLF-039C acknowledges and exports, but cannot sign an exception-bearing d
   expect(manifest).toContain("Generated");
   expect(manifest).toContain("Filters");
   expect(manifest).toContain("Freshness");
+  expect(manifest).toContain("Open incident");
   expect(manifest).toMatch(/[0-9a-f]{64}/);
   // A printout must not disclose what the firm is working on.
   expect(manifest).not.toContain("DOCKETCONTROL");
 
-  // Acknowledgment does not erase the separate projection exception. The
+  // Acknowledgment does not erase the separate open-incident exception. The
   // generated artefact must remain visibly fail-closed.
   await expect(review.getByTestId("ip-docket-review-exceptions")).toContainText(
-    "Not projected to a calendar",
+    "Open incident",
   );
   await expect(review.getByTestId("ip-docket-review-blocked")).toHaveText(
     "Resolve every mandatory exception and generate a clean review before signing.",

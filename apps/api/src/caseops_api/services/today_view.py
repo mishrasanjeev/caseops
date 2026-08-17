@@ -5,7 +5,7 @@ in the morning into a single tenant-scoped, matter-access-respecting
 payload. Replaces the old "open the matters list and remember what's
 hot" workflow with a per-user prioritised feed.
 
-Returns five streams keyed by urgency:
+Returns six streams keyed by urgency:
 
 1. ``hearings_next_7d`` — `MatterHearing` rows with `hearing_on`
    between today and today + horizon_days, status SCHEDULED.
@@ -25,23 +25,28 @@ Returns five streams keyed by urgency:
    unseen while it blocked a colleague's handover, and an unacknowledged
    critical deadline could escalate without ever appearing on the page
    the user opens in the morning.
-
    This stream is IP-docket scoped rather than Matter scoped, so its
    isolation comes from ``can_access_ip_docket`` — the same predicate the
    IP listing uses — rather than from ``visible_matters_filter``. A
    restricted docket the caller cannot open contributes nothing.
 
-All five share a common `MatterRef` (id + title + matter_code) so the
-frontend can deeplink to the matter cockpit.
+   Both kinds require ``ip:write``. Read-only members retain the five
+   informational Matter streams, but this action-only stream is empty so Today
+   never advertises an impossible write.
 
-Isolation is enforced on every join by BOTH:
+The five Matter-scoped streams share a common `MatterRef` (id + title +
+matter_code) so the frontend can deeplink to the matter cockpit. The sixth is
+IP-docket scoped and carries its docket identity directly.
+
+Isolation for every Matter-scoped join is enforced by BOTH:
   1. tenant     — `Matter.company_id == context.company.id`
   2. matter-ACL — `visible_matters_filter(session, context=context)`,
      the same predicate `list_matters` uses, so restricted /
      team-scoped / ethical-walled matters the caller is not entitled
      to never surface in the Today feed or in next-action.
-The function never reads a row outside the caller's tenant, and never
-a matter the caller could not also see in the matters list.
+The IP stream applies the analogous tenant and IP-docket visibility predicates.
+The function never reads a row outside the caller's tenant, and never a record
+the caller could not also see in its canonical list.
 """
 from __future__ import annotations
 
@@ -63,6 +68,7 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskStatus,
 )
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.matter_access import visible_matters_filter
 from caseops_api.services.session_context import SessionContext
 
@@ -206,9 +212,10 @@ def _ip_coverage_actions(
 ) -> list[TodayIpCoverageAction]:
     """IP coverage waiting on this user (see the module docstring).
 
-    Delegates to the IP services rather than re-querying, so there is one
-    access-control path for IP dockets rather than a second one drifting here.
-    Both helpers already re-check ``can_access_ip_docket`` per row.
+    Delegates to the IP services rather than duplicating their access policy.
+    Both helpers push visibility, lifecycle, ordering and this stream's
+    ``limit + 1`` probe into SQL, so Today does bounded work with no per-docket
+    access-query loop even when the member has years of coverage history.
     """
 
     # Imported locally: the IP services import broadly, and Today is imported by
@@ -220,7 +227,9 @@ def _ip_coverage_actions(
 
     actions: list[TodayIpCoverageAction] = []
 
-    for transfer in list_ip_coverage_transfers_awaiting(session, context=context).transfers:
+    for transfer in list_ip_coverage_transfers_awaiting(
+        session, context=context, limit=limit
+    ).transfers:
         actions.append(
             TodayIpCoverageAction(
                 coverage_id=transfer.coverage_id,
@@ -236,7 +245,13 @@ def _ip_coverage_actions(
             )
         )
 
-    assigned = list_ip_assigned_coverage(session, context=context, unacknowledged_only=True)
+    assigned = list_ip_assigned_coverage(
+        session,
+        context=context,
+        unacknowledged_only=True,
+        actionable_only=True,
+        limit=limit,
+    )
     pending_decision = {action.coverage_id for action in actions}
     for row in assigned.coverages:
         # A row already listed as a decision must not appear twice saying two
@@ -294,8 +309,13 @@ def build_today_view(
         "deadlines_next_7d": _deadlines(
             session, context, today, horizon_end, limit=probe,
         ),
-        "ip_coverage_actions": _ip_coverage_actions(
-            session, context, today, limit=probe,
+        # Every item in this stream asks for a write (accept/reject or
+        # acknowledge). Keep the rest of Today informational for read-only
+        # members, but never advertise a control their role cannot execute.
+        "ip_coverage_actions": (
+            _ip_coverage_actions(session, context, today, limit=probe)
+            if membership_has_capability(session, context.membership, "ip:write")
+            else []
         ),
     }
 

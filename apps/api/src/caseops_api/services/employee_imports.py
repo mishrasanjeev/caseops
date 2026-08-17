@@ -34,6 +34,10 @@ from caseops_api.schemas.employees import (
     EmployeeImportJobResponse,
     EmployeeImportRowPreview,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.employees import (
     _create_employee_without_commit,
@@ -90,6 +94,34 @@ def _utcnow() -> datetime:
     from caseops_api.db.models import utcnow
 
     return utcnow()
+
+
+def _lock_import_actor(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> SessionContext:
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids={context.membership.id},
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active company membership required.",
+        )
+    require_locked_membership_capability(
+        session,
+        actor,
+        "company:manage_users",
+    )
+    return SessionContext(
+        company=context.company,
+        membership=actor,
+        user=actor.user,
+    )
 
 
 def _clean_cell(value: object) -> str:
@@ -634,6 +666,7 @@ def preview_employee_import(
     content_type: str | None,
     content: bytes,
 ) -> EmployeeImportJobResponse:
+    context = _lock_import_actor(session, context=context)
     parsed_rows = _parse_upload(
         filename=filename,
         content_type=content_type,
@@ -780,6 +813,7 @@ def _mark_commit_failed(
     reason: str,
     message: str,
 ) -> None:
+    context = _lock_import_actor(session, context=context)
     job = _load_job(session, context=context, job_id=job_id)
     now = _utcnow()
     job.status = EmployeeImportJobStatus.FAILED
@@ -868,6 +902,7 @@ def commit_employee_import(
     context: SessionContext,
     job_id: str,
 ) -> EmployeeImportCommitResponse:
+    context = _lock_import_actor(session, context=context)
     job = _load_job(session, context=context, job_id=job_id)
     if job.status != EmployeeImportJobStatus.PREVIEWED:
         _raise_bad_request("Only previewed employee imports can be committed.")
@@ -896,6 +931,7 @@ def commit_employee_import(
         _raise_bad_request("Cannot commit an employee import with validation errors.")
 
     job = _claim_job_for_commit(session, context=context, job=job)
+    context = _lock_import_actor(session, context=context)
     created: list[EmployeeCreateResponse] = []
     persisted_rows = list(
         session.scalars(
@@ -999,6 +1035,7 @@ def cancel_employee_import(
     context: SessionContext,
     job_id: str,
 ) -> EmployeeImportJobResponse:
+    context = _lock_import_actor(session, context=context)
     job = _load_job(session, context=context, job_id=job_id)
     if job.status != EmployeeImportJobStatus.PREVIEWED:
         _raise_bad_request("Only previewed employee imports can be cancelled.")
