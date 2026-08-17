@@ -9902,6 +9902,35 @@ export interface components {
             /** Total Amount Minor */
             total_amount_minor: number;
         };
+        /** _IpCoverageActionResponse */
+        _IpCoverageActionResponse: {
+            /** Coverage Id */
+            coverage_id: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Days Until */
+            days_until?: number | null;
+            /** Deadline Title */
+            deadline_title?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Due On */
+            due_on?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "decide_transfer" | "acknowledge";
+            /** Reason */
+            reason?: string | null;
+            /** Responsible Label */
+            responsible_label: string;
+        };
         /** _MatterRefResponse */
         _MatterRefResponse: {
             /** Id */
@@ -31952,6 +31981,8 @@ export interface components {
             hearings_next_7d: components["schemas"]["_HearingResponse"][];
             /** Horizon Days */
             horizon_days: number;
+            /** Ip Coverage Actions */
+            ip_coverage_actions: components["schemas"]["_IpCoverageActionResponse"][];
             /** Overdue Invoices */
             overdue_invoices: components["schemas"]["_InvoiceResponse"][];
             /** Stream Counts */

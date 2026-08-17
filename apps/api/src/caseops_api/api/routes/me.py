@@ -8,7 +8,7 @@ prioritised, tenant-scoped, owner-filtered feed.
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -75,6 +75,22 @@ class _DeadlineResponse(BaseModel):
     days_until: int
 
 
+class _IpCoverageActionResponse(BaseModel):
+    coverage_id: str
+    docket_id: str
+    docket_title: str
+    deadline_title: str | None = None
+    due_on: date | None = None
+    days_until: int | None = None
+    critical: bool = False
+    # "decide_transfer" blocks a colleague until answered; "acknowledge" is what
+    # stops a critical item escalating. Different acts, so the client must be
+    # able to tell them apart rather than infer.
+    kind: Literal["decide_transfer", "acknowledge"]
+    responsible_label: str
+    reason: str | None = None
+
+
 class TodayViewResponse(BaseModel):
     today: date
     horizon_days: int
@@ -83,6 +99,7 @@ class TodayViewResponse(BaseModel):
     drafts_in_review: list[_DraftInReviewResponse]
     overdue_invoices: list[_InvoiceResponse]
     deadlines_next_7d: list[_DeadlineResponse]
+    ip_coverage_actions: list[_IpCoverageActionResponse]
     # Additive bounding metadata — see TodayView in services/today_view.
     # The five arrays above are unchanged; these maps (keyed by the
     # same stream names) tell the client when a stream was capped so it
@@ -181,6 +198,21 @@ async def get_my_today_view(
                 days_until=d.days_until,
             )
             for d in view.deadlines_next_7d
+        ],
+        ip_coverage_actions=[
+            _IpCoverageActionResponse(
+                coverage_id=a.coverage_id,
+                docket_id=a.docket_id,
+                docket_title=a.docket_title,
+                deadline_title=a.deadline_title,
+                due_on=a.due_on,
+                days_until=a.days_until,
+                critical=a.critical,
+                kind=a.kind,  # type: ignore[arg-type]
+                responsible_label=a.responsible_label,
+                reason=a.reason,
+            )
+            for a in view.ip_coverage_actions
         ],
         stream_limits=view.stream_limits,
         stream_counts=view.stream_counts,
