@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from caseops_api.core.observability import get_request_id
+from caseops_api.core.redaction import sanitize_audit_metadata
 from caseops_api.db.models import AuditActorType, AuditEvent, AuditResult
 from caseops_api.services.session_context import SessionContext
 
@@ -60,7 +61,12 @@ def record_audit(
         matter_id=matter_id,
         ip_docket_id=ip_docket_id,
         result=result,
-        metadata_json=json.dumps(metadata, default=str) if metadata else None,
+        # DATA-GOV-11: minimised at the WRITE PATH, not by each of the 400-odd
+        # callers. An audit row is immutable and outlives the content it
+        # describes, so a leak here cannot be rotated away later.
+        metadata_json=(
+            json.dumps(sanitize_audit_metadata(metadata), default=str) if metadata else None
+        ),
         request_id=request_id if request_id is not None else get_request_id(),
         ip=ip,
         user_agent=user_agent,

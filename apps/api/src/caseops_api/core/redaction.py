@@ -126,6 +126,8 @@ def redact_text(
     *,
     max_length: int = MAX_REDACTED_LOG_LENGTH,
     redact_identifiers: bool = True,
+    redact_long_tokens: bool = True,
+    redact_phone_numbers: bool = True,
 ) -> str:
     """Redact secrets and personal data from arbitrary text.
 
@@ -150,7 +152,8 @@ def redact_text(
     if redact_identifiers:
         text = _UUID_RE.sub("[id-redacted]", text)
         text = _PHONE_RE.sub("[phone-redacted]", text)
-        text = _LONG_TOKEN_RE.sub("[token-redacted]", text)
+        if redact_long_tokens:
+            text = _LONG_TOKEN_RE.sub("[token-redacted]", text)
     else:
         # Preserving an identifier means protecting it from the LATER rules too.
         # A bare `if` around the UUID rule is not enough: the phone pattern
@@ -164,8 +167,10 @@ def redact_text(
             return f"id{len(shielded) - 1}"
 
         text = _UUID_RE.sub(_park, text)
-        text = _PHONE_RE.sub("[phone-redacted]", text)
-        text = _LONG_TOKEN_RE.sub("[token-redacted]", text)
+        if redact_phone_numbers:
+            text = _PHONE_RE.sub("[phone-redacted]", text)
+        if redact_long_tokens:
+            text = _LONG_TOKEN_RE.sub("[token-redacted]", text)
         for position, original in enumerate(shielded):
             text = text.replace(f"id{position}", original)
     if len(text) > max_length:
@@ -196,40 +201,142 @@ def redact_provider_error(value: object) -> str:
 # instead. A field whose name says it carries content is dropped to a length
 # summary rather than logged, because the safe amount of a client's document to
 # put in Cloud Logging is none of it.
-_CONTENT_FIELD_HINTS = (
-    "body",
-    "chunk",
-    "citation_text",
+# Content-bearing field names. Pattern matching cannot recognise privileged
+# prose - "PRIVILEGED opinion body" contains no token any regex can key on - so
+# DATA-GOV-15's document-text/prompt/name categories and DATA-GOV-11's
+# tombstone minimisation are enforced by FIELD NAME instead.
+#
+# Matched as whole underscore-separated TOKENS, not substrings. Substring
+# matching withheld `recommendation_context` because "context" ends in "text",
+# which would have quietly gutted audit evidence for every key containing
+# context, pretext or subtext.
+_CONTENT_TOKENS = frozenset(
+    {
+        "body",
+        "chunk",
+        "completion",
+        "content",
+        "excerpt",
+        "extract",
+        "opinion",
+        "prompt",
+        "prompts",
+        "raw",
+        "rationale",
+        "snippet",
+        "summary",
+        "transcript",
+        "text",
+    }
+)
+# Phrases whose risk comes from the pair rather than either token alone. A bare
+# `name` is an ordinary audit field - a team name, a provider name - and
+# withholding it would cost evidence for nothing.
+_CONTENT_PHRASES = (
     "client_name",
-    "completion",
-    "content",
-    "document_text",
-    "doc_text",
-    "excerpt",
-    "extract",
     "mark_name",
-    "message_body",
-    "note",
-    "opinion",
-    "prompt",
-    "raw",
-    "rationale",
-    "snippet",
-    "summary",
-    "text",
-    "transcript",
+    "party_name",
 )
 
 
+# A key ending in one of these names identifiers, not content. `chunk_ids` holds
+# UUIDs that let an auditor find the evidence; withholding them because the key
+# also contains "chunk" removes the pointer while protecting nothing, which is
+# the opposite of a tombstone.
+# DATA-GOV-11 forbids "destinations". In structured metadata a destination is
+# identified by its KEY. Pattern-guessing at the value ate
+# `GOOGLE-SEARCH-2026-08-17-001`, because the phone rule matches any digit run
+# with separators - which is also what a dated provider reference looks like.
+_DESTINATION_KEYS = frozenset(
+    {
+        "addressee",
+        "bcc",
+        "cc",
+        "destination",
+        "destinations",
+        "email",
+        "emailaddress",
+        "mobile",
+        "msisdn",
+        "phone",
+        "phonenumber",
+        "recipient",
+        "recipients",
+        "sendto",
+        "to",
+    }
+)
+_IDENTIFIER_SUFFIXES = ("id", "ids", "hash", "hashes", "sha256", "count", "counts", "ref", "refs")
+
+
 def is_content_field(name: str) -> bool:
-    """Whether a log field name suggests it carries user or document content."""
+    """Whether a field name suggests it carries user or document content."""
     lowered = "".join(
         character for character in name.lower() if character.isalnum() or character == "_"
     )
-    return any(hint in lowered for hint in _CONTENT_FIELD_HINTS)
+    tokens = lowered.split("_")
+    if tokens and tokens[-1] in _IDENTIFIER_SUFFIXES:
+        return False
+    if any(phrase in lowered for phrase in _CONTENT_PHRASES):
+        return True
+    return bool(set(tokens) & _CONTENT_TOKENS)
 
 
 def summarize_content(value: object) -> str:
     """Replace content with a shape description that is still useful to debug."""
     text = str(value or "")
     return f"[content-withheld chars={len(text)}]"
+
+
+def sanitize_audit_metadata(value: object, *, key: str = "") -> object:
+    """Minimise audit metadata to tombstone-safe values (DATA-GOV-11).
+
+    An audit row is immutable legal evidence that outlives the content it
+    describes, so it is the one place where a leak cannot later be cleaned up.
+    The requirement is explicit: retained evidence "cannot contain raw
+    privileged documents, message bodies, prompts, destinations or secrets".
+
+    The write path applied ``json.dumps(metadata)`` with no constraint at all,
+    so any of the 400-odd callers could put a draft, a prompt or a recipient
+    address into a permanent row - and unlike a log line, it cannot be rotated
+    away afterwards.
+
+    Three rules, matched to STRUCTURED data rather than free text:
+
+    - a key naming a secret has its value replaced outright
+    - a key naming content is withheld as a length summary, because no pattern
+      recognises a privileged paragraph
+    - other strings lose URLs, email and phone - the "destinations" half
+
+    The long-opaque-token rule is deliberately NOT applied. It is a blunt
+    secret-catcher for free-text error strings, where a 24-character run is
+    probably a key. In structured metadata those runs are identifiers and
+    content hashes - ``supreme_court_latest_orders``, a SHA-256 digest - which
+    are exactly the tombstone fields this requirement wants KEPT. Redacting a
+    content hash destroys the tombstone: it identifies evidence without
+    revealing it, which is the entire point. Secrets are caught by key name
+    instead, which is precise where the value's shape is not.
+    """
+    normalized_key = _normalized_secret_key(key) if key else ""
+    if normalized_key and normalized_key in _SECRET_KEYS:
+        return "[redacted]"
+    if normalized_key and normalized_key in _DESTINATION_KEYS:
+        return "[destination-redacted]"
+    if key and is_content_field(key) and not isinstance(value, (dict, list, tuple)):
+        return summarize_content(value)
+    if isinstance(value, str):
+        return redact_text(
+            value,
+            max_length=MAX_REDACTED_LOG_LENGTH,
+            redact_identifiers=False,
+            redact_long_tokens=False,
+            redact_phone_numbers=False,
+        )
+    if isinstance(value, dict):
+        return {
+            item_key: sanitize_audit_metadata(item, key=str(item_key))
+            for item_key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [sanitize_audit_metadata(item, key=key) for item in value]
+    return value
