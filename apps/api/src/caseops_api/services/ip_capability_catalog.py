@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from caseops_api.core.settings import Settings
+from caseops_api.core.settings import Settings, get_settings
 from caseops_api.services.session_context import SessionContext
 
 
@@ -252,6 +253,73 @@ def evaluate_ip_feature(
         rollout_enabled=rollout_enabled,
         rollout_expires_at=expiry,
         manual_fallback_feature_id=feature.manual_fallback_feature_id,
+    )
+
+
+def assert_ip_rollout_enabled(
+    feature_id: str,
+    *,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Fail closed at a WRITER when a feature's kill switch is off.
+
+    RES-08 requires independent server-side kill switches. Until this existed,
+    every flag except ``ip_rule_governance_enabled`` was declared here as
+    ``rollout_flag`` metadata and enforced nowhere: ``evaluate_ip_feature`` had a
+    single caller, the readiness projection that feeds the UI. An operator
+    setting ``ip_registry_sync_enabled=false`` would have been told the feature
+    was off by the very surface that kept running it. ARCH-OPS-12 is explicit
+    that frontend visibility is never authorization.
+
+    This checks the ROLLOUT gate alone. Capability and entitlement are separate
+    concerns with their own failure codes, and a kill switch that also depended
+    on the caller's permissions would not be a kill switch. Being a plain
+    function rather than a route dependency means non-HTTP callers - jobs,
+    consumers, backfills - are fenced too, which is the same reason
+    ``_assert_rule_governance_mutation_enabled`` lives inside its service.
+    """
+
+    feature = IP_FEATURE_BY_ID.get(feature_id)
+    if feature is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ip_feature_unknown",
+                "reason": "unknown_feature",
+                "detail": f"{feature_id} is not a registered IP feature.",
+            },
+        )
+
+    active_settings = settings or get_settings()
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    expires_at = getattr(active_settings, feature.rollout_expiry)
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+
+    enabled = getattr(active_settings, feature.rollout_flag) is True
+    expired = expires_at is not None and current >= expires_at
+    if enabled and not expired:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "ip_feature_disabled",
+            "reason": "rollout_expired" if enabled else "rollout_disabled",
+            "feature_id": feature.feature_id,
+            "rollout_flag": feature.rollout_flag,
+            "rollout_owner": feature.rollout_owner,
+            # Naming the fallback is the difference between an outage and a
+            # degraded mode the user can still work in.
+            "manual_fallback_feature_id": feature.manual_fallback_feature_id,
+            "detail": (
+                f"{feature.feature_id} is disabled by its server-side rollout "
+                f"control. Existing records remain readable."
+            ),
+        },
     )
 
 
