@@ -43,7 +43,13 @@ export default defineConfig({
   // Aborting early turns that into a normal failure with a report attached,
   // which is the difference between a diagnosable cascade and an invisible one.
   // Locally there is no limit, because a developer wants the whole picture.
-  maxFailures: process.env.CI ? 5 : 0,
+  // Five was too high to help: the cascade's time is spent in HANGING teardown,
+  // not in counted failures. Observed on run 32152575950 - test 136 took 5.1m
+  // against a 120s test timeout with retries disabled, so ~3 minutes of it sits
+  // outside the test body where maxFailures has no say. Two failures abort
+  // early enough for the job to finish inside its budget and upload a trace,
+  // which is the outcome that matters; capping the waste is secondary.
+  maxFailures: process.env.CI ? 2 : 0,
   expect: {
     timeout: 15_000,
   },
