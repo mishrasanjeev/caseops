@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     DataRetentionPolicyVersion,
     LegalHold,
+    LegalHoldItem,
     LegalHoldStatus,
     TenantDataOperation,
     TenantDataOperationItem,
@@ -114,12 +115,7 @@ def _registered_item_scope(payload: TenantDataOperationDryRunRequest) -> list[di
 
 
 def _active_hold_ids(session: Session, *, company_id: str) -> list[str]:
-    """Return active hold IDs in deterministic order.
-
-    Until a later scope resolver proves target-specific coverage, any active
-    company hold conservatively protects every simulated target.  This may
-    over-block a dry run, but it can never let a held target appear eligible.
-    """
+    """Return active hold IDs in deterministic order."""
 
     return list(
         session.scalars(
@@ -131,6 +127,81 @@ def _active_hold_ids(session: Session, *, company_id: str) -> list[str]:
             .order_by(LegalHold.id)
         ).all()
     )
+
+
+# A hold item whose target_type is this covers an entire data class rather than
+# one record, which is how "target ... data class" in DATA-GOV-04 is expressed.
+HOLD_TARGET_TYPE_DATA_CLASS = "data_class"
+
+
+def resolve_hold_for_target(
+    session: Session,
+    *,
+    company_id: str,
+    data_class_id: str,
+    target_type: str | None = None,
+    target_reference_hash: str | None = None,
+) -> str | None:
+    """Return the id of an active legal hold covering this target, or ``None``.
+
+    DATA-GOV-04 requires a hold to target a company, client, record, custodian,
+    data class or date range, and to preserve covered data. Until now the
+    dry-run manifest treated ANY active hold as covering EVERY target: correct
+    in direction, since it can only over-block, but it makes a scoped hold
+    indistinguishable from a company-wide one and marks unrelated data as held.
+
+    Coverage is decided in this order, and the order is the safety property:
+
+    1. An active hold with NO items is company-wide. This preserves the previous
+       behaviour exactly, and it is why an unscoped hold cannot silently narrow.
+       Holds are itemless in practice today - nothing in the application writes
+       ``LegalHoldItem`` yet - so this is the live path.
+    2. An item naming the data class (``target_type='data_class'``) covers every
+       record in that class.
+    3. An item naming the exact record covers that record.
+
+    Ties resolve to the lowest hold id so a manifest is reproducible.
+
+    Fail-closed by construction: the function only ever narrows coverage when an
+    item explicitly says so, and any hold it cannot interpret still matches at
+    step 1. A caller must treat a non-None result as "blocked".
+    """
+
+    active_ids = _active_hold_ids(session, company_id=company_id)
+    if not active_ids:
+        return None
+
+    items = list(
+        session.scalars(
+            select(LegalHoldItem)
+            .where(
+                LegalHoldItem.company_id == company_id,
+                LegalHoldItem.legal_hold_id.in_(active_ids),
+            )
+            .order_by(LegalHoldItem.legal_hold_id, LegalHoldItem.id)
+        ).all()
+    )
+    items_by_hold: dict[str, list[LegalHoldItem]] = {}
+    for item in items:
+        items_by_hold.setdefault(item.legal_hold_id, []).append(item)
+
+    for hold_id in active_ids:
+        hold_items = items_by_hold.get(hold_id)
+        if not hold_items:
+            return hold_id
+        for item in hold_items:
+            if item.data_class_id != data_class_id:
+                continue
+            if item.target_type == HOLD_TARGET_TYPE_DATA_CLASS:
+                return hold_id
+            if (
+                target_type is not None
+                and target_reference_hash is not None
+                and item.target_type == target_type
+                and item.target_reference_hash == target_reference_hash
+            ):
+                return hold_id
+    return None
 
 
 def create_dry_run_manifest(
@@ -166,17 +237,27 @@ def create_dry_run_manifest(
     }
     request_scope_hash = _canonical_digest(request_scope)
     active_hold_ids = _active_hold_ids(session, company_id=context.company.id)
-    hold_id = active_hold_ids[0] if active_hold_ids else None
     now = _now()
-    item_records = [
-        {
-            **item,
-            "item_status": "held" if hold_id else "eligible",
-            "legal_hold_id": hold_id,
-            "safe_to_execute": False,
-        }
-        for item in item_scope
-    ]
+    # Resolved per item, not once for the manifest. A hold scoped to one data
+    # class previously marked every unrelated item "held", which reads to an
+    # operator as far broader preservation than was actually ordered.
+    item_records = []
+    for item in item_scope:
+        item_hold_id = resolve_hold_for_target(
+            session,
+            company_id=context.company.id,
+            data_class_id=item["data_class_id"],
+            target_type=item.get("target_type"),
+            target_reference_hash=item.get("target_reference_hash"),
+        )
+        item_records.append(
+            {
+                **item,
+                "item_status": "held" if item_hold_id else "eligible",
+                "legal_hold_id": item_hold_id,
+                "safe_to_execute": False,
+            }
+        )
     manifest = {
         "schema_version": 1,
         "operation_type": payload.operation_type,
