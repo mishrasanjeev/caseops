@@ -41,10 +41,13 @@ _SECRET_KEYS = {
     "bearer",
     "clientsecret",
     "privatekey",
+    # Present in the original set; dropped once during this refactor, which
+    # silently unredacted "webhook-signature: signed-secret". Keep it.
+    "webhooksignature",
+    # Password keys were absent entirely, so "password=..." was never redacted;
+    # the abbreviations are what people actually type in DSNs and debug lines.
     "password",
     "passwd",
-    # Abbreviations are what people actually type in connection strings and
-    # debug lines; "pw=hunter2" sailed through the allowlist until it was tested.
     "pw",
     "pwd",
     "pass",

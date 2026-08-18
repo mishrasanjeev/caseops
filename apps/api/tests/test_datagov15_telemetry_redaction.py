@@ -156,3 +156,44 @@ class TestModelOutputIsNotLogged:
         source = inspect.getsource(llm)
         assert "raw[:1500]" not in source
         assert "raw preview" not in source
+
+
+class TestSecretKeyCoverageDoesNotRegress:
+    """The key allowlist is data, and data is what a refactor silently drops.
+
+    Promoting the redactor into ``core`` rewrote this set from a truncated view
+    of the original and lost ``webhooksignature`` - which unredacted
+    "webhook-signature: signed-secret" in the provider-operations API response.
+    Nothing failed at the redactor's own tests; it surfaced two layers away.
+    """
+
+    def test_every_key_the_original_redactor_covered_is_still_covered(self) -> None:
+        from caseops_api.core.redaction import _SECRET_KEYS
+
+        # The exact set as it stood before the move.
+        original = {
+            "apikey",
+            "authorization",
+            "authheader",
+            "bearer",
+            "clientsecret",
+            "privatekey",
+            "secret",
+            "signature",
+            "token",
+            "webhooksignature",
+        }
+
+        assert original <= _SECRET_KEYS, (
+            f"redaction coverage regressed for: {sorted(original - _SECRET_KEYS)}"
+        )
+
+    def test_the_provider_operations_fixture_shape_is_redacted(self) -> None:
+        from caseops_api.core.redaction import redact_provider_error
+
+        redacted = redact_provider_error(
+            "webhook-signature: signed-secret phone +91 98765 43210"
+        )
+
+        assert "signed-secret" not in redacted
+        assert "98765" not in redacted
