@@ -20826,6 +20826,26 @@
           "sql_type": "VARCHAR(24)",
           "nullable": false
         },
+        "approved_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "approved_by_membership_company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "approved_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "approver_label_snapshot": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
         "blocked_reason": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(255)",
@@ -22800,7 +22820,7 @@
       }
     }
   ],
-  "schema_fingerprint": "a52263e7782fbe53ab7a3061e3fe0327bff7eda680b0a2a2fc79f5e43a6dd45a",
+  "schema_fingerprint": "5f97017dd188794f73a3a7bb731dc9eaf4354cc8b462056cd3dfa29a93c7bb65",
   "index_inventory": {
     "orm_index_count": 1147,
     "orm_index_fingerprint": "a83ceeade72cbac48d88c832aa3d55e25fecdbb7f2515560e8ecfb49afea5435",

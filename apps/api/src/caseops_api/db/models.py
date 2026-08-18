@@ -16144,16 +16144,48 @@ class TenantDataOperation(Base):
             name="ck_tenant_data_operation_type",
         ),
         CheckConstraint(
-            "execution_mode = 'dry_run'",
-            name="ck_tenant_data_operation_dry_run_only",
+            "execution_mode IN ('dry_run', 'execute')",
+            name="ck_tenant_data_operation_execution_mode",
+        ),
+        # Replaces the former dry-run-only fence. Dropping that constraint
+        # outright would have removed the last-resort guarantee on the one table
+        # that governs export and purge, leaving every control in application
+        # code. Execute is instead expressible only with a second person's
+        # recorded approval - the same rule ck_legal_hold_activation_approval
+        # already enforces for holds.
+        CheckConstraint(
+            "execution_mode <> 'dry_run' OR approval_status = 'not_requested'",
+            name="ck_tenant_data_operation_dry_run_unapproved",
+        ),
+        CheckConstraint(
+            "execution_mode <> 'execute' OR ("
+            "approval_status = 'approved' "
+            "AND approved_at IS NOT NULL "
+            "AND approved_by_membership_id IS NOT NULL "
+            "AND approved_by_membership_company_id = company_id "
+            "AND requested_by_membership_id IS NOT NULL "
+            "AND requested_by_membership_company_id = company_id)",
+            name="ck_tenant_data_operation_execute_requires_approval",
+        ),
+        CheckConstraint(
+            "requested_by_membership_id IS NULL "
+            "OR approved_by_membership_id IS NULL "
+            "OR requested_by_membership_id <> approved_by_membership_id",
+            name="ck_tenant_data_operation_approver_distinct",
+        ),
+        CheckConstraint(
+            "(approved_by_membership_id IS NULL AND approved_by_membership_company_id IS NULL) "
+            "OR (approved_by_membership_id IS NOT NULL "
+            "AND approved_by_membership_company_id = company_id)",
+            name="ck_tenant_data_operation_approver_company_complete",
         ),
         CheckConstraint(
             "status IN ('planned', 'dry_run_complete', 'blocked', 'cancelled')",
             name="ck_tenant_data_operation_status",
         ),
         CheckConstraint(
-            "approval_status = 'not_requested'",
-            name="ck_tenant_data_operation_execute_approval_closed",
+            "approval_status IN ('not_requested', 'requested', 'approved', 'rejected')",
+            name="ck_tenant_data_operation_approval_status",
         ),
         CheckConstraint(
             "length(request_scope_hash) = 64",
@@ -16217,6 +16249,12 @@ class TenantDataOperation(Base):
         String(36), nullable=True
     )
     requester_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_by_membership_company_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dry_run_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
