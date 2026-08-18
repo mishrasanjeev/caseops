@@ -52,6 +52,10 @@ class TenantDataOperationDryRunRequest(BaseModel):
     request_evidence_ref: str = Field(min_length=1, max_length=512)
     items: list[TenantDataOperationItemInput] = Field(min_length=1, max_length=500)
     retention_policy_version_id: str | None = Field(default=None, max_length=36)
+    # DATA-GOV-06 point-in-time scope. Optional so existing callers keep working;
+    # omitted means "as of now", which is recorded explicitly rather than left
+    # implicit, because a manifest with no instant cannot be compared to another.
+    as_of: datetime | None = Field(default=None)
 
 
 class TenantDataOperationItemRecord(BaseModel):
@@ -67,6 +71,14 @@ class TenantDataOperationItemRecord(BaseModel):
     detail_redacted: str | None
 
 
+class TenantDataOperationExclusion(BaseModel):
+    """A category the export withholds, and what the recipient can still ask for."""
+
+    category: str
+    reason: str
+    reference_metadata: str
+
+
 class TenantDataOperationDryRunRecord(BaseModel):
     id: str
     operation_type: DataOperationType
@@ -77,4 +89,6 @@ class TenantDataOperationDryRunRecord(BaseModel):
     manifest_hash: str
     request_evidence_ref: str
     completed_at: datetime
+    as_of: datetime
+    exclusions: list[TenantDataOperationExclusion]
     items: list[TenantDataOperationItemRecord]
