@@ -60,6 +60,11 @@ STEP_UP_PURPOSES = {
     "ip_rule_activation",
     "bulk_export",
     "destructive_action",
+    # DATA-GOV-05. Named rather than folded into destructive_action so an audit
+    # trail says which control was satisfied, and so the two can be governed
+    # independently later.
+    "legal_hold_change",
+    "retention_policy_activation",
     "step_up",
 }
 
