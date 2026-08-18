@@ -31,6 +31,11 @@ import uuid
 from contextvars import ContextVar
 from typing import Any
 
+from caseops_api.core.redaction import (
+    is_content_field,
+    redact_log_text,
+    summarize_content,
+)
 from caseops_api.core.settings import get_settings
 
 # --- Context vars --------------------------------------------------------
@@ -94,6 +99,28 @@ def ensure_request_id(candidate: str | None) -> str:
     return uuid.uuid4().hex
 
 
+def _redact_extra(value: Any, *, key: str = "") -> Any:
+    """Redact caller-supplied ``extra`` values without flattening their shape.
+
+    Structure is preserved so log consumers keep their field types; only leaf
+    strings are scrubbed. Fields whose NAME says they carry content are withheld
+    entirely - no pattern can recognise a privileged paragraph, so the field name
+    is the only signal available.
+    """
+    if key and is_content_field(key) and not isinstance(value, (dict, list, tuple)):
+        return summarize_content(value)
+    if isinstance(value, str):
+        return redact_log_text(value)
+    if isinstance(value, dict):
+        return {
+            item_key: _redact_extra(item, key=str(item_key))
+            for item_key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact_extra(item, key=key) for item in value]
+    return value
+
+
 # --- JSON log formatter --------------------------------------------------
 
 
@@ -126,7 +153,11 @@ class JsonLogFormatter(logging.Formatter):
             "timestamp": ts,
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            # DATA-GOV-15: everything leaving the process is redacted at the
+            # sink, not at each call site. Call-site discipline had already
+            # failed - services/audit_exports.py redacted the exception it
+            # PERSISTED while logging the same object raw one line above.
+            "message": redact_log_text(record.getMessage()),
             "request_id": _request_id.get(),
             "tenant_id": _tenant_id.get(),
             "matter_id": _matter_id.get(),
@@ -140,13 +171,17 @@ class JsonLogFormatter(logging.Formatter):
                 continue
             try:
                 json.dumps(value, default=str)
-                payload[key] = value
+                payload[key] = _redact_extra(value, key=key)
             except TypeError:
-                payload[key] = repr(value)
+                payload[key] = redact_log_text(repr(value))
         if record.exc_info:
-            payload["exc_info"] = self.formatException(record.exc_info)
+            # The exception message is the highest-risk string in the record: a
+            # driver failure quotes its DSN, credentials included.
+            payload["exc_info"] = redact_log_text(
+                self.formatException(record.exc_info), max_length=8_000
+            )
         if record.stack_info:
-            payload["stack_info"] = record.stack_info
+            payload["stack_info"] = redact_log_text(record.stack_info, max_length=8_000)
         return json.dumps(payload, default=str, separators=(",", ":"))
 
 

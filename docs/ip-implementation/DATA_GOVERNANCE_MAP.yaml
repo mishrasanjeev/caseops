@@ -295,11 +295,12 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "application-logs-traces-and-metrics",
       "kind": "log_trace_metric",
-      "purpose": "Application logging, optional OpenTelemetry traces, and operational metrics that must minimize/redact content and identifiers.",
+      "purpose": "Application logging, optional OpenTelemetry traces, and operational metrics that must minimize/redact content and identifiers. DATA-GOV-15 (2026-08-18) moved that redaction into the log formatter itself: message text, exception tracebacks and caller-supplied extras are scrubbed of secrets, connection strings, email and phone at the sink, and fields whose name indicates document text, prompts or party names are withheld as a length summary. Correlation identifiers (tenant/request/matter) are deliberately preserved so an incident remains traceable. Before this the requirement was enforced only by call-site discipline, which had already failed: services/audit_exports.py redacted the exception it persisted while logging the same object raw. This changes handling only; no retention duration, hold, or disposition is asserted or activated.",
       "sensitivity": "internal_with_confidential_identifiers",
       "source_licence_limits": "Logs/traces/metrics may not become a content or secret export channel.",
       "implementation_refs": [
         "apps/api/src/caseops_api/core/observability.py",
+        "apps/api/src/caseops_api/core/redaction.py",
         "apps/api/src/caseops_api/core/settings.py"
       ]
     },
@@ -337,7 +338,7 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "llm-and-embedding-provider-held-content",
       "kind": "provider_held_object",
-      "purpose": "Configured or optional LLM, embedding, and prompt-cache provider request/response content and derived vectors, including bounded authority-metadata extraction and its one-document provider canary. Provider-returned citations are surfaced and persisted only through the citation verification predicate in services/citations.py; EH-SGR-07 (2026-08-16) changed that predicate's meaning, so a persisted verified-citation count recorded before that date is not comparable with one recorded after, and neither has yet been re-baselined against production data.",
+      "purpose": "Configured or optional LLM, embedding, and prompt-cache provider request/response content and derived vectors, including bounded authority-metadata extraction and its one-document provider canary. Provider-returned citations are surfaced and persisted only through the citation verification predicate in services/citations.py; EH-SGR-07 (2026-08-16) changed that predicate's meaning, so a persisted verified-citation count recorded before that date is not comparable with one recorded after, and neither has yet been re-baselined against production data. DATA-GOV-15 (2026-08-18): services/llm.py no longer writes raw completion text to logs on decode or schema failure. It previously logged a 1000/1500 character prefix, justified on the grounds that max_tokens bounds the length; length was not the concern, since the completion is draft legal text about client matters. The failure is now reported as response shape (length, delimiters, fence, brace balance), which still separates prose-instead-of-JSON from truncation. This changes handling only; provider retention and training settings remain pending approval.",
       "sensitivity": "privileged_or_confidential",
       "source_licence_limits": "Provider training, retention, residency, deletion, and permitted-use settings require approved provider and tenant policy before content transmission.",
       "implementation_refs": [
