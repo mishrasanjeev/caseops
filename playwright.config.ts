@@ -30,6 +30,20 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,
+  // Stop after a handful of failures in CI.
+  //
+  // These specs run in one worker against one server, so a failure that leaves
+  // the app or its data wedged takes every following test down with it. Without
+  // a limit the suite grinds through each one to its 120s timeout: an observed
+  // cascade starting at ram-2026-08-11-bugs.spec.ts:411 burned 25 minutes on
+  // seven tests and hit the 30-minute job budget. A job killed by its budget is
+  // reported as CANCELLED, so the reporter never finishes and the traces are
+  // never uploaded - the run destroys the evidence of why it failed.
+  //
+  // Aborting early turns that into a normal failure with a report attached,
+  // which is the difference between a diagnosable cascade and an invisible one.
+  // Locally there is no limit, because a developer wants the whole picture.
+  maxFailures: process.env.CI ? 5 : 0,
   expect: {
     timeout: 15_000,
   },

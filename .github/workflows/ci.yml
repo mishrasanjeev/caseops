@@ -380,8 +380,12 @@ jobs:
         # its bundled Chromium. No extra env needed.
         run: npm run test:e2e:app
 
+      # `failure()` excludes a job killed by timeout-minutes, which reports as
+      # cancelled - exactly the case where the report is most needed. Traces,
+      # screenshots and video are already captured retain-on-failure; they were
+      # simply being thrown away.
       - name: Upload Playwright report on failure
-        if: failure()
+        if: '!cancelled()' 
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
