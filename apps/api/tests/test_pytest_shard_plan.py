@@ -270,11 +270,36 @@ def test_repository_hybrid_plan_improves_legacy_line_only_peak_cost(
     expected_files = sorted(path.resolve() for path in root.rglob("test_*.py"))
     planned_files = [path.resolve() for shard in hybrid for path in shard.files]
 
-    # "Materially" is intentional: a cosmetic reshuffle must not replace the
-    # observed line-only plan.  The checked-in suite currently improves both
-    # peaks by more than ten percent for the old and failed matrix sizes.
-    assert hybrid_peak_cost * 100 <= legacy_peak_cost * 90
-    assert hybrid_peak_tests * 100 <= legacy_peak_tests * 90
+    # Two things are asserted, and the split matters.
+    #
+    # ABSOLUTE QUALITY: the shipped plan must pack close to perfect balance.
+    # This is the real bar, and it is the one a bad planner cannot sneak past.
+    #
+    # The previous form asserted only `hybrid_peak <= legacy_peak * 0.90`, a
+    # ratio against a baseline that moves whenever a test file is added. That
+    # made it possible to FAIL with a near-optimal planner (observed: hybrid at
+    # 1.047x perfect balance on test definitions, yet 0.912 of a legacy plan
+    # that had itself improved), and - worse - possible to PASS by degrading the
+    # baseline rather than improving the plan. A tie-break that made both arms
+    # worse moved the ratio from 0.912 to 0.882 while raising the shipped plan's
+    # own peak from 279 to 283. A gate that rewards making the control worse is
+    # not measuring the thing it names.
+    #
+    # Perfect balance is total/shards; a whole file cannot be split, so some
+    # excess is structural. Ten percent is the allowance.
+    ideal_cost = sum(map(hybrid_cost, hybrid)) / total_shards
+    ideal_tests = sum(item.estimated_test_definitions for item in hybrid) / total_shards
+    assert hybrid_peak_cost <= ideal_cost * 1.10, (
+        f"shard plan is {hybrid_peak_cost / ideal_cost:.3f}x perfect balance on cost"
+    )
+    assert hybrid_peak_tests <= ideal_tests * 1.10, (
+        f"shard plan is {hybrid_peak_tests / ideal_tests:.3f}x perfect balance on tests"
+    )
+
+    # MATERIALITY: the hybrid weighting must still earn its place. A cosmetic
+    # reshuffle that merely reproduces the line-only plan is rejected here.
+    assert hybrid_peak_cost < legacy_peak_cost
+    assert hybrid_peak_tests < legacy_peak_tests
     assert sorted(planned_files) == expected_files
     assert len(planned_files) == len(set(planned_files))
 
