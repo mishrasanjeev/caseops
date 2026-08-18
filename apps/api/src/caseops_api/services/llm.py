@@ -988,20 +988,25 @@ def generate_structured[T: BaseModel](
     try:
         payload = _tolerant_json_loads(_strip_code_fence(completion.text))
     except json.JSONDecodeError as exc:
-        # Include a prefix of the raw model output so prod 502s are
-        # debuggable without a redeploy-to-log cycle. ``completion.text``
-        # is bounded by ``max_tokens`` so a 1000-char prefix is always
-        # safe to surface.
-        preview = (completion.text or "").strip()[:1000]
+        # DATA-GOV-15: the previous form logged a 1000-char prefix of the raw
+        # model output, justified on the grounds that ``max_tokens`` bounds its
+        # LENGTH. Length is not the concern - this model writes draft legal text
+        # about client matters, so a bounded prefix is a bounded privilege leak.
+        # What actually diagnoses a decode failure is the SHAPE of the response,
+        # which is reported here instead: enough to tell "model returned prose",
+        # "output truncated" and "fence not stripped" apart without shipping a
+        # word of the content.
+        shape = _response_shape(completion.text)
         logger.warning(
-            "generate_structured JSON decode failed (%s:%s). raw preview: %s",
+            "generate_structured JSON decode failed (%s:%s). %s decode_error=%s",
             completion.provider,
             completion.model,
-            preview,
+            shape,
+            f"line {exc.lineno} col {exc.colno}",
         )
         raise LLMResponseFormatError(
             f"{completion.provider}:{completion.model} did not return valid "
-            f"JSON. raw[:500]={preview[:500]!r}",
+            f"JSON. {shape} decode_error=line {exc.lineno} col {exc.colno}",
         ) from exc
     try:
         validated = schema.model_validate(payload)
@@ -1019,15 +1024,16 @@ def generate_structured[T: BaseModel](
         preview_keys: Any = payload
         if isinstance(payload, dict):
             preview_keys = list(payload.keys())
-        raw_preview = (completion.text or "").strip()[:1500]
+        # Field violations and payload keys are the diagnosis; the raw body is
+        # not, and it is the part that carries client content.
         logger.warning(
             "generate_structured schema mismatch (%s:%s). violations=%s "
-            "payload_keys=%s raw[:1500]=%s",
+            "payload_keys=%s %s",
             completion.provider,
             completion.model,
             violations,
             preview_keys,
-            repr(raw_preview),
+            _response_shape(completion.text),
         )
         raise LLMResponseFormatError(
             f"{completion.provider}:{completion.model} returned JSON that did "
@@ -1148,6 +1154,27 @@ def _extract_first_json_block(text: str) -> str | None:
             if depth == 0:
                 return text[start : idx + 1]
     return None
+
+
+def _response_shape(text: str | None) -> str:
+    """Describe a model response structurally, without emitting its content.
+
+    Distinguishes the failure modes that matter operationally - prose instead of
+    JSON, truncation mid-object, an unstripped code fence - using only the length,
+    the delimiters and the character classes present.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return "shape=empty len=0"
+    fenced = raw.startswith("```")
+    body = raw
+    opener = body[:1]
+    closer = body[-1:]
+    balanced = body.count("{") == body.count("}") and body.count("[") == body.count("]")
+    return (
+        f"shape=len:{len(raw)} opens:{opener!r} closes:{closer!r} "
+        f"fenced:{fenced} balanced:{balanced}"
+    )
 
 
 def _strip_code_fence(text: str) -> str:
