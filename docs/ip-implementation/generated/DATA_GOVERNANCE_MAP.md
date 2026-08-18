@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `48364f24c75d79bf3aa08617409cb1daec4aa82a5a57cec05f82d0998c3e7e67`
+- Canonical map SHA-256: `1c058b5845fdc467d1d7b228ab0cc034cfde7b7bdd53904a31f1e955f54282c8`
 - SQL tables: `260`
-- SQL columns: `4013`
+- SQL columns: `4017`
 - ORM indexes: `1147`
 - Alembic/raw index declarations: `507`
 - Non-SQL data classes: `11`
@@ -256,7 +256,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `tenant_contract_playbook_rules` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `tenant_contract_playbooks` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `tenant_data_operation_items` | `tenant_operational_record` | 13 | `registry_fail_closed` |
-| `tenant_data_operations` | `tenant_operational_record` | 19 | `registry_fail_closed` |
+| `tenant_data_operations` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `tenant_enterprise_identity_configurations` | `security_identity_control` | 15 | `registry_fail_closed` |
 | `tenant_google_workspace_configurations` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `tenant_microsoft365_configurations` | `tenant_operational_record` | 19 | `registry_fail_closed` |
