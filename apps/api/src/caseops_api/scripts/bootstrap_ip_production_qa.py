@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.password_policy import enforce_password_policy
+from caseops_api.core.security import hash_password
 from caseops_api.db.models import (
     BillingSubscription,
     Company,
@@ -38,6 +40,10 @@ class IpProductionQaResult:
     subscription_id: str
     created_company: bool
     created_subscription: bool
+    # Reported so an operator can tell "the credential was reset" from "the
+    # tenant already existed and nothing changed" - the ambiguity that made a
+    # wrong QA password unfixable without deleting the tenant.
+    rotated_owner_credential: bool = False
     entitlement_key: str = "ip_workspace"
 
 
@@ -58,6 +64,7 @@ def ensure_ip_production_qa(
     owner_full_name: str,
     owner_email: str,
     owner_password: str,
+    rotate_owner_credential: bool = False,
 ) -> IpProductionQaResult:
     normalized_slug = company_slug.strip().lower()
     normalized_email = owner_email.strip().lower()
@@ -69,6 +76,7 @@ def ensure_ip_production_qa(
 
     company = session.scalar(select(Company).where(Company.slug == normalized_slug))
     created_company = company is None
+    rotated = False
     if company is None:
         auth = register_company_owner(
             session,
@@ -100,6 +108,28 @@ def ensure_ip_production_qa(
         )
         if membership is None:
             raise RuntimeError("Existing production QA tenant has no matching active owner.")
+        # Rotation is opt-in and never a side effect of the idempotent path.
+        # Before this the password could only be set at tenant CREATION, so a
+        # QA credential that drifted from the configured secret could not be
+        # corrected without deleting the tenant - and therefore could not be
+        # rotated on a schedule or after exposure either.
+        if rotate_owner_credential:
+            # Owner identity is already guaranteed above: the membership lookup
+            # joins on User.email == normalized_email and raises if it finds
+            # nothing, so a mismatched owner never reaches this branch. An extra
+            # identity check here could not fire, and a guard that cannot fire
+            # reads as protection that is not there.
+            owner = session.get(User, membership.user_id)
+            assert owner is not None
+            # Validate to the SAME policy as creation. hash_password alone will
+            # happily hash anything, so calling it directly would have made
+            # rotation the one path that could install a weak credential.
+            enforce_password_policy(owner_password)
+            owner.password_hash = hash_password(owner_password)
+            session.flush()
+            rotated = True
+        else:
+            rotated = False
 
     subscription = session.scalar(
         select(BillingSubscription)
@@ -139,6 +169,7 @@ def ensure_ip_production_qa(
         subscription_id=subscription.id,
         created_company=created_company,
         created_subscription=created_subscription,
+        rotated_owner_credential=rotated,
     )
 
 
@@ -158,6 +189,12 @@ def main() -> None:
             owner_full_name=os.environ.get("CASEOPS_IP_QA_OWNER_NAME", "CaseOps IP QA Bot"),
             owner_email=os.environ.get("CASEOPS_IP_QA_EMAIL", "ip-qa-bot@caseops.ai"),
             owner_password=_required_env("CASEOPS_IP_QA_PASSWORD"),
+            # Explicit and separate from the password itself: possessing the
+            # secret must not be sufficient to overwrite a live credential.
+            rotate_owner_credential=os.environ.get(
+                "CASEOPS_IP_QA_ROTATE_CREDENTIAL", ""
+            ).strip().lower()
+            == "true",
         )
     print(json.dumps(asdict(result), sort_keys=True))
 
