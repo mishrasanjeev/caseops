@@ -28,6 +28,7 @@ from caseops_api.db.models import (
 from caseops_api.schemas.data_governance import (
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
+    TenantDataOperationExclusion,
     TenantDataOperationItemRecord,
 )
 from caseops_api.services.audit import record_from_context
@@ -204,6 +205,59 @@ def resolve_hold_for_target(
     return None
 
 
+# DATA-GOV-07 names five categories an export must exclude, and requires each
+# exclusion to be DOCUMENTED rather than silently applied. A recipient who
+# cannot see what was withheld cannot tell an export that omitted a category on
+# purpose from one that missed it by accident - and for a tenant export leaving
+# the platform, that difference is the whole assurance.
+#
+# `reference_metadata` is the second half of the requirement: it states what the
+# recipient can still ask for, so an exclusion is a redirection rather than a
+# dead end.
+EXPORT_EXCLUSIONS: tuple[dict[str, str], ...] = (
+    {
+        "category": "platform_secrets",
+        "reason": "Signing keys, provider credentials and webhook secrets are platform "
+        "property and are never tenant data.",
+        "reference_metadata": "Credential rotation dates are available through the "
+        "security contact.",
+    },
+    {
+        "category": "cross_tenant_and_global_data",
+        "reason": "Records owned by other companies, and platform-global reference data, "
+        "fall outside this tenant's scope.",
+        "reference_metadata": "Global reference corpora are published separately under "
+        "their own licence.",
+    },
+    {
+        "category": "internal_provider_cost_and_profit",
+        "reason": "Provider unit cost and margin are CaseOps commercial data, not a "
+        "record of the tenant's matter.",
+        "reference_metadata": "Amounts the tenant was billed remain in the billing "
+        "records that ARE exported.",
+    },
+    {
+        "category": "other_clients_restricted_records",
+        "reason": "Matter-level restrictions and ethical walls survive an export; a "
+        "tenant-wide request does not lift them.",
+        "reference_metadata": "Counts of withheld records are reported without titles "
+        "or party names.",
+    },
+    {
+        "category": "non_redistributable_source_payloads",
+        "reason": "Licensed judgment and statute payloads cannot be redistributed by "
+        "CaseOps under their source terms.",
+        "reference_metadata": "Citations, neutral identifiers and source URLs are "
+        "exported so the recipient can retrieve the original.",
+    },
+)
+
+
+def export_exclusions() -> list[dict[str, str]]:
+    """The documented exclusion set for a tenant export manifest."""
+    return [dict(entry) for entry in EXPORT_EXCLUSIONS]
+
+
 def create_dry_run_manifest(
     session: Session,
     *,
@@ -229,10 +283,16 @@ def create_dry_run_manifest(
         if policy is None:
             raise HTTPException(status_code=404, detail="Retention policy version not found.")
 
+    # DATA-GOV-06 requires point-in-time scope. Without it two dry runs of the
+    # same request are not comparable, and an operator cannot say what the
+    # manifest was true OF. It is part of the hashed scope so a re-run at a
+    # different instant is a different manifest rather than a silent overwrite.
+    as_of = payload.as_of or _now()
     request_scope = {
-        "schema_version": 1,
+        "schema_version": 2,
         "operation_type": payload.operation_type,
         "execution_mode": "dry_run",
+        "as_of": as_of.isoformat(),
         "items": item_scope,
     }
     request_scope_hash = _canonical_digest(request_scope)
@@ -259,12 +319,19 @@ def create_dry_run_manifest(
             }
         )
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "operation_type": payload.operation_type,
         "execution_mode": "dry_run",
         "execution_authorization": "absent",
+        "as_of": as_of.isoformat(),
         "request_scope_hash": request_scope_hash,
         "active_hold_ids": active_hold_ids,
+        # Only a tenant export leaves the platform, so only it carries the
+        # exclusion record. Attaching the list to a purge or restore manifest
+        # would imply a redistribution boundary that operation does not have.
+        "exclusions": (
+            export_exclusions() if payload.operation_type == "tenant_export" else []
+        ),
         "items": item_records,
     }
     manifest_hash = _canonical_digest(manifest)
@@ -332,6 +399,10 @@ def create_dry_run_manifest(
         manifest_hash=manifest_hash,
         request_evidence_ref=payload.request_evidence_ref,
         completed_at=now,
+        as_of=as_of,
+        exclusions=[
+            TenantDataOperationExclusion(**entry) for entry in manifest["exclusions"]
+        ],
         items=[
             TenantDataOperationItemRecord(
                 id=row.id,
