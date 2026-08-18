@@ -79,6 +79,26 @@ class TenantDataOperationExclusion(BaseModel):
     reference_metadata: str
 
 
+class TenantDataOperationUnsatisfiedDependency(BaseModel):
+    """A table that references purge scope without being in it."""
+
+    table: str
+    references: str
+    detail: str
+
+
+class TenantDataOperationDependencyPlan(BaseModel):
+    """DATA-GOV-08 dependency plan: what is removed, in what order."""
+
+    schema_version: int
+    deletion_order: list[str]
+    unsatisfied_dependencies: list[TenantDataOperationUnsatisfiedDependency]
+    # Non-empty means the deletion order could not account for every foreign key
+    # touching the scope, so it must not be executed as though complete.
+    unresolved_cycles: list[str]
+    order_is_complete: bool
+
+
 class TenantDataOperationDryRunRecord(BaseModel):
     id: str
     operation_type: DataOperationType
@@ -90,5 +110,6 @@ class TenantDataOperationDryRunRecord(BaseModel):
     request_evidence_ref: str
     completed_at: datetime
     as_of: datetime
+    dependency_plan: TenantDataOperationDependencyPlan | None
     exclusions: list[TenantDataOperationExclusion]
     items: list[TenantDataOperationItemRecord]

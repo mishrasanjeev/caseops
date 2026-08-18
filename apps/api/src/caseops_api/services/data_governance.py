@@ -9,9 +9,10 @@ proof before any real data action is even representable.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -26,6 +27,7 @@ from caseops_api.db.models import (
     TenantDataOperationItem,
 )
 from caseops_api.schemas.data_governance import (
+    TenantDataOperationDependencyPlan,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
     TenantDataOperationExclusion,
@@ -258,6 +260,88 @@ def export_exclusions() -> list[dict[str, str]]:
     return [dict(entry) for entry in EXPORT_EXCLUSIONS]
 
 
+def purge_dependency_plan(data_class_ids: Sequence[str]) -> dict[str, Any]:
+    """Order a purge so a child is removed before the parent it references.
+
+    DATA-GOV-08 requires a purge to carry a dependency plan. The order is
+    DERIVED from the live foreign-key graph rather than maintained by hand,
+    because a hand-written order is correct exactly until someone adds a
+    relationship and does not remember this list. SQLAlchemy already sorts
+    tables parents-first for creation; deletion is that order reversed.
+
+    ``unsatisfied_dependencies`` is the half that matters more. If a request
+    purges ``legal_holds`` but not ``legal_hold_items``, the delete either fails
+    on the constraint or, worse, succeeds against a database configured to
+    cascade and silently removes evidence the request never named. Reporting
+    the referencing table by name lets an operator widen the scope
+    deliberately instead of discovering it mid-execution.
+    """
+
+    from sqlalchemy.schema import sort_tables_and_constraints
+
+    from caseops_api.db.models import Base
+
+    requested = {str(item) for item in data_class_ids}
+    tables = {table.name: table for table in Base.metadata.tables.values()}
+
+    # `metadata.sorted_tables` warns about unresolvable foreign-key cycles and
+    # then SILENTLY DROPS those edges from its ordering - "Foreign key
+    # constraints involving these tables will not be considered". An order that
+    # quietly ignores some foreign keys is exactly the failure this plan exists
+    # to prevent, so the cycle is surfaced instead of swallowed.
+    # `sort_tables_and_constraints` reports the broken edges: it yields a
+    # (None, constraints) entry for the constraints it had to set aside.
+    sorted_pairs = sort_tables_and_constraints(list(Base.metadata.tables.values()))
+    ordered_tables = [table for table, _ in sorted_pairs if table is not None]
+    cycle_broken: list[str] = []
+    for table, constraints in sorted_pairs:
+        if table is not None:
+            continue
+        for constraint in constraints:
+            parent = getattr(constraint.table, "name", None)
+            if parent and parent not in cycle_broken:
+                cycle_broken.append(parent)
+
+    # Creation order is parents-first, so deletion order is its reverse.
+    deletion_order = [
+        table.name for table in reversed(ordered_tables) if table.name in requested
+    ]
+    unresolved_cycles = sorted(name for name in cycle_broken if name in requested)
+
+    unsatisfied: list[dict[str, str]] = []
+    for name in sorted(requested):
+        table = tables.get(name)
+        if table is None:
+            continue
+        for other in Base.metadata.tables.values():
+            if other.name in requested:
+                continue
+            for foreign_key in other.foreign_keys:
+                if foreign_key.column.table.name != name:
+                    continue
+                entry = {
+                    "table": other.name,
+                    "references": name,
+                    "detail": (
+                        f"{other.name} references {name} but is not in scope; purging "
+                        f"{name} would orphan or block those rows."
+                    ),
+                }
+                if entry not in unsatisfied:
+                    unsatisfied.append(entry)
+
+    return {
+        "schema_version": 1,
+        "deletion_order": deletion_order,
+        "unsatisfied_dependencies": unsatisfied,
+        # Empty is the normal case. A non-empty list means the ordering above
+        # could not account for every foreign key touching the requested scope,
+        # so it must not be executed as though it were complete.
+        "unresolved_cycles": unresolved_cycles,
+        "order_is_complete": not unresolved_cycles,
+    }
+
+
 def create_dry_run_manifest(
     session: Session,
     *,
@@ -332,6 +416,12 @@ def create_dry_run_manifest(
         "exclusions": (
             export_exclusions() if payload.operation_type == "tenant_export" else []
         ),
+        # Only a purge removes rows, so only a purge carries a deletion order.
+        "dependency_plan": (
+            purge_dependency_plan([item["data_class_id"] for item in item_scope])
+            if payload.operation_type == "retention_purge"
+            else None
+        ),
         "items": item_records,
     }
     manifest_hash = _canonical_digest(manifest)
@@ -400,6 +490,11 @@ def create_dry_run_manifest(
         request_evidence_ref=payload.request_evidence_ref,
         completed_at=now,
         as_of=as_of,
+        dependency_plan=(
+            TenantDataOperationDependencyPlan.model_validate(manifest["dependency_plan"])
+            if manifest["dependency_plan"] is not None
+            else None
+        ),
         exclusions=[
             TenantDataOperationExclusion(**entry) for entry in manifest["exclusions"]
         ],
