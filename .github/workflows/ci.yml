@@ -380,8 +380,15 @@ jobs:
         # its bundled Chromium. No extra env needed.
         run: npm run test:e2e:app
 
-      - name: Upload Playwright report on failure
-        if: failure()
+      # MUST be always(). A job killed by timeout-minutes IS cancelled, so both
+      # `failure()` and `!cancelled()` skip this step - verified on run
+      # 32152575950, where the job hit its 30-minute budget and the upload was
+      # skipped despite `!cancelled()`. That is the one case where the trace is
+      # most needed. Traces, screenshots and video are already captured
+      # retain-on-failure and written under test-results/; they were simply
+      # being thrown away.
+      - name: Upload Playwright report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
