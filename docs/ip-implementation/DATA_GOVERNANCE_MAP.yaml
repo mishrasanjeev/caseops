@@ -20846,6 +20846,11 @@
           "sql_type": "VARCHAR(255)",
           "nullable": true
         },
+        "approves_operation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "blocked_reason": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(255)",
@@ -20890,6 +20895,11 @@
           "category_id": "configuration_or_state_metadata",
           "sql_type": "VARCHAR(40)",
           "nullable": false
+        },
+        "rejection_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
         },
         "request_evidence_ref": {
           "category_id": "domain_attribute",
@@ -22820,7 +22830,7 @@
       }
     }
   ],
-  "schema_fingerprint": "5f97017dd188794f73a3a7bb731dc9eaf4354cc8b462056cd3dfa29a93c7bb65",
+  "schema_fingerprint": "73af85a148238d22833532433707a7fa2782c70d30a56a5e4fa46a1e39ac8f95",
   "index_inventory": {
     "orm_index_count": 1147,
     "orm_index_fingerprint": "a83ceeade72cbac48d88c832aa3d55e25fecdbb7f2515560e8ecfb49afea5435",
