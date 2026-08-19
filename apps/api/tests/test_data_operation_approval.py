@@ -388,6 +388,23 @@ class TestRefusing:
         assert excinfo.value.detail["type"] == "data_operation_rejection_needs_a_reason"
         assert reviewed.approval_status == "requested"
 
+    def test_an_over_long_reason_is_refused_rather_than_truncated(
+        self, session: Session, requester: SessionContext
+    ) -> None:
+        # Cutting it to fit would silently discard the end of an explanation
+        # written to be read months from now.
+        reviewed = _dry_run(session, requester, approval_status="requested")
+        approver = _colleague(session, requester.company)
+
+        with pytest.raises(HTTPException) as excinfo:
+            reject_execution(
+                session, context=approver, operation_id=reviewed.id, reason="x" * 501
+            )
+
+        assert excinfo.value.detail["type"] == "data_operation_rejection_reason_too_long"
+        assert reviewed.approval_status == "requested"
+        assert reviewed.rejection_reason is None
+
     def test_a_refused_manifest_is_terminal(
         self, session: Session, requester: SessionContext
     ) -> None:

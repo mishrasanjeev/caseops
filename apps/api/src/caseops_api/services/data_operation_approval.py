@@ -14,6 +14,12 @@ while keeping the approver's signature.
 
 A rejection is recorded, not deleted. Evidence that someone asked to export or
 purge a tenant and was refused is exactly what an audit needs to see later.
+
+Approving is not executing. `approve_execution` produces an authorised operation
+in status 'planned' and nothing more - no export is written, no record is
+deleted. Execution itself remains unimplemented and still fails closed through
+`data_governance.reject_data_operation_execution`. Read the name as "approve the
+execution", not "approve and execute".
 """
 
 from __future__ import annotations
@@ -138,9 +144,17 @@ def reject_execution(
             "data_operation_rejection_needs_a_reason",
             "A refusal must say why, or the record of it cannot be acted on later.",
         )
+    if len(cleaned) > _MAX_REASON_LENGTH:
+        # Truncating to fit would silently discard the end of an explanation
+        # that exists to be read months from now. Say so instead.
+        raise _conflict(
+            "data_operation_rejection_reason_too_long",
+            f"A refusal reason is limited to {_MAX_REASON_LENGTH} characters; "
+            f"this one is {len(cleaned)}.",
+        )
 
     operation.approval_status = "rejected"
-    operation.rejection_reason = cleaned[:_MAX_REASON_LENGTH]
+    operation.rejection_reason = cleaned
     operation.updated_at = _now()
     session.flush()
     record_from_context(
