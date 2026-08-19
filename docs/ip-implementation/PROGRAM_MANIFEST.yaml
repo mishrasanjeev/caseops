@@ -7817,12 +7817,12 @@
         },
         {
           "id": "IPLF-028A-RES-13-REHEARSAL",
-          "summary": "No current database-plus-object application-cutover restore rehearsal or tenant-export dry run has been performed against an approved environment.",
-          "owner": "Authorized SRE/incident operator and Engineering/QA",
-          "evidence_needed": "Dated, sanitized database/object/image/schema/operator/reviewer evidence with measured application readiness and a tested tenant-export dry run.",
-          "safe_fallback": "Do not treat an isolated SQLite migration test as backup, object-store, restore, or resilience evidence.",
-          "milestone_impact": "Blocks RES-13 and deployment/acceptance closure for IPLF-028.",
-          "next_independent_slice": "Build and test complete non-live rehearsal tooling now; named authorization remains mandatory before an operator runs it against non-anonymized tenant data."
+          "summary": "OWNER-WAIVED 2026-08-19 as a gate; the underlying fact is unchanged. No database-plus-object application-cutover restore rehearsal or tenant-export dry run has been performed against any approved environment, so it is not known whether the production database can be restored or how long it would take. Point-in-time recovery is disabled on caseops-db, giving a real RPO near 24 hours against the 15-minute RES-01 target. See docs/ip-implementation/OWNER_WAIVER_RES13_RESTORE_REHEARSAL_2026-08-19.md. This entry is retained rather than deleted so the unproven state stays visible on the row.",
+          "owner": "Sanjeev Kumar (program owner) waived the gate; an authorized SRE/incident operator and Engineering/QA remain the owners if it is ever run.",
+          "evidence_needed": "None required for release under the owner waiver. To close this on evidence rather than waiver: dated, sanitized database/object/image/schema/operator/reviewer evidence with measured application readiness and a tested tenant-export dry run.",
+          "safe_fallback": "Do not treat an isolated SQLite migration test, or this waiver, as backup, object-store, restore, or resilience evidence. The waiver removes a verification; it does not supply one.",
+          "milestone_impact": "No longer blocks deployment/acceptance closure for IPLF-028. RES-13 remains verification_status not_run and must never be reported as verified.",
+          "next_independent_slice": "Proceed with the remaining IPLF-028A blockers. Non-live rehearsal tooling can still be built at any time; named authorization remains mandatory before an operator runs it against non-anonymized tenant data."
         }
       ],
       "next_actions": [
