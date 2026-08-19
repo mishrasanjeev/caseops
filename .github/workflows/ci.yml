@@ -275,8 +275,21 @@ jobs:
           # The pgvector image preinstalls the extension binary but each
           # database has to opt-in with CREATE EXTENSION. Idempotent.
           # No password needed — POSTGRES_HOST_AUTH_METHOD=trust above.
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
-          psql -h 127.0.0.1 -U caseops -d caseops_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          #
+          # This used to `apt-get install postgresql-client` to get one psql
+          # invocation. That put an Ubuntu mirror on the critical path of a job
+          # that does not otherwise need one, and azure.archive.ubuntu.com
+          # blackholes often enough to have failed this step three times in a
+          # day — apt burns the whole step budget retrying before falling back.
+          # The service container already contains psql, so run it there and
+          # depend on no mirror at all.
+          CID=$(docker ps --filter "ancestor=pgvector/pgvector:pg17" --format '{{.ID}}' | head -1)
+          if [ -z "${CID}" ]; then
+            echo "::error::pgvector service container not found; cannot enable the extension"
+            docker ps
+            exit 1
+          fi
+          docker exec "${CID}" psql -U caseops -d caseops_test             -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Pytest -m postgres
         working-directory: apps/api
@@ -387,6 +400,13 @@ jobs:
       - name: Install Playwright system dependencies
         timeout-minutes: 6
         run: |
+          # install-deps needs apt, so the mirror cannot be avoided here - but
+          # the failing one can. azure.archive.ubuntu.com intermittently
+          # blackholes; apt then spends minutes retrying before falling back to
+          # archive.ubuntu.com, which is what actually blows the step timeout.
+          # Point at the fallback up front. Best-effort: a runner image that
+          # stores sources differently is left as it was.
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g'             /etc/apt/sources.list /etc/apt/sources.list.d/*.list             /etc/apt/sources.list.d/*.sources 2>/dev/null || true
           for attempt in 1 2; do
             if npx playwright install-deps chromium; then
               exit 0

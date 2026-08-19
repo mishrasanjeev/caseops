@@ -34,6 +34,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.repo_paths import repo_root_or_none
 from caseops_api.db.models import Base, LegalHold, LegalHoldItem, LegalHoldStatus
 
 CheckStatus = Literal["ok", "findings", "unavailable"]
@@ -88,25 +89,35 @@ def _unavailable(check_id: str, summary: str, blocked_by: str) -> IntegrityCheck
     )
 
 
-GOVERNANCE_MAP_PATH = (
-    pathlib.Path(__file__).resolve().parents[5]
-    / "docs"
-    / "ip-implementation"
-    / "DATA_GOVERNANCE_MAP.yaml"
-)
+def governance_map_path() -> pathlib.Path | None:
+    """Where the committed data-governance map lives, if it is reachable.
+
+    Resolved through a marker search rather than a fixed parent count. The
+    original ``parents[5]`` worked in the checkout and raised IndexError in the
+    container, where this module has only five parents - and it raised at
+    IMPORT time, above the try/except below, so the "unavailable" answer that
+    guard exists to give could never be reached in production.
+    """
+    root = repo_root_or_none(pathlib.Path(__file__))
+    if root is None:
+        return None
+    return root / "docs" / "ip-implementation" / "DATA_GOVERNANCE_MAP.yaml"
 
 
 def _governance_map_tables() -> set[str] | None:
     """Table names registered in the committed data-governance map.
 
-    Returns ``None`` when the map is not on disk. The API image ships
+    Returns ``None`` when the map is not reachable. The API image ships
     ``apps/api`` and not ``docs/``, so this check is repo-context only - and a
     check that cannot read its source must report unavailable rather than
     conclude that every table is unregistered, which would turn a packaging
     detail into 260 spurious findings.
     """
+    path = governance_map_path()
+    if path is None:
+        return None
     try:
-        document = json.loads(GOVERNANCE_MAP_PATH.read_text(encoding="utf-8"))
+        document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return {

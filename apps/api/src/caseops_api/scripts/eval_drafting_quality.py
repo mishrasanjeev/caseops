@@ -47,6 +47,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from caseops_api.core.repo_paths import repo_root_or_none
 from caseops_api.schemas.drafting_templates import (
     DraftTemplateType,
     get_template_facts_model,
@@ -57,8 +58,11 @@ from caseops_api.services.draft_validators import run_validators
 # Constants
 # ---------------------------------------------------------------
 
-# Anchor outputs at the repo root (5 levels above this file).
-_REPO_ROOT = Path(__file__).resolve().parents[5]
+# Anchor outputs at the repository root, found by marker rather than by a
+# fixed parent count: ``parents[5]`` raises IndexError at import time in the
+# container, where this file has only five parents. Falls back to the API
+# root so importing this module can never be the thing that fails.
+_REPO_ROOT = repo_root_or_none(Path(__file__)) or Path(__file__).resolve().parents[3]
 _FIXTURE_DIR = (
     Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "drafting"
 )

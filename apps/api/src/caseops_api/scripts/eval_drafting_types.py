@@ -31,6 +31,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from caseops_api.core.repo_paths import repo_root_or_none
 from caseops_api.core.settings import get_settings
 from caseops_api.schemas.drafting_templates import (
     DraftTemplateType,
@@ -76,9 +77,11 @@ _MISC_FIXTURE = "misc_templates.json"
 # R7/R8 fixture harness uses in tests/test_drafting_goldens.py.
 _PLACEHOLDER_MATTER_ID = "11111111-1111-1111-1111-111111111111"
 
-# Anchor report + artifact outputs on the repo root (two levels
-# above ``apps/api/``) so the script works regardless of CWD.
-_REPO_ROOT = Path(__file__).resolve().parents[5]
+# Anchor outputs at the repository root, found by marker rather than by a
+# fixed parent count: ``parents[5]`` raises IndexError at import time in the
+# container, where this file has only five parents. Falls back to the API
+# root so importing this module can never be the thing that fails.
+_REPO_ROOT = repo_root_or_none(Path(__file__)) or Path(__file__).resolve().parents[3]
 _REPORT_PATH = _REPO_ROOT / "docs" / "EVAL_DRAFTING_TYPES_2026-04-21.md"
 _ARTIFACT_PATH = (
     _REPO_ROOT / "docs" / "eval_artifacts" / "drafting_types_2026_04_21.json"
