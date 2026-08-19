@@ -370,9 +370,32 @@ jobs:
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
-      - name: Install Chromium for Playwright
-        timeout-minutes: 8
-        run: npx playwright install --with-deps chromium
+      # Split deliberately. `--with-deps` does two unrelated things: fetch the
+      # browser from Playwright's CDN, and apt-get system libraries from the
+      # Ubuntu mirror. Only the second has ever hung here - three times in two
+      # days, always on azure.archive.ubuntu.com - and bundling them meant a
+      # slow package mirror blocked the browser download too.
+      - name: Install Chromium browser for Playwright
+        timeout-minutes: 5
+        run: npx playwright install chromium
+
+      # ubuntu-latest already ships most of these libraries, so this usually
+      # completes in seconds; it is the apt round-trip that stalls. One retry
+      # covers a transient mirror, and a second failure is a real failure - the
+      # step is NOT allowed to pass silently, because a missing library shows up
+      # later as an unexplained browser launch error.
+      - name: Install Playwright system dependencies
+        timeout-minutes: 6
+        run: |
+          for attempt in 1 2; do
+            if npx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt ${attempt} failed; retrying"
+            sleep 10
+          done
+          echo "::error::playwright install-deps failed twice"
+          exit 1
 
       - name: Next build (reused by `next start` in playwright webServer)
         timeout-minutes: 15
