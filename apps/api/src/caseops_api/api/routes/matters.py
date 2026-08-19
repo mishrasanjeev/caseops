@@ -21,6 +21,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -417,7 +418,15 @@ async def preview_current_company_matter_import(
     file: Annotated[UploadFile, File(...)],
 ) -> MatterImportJobResponse:
     content = await file.read(MATTER_IMPORT_MAPPING_MAX_BYTES + 1)
-    return preview_matter_import(
+    # Off the event loop. preview_matter_import parses the upload and then runs
+    # a full strict-business-rules dry run synchronously; called directly from
+    # an async handler it pins the single Uvicorn event loop for its whole
+    # duration, and every unrelated request queues behind it. That is the
+    # 2026-06-08 incident recorded in scripts/deploy-prod.sh, and it is what
+    # wedges the E2E suite: one hung preview took the API down for every test
+    # that followed, burning the 30-minute CI budget.
+    return await run_in_threadpool(
+        preview_matter_import,
         session,
         context=context,
         filename=file.filename or "matters",
@@ -470,7 +479,8 @@ async def dry_run_current_company_matter_import(
     ] = None,
 ) -> BulkMatterImportDryRunResponse:
     mapping_content = await mapping_file.read(MATTER_IMPORT_MAPPING_MAX_BYTES + 1)
-    parsed_import = parse_matter_import_mapping(
+    parsed_import = await run_in_threadpool(
+        parse_matter_import_mapping,
         filename=mapping_file.filename or "matters.csv",
         content_type=mapping_file.content_type,
         content=mapping_content,
@@ -495,7 +505,10 @@ async def dry_run_current_company_matter_import(
                 content=archive_content,
             )
         )
-    return dry_run_bulk_matter_import(
+    # Same reasoning as the preview endpoint: parsing plus per-row validation is
+    # synchronous work, and this variant also scans ZIP entry names.
+    return await run_in_threadpool(
+        dry_run_bulk_matter_import,
         session,
         context=context,
         parsed_import=parsed_import,
