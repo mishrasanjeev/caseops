@@ -28,6 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
+        timeout-minutes: 5
         uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
         with:
           version: "latest"
@@ -36,6 +37,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Sync API deps
+        timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
@@ -87,6 +89,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
+        timeout-minutes: 5
         uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
         with:
           version: "latest"
@@ -95,6 +98,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Sync API deps
+        timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
@@ -170,6 +174,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
+        timeout-minutes: 5
         uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
         with:
           version: "latest"
@@ -178,6 +183,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Sync API deps
+        timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
@@ -250,6 +256,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
+        timeout-minutes: 5
         uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
         with:
           version: "latest"
@@ -258,10 +265,12 @@ jobs:
         run: uv python install 3.13
 
       - name: Sync API deps
+        timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
       - name: Enable pgvector extension on the test DB
+        timeout-minutes: 3
         run: |
           # The pgvector image preinstalls the extension binary but each
           # database has to opt-in with CREATE EXTENSION. Idempotent.
@@ -329,6 +338,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Next build
+        timeout-minutes: 12
         run: npm run build:web
 
   e2e:
@@ -346,6 +356,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install uv
+        timeout-minutes: 5
         uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
         with:
           version: "latest"
@@ -355,13 +366,39 @@ jobs:
       - run: npm ci
 
       - name: Sync API deps
+        timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
-      - name: Install Chromium for Playwright
-        run: npx playwright install --with-deps chromium
+      # Split deliberately. `--with-deps` does two unrelated things: fetch the
+      # browser from Playwright's CDN, and apt-get system libraries from the
+      # Ubuntu mirror. Only the second has ever hung here - three times in two
+      # days, always on azure.archive.ubuntu.com - and bundling them meant a
+      # slow package mirror blocked the browser download too.
+      - name: Install Chromium browser for Playwright
+        timeout-minutes: 5
+        run: npx playwright install chromium
+
+      # ubuntu-latest already ships most of these libraries, so this usually
+      # completes in seconds; it is the apt round-trip that stalls. One retry
+      # covers a transient mirror, and a second failure is a real failure - the
+      # step is NOT allowed to pass silently, because a missing library shows up
+      # later as an unexplained browser launch error.
+      - name: Install Playwright system dependencies
+        timeout-minutes: 6
+        run: |
+          for attempt in 1 2; do
+            if npx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt ${attempt} failed; retrying"
+            sleep 10
+          done
+          echo "::error::playwright install-deps failed twice"
+          exit 1
 
       - name: Next build (reused by `next start` in playwright webServer)
+        timeout-minutes: 15
         # NEXT_PUBLIC_* are baked at build time. Playwright opens pages on
         # http://127.0.0.1:3100 and the e2e API runs on http://127.0.0.1:8000.
         # Without this env, Next defaults the client bundle to
