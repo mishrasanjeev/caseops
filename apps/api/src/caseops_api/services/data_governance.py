@@ -32,10 +32,12 @@ from caseops_api.schemas.data_governance import (
     TenantDataOperationDryRunRequest,
     TenantDataOperationExclusion,
     TenantDataOperationItemRecord,
+    TenantDataOperationOffboardingCategory,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.tenant_offboarding import build_offboarding_plan
 
 # This is only the IPLF-028A foundation inventory.  The later M2/M3 data-map
 # work must expand it to every in-scope SQL/object/index/cache/queue/log/export
@@ -590,6 +592,20 @@ def create_dry_run_manifest(
         "exclusions": (
             export_exclusions() if payload.operation_type == "tenant_export" else []
         ),
+        # Only an offboarding revokes a tenant's access surface.
+        "offboarding_plan": (
+            [
+                {
+                    "category": category.category,
+                    "disposition": category.disposition,
+                    "record_count": category.record_count,
+                    "detail": category.detail,
+                }
+                for category in build_offboarding_plan(session, company_id=context.company.id)
+            ]
+            if payload.operation_type == "tenant_offboarding"
+            else []
+        ),
         # Only a purge removes rows, so only a purge carries a deletion order.
         "dependency_plan": (
             purge_dependency_plan([item["data_class_id"] for item in item_scope])
@@ -664,6 +680,10 @@ def create_dry_run_manifest(
         request_evidence_ref=payload.request_evidence_ref,
         completed_at=now,
         as_of=as_of,
+        offboarding_plan=[
+            TenantDataOperationOffboardingCategory.model_validate(entry)
+            for entry in manifest["offboarding_plan"]
+        ],
         dependency_plan=(
             TenantDataOperationDependencyPlan.model_validate(manifest["dependency_plan"])
             if manifest["dependency_plan"] is not None
