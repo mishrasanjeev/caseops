@@ -57,6 +57,19 @@ def _membership(session: Session, company_id: str) -> str:
     return membership.id
 
 
+def _reviewed_manifest(session: Session, company_id: str) -> str:
+    """A completed dry run for an execute row to cite.
+
+    20260820_0001 requires every execute row to name the manifest it was
+    approved against, so these fixtures now build the thing that was reviewed
+    instead of an execute row that appeared from nowhere.
+    """
+    dry_run = _operation(company_id, approval_status="requested")
+    session.add(dry_run)
+    session.flush()
+    return dry_run.id
+
+
 def _operation(company_id: str, **overrides: object) -> TenantDataOperation:
     now = datetime.now(UTC)
     values: dict = {
@@ -84,7 +97,13 @@ class TestRequestStatesAreReachable:
         self, session: Session, company_id: str, status: str
     ) -> None:
         # Both of these raised ck_tenant_data_operation_dry_run_unapproved before.
-        session.add(_operation(company_id, approval_status=status))
+        session.add(
+            _operation(
+                company_id,
+                approval_status=status,
+                rejection_reason="scope too broad" if status == "rejected" else None,
+            )
+        )
         session.flush()
 
     def test_a_rejection_preserves_the_manifest(
@@ -97,6 +116,7 @@ class TestRequestStatesAreReachable:
         session.flush()
 
         operation.approval_status = "rejected"
+        operation.rejection_reason = "scope too broad"
         session.flush()
 
         assert operation.manifest_hash == "b" * 64
@@ -125,6 +145,7 @@ class TestTheSafetyPropertyStillHolds:
                 execution_mode="execute",
                 status="planned",
                 approval_status="approved",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,
                 requested_by_membership_company_id=company_id,
@@ -146,6 +167,7 @@ class TestTheSafetyPropertyStillHolds:
                 execution_mode="execute",
                 status="planned",
                 approval_status="requested",
+                approves_operation_id=_reviewed_manifest(session, company_id),
             )
         )
 
@@ -165,6 +187,7 @@ class TestTheSafetyPropertyStillHolds:
                 execution_mode="execute",
                 status="planned",
                 approval_status="approved",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,
                 requested_by_membership_company_id=company_id,
@@ -185,7 +208,13 @@ class TestEveryEnumValueIsNowReachable:
         reachable = set()
 
         for status in ("not_requested", "requested", "rejected"):
-            session.add(_operation(company_id, approval_status=status))
+            session.add(
+                _operation(
+                    company_id,
+                    approval_status=status,
+                    rejection_reason="scope too broad" if status == "rejected" else None,
+                )
+            )
             session.flush()
             reachable.add(status)
 
@@ -197,6 +226,7 @@ class TestEveryEnumValueIsNowReachable:
                 execution_mode="execute",
                 status="planned",
                 approval_status="approved",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,
                 requested_by_membership_company_id=company_id,

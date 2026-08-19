@@ -65,6 +65,9 @@ STEP_UP_PURPOSES = {
     # independently later.
     "legal_hold_change",
     "retention_policy_activation",
+    # Approving or refusing an export/purge execution. Separate from
+    # legal_hold_change so an audit trail says which control was satisfied.
+    "data_operation_execution",
     "step_up",
 }
 

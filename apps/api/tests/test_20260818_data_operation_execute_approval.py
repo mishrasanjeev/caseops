@@ -58,6 +58,19 @@ def _membership(session: Session, company_id: str) -> str:
     return membership.id
 
 
+def _reviewed_manifest(session: Session, company_id: str) -> str:
+    """A completed dry run for an execute row to cite.
+
+    20260820_0001 requires every execute row to name the manifest it was
+    approved against. Each negative case below must still fail for the reason
+    it is testing, not because it forgot to cite one.
+    """
+    dry_run = _operation(company_id)
+    session.add(dry_run)
+    session.flush()
+    return dry_run.id
+
+
 def _operation(company_id: str, **overrides: object) -> TenantDataOperation:
     now = datetime.now(UTC)
     values: dict = {
@@ -99,7 +112,14 @@ class TestExecuteRequiresASecondPerson:
     def test_execute_without_approval_is_rejected(
         self, session: Session, company_id: str
     ) -> None:
-        session.add(_operation(company_id, execution_mode="execute", status="planned"))
+        session.add(
+            _operation(
+                company_id,
+                execution_mode="execute",
+                status="planned",
+                approves_operation_id=_reviewed_manifest(session, company_id),
+            )
+        )
 
         with pytest.raises(IntegrityError):
             session.flush()
@@ -114,6 +134,7 @@ class TestExecuteRequiresASecondPerson:
                 company_id,
                 execution_mode="execute",
                 status="planned",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approval_status="approved",
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,
@@ -134,6 +155,7 @@ class TestExecuteRequiresASecondPerson:
                 company_id,
                 execution_mode="execute",
                 status="planned",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approval_status="approved",
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,
@@ -158,6 +180,7 @@ class TestExecuteRequiresASecondPerson:
                 company_id,
                 execution_mode="execute",
                 status="planned",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approval_status="approved",
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,
@@ -180,6 +203,7 @@ class TestExecuteRequiresASecondPerson:
                 company_id,
                 execution_mode="execute",
                 status="planned",
+                approves_operation_id=_reviewed_manifest(session, company_id),
                 approval_status="approved",
                 approved_at=datetime.now(UTC),
                 requested_by_membership_id=requester,

@@ -16137,7 +16137,20 @@ class TenantDataOperation(Base):
             name="fk_tenant_data_operation_policy_version_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["approves_operation_id", "company_id"],
+            ["tenant_data_operations.id", "tenant_data_operations.company_id"],
+            name="fk_tenant_data_operation_approves_operation_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "company_id", name="uq_tenant_data_operation_id_company"),
+        # NULLs do not collide, so every dry run is unaffected; two execute rows
+        # citing one manifest do collide, which is the point.
+        UniqueConstraint(
+            "approves_operation_id",
+            "company_id",
+            name="uq_tenant_data_operation_approves_operation",
+        ),
         CheckConstraint(
             "operation_type IN ('tenant_export', 'retention_purge', "
             "'tenant_offboarding', 'restore_validation')",
@@ -16174,6 +16187,18 @@ class TenantDataOperation(Base):
             "AND requested_by_membership_company_id = company_id)",
             name="ck_tenant_data_operation_execute_requires_approval",
         ),
+        # An execute row must name the dry run whose manifest was reviewed.
+        # Without this an execute row could exist with no originating manifest
+        # at all, bypassing review entirely, and no approval could be traced to
+        # what its approver actually saw.
+        CheckConstraint(
+            "execution_mode <> 'execute' OR approves_operation_id IS NOT NULL",
+            name="ck_tenant_data_operation_execute_cites_manifest",
+        ),
+        CheckConstraint(
+            "execution_mode <> 'dry_run' OR approves_operation_id IS NULL",
+            name="ck_tenant_data_operation_dry_run_approves_nothing",
+        ),
         CheckConstraint(
             "requested_by_membership_id IS NULL "
             "OR approved_by_membership_id IS NULL "
@@ -16193,6 +16218,15 @@ class TenantDataOperation(Base):
         CheckConstraint(
             "approval_status IN ('not_requested', 'requested', 'approved', 'rejected')",
             name="ck_tenant_data_operation_approval_status",
+        ),
+        # A refusal that does not say why is not evidence of anything. Tying
+        # the reason to the state in both directions also stops a stale reason
+        # from an earlier refusal riding along on a row that is no longer
+        # rejected.
+        CheckConstraint(
+            "(approval_status = 'rejected' AND rejection_reason IS NOT NULL) "
+            "OR (approval_status <> 'rejected' AND rejection_reason IS NULL)",
+            name="ck_tenant_data_operation_rejection_reason",
         ),
         CheckConstraint(
             "length(request_scope_hash) = 64",
@@ -16266,6 +16300,11 @@ class TenantDataOperation(Base):
         DateTime(timezone=True), nullable=True
     )
     blocked_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Distinct from blocked_reason: "a legal hold stopped this" and "a human
+    # refused this" are different states with different remedies, and a single
+    # column would let one overwrite the other.
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    approves_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
