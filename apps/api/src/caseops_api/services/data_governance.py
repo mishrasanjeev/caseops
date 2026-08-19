@@ -484,6 +484,12 @@ def purge_dependency_plan(data_class_ids: Sequence[str]) -> dict[str, Any]:
     ]
     unresolved_cycles = sorted(name for name in cycle_broken if name in requested)
 
+    # A requested class that is not a live table cannot be planned for, and
+    # dropping it silently is the reassuring zero this plan exists to prevent:
+    # the caller asked for it, no error was raised, and it simply is not in the
+    # deletion order. Name them instead.
+    unplanned_class_ids = sorted(name for name in requested if name not in tables)
+
     unsatisfied: list[dict[str, str]] = []
     for name in sorted(requested):
         table = tables.get(name)
@@ -507,14 +513,18 @@ def purge_dependency_plan(data_class_ids: Sequence[str]) -> dict[str, Any]:
                     unsatisfied.append(entry)
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "deletion_order": deletion_order,
         "unsatisfied_dependencies": unsatisfied,
         # Empty is the normal case. A non-empty list means the ordering above
         # could not account for every foreign key touching the requested scope,
         # so it must not be executed as though it were complete.
         "unresolved_cycles": unresolved_cycles,
-        "order_is_complete": not unresolved_cycles,
+        # Requested classes with no live table. Reported rather than dropped,
+        # because a plan that quietly covers less than it was asked to cover
+        # still says order_is_complete.
+        "unplanned_class_ids": unplanned_class_ids,
+        "order_is_complete": not unresolved_cycles and not unplanned_class_ids,
     }
 
 

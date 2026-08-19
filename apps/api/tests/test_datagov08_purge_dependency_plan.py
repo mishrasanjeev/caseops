@@ -59,10 +59,24 @@ class TestDeletionOrder:
 
         assert set(plan["deletion_order"]) == {"legal_holds", "legal_hold_items"}
 
-    def test_an_unknown_data_class_is_ignored_rather_than_invented(self) -> None:
+    def test_an_unknown_data_class_is_reported_not_silently_dropped(self) -> None:
+        # This test previously asserted the opposite - that an unknown class is
+        # "ignored rather than invented" - and so blessed the fail-open it was
+        # meant to guard. Not inventing a table is right; not MENTIONING that
+        # the request named one is how a plan covering less than it was asked
+        # to cover still reports order_is_complete.
         plan = purge_dependency_plan(["legal_holds", "not_a_real_table"])
 
         assert plan["deletion_order"] == ["legal_holds"]
+        assert plan["unplanned_class_ids"] == ["not_a_real_table"]
+        assert plan["order_is_complete"] is False
+
+    def test_a_fully_planned_scope_is_still_complete(self) -> None:
+        # The fix must not turn order_is_complete into a permanent False.
+        plan = purge_dependency_plan(["legal_holds", "legal_hold_items"])
+
+        assert plan["unplanned_class_ids"] == []
+        assert plan["order_is_complete"] is True
 
 
 class TestUnsatisfiedDependencies:

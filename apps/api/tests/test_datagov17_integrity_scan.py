@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import governance_integrity_scan
 from caseops_api.services.governance_integrity_scan import run_integrity_scan
 from tests.test_auth_company import bootstrap_company
 
@@ -152,6 +153,26 @@ class TestChecksThatDoRun:
         check = _by_id(run_integrity_scan(session))["missing_data_map"]
 
         assert check.status == "ok", f"unregistered tables: {check.findings[:5]}"
+
+    def test_an_unreachable_map_reports_unavailable_rather_than_crashing(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # This is the deployed case: the API image ships src/ and alembic/ but
+        # not docs/, so the map is genuinely absent in the container. The check
+        # was written to answer "unavailable" there, and could not: the module
+        # resolved the path with parents[5], which raises IndexError at IMPORT
+        # time in a container - above the try/except meant to catch the missing
+        # file. The guard existed and was unreachable.
+        monkeypatch.setattr(
+            governance_integrity_scan, "repo_root_or_none", lambda _start: None
+        )
+
+        assert governance_integrity_scan.governance_map_path() is None
+
+        check = _by_id(run_integrity_scan(session))["missing_data_map"]
+
+        assert check.status == "unavailable"
+        assert check.blocked_by == "map-not-packaged"
 
     def test_an_unresolvable_hold_class_is_reported(
         self, session: Session, company_id: str
