@@ -99,6 +99,17 @@ class TenantDataOperationDependencyPlan(BaseModel):
     order_is_complete: bool
 
 
+class TenantDataOperationOffboardingCategory(BaseModel):
+    """One access surface an offboarding would revoke, stop, or preserve."""
+
+    category: str
+    disposition: Literal["revoke", "stop", "preserve", "unenumerable"]
+    # None means the category has no tenant-scoped store to count, which is
+    # reported rather than shown as zero.
+    record_count: int | None
+    detail: str
+
+
 class TenantDataOperationDryRunRecord(BaseModel):
     id: str
     operation_type: DataOperationType
@@ -111,5 +122,6 @@ class TenantDataOperationDryRunRecord(BaseModel):
     completed_at: datetime
     as_of: datetime
     dependency_plan: TenantDataOperationDependencyPlan | None
+    offboarding_plan: list[TenantDataOperationOffboardingCategory]
     exclusions: list[TenantDataOperationExclusion]
     items: list[TenantDataOperationItemRecord]
