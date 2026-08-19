@@ -16153,8 +16153,15 @@ class TenantDataOperation(Base):
         # code. Execute is instead expressible only with a second person's
         # recorded approval - the same rule ck_legal_hold_activation_approval
         # already enforces for holds.
+        # A dry run may never be APPROVED - that is what stops an approved
+        # execute being relabelled a simulation while keeping its signature.
+        # It MAY be 'requested' or 'rejected': that is where an approval request
+        # lives. The first version of this predicate forbade those too, which
+        # made both states unreachable by any row and left a rejection with
+        # nowhere to go except deleting the manifest.
         CheckConstraint(
-            "execution_mode <> 'dry_run' OR approval_status = 'not_requested'",
+            "execution_mode <> 'dry_run' "
+            "OR approval_status IN ('not_requested', 'requested', 'rejected')",
             name="ck_tenant_data_operation_dry_run_unapproved",
         ),
         CheckConstraint(
