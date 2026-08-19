@@ -317,7 +317,7 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "audit-export-artifacts",
       "kind": "export_artifact",
-      "purpose": "Existing audit-export job outputs and the reserved future tenant-data export artifact class. No tenant export dry-run or execute capability is claimed.",
+      "purpose": "Existing audit-export job outputs and the reserved future tenant-data export artifact class. No tenant export dry-run or execute capability is claimed. 20260819_0001 corrected the approval state machine on tenant_data_operations: 20260818_0001 declared four approval_status values but constrained dry runs to not_requested and execute rows to approved, leaving requested and rejected unreachable by any row, so a refused approval could only be represented by deleting the manifest. A dry run may now hold requested or rejected; it still may not hold approved, and the four-eyes execute fence is unchanged. This alters which approval states are recordable and asserts no retention, disposition or execute capability.",
       "sensitivity": "confidential_or_privileged",
       "source_licence_limits": "Exports must exclude secrets, cross-tenant/global data, internal cost/profit, and non-redistributable source payloads after approved policy review.",
       "implementation_refs": [
