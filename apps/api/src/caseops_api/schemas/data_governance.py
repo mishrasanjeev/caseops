@@ -21,6 +21,7 @@ DataOperationType = Literal[
 DataOperationItemStatus = Literal["pending", "eligible", "held", "blocked"]
 DataOperationDryRunApprovalStatus = Literal["not_requested", "requested", "rejected"]
 DataGovernanceIntegrityStatus = Literal["ok", "findings", "unavailable"]
+LegalHoldSummaryStatus = Literal["draft", "active", "released", "cancelled"]
 
 
 class TenantDataOperationItemInput(BaseModel):
@@ -176,3 +177,16 @@ class TenantDataGovernanceIntegrityReport(BaseModel):
     finding_count: int
     unavailable_count: int
     is_complete: bool
+
+
+class TenantLegalHoldSummary(BaseModel):
+    """Tenant-scoped aggregate preservation state, without hold payloads."""
+
+    draft_count: int
+    active_count: int
+    released_count: int
+    cancelled_count: int
+    active_company_wide_count: int
+    active_scoped_count: int
+    active_item_count: int
+    preservation_effective: bool

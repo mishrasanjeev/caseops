@@ -16,7 +16,7 @@ from hashlib import sha256
 from typing import Any, NoReturn
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -43,6 +43,7 @@ from caseops_api.schemas.data_governance import (
     TenantDataOperationExclusion,
     TenantDataOperationItemRecord,
     TenantDataOperationOffboardingCategory,
+    TenantLegalHoldSummary,
 )
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
@@ -160,6 +161,73 @@ def _active_hold_ids(session: Session, *, company_id: str) -> list[str]:
             )
             .order_by(LegalHold.id)
         ).all()
+    )
+
+
+def get_tenant_legal_hold_summary(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> TenantLegalHoldSummary:
+    """Return aggregate hold state without exposing any hold or target payload.
+
+    This supports the review-only DATA-GOV-04 workflow. It deliberately does
+    not list hold titles, authority references, requester/approver identities,
+    item hashes, or target labels: those are preservation records rather than
+    a broadly discoverable data-operation surface.
+    """
+
+    context = _lock_dry_run_actor(session, context=context)
+    counts = dict(
+        session.execute(
+            select(LegalHold.status, func.count(LegalHold.id))
+            .where(LegalHold.company_id == context.company.id)
+            .group_by(LegalHold.status)
+        ).all()
+    )
+    active_ids = list(
+        session.scalars(
+            select(LegalHold.id)
+            .where(
+                LegalHold.company_id == context.company.id,
+                LegalHold.status == LegalHoldStatus.ACTIVE,
+            )
+            .order_by(LegalHold.id)
+        ).all()
+    )
+    active_item_hold_ids: set[str] = set()
+    active_item_count = 0
+    if active_ids:
+        active_item_hold_ids = set(
+            session.scalars(
+                select(LegalHoldItem.legal_hold_id)
+                .where(
+                    LegalHoldItem.company_id == context.company.id,
+                    LegalHoldItem.legal_hold_id.in_(active_ids),
+                )
+                .distinct()
+            ).all()
+        )
+        active_item_count = int(
+            session.scalar(
+                select(func.count(LegalHoldItem.id)).where(
+                    LegalHoldItem.company_id == context.company.id,
+                    LegalHoldItem.legal_hold_id.in_(active_ids),
+                )
+            )
+            or 0
+        )
+
+    active_count = int(counts.get(LegalHoldStatus.ACTIVE, 0))
+    return TenantLegalHoldSummary(
+        draft_count=int(counts.get(LegalHoldStatus.DRAFT, 0)),
+        active_count=active_count,
+        released_count=int(counts.get(LegalHoldStatus.RELEASED, 0)),
+        cancelled_count=int(counts.get(LegalHoldStatus.CANCELLED, 0)),
+        active_company_wide_count=active_count - len(active_item_hold_ids),
+        active_scoped_count=len(active_item_hold_ids),
+        active_item_count=active_item_count,
+        preservation_effective=active_count > 0,
     )
 
 
@@ -936,6 +1004,7 @@ def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
 
 __all__ = [
     "create_dry_run_manifest",
+    "get_tenant_legal_hold_summary",
     "get_dry_run_manifest",
     "get_tenant_integrity_report",
     "list_dry_run_manifests",

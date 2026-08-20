@@ -110,6 +110,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/data-governance/holds/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read aggregate tenant legal-hold preservation state */
+        get: operations["read_tenant_legal_hold_summary_api_admin_data_governance_holds_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/data-governance/integrity": {
         parameters: {
             query?: never;
@@ -32117,6 +32134,28 @@ export interface components {
             ai_governance: components["schemas"]["AIGovernanceReadinessResponse"];
             enterprise_identity: components["schemas"]["EnterpriseIdentityReadinessResponse"];
         };
+        /**
+         * TenantLegalHoldSummary
+         * @description Tenant-scoped aggregate preservation state, without hold payloads.
+         */
+        TenantLegalHoldSummary: {
+            /** Active Company Wide Count */
+            active_company_wide_count: number;
+            /** Active Count */
+            active_count: number;
+            /** Active Item Count */
+            active_item_count: number;
+            /** Active Scoped Count */
+            active_scoped_count: number;
+            /** Cancelled Count */
+            cancelled_count: number;
+            /** Draft Count */
+            draft_count: number;
+            /** Preservation Effective */
+            preservation_effective: boolean;
+            /** Released Count */
+            released_count: number;
+        };
         /** TenantPlaybookCompareFinding */
         TenantPlaybookCompareFinding: {
             /** Clause Type */
@@ -33034,6 +33073,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_tenant_legal_hold_summary_api_admin_data_governance_holds_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantLegalHoldSummary"];
                 };
             };
         };

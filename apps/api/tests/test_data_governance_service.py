@@ -7,7 +7,14 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import AuditEvent, Company, CompanyMembership, LegalHold, User
+from caseops_api.db.models import (
+    AuditEvent,
+    Company,
+    CompanyMembership,
+    LegalHold,
+    LegalHoldItem,
+    User,
+)
 from caseops_api.db.session import get_session_factory
 from caseops_api.governance.data_class_projection import admitted_data_class_ids
 from caseops_api.schemas.data_governance import TenantDataOperationDryRunRequest
@@ -256,3 +263,93 @@ def test_iplf_028b_integrity_route_reports_unavailable_checks_without_false_gree
     assert checks["provider_deletion_exceptions"]["status"] == "unavailable"
     assert report["is_complete"] is False
     assert report["unavailable_count"] >= 3
+
+
+def test_iplf_028b_legal_hold_summary_is_tenant_scoped_and_content_minimized(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    context = _context_for_bootstrap(bootstrap)
+    now = datetime.now(UTC)
+
+    with get_session_factory()() as session:
+        approver_user = User(
+            email="summary-approver@fixture.example",
+            full_name="Summary Approver",
+            password_hash="fixture-only",
+        )
+        session.add(approver_user)
+        session.flush()
+        approver = CompanyMembership(
+            company_id=context.company.id,
+            user_id=approver_user.id,
+            role="admin",
+        )
+        session.add(approver)
+        session.flush()
+        company_wide = LegalHold(
+            company_id=context.company.id,
+            key="summary-company-wide",
+            title="Do not disclose this title",
+            authority_reference="fixture://summary-company-wide",
+            status="active",
+            created_by_membership_id=context.membership.id,
+            created_by_membership_company_id=context.company.id,
+            creator_label_snapshot=context.user.email,
+            approved_by_membership_id=approver.id,
+            approved_by_membership_company_id=context.company.id,
+            approver_label_snapshot=approver_user.email,
+            activated_at=now,
+        )
+        scoped = LegalHold(
+            company_id=context.company.id,
+            key="summary-scoped",
+            title="Do not disclose this title either",
+            authority_reference="fixture://summary-scoped",
+            status="active",
+            created_by_membership_id=context.membership.id,
+            created_by_membership_company_id=context.company.id,
+            creator_label_snapshot=context.user.email,
+            approved_by_membership_id=approver.id,
+            approved_by_membership_company_id=context.company.id,
+            approver_label_snapshot=approver_user.email,
+            activated_at=now,
+        )
+        draft = LegalHold(
+            company_id=context.company.id,
+            key="summary-draft",
+            title="Do not disclose this draft title",
+            authority_reference="fixture://summary-draft",
+            status="draft",
+            creator_label_snapshot=context.user.email,
+        )
+        session.add_all((company_wide, scoped, draft))
+        session.flush()
+        session.add(
+            LegalHoldItem(
+                company_id=context.company.id,
+                legal_hold_id=scoped.id,
+                data_class_id="legal_holds",
+                target_type="data_class",
+                target_reference_hash="b" * 64,
+            )
+        )
+        session.commit()
+
+    response = client.get(
+        "/api/admin/data-governance/holds/summary",
+        headers=auth_headers(str(bootstrap["access_token"])),
+    )
+    assert response.status_code == 200, response.text
+    summary = response.json()
+    assert summary == {
+        "draft_count": 1,
+        "active_count": 2,
+        "released_count": 0,
+        "cancelled_count": 0,
+        "active_company_wide_count": 1,
+        "active_scoped_count": 1,
+        "active_item_count": 1,
+        "preservation_effective": True,
+    }
+    assert "Do not disclose" not in response.text
