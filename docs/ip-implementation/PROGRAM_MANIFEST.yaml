@@ -17,32 +17,78 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-20T00:00:00+05:30",
-      "base_revision": "6c071ef553d94fc9176a4ea8162b5b69b58afd57",
-      "coordination_rule": "Each lane owns only its listed files and keeps all real data operations fail-closed. Release evidence, legal-policy approval, and external providers are gates, never reasons to stop independent repository work.",
-      "codex": {
-        "slice_id": "IPLF-028B",
-        "branch": "codex/iplf028b-data-governance-workflows-20260820",
-        "scope": "Owner-gated, dry-run-only tenant data-operation create/read/review contracts and their tests; execution remains an explicit typed refusal.",
-        "owned_components": [
-          "data-governance API routes and OpenAPI contract",
-          "dry-run manifest service read/write fence",
-          "IPLF-028B API tests and generated client"
-        ],
-        "excludes": [
-          "legal-hold activation or release",
-          "export, purge, offboarding, restore, worker, provider, object-store, or scheduler execution",
-          "retention-policy legal authorization and release evidence"
+        "recorded_at": "2026-08-20T10:30:00+05:30",
+        "base_revision": "ec62ff6f18ce084beb49bd8bf97b51893fdd2288",
+        "reconciliation_note": "Reconciles two copies of this block that both stamped base_revision 6c071ef5 and disagreed. The copy in the Codex calendar worktree assigned Claude IPLF-028A and Codex IPLF-039C; the copy on main closed the Claude lane and assigned Codex IPLF-028B. Each was half right, and the disagreement had a real cost: Claude built a duplicate records-governance route surface from the stale copy and deleted it unshipped after Codex merged the same endpoints. Settled from observable state rather than from either snapshot's intent - Codex has three merged and three open IPLF-028B pull requests, so that lane is in flight, not finished; Codex also has IPLF-039C commits staged in a separate worktree; Claude has IPLF-028A code merged and its evidence in flight. Read this block from origin/main, never from a sibling worktree copy.",
+        "coordination_rule": "Each lane owns only its listed files and keeps all real data operations fail-closed. A lane may edit its own slice/evidence metadata and no other lane's. Release evidence, legal-policy approval, and external providers are gates, never reasons to stop independent repository work. Where two lanes touch one slice, the split is by FILE, not by slice id: IPLF-028B has a Codex half (routes, OpenAPI, client, UI) and a Claude half (status, test and evidence references), and neither edits the other.",
+        "claude": {
+          "slice_id": "IPLF-028A",
+          "scope": "Continue the records-governance lane: keep execution fail-closed while completing policy/hold authorization artefacts, dry-run and recovery/export evidence, and the user-workflow handoff for IPLF-028B.",
+          "state": "Code merged and deployed at 9e458efd: approval workflow (#267), fail-open fixes (#269), compiled data-class projection (#270), retention authorization lifecycle (#273). Evidence in flight (#280). Cross-cutting problem-detail type fix in flight (#279). IPLF-028A-RUNTIME-DATA-CLASS-REGISTRY closed; RES-13 owner-waived not performed; POLICY-AND-HOLD-AUTHORIZATION open on retention schedule CONTENT and the tenant-facing review contract.",
+          "owned_components": [
+            "data-class registry/projection and data-operation approval/hold/purge/offboarding services",
+            "retention policy authorization lifecycle service",
+            "records-governance migrations, tests, maps, and evidence",
+            "IPLF-028A and IPLF-028B status, test, and evidence references"
+          ],
+          "merge_constraints": [
+            "Retain ownership of 20260820_0002_invoice_number_immutable.py, the data-governance projection/map, and apps/api/tests/test_postgres_validation.py.",
+            "Do not edit the calendar snapshot/candidate model, service, API, or dedicated calendar test files reserved by Codex.",
+            "Do not edit apps/api/src/caseops_api/api/routes/data_governance.py, its schemas, or its generated client: those are the Codex half of IPLF-028B."
+          ],
+          "excludes": [
+            "IP calendar snapshot/reconciliation-candidate contract",
+            "IPLF-039C schema, API, and tests",
+            "IPLF-027B destructive approval/deletion operation",
+            "data-governance API routes, OpenAPI contract, generated client, and review UI"
+          ]
+        },
+        "codex": {
+          "slice_id": "IPLF-028B",
+          "scope": "Owner-gated, dry-run-only tenant data-operation create/read/review contracts, their tests, generated client and review UI; execution remains an explicit typed refusal.",
+          "state": "In flight. Merged: #274 workflows, #277 legal-hold summary, #275 integrity review page. Open: #276 history UI, #278 dry-run builder, #281 legal-hold UI.",
+          "owned_components": [
+            "data-governance API routes and OpenAPI contract",
+            "dry-run manifest service read/write fence",
+            "IPLF-028B API tests, generated client, and review UI"
+          ],
+          "merge_constraints": [
+            "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
+            "Do not alter data-governance policy fields, the reviewed data-class projection, or the governed-operation inventory.",
+            "Do not edit IPLF-028A or IPLF-028B status/evidence references: those are the Claude half."
+          ],
+          "excludes": [
+            "records-governance policy/hold/execute workflow",
+            "retention-policy legal authorization and release evidence",
+            "legal-hold activation or release",
+            "export, purge, offboarding, restore, worker, provider, object-store, or scheduler execution"
+          ]
+        },
+        "codex_staged_next": {
+          "slice_id": "IPLF-039C",
+          "branch": "codex/iplf-039c-calendar-reconcile-20260820",
+          "state": "Commits staged in a separate worktree, no pull request open yet; head c89bc3ed.",
+          "note": "Recorded so a reader does not mistake the calendar commits for an unassigned lane."
+        },
+        "queued_unassigned": [
+          {
+            "slice_id": "IPLF-027B",
+            "reason": "Blocked on consolidated authorized A0-retirement approval, resealed deletion packet, second drain, and scheduled full-history security evidence; no parallel destructive work is authorized."
+          },
+          {
+            "slice_id": "IPLF-039D",
+            "reason": "Keep queued until a separate owner is assigned; it must not share the calendar lane's model/migration work."
+          },
+          {
+            "slice_id": "IPLF-039F",
+            "reason": "Precondition MET on 2026-08-20: Claude's invoice-immutability PR #272 merged and deployed, so a cost/billing worktree can now be based on current main. Still unassigned - it needs an owner, not a further wait."
+          },
+          {
+            "slice_id": "IPLF-029A",
+            "reason": "Audit closure is downstream of the independently evidenced IPLF-027B, IPLF-028A, and provider gates."
+          }
         ]
       },
-      "claude": {
-        "slice_id": "IPLF-028A invoice-immutability dependency",
-        "status": "merged via PR #272 before this IPLF-028B lane began",
-        "excludes": [
-          "no active shared-file ownership or required handoff remains"
-        ]
-      }
-    },
     "checkpoint": {
       "recorded_at": "2026-08-15T13:29:12+05:30",
       "repository_revision": "5154af359b5351224c34db7468eef5704d3d0faa",
