@@ -1,19 +1,23 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   fetchTenantDataGovernanceIntegrity,
   fetchTenantDataOperationDryRun,
+  createTenantDataOperationDryRun,
   listTenantDataOperationDryRuns,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
@@ -24,7 +28,14 @@ function tone(status: "ok" | "findings" | "unavailable"): "success" | "warning" 
 
 export default function DataGovernancePage() {
   const canAudit = useCapability("audit:export");
+  const queryClient = useQueryClient();
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
+  const [operationType, setOperationType] = useState<"tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation">("tenant_export");
+  const [requestEvidenceRef, setRequestEvidenceRef] = useState("");
+  const [dataClassId, setDataClassId] = useState("");
+  const [targetType, setTargetType] = useState("tenant");
+  const [targetReferenceHash, setTargetReferenceHash] = useState("");
+  const [requestError, setRequestError] = useState<string | null>(null);
   const report = useQuery({
     queryKey: ["admin", "data-governance", "integrity"],
     queryFn: fetchTenantDataGovernanceIntegrity,
@@ -40,6 +51,29 @@ export default function DataGovernancePage() {
     queryFn: () => fetchTenantDataOperationDryRun(selectedOperationId!),
     enabled: canAudit && selectedOperationId !== null,
   });
+  const createDryRun = useMutation({
+    mutationFn: () => createTenantDataOperationDryRun({
+      operationType,
+      requestEvidenceRef: requestEvidenceRef.trim(),
+      items: [{ dataClassId: dataClassId.trim(), targetType: targetType.trim(), targetReferenceHash: targetReferenceHash.trim().toLowerCase(), candidateRecordCount: 0, estimatedBytes: 0 }],
+    }),
+    onSuccess: (operation) => {
+      setSelectedOperationId(operation.id);
+      setRequestError(null);
+      queryClient.invalidateQueries({ queryKey: ["admin", "data-governance", "dry-runs"] });
+    },
+    onError: () => setRequestError("The dry-run manifest could not be created. Verify the registered class ID and the 64-character SHA-256 target reference."),
+  });
+
+  function submitDryRun(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!requestEvidenceRef.trim() || !dataClassId.trim() || !targetType.trim() || !/^[0-9a-f]{64}$/i.test(targetReferenceHash.trim())) {
+      setRequestError("Enter an evidence reference, a registered class ID, a target type, and a 64-character SHA-256 target reference.");
+      return;
+    }
+    setRequestError(null);
+    createDryRun.mutate();
+  }
 
   if (!canAudit) {
     return <EmptyState icon={ShieldAlert} title="Workspace owner required" description="Data-governance review is limited to the workspace owner." />;
@@ -58,6 +92,19 @@ export default function DataGovernancePage() {
               {report.data.checks.map((check) => <div key={check.check_id} className="rounded-lg border border-[var(--color-line)] p-4" data-testid={`governance-check-${check.check_id}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{check.check_id}</span><Badge tone={tone(check.status)}>{check.status}</Badge></div><p className="mt-2 text-sm text-[var(--color-mute)]">{check.summary}</p>{check.blocked_by ? <p className="mt-2 text-xs text-[var(--color-mute)]">Blocked by: {check.blocked_by}</p> : null}</div>)}
             </div>
           )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle as="h2">Prepare dry-run manifest</CardTitle><CardDescription>Creates only an immutable review record. Use a registered class ID and a SHA-256 target reference; do not enter client, matter, or document identifiers.</CardDescription></CardHeader>
+        <CardContent>
+          <form className="grid gap-4" onSubmit={submitDryRun}>
+            <div className="grid gap-2"><Label htmlFor="dry-run-operation-type">Operation type</Label><select id="dry-run-operation-type" value={operationType} onChange={(event) => setOperationType(event.target.value as typeof operationType)} className="h-10 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"><option value="tenant_export">Tenant export</option><option value="retention_purge">Retention purge</option><option value="tenant_offboarding">Tenant offboarding</option><option value="restore_validation">Restore validation</option></select></div>
+            <div className="grid gap-2"><Label htmlFor="dry-run-evidence">Evidence reference</Label><Input id="dry-run-evidence" value={requestEvidenceRef} onChange={(event) => setRequestEvidenceRef(event.target.value)} placeholder="ticket://reviewed-request" /></div>
+            <div className="grid gap-2 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="dry-run-data-class">Registered data class ID</Label><Input id="dry-run-data-class" value={dataClassId} onChange={(event) => setDataClassId(event.target.value)} placeholder="tenant_data_operations" /></div><div className="grid gap-2"><Label htmlFor="dry-run-target-type">Target type</Label><Input id="dry-run-target-type" value={targetType} onChange={(event) => setTargetType(event.target.value)} placeholder="tenant" /></div></div>
+            <div className="grid gap-2"><Label htmlFor="dry-run-target-hash">SHA-256 target reference</Label><Input id="dry-run-target-hash" value={targetReferenceHash} onChange={(event) => setTargetReferenceHash(event.target.value)} placeholder="64 lowercase hexadecimal characters" spellCheck={false} /></div>
+            {requestError ? <p role="alert" className="text-sm text-[var(--color-danger-700)]">{requestError}</p> : null}
+            <div><Button type="submit" disabled={createDryRun.isPending}>{createDryRun.isPending ? "Preparing…" : "Create non-executable dry run"}</Button></div>
+          </form>
         </CardContent>
       </Card>
       <Card>
