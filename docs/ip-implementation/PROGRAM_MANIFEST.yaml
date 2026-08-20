@@ -7866,7 +7866,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md",
-        "docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md"
+        "docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md",
+        "docs/ip-implementation/evidence/m2/IPLF-028B/route-handoff-2026-08-20.md"
       ],
       "evidence_metadata": [],
       "approvals": [],
