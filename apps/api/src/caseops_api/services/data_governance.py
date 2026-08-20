@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     DataRetentionPolicyVersion,
+    DataRetentionPolicyVersionStatus,
     LegalHold,
     LegalHoldItem,
     LegalHoldStatus,
@@ -546,6 +547,23 @@ def create_dry_run_manifest(
         )
         if policy is None:
             raise HTTPException(status_code=404, detail="Retention policy version not found.")
+        # Existence was the whole check. A candidate is something one person
+        # typed and nobody approved, and citing one recorded the manifest as
+        # though a policy authorized it - a purge built from that manifest would
+        # trace its authority to a draft. Only an ACTIVE version authorizes
+        # anything; 'approved' is consent to activate, not activation.
+        if policy.status != DataRetentionPolicyVersionStatus.ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "type": "retention_policy_version_not_active",
+                    "detail": (
+                        "Only an active retention policy version authorizes a data "
+                        f"operation; this one is {policy.status}."
+                    ),
+                    "status": policy.status,
+                },
+            )
 
     # DATA-GOV-06 requires point-in-time scope. Without it two dry runs of the
     # same request are not comparable, and an operator cannot say what the
