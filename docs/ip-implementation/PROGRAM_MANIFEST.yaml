@@ -16,6 +16,68 @@
     "acceptance_status": "not_required",
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
+    "parallel_work_allocation": {
+      "recorded_at": "2026-08-20T00:00:00+05:30",
+      "base_revision": "966e0caacb54e91b2491801de6c4b7fc5cafe017",
+      "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
+      "codex": {
+        "slice_id": "IPLF-039C",
+        "branch": "codex/iplf-039c-calendar-reconcile-20260820 (stacked on Claude PR #272 until invoice migration merges)",
+        "scope": "Implement UJ-62-EXC-03: immutable external-provider snapshots plus persisted, authorized accept/reject reconciliation candidates for calendar edits and deletes; add focused API/PostgreSQL tests and bounded OAuth-sandbox verification scaffolding.",
+        "owned_components": [
+          "IP calendar drift/reconciliation service and its dedicated schema/API contract",
+          "IP calendar projection and drift tests, including UJ-62-EXC-03",
+          "IPLF-039C status, test, and evidence references"
+        ],
+        "merge_constraints": [
+          "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
+          "Use a dedicated calendar PostgreSQL test file; do not edit apps/api/tests/test_postgres_validation.py while Claude's invoice PR owns it.",
+          "Do not edit data-governance projections or maps; calendar snapshot metadata stays in its own operational-record class and documentation."
+        ],
+        "excludes": [
+          "records-governance policy/hold/execute workflow",
+          "IP incident lifecycle",
+          "IP cost/billing models and migrations",
+          "IPLF-027B irreversible A0 retirement"
+        ]
+      },
+      "claude": {
+        "slice_id": "IPLF-028A",
+        "scope": "Continue the records-governance lane: keep execution fail-closed while completing policy/hold authorization artefacts, dry-run and recovery/export evidence, and the user-workflow handoff for IPLF-028B.",
+        "owned_components": [
+          "data-class registry/projection and data-operation approval/hold/purge/offboarding services",
+          "records-governance migrations, tests, maps, and evidence",
+          "IPLF-028A and IPLF-028B status, test, and evidence references"
+        ],
+        "merge_constraints": [
+          "Retain ownership of 20260820_0002_invoice_number_immutable.py, the data-governance projection/map, and apps/api/tests/test_postgres_validation.py for the active invoice change.",
+          "Do not edit the calendar snapshot/candidate model, service, API, or dedicated calendar test files reserved by Codex."
+        ],
+        "excludes": [
+          "IP calendar snapshot/reconciliation-candidate contract",
+          "IPLF-039C schema, API, and tests",
+          "IPLF-027B destructive approval/deletion operation"
+        ]
+      },
+      "queued_unassigned": [
+        {
+          "slice_id": "IPLF-027B",
+          "reason": "Blocked on consolidated authorized A0-retirement approval, resealed deletion packet, second drain, and scheduled full-history security evidence; no parallel destructive work is authorized."
+        },
+        {
+          "slice_id": "IPLF-039D",
+          "reason": "Keep queued until a separate owner is assigned; it must not share the calendar lane's model/migration work."
+        },
+        {
+          "slice_id": "IPLF-039F",
+          "reason": "Keep queued until Claude's current invoice-immutability PR is merged and a separate cost/billing worktree can be based on current main."
+        },
+        {
+          "slice_id": "IPLF-029A",
+          "reason": "Audit closure is downstream of the independently evidenced IPLF-027B, IPLF-028A, and provider gates."
+        }
+      ]
+    },
     "checkpoint": {
       "recorded_at": "2026-08-15T13:29:12+05:30",
       "repository_revision": "5154af359b5351224c34db7468eef5704d3d0faa",

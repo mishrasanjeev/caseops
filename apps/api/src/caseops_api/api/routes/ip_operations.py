@@ -95,6 +95,9 @@ from caseops_api.schemas.ip_operations import (
     IpAssignedCoverageListResponse,
     IpCalendarDriftRecord,
     IpCalendarDriftResponse,
+    IpCalendarReconciliationCandidateListResponse,
+    IpCalendarReconciliationCandidateRecord,
+    IpCalendarReconciliationDecisionRequest,
     IpControlReviewCreateRequest,
     IpControlReviewExportRequest,
     IpControlReviewRecord,
@@ -318,6 +321,7 @@ from caseops_api.services.shared_work import (
 router = APIRouter()
 IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
+IpApprover = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
 IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
 IpRuleProposer = Annotated[
     SessionContext,
@@ -1345,6 +1349,76 @@ async def post_ip_calendar_drift_check(
         checked_at=datetime.now(UTC),
         findings=[IpCalendarDriftRecord(**vars(finding)) for finding in findings],
     )
+
+
+def _calendar_reconciliation_candidate_record(row) -> IpCalendarReconciliationCandidateRecord:
+    return IpCalendarReconciliationCandidateRecord(
+        id=row.id,
+        calendar_event_sync_id=row.calendar_event_sync_id,
+        calendar_connection_id=row.calendar_connection_id,
+        source_type=row.source_type,
+        source_id=row.source_id,
+        ip_docket_id=row.ip_docket_id,
+        drift_status=row.drift_status,
+        snapshot_schema_version=row.snapshot_schema_version,
+        expected_snapshot=dict(row.expected_snapshot_json or {}),
+        observed_snapshot=dict(row.observed_snapshot_json or {}),
+        snapshot_sha256=row.snapshot_sha256,
+        status=row.status,
+        detected_by_membership_id=row.detected_by_membership_id,
+        decided_by_membership_id=row.decided_by_membership_id,
+        decision_evidence_reference=row.decision_evidence_reference,
+        decided_at=row.decided_at,
+        created_at=row.created_at,
+    )
+
+
+@router.get(
+    "/calendar-projections/reconciliation-candidates",
+    response_model=IpCalendarReconciliationCandidateListResponse,
+)
+async def get_ip_calendar_reconciliation_candidates(
+    context: IpViewer,
+    session: DbSession,
+    include_resolved: bool = False,
+) -> IpCalendarReconciliationCandidateListResponse:
+    from caseops_api.services.calendar_sync import (
+        list_ip_calendar_projection_reconciliation_candidates,
+    )
+
+    rows = list_ip_calendar_projection_reconciliation_candidates(
+        session,
+        context=context,
+        include_resolved=include_resolved,
+    )
+    return IpCalendarReconciliationCandidateListResponse(
+        candidates=[_calendar_reconciliation_candidate_record(row) for row in rows]
+    )
+
+
+@router.post(
+    "/calendar-projections/reconciliation-candidates/{candidate_id}/decision",
+    response_model=IpCalendarReconciliationCandidateRecord,
+)
+async def post_ip_calendar_reconciliation_decision(
+    candidate_id: str,
+    payload: IpCalendarReconciliationDecisionRequest,
+    context: IpApprover,
+    session: DbSession,
+) -> IpCalendarReconciliationCandidateRecord:
+    from caseops_api.services.calendar_sync import (
+        decide_ip_calendar_projection_reconciliation_candidate,
+    )
+
+    row = decide_ip_calendar_projection_reconciliation_candidate(
+        session,
+        context=context,
+        candidate_id=candidate_id,
+        action=payload.action,
+        evidence_reference=payload.evidence_reference,
+        expected_snapshot_sha256=payload.expected_snapshot_sha256,
+    )
+    return _calendar_reconciliation_candidate_record(row)
 
 
 @router.get(

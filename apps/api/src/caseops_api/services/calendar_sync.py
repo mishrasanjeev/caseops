@@ -21,6 +21,7 @@ from caseops_api.db.models import (
     CalendarConnectionStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    CalendarProjectionReconciliationCandidate,
     CalendarProvider,
     CalendarSyncSourceType,
     Company,
@@ -7375,6 +7376,7 @@ class CalendarDriftFinding:
     ip_docket_id: str | None
     drift_status: str
     detail: str
+    reconciliation_candidate_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -7535,6 +7537,90 @@ def _calendar_drift_connection_snapshot(
         _aware(connection.updated_at).isoformat(),
         hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
     )
+
+
+def _calendar_drift_candidate_fingerprint(
+    *,
+    claim: _CalendarDriftClaim,
+    drift_status: str,
+    observed_snapshot: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object], str]:
+    """Return the content-minimised, immutable evidence for one drift read."""
+
+    expected_snapshot: dict[str, object] = {
+        "schema_version": 1,
+        "provider_event_id": claim.provider_event_id,
+        "source_type": claim.source_type,
+        "source_id": claim.source_id,
+        "occurs_on": claim.generation.occurs_on.isoformat(),
+    }
+    observed = {"schema_version": 1, **observed_snapshot}
+    fingerprint_payload = {
+        "drift_status": drift_status,
+        "expected": expected_snapshot,
+        "observed": observed,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return expected_snapshot, observed, fingerprint
+
+
+def _record_calendar_drift_candidate(
+    session: Session,
+    *,
+    actor: CompanyMembership,
+    sync: CalendarEventSync,
+    claim: _CalendarDriftClaim,
+    drift_status: str,
+    observed_snapshot: dict[str, object],
+) -> CalendarProjectionReconciliationCandidate:
+    """Persist one reviewable snapshot without ever copying provider content."""
+
+    expected_snapshot, observed, fingerprint = _calendar_drift_candidate_fingerprint(
+        claim=claim,
+        drift_status=drift_status,
+        observed_snapshot=observed_snapshot,
+    )
+    existing = session.scalar(
+        select(CalendarProjectionReconciliationCandidate).where(
+            CalendarProjectionReconciliationCandidate.calendar_event_sync_id == sync.id,
+            CalendarProjectionReconciliationCandidate.snapshot_sha256 == fingerprint,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    # A later observation replaces the actionable candidate, but never alters
+    # the original evidence.  A closed candidate stays part of the audit trail.
+    pending_rows = list(
+        session.scalars(
+            select(CalendarProjectionReconciliationCandidate).where(
+                CalendarProjectionReconciliationCandidate.calendar_event_sync_id == sync.id,
+                CalendarProjectionReconciliationCandidate.status == "pending",
+            )
+        ).all()
+    )
+    for pending in pending_rows:
+        pending.status = "superseded"
+        session.add(pending)
+
+    candidate = CalendarProjectionReconciliationCandidate(
+        company_id=sync.company_id,
+        calendar_event_sync_id=sync.id,
+        calendar_connection_id=sync.calendar_connection_id,
+        source_type=claim.source_type,
+        source_id=claim.source_id,
+        ip_docket_id=claim.generation.ip_authority.docket_id,
+        drift_status=drift_status,
+        expected_snapshot_json=expected_snapshot,
+        observed_snapshot_json=observed,
+        snapshot_sha256=fingerprint,
+        detected_by_membership_id=actor.id,
+    )
+    session.add(candidate)
+    session.flush()
+    return candidate
 
 
 def _lock_calendar_drift_graph(
@@ -7810,6 +7896,7 @@ def _finalize_calendar_drift_read(
     claim: _CalendarDriftClaim,
     drift_status: str,
     detail: str,
+    observed_snapshot: dict[str, object],
 ) -> CalendarDriftFinding | None:
     """Publish a provider read only if the exact claimed authority survives."""
 
@@ -7911,6 +7998,14 @@ def _finalize_calendar_drift_read(
     session.add(sync)
     finding = None
     if drift_status in {"moved", "missing", "unknown"}:
+        candidate = _record_calendar_drift_candidate(
+            session,
+            actor=actor_context.membership,
+            sync=sync,
+            claim=claim,
+            drift_status=drift_status,
+            observed_snapshot=observed_snapshot,
+        )
         finding = CalendarDriftFinding(
             sync_id=sync.id,
             connection_id=claim.connection_id,
@@ -7920,6 +8015,7 @@ def _finalize_calendar_drift_read(
             ip_docket_id=claim.generation.ip_authority.docket_id,
             drift_status=drift_status,
             detail=detail,
+            reconciliation_candidate_id=candidate.id,
         )
         record_from_context(
             session,
@@ -7931,6 +8027,7 @@ def _finalize_calendar_drift_read(
             metadata={
                 "drift_status": drift_status,
                 "source_type": claim.source_type,
+                "reconciliation_candidate_id": candidate.id,
             },
         )
     session.commit()
@@ -8152,31 +8249,57 @@ def check_ip_calendar_projection_drift(
         if claim.reader is None:
             status_value = "unknown"
             detail = "The calendar connection could not be read."
+            observed_snapshot: dict[str, object] = {"readable": False}
         else:
             try:
                 event = claim.reader(claim.provider_event_id)
             except CalendarProviderError as exc:
                 status_value = "unknown"
                 detail = _safe_error(exc)
+                observed_snapshot = {"readable": False}
             except Exception:  # pragma: no cover - provider adapters are varied
                 status_value = "unknown"
                 detail = "The calendar provider could not be read."
+                observed_snapshot = {"readable": False}
             else:
                 if event is None or event.get("cancelled"):
                     status_value = "missing"
                     detail = "The event is no longer on the calendar."
+                    observed_snapshot = {
+                        "readable": True,
+                        "event_present": event is not None,
+                        "cancelled": bool(event and event.get("cancelled")),
+                    }
                 else:
                     expected = claim.generation.occurs_on.isoformat()
                     actual = str(event.get("start_date") or "")
                     if actual and actual != expected:
                         status_value = "moved"
                         detail = "The event was moved away from the CaseOps date."
+                        observed_snapshot = {
+                            "readable": True,
+                            "event_present": True,
+                            "cancelled": False,
+                            "start_date": actual,
+                        }
                     elif not actual:
                         status_value = "unknown"
                         detail = "The event carries no readable date."
+                        observed_snapshot = {
+                            "readable": True,
+                            "event_present": True,
+                            "cancelled": False,
+                            "start_date": None,
+                        }
                     else:
                         status_value = "matches"
                         detail = "The event matches the CaseOps date."
+                        observed_snapshot = {
+                            "readable": True,
+                            "event_present": True,
+                            "cancelled": False,
+                            "start_date": actual,
+                        }
 
         finding = _finalize_calendar_drift_read(
             session,
@@ -8184,7 +8307,229 @@ def check_ip_calendar_projection_drift(
             claim=claim,
             drift_status=status_value,
             detail=detail,
+            observed_snapshot=observed_snapshot,
         )
         if finding is not None:
             findings.append(finding)
     return findings
+
+
+def list_ip_calendar_projection_reconciliation_candidates(
+    session: Session,
+    *,
+    context: SessionContext,
+    include_resolved: bool = False,
+) -> list[CalendarProjectionReconciliationCandidate]:
+    """List only candidate evidence the caller may open through its docket."""
+
+    statement = (
+        select(CalendarProjectionReconciliationCandidate)
+        .where(CalendarProjectionReconciliationCandidate.company_id == context.company.id)
+        .order_by(
+            CalendarProjectionReconciliationCandidate.created_at.desc(),
+            CalendarProjectionReconciliationCandidate.id.desc(),
+        )
+    )
+    if not include_resolved:
+        statement = statement.where(
+            CalendarProjectionReconciliationCandidate.status == "pending"
+        )
+    rows = list(session.scalars(statement).all())
+    docket_ids = sorted({row.ip_docket_id for row in rows if row.ip_docket_id})
+    dockets = {
+        row.id: row
+        for row in session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id.in_(docket_ids),
+            )
+        ).all()
+    }
+    return [
+        row
+        for row in rows
+        if row.ip_docket_id
+        and (docket := dockets.get(row.ip_docket_id)) is not None
+        and can_access_ip_docket(session, context=context, docket=docket)
+    ]
+
+
+def decide_ip_calendar_projection_reconciliation_candidate(
+    session: Session,
+    *,
+    context: SessionContext,
+    candidate_id: str,
+    action: Literal["accept", "reject"],
+    evidence_reference: str,
+    expected_snapshot_sha256: str,
+) -> CalendarProjectionReconciliationCandidate:
+    """Close an immutable drift candidate under the exact current authority.
+
+    ``accept`` preserves the CaseOps obligation and records the observed
+    external state as reviewed.  ``reject`` likewise preserves CaseOps as the
+    source of truth, then queues the known provider event for a guarded PATCH
+    that restores the projection.  Neither action ever imports a date from the
+    external provider into the legal deadline.
+    """
+
+    evidence = evidence_reference.strip()
+    if len(evidence) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A reconciliation evidence reference is required.",
+        )
+    advisory = session.scalar(
+        select(CalendarProjectionReconciliationCandidate).where(
+            CalendarProjectionReconciliationCandidate.id == candidate_id,
+            CalendarProjectionReconciliationCandidate.company_id == context.company.id,
+        )
+    )
+    if advisory is None or advisory.ip_docket_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found.")
+    advisory_sync = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.id == advisory.calendar_event_sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+    )
+    if advisory_sync is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Candidate is stale.")
+    advisory_docket = session.scalar(
+        select(IpDocketRecord).where(
+            IpDocketRecord.id == advisory.ip_docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+    )
+    advisory_matter_id = advisory_docket.matter_id if advisory_docket is not None else None
+    source_model = _calendar_source_model(str(advisory_sync.source_type))
+    source_id = advisory_sync.source_id
+    connection_id = advisory_sync.calendar_connection_id
+    session.rollback()
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor = memberships.get(context.membership.id)
+    if actor is None:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="IP approval is required.",
+        )
+    require_locked_membership_capability(session, actor, "ip:approve")
+    context = SessionContext(company=context.company, membership=actor, user=actor.user)
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="calendar_projection_reconciliation",
+    )
+    if advisory_matter_id:
+        session.scalar(
+            select(Matter)
+            .where(Matter.id == advisory_matter_id, Matter.company_id == context.company.id)
+            .with_for_update(of=Matter)
+            .execution_options(populate_existing=True)
+        )
+    docket = session.scalar(
+        select(IpDocketRecord)
+        .where(
+            IpDocketRecord.id == advisory.ip_docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+        .with_for_update(of=IpDocketRecord)
+        .execution_options(populate_existing=True)
+    )
+    locked_source = session.scalar(
+        select(source_model)
+        .where(source_model.id == source_id, source_model.company_id == context.company.id)
+        .with_for_update(of=source_model)
+        .execution_options(populate_existing=True)
+    )
+    sync = session.scalar(
+        select(CalendarEventSync)
+        .where(
+            CalendarEventSync.id == advisory.calendar_event_sync_id,
+            CalendarEventSync.company_id == context.company.id,
+        )
+        .with_for_update(of=CalendarEventSync)
+        .execution_options(populate_existing=True)
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(
+            UserCalendarConnection.id == connection_id,
+            UserCalendarConnection.company_id == context.company.id,
+        )
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    candidate = session.scalar(
+        select(CalendarProjectionReconciliationCandidate)
+        .where(
+            CalendarProjectionReconciliationCandidate.id == candidate_id,
+            CalendarProjectionReconciliationCandidate.company_id == context.company.id,
+        )
+        .with_for_update(of=CalendarProjectionReconciliationCandidate)
+        .execution_options(populate_existing=True)
+    )
+    if (
+        docket is None
+        or locked_source is None
+        or sync is None
+        or connection is None
+        or candidate is None
+        or candidate.status != "pending"
+        or candidate.snapshot_sha256 != expected_snapshot_sha256
+        or candidate.calendar_event_sync_id != sync.id
+        or candidate.calendar_connection_id != connection.id
+        or candidate.source_type != str(sync.source_type)
+        or candidate.source_id != sync.source_id
+        or candidate.ip_docket_id != docket.id
+        or sync.sync_status != CalendarEventSyncStatus.SYNCED
+        or not sync.provider_event_id
+        or not can_access_ip_docket(session, context=context, docket=docket)
+    ):
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "calendar_projection_reconciliation_stale",
+                "message": (
+                    "The calendar reconciliation candidate changed or is no longer accessible."
+                ),
+            },
+        )
+    now = _current_time()
+    candidate.status = "accepted" if action == "accept" else "rejected"
+    candidate.decided_by_membership_id = context.membership.id
+    candidate.decision_evidence_reference = evidence
+    candidate.decided_at = now
+    session.add(candidate)
+    if action == "reject":
+        # A known ID means the regular projection worker issues an idempotent
+        # provider PATCH, never a second CREATE.
+        sync.sync_status = CalendarEventSyncStatus.PENDING
+        sync.next_attempt_at = now
+        sync.last_error = None
+        sync.dead_letter_reason = None
+        sync.updated_at = now
+        session.add(sync)
+    record_from_context(
+        session,
+        context,
+        action="calendar_event_sync.drift_reconciliation_decided",
+        target_type="calendar_projection_reconciliation_candidate",
+        target_id=candidate.id,
+        ip_docket_id=docket.id,
+        metadata={
+            "decision": action,
+            "drift_status": candidate.drift_status,
+            "calendar_event_sync_id": sync.id,
+            "evidence_reference": evidence,
+            "reprojection_queued": action == "reject",
+        },
+    )
+    session.commit()
+    return candidate

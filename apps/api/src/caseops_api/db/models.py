@@ -2995,6 +2995,89 @@ class CalendarEventSync(Base):
     connection: Mapped[UserCalendarConnection] = relationship(back_populates="event_syncs")
 
 
+class CalendarProjectionReconciliationCandidate(Base):
+    """Immutable, content-minimised evidence for one external calendar drift.
+
+    CaseOps remains authoritative for the underlying deadline/hearing/task.
+    This row records only the projected event identity, its expected date and
+    the provider's observable state; it never stores the provider event title,
+    body, attendees or location.  A later human decision is therefore tied to
+    exactly what the checker observed, rather than a mutable sync-row detail.
+    """
+
+    __tablename__ = "calendar_projection_reconciliation_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "calendar_event_sync_id",
+            "snapshot_sha256",
+            name="uq_calendar_projection_reconciliation_snapshot",
+        ),
+        CheckConstraint(
+            "drift_status IN ('moved', 'missing', 'unknown')",
+            name="ck_calendar_projection_reconciliation_drift_status",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'superseded')",
+            name="ck_calendar_projection_reconciliation_status",
+        ),
+        CheckConstraint(
+            "(status IN ('pending', 'superseded') AND decided_at IS NULL "
+            "AND decided_by_membership_id IS NULL AND decision_evidence_reference IS NULL) OR "
+            "(status IN ('accepted', 'rejected') AND decided_at IS NOT NULL "
+            "AND decided_by_membership_id IS NOT NULL AND decision_evidence_reference IS NOT NULL)",
+            name="ck_calendar_projection_reconciliation_decision_evidence",
+        ),
+        Index(
+            "ix_calendar_projection_reconciliation_company_status",
+            "company_id",
+            "status",
+        ),
+        Index(
+            "ix_calendar_projection_reconciliation_sync",
+            "calendar_event_sync_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    calendar_event_sync_id: Mapped[str] = mapped_column(
+        ForeignKey("calendar_event_syncs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    calendar_connection_id: Mapped[str] = mapped_column(
+        ForeignKey("user_calendar_connections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    drift_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    expected_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    observed_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    detected_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    decided_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    decision_evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    calendar_event_sync: Mapped[CalendarEventSync] = relationship()
+
+
 class UserMailboxConnection(Base):
     __tablename__ = "user_mailbox_connections"
     __table_args__ = (

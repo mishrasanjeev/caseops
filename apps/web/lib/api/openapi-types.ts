@@ -3862,6 +3862,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/calendar-projections/reconciliation-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Calendar Reconciliation Candidates */
+        get: operations["get_ip_calendar_reconciliation_candidates_api_ip_calendar_projections_reconciliation_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/calendar-projections/reconciliation-candidates/{candidate_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Calendar Reconciliation Decision */
+        post: operations["post_ip_calendar_reconciliation_decision_api_ip_calendar_projections_reconciliation_candidates__candidate_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/control-reviews": {
         parameters: {
             query?: never;
@@ -18330,6 +18364,8 @@ export interface components {
             ip_docket_id?: string | null;
             /** Membership Id */
             membership_id?: string | null;
+            /** Reconciliation Candidate Id */
+            reconciliation_candidate_id?: string | null;
             /** Source Id */
             source_id: string;
             /** Source Type */
@@ -18346,6 +18382,73 @@ export interface components {
             checked_at: string;
             /** Findings */
             findings?: components["schemas"]["IpCalendarDriftRecord"][];
+        };
+        /** IpCalendarReconciliationCandidateListResponse */
+        IpCalendarReconciliationCandidateListResponse: {
+            /** Candidates */
+            candidates?: components["schemas"]["IpCalendarReconciliationCandidateRecord"][];
+        };
+        /** IpCalendarReconciliationCandidateRecord */
+        IpCalendarReconciliationCandidateRecord: {
+            /** Calendar Connection Id */
+            calendar_connection_id: string;
+            /** Calendar Event Sync Id */
+            calendar_event_sync_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By Membership Id */
+            decided_by_membership_id: string | null;
+            /** Decision Evidence Reference */
+            decision_evidence_reference: string | null;
+            /** Detected By Membership Id */
+            detected_by_membership_id: string | null;
+            /**
+             * Drift Status
+             * @enum {string}
+             */
+            drift_status: "moved" | "missing" | "unknown";
+            /** Expected Snapshot */
+            expected_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string | null;
+            /** Observed Snapshot */
+            observed_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Snapshot Schema Version */
+            snapshot_schema_version: number;
+            /** Snapshot Sha256 */
+            snapshot_sha256: string;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected" | "superseded";
+        };
+        /** IpCalendarReconciliationDecisionRequest */
+        IpCalendarReconciliationDecisionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "accept" | "reject";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Snapshot Sha256 */
+            expected_snapshot_sha256: string;
         };
         /** IpChecklistItem */
         IpChecklistItem: {
@@ -40135,6 +40238,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpCalendarDriftResponse"];
+                };
+            };
+        };
+    };
+    get_ip_calendar_reconciliation_candidates_api_ip_calendar_projections_reconciliation_candidates_get: {
+        parameters: {
+            query?: {
+                include_resolved?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCalendarReconciliationCandidateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_calendar_reconciliation_decision_api_ip_calendar_projections_reconciliation_candidates__candidate_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCalendarReconciliationDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCalendarReconciliationCandidateRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

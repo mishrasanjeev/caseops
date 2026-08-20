@@ -643,6 +643,7 @@ class IpCalendarDriftRecord(BaseModel):
     source_type: str
     source_id: str
     ip_docket_id: str | None = None
+    reconciliation_candidate_id: str | None = None
     # `unknown` is a real outcome: the provider could not be read, so the
     # projection is unverified rather than confirmed correct.
     drift_status: Literal["moved", "missing", "unknown"]
@@ -652,6 +653,36 @@ class IpCalendarDriftRecord(BaseModel):
 class IpCalendarDriftResponse(BaseModel):
     checked_at: datetime
     findings: list[IpCalendarDriftRecord] = Field(default_factory=list)
+
+
+class IpCalendarReconciliationCandidateRecord(BaseModel):
+    id: str
+    calendar_event_sync_id: str
+    calendar_connection_id: str
+    source_type: str
+    source_id: str
+    ip_docket_id: str | None
+    drift_status: Literal["moved", "missing", "unknown"]
+    snapshot_schema_version: int
+    expected_snapshot: dict
+    observed_snapshot: dict
+    snapshot_sha256: str
+    status: Literal["pending", "accepted", "rejected", "superseded"]
+    detected_by_membership_id: str | None
+    decided_by_membership_id: str | None
+    decision_evidence_reference: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class IpCalendarReconciliationCandidateListResponse(BaseModel):
+    candidates: list[IpCalendarReconciliationCandidateRecord] = Field(default_factory=list)
+
+
+class IpCalendarReconciliationDecisionRequest(BaseModel):
+    action: Literal["accept", "reject"]
+    evidence_reference: str = Field(min_length=8, max_length=500)
+    expected_snapshot_sha256: str = Field(min_length=64, max_length=64)
 
 
 class IpAssignedCoverageRecord(BaseModel):

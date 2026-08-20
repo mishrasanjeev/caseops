@@ -33,6 +33,7 @@ from caseops_api.db.models import (
     CalendarConnectionStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    CalendarProjectionReconciliationCandidate,
     CalendarProvider,
     UserCalendarConnection,
 )
@@ -185,6 +186,18 @@ def _drift_status(sync_id: str) -> tuple[str, str | None]:
         row = session.get(CalendarEventSync, sync_id)
         assert row is not None
         return row.drift_status, row.drift_detail
+
+
+def _candidates(sync_id: str) -> list[CalendarProjectionReconciliationCandidate]:
+    factory = get_session_factory()
+    with factory() as session:
+        return list(
+            session.scalars(
+                select(CalendarProjectionReconciliationCandidate)
+                .where(CalendarProjectionReconciliationCandidate.calendar_event_sync_id == sync_id)
+                .order_by(CalendarProjectionReconciliationCandidate.created_at)
+            ).all()
+        )
 
 
 def _manual_docketing_reason(context_ids: tuple[str, str]) -> str:
@@ -637,6 +650,140 @@ def test_uj62_exc03b_reprojecting_clears_a_finding(client: TestClient) -> None:
     )
     assert _run(seeded["context_ids"]) == []
     assert _drift_status(seeded["sync_id"])[0] == "matches"
+
+
+def test_uj62_exc03_persists_an_immutable_content_minimised_candidate(
+    client: TestClient,
+) -> None:
+    """A provider-side move is reviewable without copying provider content.
+
+    The same observed state must deduplicate to its original evidence record;
+    a later observation produces a new candidate and supersedes, rather than
+    edits, the earlier snapshot.
+    """
+
+    seeded = _seed(client)
+    first_observed_date = (DUE + timedelta(days=1)).isoformat()
+    calendar_sync.set_google_calendar_provider_for_tests(
+        _Reader({"id": "provider-event-1", "start_date": first_observed_date, "cancelled": False})
+    )
+
+    first_findings = _run(seeded["context_ids"])
+    assert len(first_findings) == 1
+    first_id = first_findings[0].reconciliation_candidate_id
+    assert first_id
+    first = _candidates(seeded["sync_id"])
+    assert len(first) == 1
+    assert first[0].id == first_id
+    assert first[0].status == "pending"
+    assert first[0].drift_status == "moved"
+    assert first[0].expected_snapshot_json == {
+        "schema_version": 1,
+        "provider_event_id": "provider-event-1",
+        "source_type": "matter_deadline",
+        "source_id": seeded["deadline_id"],
+        "occurs_on": DUE.isoformat(),
+    }
+    assert first[0].observed_snapshot_json == {
+        "schema_version": 1,
+        "readable": True,
+        "event_present": True,
+        "cancelled": False,
+        "start_date": first_observed_date,
+    }
+    assert len(first[0].snapshot_sha256) == 64
+    assert "title" not in first[0].observed_snapshot_json
+    assert "body" not in first[0].observed_snapshot_json
+    assert "attendees" not in first[0].observed_snapshot_json
+
+    same_findings = _run(seeded["context_ids"])
+    assert [item.reconciliation_candidate_id for item in same_findings] == [first_id]
+    assert len(_candidates(seeded["sync_id"])) == 1
+
+    second_observed_date = (DUE + timedelta(days=2)).isoformat()
+    calendar_sync.set_google_calendar_provider_for_tests(
+        _Reader({"id": "provider-event-1", "start_date": second_observed_date, "cancelled": False})
+    )
+    second_findings = _run(seeded["context_ids"])
+    assert len(second_findings) == 1
+    assert second_findings[0].reconciliation_candidate_id != first_id
+    candidates = _candidates(seeded["sync_id"])
+    assert [row.status for row in candidates] == ["superseded", "pending"]
+    assert candidates[0].observed_snapshot_json["start_date"] == first_observed_date
+    assert candidates[1].observed_snapshot_json["start_date"] == second_observed_date
+
+
+def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provider_date(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept preserves CaseOps; reject queues an exact known-ID reprojection."""
+
+    seeded = _seed(client)
+    moved_date = (DUE + timedelta(days=1)).isoformat()
+    calendar_sync.set_google_calendar_provider_for_tests(
+        _Reader({"id": "provider-event-1", "start_date": moved_date, "cancelled": False})
+    )
+    first = _run(seeded["context_ids"])[0]
+    assert first.reconciliation_candidate_id
+
+    listed = client.get(
+        "/api/ip/calendar-projections/reconciliation-candidates",
+        headers=seeded["headers"],
+    )
+    assert listed.status_code == 200, listed.text
+    body = listed.json()["candidates"]
+    assert [row["id"] for row in body] == [first.reconciliation_candidate_id]
+    assert body[0]["observed_snapshot"]["start_date"] == moved_date
+
+    purposes: list[str] = []
+
+    def allow_step_up(*_args, **kwargs) -> None:
+        purposes.append(str(kwargs["purpose"]))
+
+    monkeypatch.setattr(calendar_sync, "require_recent_step_up", allow_step_up)
+    accepted = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{first.reconciliation_candidate_id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "accept",
+            "evidence_reference": "matter-note:calendar-drift-reviewed",
+            "expected_snapshot_sha256": body[0]["snapshot_sha256"],
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "accepted"
+    assert purposes == ["calendar_projection_reconciliation"]
+    factory = get_session_factory()
+    with factory() as session:
+        sync = session.get(CalendarEventSync, seeded["sync_id"])
+        assert sync is not None
+        assert sync.sync_status == CalendarEventSyncStatus.SYNCED
+
+    changed_date = (DUE + timedelta(days=2)).isoformat()
+    calendar_sync.set_google_calendar_provider_for_tests(
+        _Reader({"id": "provider-event-1", "start_date": changed_date, "cancelled": False})
+    )
+    second = _run(seeded["context_ids"])[0]
+    assert second.reconciliation_candidate_id
+    pending = _candidates(seeded["sync_id"])[-1]
+    rejected = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{second.reconciliation_candidate_id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "reject",
+            "evidence_reference": "matter-note:restore-authoritative-projection",
+            "expected_snapshot_sha256": pending.snapshot_sha256,
+        },
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+    with factory() as session:
+        sync = session.get(CalendarEventSync, seeded["sync_id"])
+        assert sync is not None
+        assert sync.sync_status == CalendarEventSyncStatus.PENDING
+        assert sync.provider_event_id == "provider-event-1"
+        assert sync.source_id == seeded["deadline_id"]
 
 
 def test_uj62_exc03b_a_successful_resync_resets_drift_in_the_source() -> None:
