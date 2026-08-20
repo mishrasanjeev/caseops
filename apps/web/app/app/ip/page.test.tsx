@@ -550,6 +550,77 @@ describe("IpDocketPage", () => {
     expect(within(documentWorkspace).getByLabelText(/New version for ACME_Trademark/i)).toBeVisible();
   });
 
+  // IPLF-039F / UJ-52-EXC-01, EXC-04, EXC-05. The cost card used to replace its
+  // whole form with "Cost items require a linked Matter" whenever the record had
+  // no billing owner, so the surface that is supposed to preserve an already-paid
+  // official fee offered no way to record one. It must now offer the nonbillable
+  // capture, and it must not render a withheld rate as an amount.
+  it("offers nonbillable capture on a record with no Matter and withholds confidential rates", async () => {
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [{
+        id: "ip-1", company_id: "company-1", matter_id: null, record_type: "trademark",
+        title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: false,
+        is_active: true, lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null,
+        lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
+        lifecycle_evidence_ref: null, successor_docket_id: null,
+        current_version: 1, created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
+        current_particulars: { form_key: "TM-A", form_version: "2026.1", readiness_status: "ready", classes_json: [{ class_number: 9, specification: "Software" }] },
+        notice_links: [], deadline_incidents: [], title_interests: [], related_right_obligations: [],
+        evidence_candidates: [], deadline_coverages: [],
+        cost_items: [
+          {
+            id: "cost-1", matter_id: null, category: "official_fee",
+            description: "Official filing fee paid before a billing Matter existed.",
+            amount_minor: 900000, currency: "INR", billable: false, cost_nature: "actual",
+            rate_confidential: false, amount_withheld: false,
+            fx_rate: null, fx_rate_source: null, fx_converted_at: null,
+            base_amount_minor: null, base_currency: null,
+            evidence_reference: "receipt:registry-fee-unbilled-2026",
+            billing_link_type: null, billing_link_id: null,
+            reconciliation_status: "nonbillable" as const,
+            canonical_amount_minor: null, reconciliation_difference_minor: null, reconciled_at: null,
+          },
+          {
+            id: "cost-2", matter_id: null, category: "associate_fee",
+            description: "Negotiated associate rate.",
+            amount_minor: null, currency: "USD", billable: false, cost_nature: "estimate",
+            rate_confidential: true, amount_withheld: true,
+            fx_rate: null, fx_rate_source: null, fx_converted_at: null,
+            base_amount_minor: null, base_currency: null,
+            evidence_reference: "attachment:confidential-fee-agreement-2026",
+            billing_link_type: null, billing_link_id: null,
+            reconciliation_status: "estimate" as const,
+            canonical_amount_minor: null, reconciliation_difference_minor: null, reconciled_at: null,
+          },
+        ],
+      }],
+      count: 1,
+    });
+    fetchIpDocumentsMock.mockResolvedValue({ items: [], total: 0 });
+
+    render(withClient(<IpDocketPage />));
+
+    // The capture the old surface refused is now the offered action.
+    expect(
+      await screen.findByRole("button", { name: "Add nonbillable cost evidence" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/captured as\s+nonbillable evidence/i),
+    ).toBeVisible();
+
+    // A withheld rate reads as withheld. Rendering 0.00 would be undetectable.
+    expect(
+      screen.getByText(/Amount withheld — requires fee-management access/),
+    ).toBeVisible();
+    expect(screen.queryByText("USD 0.00")).toBeNull();
+
+    // Status and nature are words, not colour alone.
+    expect(screen.getByText(/Estimate — not an expense/)).toBeVisible();
+    expect(screen.getByText(/Nonbillable/)).toBeVisible();
+    // The non-confidential cost on the same record is unaffected.
+    expect(screen.getByText("INR 9000.00")).toBeVisible();
+  });
+
   it("surfaces deadline exceptions and keeps every confirmation control visible on mobile", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
     fetchIpDocketsMock.mockResolvedValue({

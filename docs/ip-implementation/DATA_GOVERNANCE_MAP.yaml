@@ -9107,6 +9107,21 @@
           "sql_type": "BIGINT",
           "nullable": false
         },
+        "base_amount_minor": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "BIGINT",
+          "nullable": true
+        },
+        "base_currency": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "VARCHAR(3)",
+          "nullable": true
+        },
+        "billable": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
         "billing_link_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(64)",
@@ -9130,6 +9145,11 @@
         "company_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "cost_nature": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "VARCHAR(16)",
           "nullable": false
         },
         "created_at": {
@@ -9162,6 +9182,21 @@
           "sql_type": "VARCHAR(500)",
           "nullable": false
         },
+        "fx_converted_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "fx_rate": {
+          "category_id": "domain_attribute",
+          "sql_type": "NUMERIC(20, 10)",
+          "nullable": true
+        },
+        "fx_rate_source": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
@@ -9170,6 +9205,11 @@
         "matter_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "rate_confidential": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
           "nullable": false
         },
         "reconciled_at": {
@@ -15947,7 +15987,7 @@
     {
       "id": "matter_invoices",
       "table_name": "matter_invoices",
-      "purpose": "Repository SQL persistence class `matter_invoices`; its exact column inventory is intentionally versioned below. EH-SGR-04 (2026-08-20): `invoice_number` is immutable at the database. Migration 20260820_0002 adds a BEFORE UPDATE trigger (`matter_invoices_invoice_number_immutable`, PostgreSQL) that rejects any change to the column, and a non-blank CHECK (`ck_matter_invoice_number_not_blank`) on every dialect. Under Indian GST a tax invoice number is fixed at issue and corrections are made by credit or debit note, so a retention or correction procedure for this table must not assume the number can be rewritten in place.",
+      "purpose": "Repository SQL persistence class `matter_invoices`; its exact column inventory is intentionally versioned below.",
       "policy_profile_id": "billing_provider_evidence",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -22830,7 +22870,7 @@
       }
     }
   ],
-  "schema_fingerprint": "73af85a148238d22833532433707a7fa2782c70d30a56a5e4fa46a1e39ac8f95",
+  "schema_fingerprint": "9f727452163522920abe8bb04910212c5c522eac62963dbcd3b5d849d618b6e4",
   "index_inventory": {
     "orm_index_count": 1147,
     "orm_index_fingerprint": "a83ceeade72cbac48d88c832aa3d55e25fecdbb7f2515560e8ecfb49afea5435",

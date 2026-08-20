@@ -8054,14 +8054,33 @@ export type IpDocket = {
   related_right_obligations: IpRelatedRightObligation[];
   cost_items: Array<{
     id: string;
+    matter_id: string | null;
     category: string;
     description: string;
-    amount_minor: number;
+    /** The amount as originally incurred. `null` when the rate is confidential
+     * and the signed-in member does not hold `ip:fees_manage` — read
+     * `amount_withheld` to tell that apart from an absent cost. */
+    amount_minor: number | null;
     currency: string;
+    billable: boolean;
+    cost_nature: "actual" | "estimate";
+    rate_confidential: boolean;
+    amount_withheld: boolean;
+    fx_rate: string | null;
+    fx_rate_source: string | null;
+    fx_converted_at: string | null;
+    base_amount_minor: number | null;
+    base_currency: string | null;
     evidence_reference: string;
     billing_link_type: "invoice" | "invoice_line_item" | "time_entry" | null;
     billing_link_id: string | null;
-    reconciliation_status: "matched" | "mismatch" | "missing" | "unlinked";
+    reconciliation_status:
+      | "matched"
+      | "mismatch"
+      | "missing"
+      | "unlinked"
+      | "estimate"
+      | "nonbillable";
     canonical_amount_minor: number | null;
     reconciliation_difference_minor: number | null;
     reconciled_at: string | null;
@@ -8304,12 +8323,24 @@ export type IpCostReconciliationReport = {
     canonical_amount_minor: number | null;
     difference_minor: number | null;
     currency: string;
-    status: "matched" | "mismatch" | "missing" | "unlinked";
+    /** What was actually compared against the ledger: the converted amount
+     * when the cost preserves a conversion, otherwise the original. */
+    comparison_amount_minor: number;
+    comparison_currency: string;
+    status:
+      | "matched"
+      | "mismatch"
+      | "missing"
+      | "unlinked"
+      | "estimate"
+      | "nonbillable";
   }>;
   matched_count: number;
   mismatch_count: number;
   missing_count: number;
   unlinked_count: number;
+  estimate_count: number;
+  nonbillable_count: number;
   checksum_sha256: string;
 };
 
@@ -9571,9 +9602,21 @@ export async function addIpCostItem(
     category: "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other";
     description: string;
     amountMinor: number;
+    /** The currency the cost was incurred in. Keep it the original — a
+     * conversion is recorded through the `fx*`/`base*` fields, never by
+     * overwriting this. */
+    currency?: string;
     evidenceReference: string;
     billingLinkType?: "invoice" | "invoice_line_item" | "time_entry" | null;
     billingLinkId?: string | null;
+    billable?: boolean;
+    costNature?: "actual" | "estimate";
+    rateConfidential?: boolean;
+    fxRate?: string | null;
+    fxRateSource?: string | null;
+    fxConvertedAt?: string | null;
+    baseAmountMinor?: number | null;
+    baseCurrency?: string | null;
   },
 ): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/cost-items`, {
@@ -9582,10 +9625,18 @@ export async function addIpCostItem(
       category: input.category,
       description: input.description,
       amount_minor: input.amountMinor,
-      currency: "INR",
+      currency: input.currency ?? "INR",
       evidence_reference: input.evidenceReference,
       billing_link_type: input.billingLinkType ?? null,
       billing_link_id: input.billingLinkId ?? null,
+      billable: input.billable ?? true,
+      cost_nature: input.costNature ?? "actual",
+      rate_confidential: input.rateConfidential ?? false,
+      fx_rate: input.fxRate ?? null,
+      fx_rate_source: input.fxRateSource ?? null,
+      fx_converted_at: input.fxConvertedAt ?? null,
+      base_amount_minor: input.baseAmountMinor ?? null,
+      base_currency: input.baseCurrency ?? null,
     },
   });
 }

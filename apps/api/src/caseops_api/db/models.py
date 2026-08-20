@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from enum import StrEnum
 from uuid import uuid4
 
@@ -15368,17 +15369,80 @@ class IpCostItem(Base):
         ),
         CheckConstraint("amount_minor >= 0", name="ck_ip_cost_item_amount_nonnegative"),
         CheckConstraint("length(currency) = 3", name="ck_ip_cost_item_currency"),
+        CheckConstraint(
+            "cost_nature IN ('actual', 'estimate')",
+            name="ck_ip_cost_item_cost_nature",
+        ),
+        CheckConstraint(
+            "(billing_link_type IS NULL) = (billing_link_id IS NULL)",
+            name="ck_ip_cost_item_billing_link_pair",
+        ),
+        # UJ-52-EXC-01: a docket with no billing Matter may still record the
+        # cost, but only as nonbillable evidence with nothing to link to.
+        CheckConstraint(
+            "matter_id IS NOT NULL OR (billable = false AND billing_link_type IS NULL)",
+            name="ck_ip_cost_item_matterless_is_nonbillable",
+        ),
+        CheckConstraint(
+            "billable = true OR billing_link_type IS NULL",
+            name="ck_ip_cost_item_nonbillable_has_no_billing_link",
+        ),
+        # UJ-52-EXC-04: an estimate is not an expense and cannot reconcile.
+        CheckConstraint(
+            "cost_nature = 'actual' OR billing_link_type IS NULL",
+            name="ck_ip_cost_item_estimate_has_no_billing_link",
+        ),
+        # UJ-52-EXC-02: preserve original amount/rate/source/time, or none.
+        CheckConstraint(
+            "(fx_rate IS NULL AND fx_rate_source IS NULL AND fx_converted_at IS NULL"
+            " AND base_amount_minor IS NULL AND base_currency IS NULL)"
+            " OR (fx_rate IS NOT NULL AND fx_rate_source IS NOT NULL"
+            " AND fx_converted_at IS NOT NULL AND base_amount_minor IS NOT NULL"
+            " AND base_currency IS NOT NULL)",
+            name="ck_ip_cost_item_fx_complete",
+        ),
+        CheckConstraint(
+            "fx_rate IS NULL OR fx_rate > 0",
+            name="ck_ip_cost_item_fx_rate_positive",
+        ),
+        CheckConstraint(
+            "base_amount_minor IS NULL OR base_amount_minor >= 0",
+            name="ck_ip_cost_item_base_amount_nonnegative",
+        ),
+        CheckConstraint(
+            "base_currency IS NULL OR length(base_currency) = 3",
+            name="ck_ip_cost_item_base_currency",
+        ),
+        CheckConstraint(
+            "base_currency IS NULL OR base_currency <> currency",
+            name="ck_ip_cost_item_fx_distinct_currency",
+        ),
         Index("ix_ip_cost_items_company_docket", "company_id", "docket_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    matter_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    # Nullable since IPLF-039F: UJ-52-EXC-01 requires nonbillable legal-cost
+    # capture to survive the absence of a billing Matter.
+    matter_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     category: Mapped[str] = mapped_column(String(40), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
+    # The amount exactly as incurred. When the FX columns below are set this
+    # stays the ORIGINAL amount and currency; the conversion is recorded
+    # beside it rather than replacing it.
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    billable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    cost_nature: Mapped[str] = mapped_column(String(16), nullable=False, default="actual")
+    rate_confidential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
+    fx_rate_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    fx_converted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    base_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    base_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
     billing_link_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     billing_link_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

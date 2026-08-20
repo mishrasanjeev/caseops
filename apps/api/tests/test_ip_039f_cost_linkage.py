@@ -1,33 +1,52 @@
 """IPLF-039F per-path evidence: IP cost and billing linkage (UJ-52).
 
-Writing these tests established that **three of the seven UJ-52 paths are
-implemented**, one is contradicted by the implementation, and three describe
-concepts that do not exist in the codebase.
+All seven UJ-52 paths are covered here. Three were already implemented when
+this file was first written; the remaining four were added by IPLF-039F, and
+one of those four had to *undo* an implementation that contradicted its path.
 
 Stable manifest test IDs proven here:
 
 * ``IPLF-UJ-52-NORMAL``   record a legal cost and reconcile it against billing
+* ``IPLF-UJ-52-EXC-01``   nonbillable capture survives the absence of a Matter
+* ``IPLF-UJ-52-EXC-02``   a conversion preserves original amount/rate/source/time
 * ``IPLF-UJ-52-EXC-03``   a filing payment is not a client payment
+* ``IPLF-UJ-52-EXC-04``   a provider estimate is not an actual expense
+* ``IPLF-UJ-52-EXC-05``   confidential rates are permissioned
 * ``IPLF-UJ-52-EXC-06``   a broken invoice link surfaces instead of matching
 
-Not claimed (see the slice blockers and evidence document):
+The four IPLF-039F paths, and what each one is really guarding:
 
-* ``UJ-52-EXC-01`` — the implementation **contradicts** the requirement.
-  ``add_ip_cost_item`` refuses every cost when the docket has no Matter, but
-  the path requires nonbillable legal-cost capture to remain possible.
-* ``UJ-52-EXC-02`` — no exchange rate, FX source or conversion timestamp field
-  exists, so an original amount/rate/source/time cannot be preserved.
-* ``UJ-52-EXC-04`` — the category enum has no estimate concept, so a
-  provider-estimated cost cannot be distinguished from an actual expense.
-* ``UJ-52-EXC-05`` — no rate-confidentiality or permissioning concept exists.
+* ``UJ-52-EXC-01`` — ``add_ip_cost_item`` used to refuse *every* cost when the
+  docket had no Matter, so an official fee already paid to the registry was
+  lost rather than deferred. The absence of a billing Matter must block the
+  billable decision, never the capture.
+* ``UJ-52-EXC-02`` — the converted figure is what the ledger was billed in, so
+  it is what reconciliation must compare; the original amount and currency
+  must nevertheless survive unchanged beside it.
+* ``UJ-52-EXC-04`` — a provider's quote has no counterpart in the ledger and
+  must never be reported as reconciled against one.
+* ``UJ-52-EXC-05`` — a rate marked confidential is withheld from a reader
+  without ``ip:fees_manage``, and withheld visibly rather than as a zero.
 """
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
-from caseops_api.db.models import MatterInvoice
+from caseops_api.db.models import (
+    AuditEvent,
+    CompanyMembership,
+    IpCostItem,
+    MatterInvoice,
+    MembershipRole,
+)
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
@@ -71,6 +90,419 @@ def _reconcile(client, headers, docket_id):
     return client.post(
         f"/api/ip/dockets/{docket_id}/cost-items/reconcile", headers=headers, json={}
     )
+
+
+def _setup_without_matter(client: TestClient):
+    """A docket that has no billing Matter at all — the UJ-52-EXC-01 subject."""
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    created = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": "Unbilled Clearance Mark",
+            "restricted": False,
+            "particulars": _particulars("UNBILLED CLEARANCE MARK"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket = created.json()
+    assert docket["matter_id"] is None, "this path needs a docket with no billing owner"
+    return headers, docket
+
+
+def _invite_partner(client: TestClient, owner_headers: dict[str, str]) -> dict[str, str]:
+    """A partner holds ``ip:fees_view`` but not ``ip:fees_manage``.
+
+    That is precisely the reader UJ-52-EXC-05 is about: authorized to open the
+    docket and see that costs exist, not authorized to see a confidential rate.
+    """
+
+    created = client.post(
+        "/api/companies/current/users",
+        headers=owner_headers,
+        json={
+            "full_name": "Cost Reading Partner",
+            "email": "cost-partner@asterlegal.in",
+            "role": "member",
+            "password": "PartnerPass123!",
+        },
+    )
+    assert created.status_code == 200, created.text
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, str(created.json()["membership_id"]))
+        assert membership is not None
+        membership.role = MembershipRole.PARTNER
+        session.commit()
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "company_slug": "aster-legal",
+            "email": "cost-partner@asterlegal.in",
+            "password": "PartnerPass123!",
+        },
+    )
+    assert login.status_code == 200, login.text
+    return auth_headers(str(login.json()["access_token"]))
+
+
+def _issue_invoice(matter_id: str, *, total_minor: int, currency: str = "INR") -> str:
+    with get_session_factory()() as session:
+        from caseops_api.db.models import Matter
+
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        invoice = MatterInvoice(
+            id=str(uuid.uuid4()),
+            company_id=matter.company_id,
+            matter_id=matter_id,
+            invoice_number=f"INV-{uuid.uuid4().hex[:6].upper()}",
+            client_name="Cost Linkage Client",
+            status="issued",
+            currency=currency,
+            subtotal_amount_minor=total_minor,
+            tax_amount_minor=0,
+            total_amount_minor=total_minor,
+            balance_due_minor=total_minor,
+            issued_on=date.today() - timedelta(days=1),
+            due_on=date.today() + timedelta(days=29),
+        )
+        session.add(invoice)
+        session.commit()
+        return invoice.id
+
+
+def _docket(client, headers, docket_id):
+    response = client.get(f"/api/ip/dockets/{docket_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-52-EXC-01 — no billing Matter defers the billing decision, not the fee.
+
+    The previous implementation raised 409 for every cost on a matterless
+    docket. An official fee paid to the registry has already left the firm's
+    account by then, so refusing it does not prevent a cost — it only destroys
+    the evidence that one was incurred.
+    """
+
+    headers, docket = _setup_without_matter(client)
+
+    # A *billable* cost is still refused, and the refusal says what to do
+    # instead rather than simply closing the door.
+    billable = _cost(client, headers, docket["id"], billable=True)
+    assert billable.status_code == 409, billable.text
+    assert "nonbillable" in billable.json()["detail"]
+
+    # The nonbillable capture the path requires now succeeds.
+    captured = _cost(
+        client,
+        headers,
+        docket["id"],
+        billable=False,
+        description="Official filing fee paid before a billing Matter existed.",
+        evidence_reference="receipt:registry-fee-unbilled-2026",
+    )
+    assert captured.status_code == 200, captured.text
+    cost = captured.json()["cost_items"][0]
+    assert cost["matter_id"] is None
+    assert cost["billable"] is False
+    assert cost["amount_minor"] == 900000, "the incurred amount is preserved in full"
+    assert cost["evidence_reference"] == "receipt:registry-fee-unbilled-2026"
+
+    # "nonbillable" is a terminal answer, distinct from "unlinked", which still
+    # expects a billing link to arrive.
+    assert cost["reconciliation_status"] == "nonbillable"
+    assert cost["billing_link_type"] is None
+
+    # It cannot be smuggled into client billing by supplying a link.
+    linked = _cost(
+        client,
+        headers,
+        docket["id"],
+        billable=False,
+        billing_link_type="invoice",
+        billing_link_id="00000000-0000-0000-0000-000000000000",
+    )
+    assert linked.status_code == 422, linked.text
+
+    report = _reconcile(client, headers, docket["id"]).json()
+    assert report["nonbillable_count"] == 1
+    assert report["matched_count"] == 0
+    assert report["unlinked_count"] == 0
+    # Matter billing is still the only accounting owner; this created no second
+    # ledger for unbilled costs to live in.
+    assert report["accounting_owner"] == "matter_billing"
+
+
+def test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-52-EXC-02 — the converted figure reconciles; the original survives."""
+
+    headers, docket, matter = _setup(client)
+
+    converted_at = datetime(2026, 8, 19, 9, 30, tzinfo=UTC)
+    # USD 1,200.00 incurred, billed to the client as INR 105,660.00.
+    invoice_id = _issue_invoice(matter["id"], total_minor=10566000)
+
+    recorded = _cost(
+        client,
+        headers,
+        docket["id"],
+        category="associate_fee",
+        description="US associate fee invoiced in USD and billed on in INR.",
+        amount_minor=120000,
+        currency="USD",
+        evidence_reference="attachment:us-associate-invoice-2026",
+        billing_link_type="invoice",
+        billing_link_id=invoice_id,
+        fx_rate="88.05",
+        fx_rate_source="RBI reference rate 2026-08-19",
+        fx_converted_at=converted_at.isoformat(),
+        base_amount_minor=10566000,
+        base_currency="INR",
+    )
+    assert recorded.status_code == 200, recorded.text
+    cost = recorded.json()["cost_items"][0]
+
+    # The original is untouched: this is the fact the firm must be able to
+    # produce years later, not the figure that happened to be billed.
+    assert cost["amount_minor"] == 120000
+    assert cost["currency"] == "USD"
+    # ...alongside the complete conversion record.
+    assert cost["base_amount_minor"] == 10566000
+    assert cost["base_currency"] == "INR"
+    assert float(cost["fx_rate"]) == 88.05
+    assert cost["fx_rate_source"] == "RBI reference rate 2026-08-19"
+    assert datetime.fromisoformat(cost["fx_converted_at"]) == converted_at
+
+    # The INR invoice matches, even though it equals none of the USD figures.
+    assert cost["reconciliation_status"] == "matched"
+
+    report = _reconcile(client, headers, docket["id"]).json()
+    row = report["rows"][0]
+    assert row["status"] == "matched"
+    assert row["evidence_amount_minor"] == 120000, "the original is still reported"
+    assert row["comparison_amount_minor"] == 10566000, "the converted figure is compared"
+    assert row["comparison_currency"] == "INR"
+    assert row["canonical_amount_minor"] == 10566000
+    assert row["difference_minor"] == 0, (
+        "the gap must be measured against the converted amount; against the "
+        "original it would report a 10,446,000-minor discrepancy that does not exist"
+    )
+    assert report["matched_count"] == 1
+    assert report["mismatch_count"] == 0
+
+
+def test_uj52_exc02_a_partial_or_null_conversion_is_refused(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-52-EXC-02 — a rate with no source preserves nothing."""
+
+    headers, docket, _matter = _setup(client)
+
+    partial = _cost(client, headers, docket["id"], currency="USD", fx_rate="88.05")
+    assert partial.status_code == 422, partial.text
+    assert "fx_converted_at" in partial.text and "base_amount_minor" in partial.text
+
+    # Converting INR into INR is not a conversion and must not be recorded as one.
+    same_currency = _cost(
+        client,
+        headers,
+        docket["id"],
+        currency="INR",
+        fx_rate="1.0",
+        fx_rate_source="Self",
+        fx_converted_at=datetime(2026, 8, 19, tzinfo=UTC).isoformat(),
+        base_amount_minor=900000,
+        base_currency="INR",
+    )
+    assert same_currency.status_code == 422, same_currency.text
+
+    negative_rate = _cost(
+        client,
+        headers,
+        docket["id"],
+        currency="USD",
+        fx_rate="-1",
+        fx_rate_source="Nowhere",
+        fx_converted_at=datetime(2026, 8, 19, tzinfo=UTC).isoformat(),
+        base_amount_minor=900000,
+        base_currency="INR",
+    )
+    assert negative_rate.status_code == 422, negative_rate.text
+
+
+def test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense(
+    client: TestClient,
+) -> None:
+    """IPLF-UJ-52-EXC-04 — a quote is captured, and never reconciled as spend."""
+
+    headers, docket, matter = _setup(client)
+
+    estimated = _cost(
+        client,
+        headers,
+        docket["id"],
+        category="associate_fee",
+        description="Associate quote for the opposition response.",
+        amount_minor=250000,
+        cost_nature="estimate",
+        evidence_reference="attachment:associate-quote-2026",
+    )
+    assert estimated.status_code == 200, estimated.text
+    estimate = estimated.json()["cost_items"][0]
+    assert estimate["cost_nature"] == "estimate"
+    assert estimate["amount_minor"] == 250000, "the quoted figure is still recorded"
+    # It has no counterpart in the ledger, so it gets its own terminal answer.
+    assert estimate["reconciliation_status"] == "estimate"
+
+    # An estimate that equals an issued invoice exactly still does not match it.
+    invoice_id = _issue_invoice(matter["id"], total_minor=250000)
+    linked_estimate = _cost(
+        client,
+        headers,
+        docket["id"],
+        amount_minor=250000,
+        cost_nature="estimate",
+        billing_link_type="invoice",
+        billing_link_id=invoice_id,
+    )
+    assert linked_estimate.status_code == 422, linked_estimate.text
+    assert "estimate" in linked_estimate.text
+
+    # The same amount as an actual expense reconciles normally, which is what
+    # makes the distinction meaningful rather than cosmetic.
+    actual = _cost(
+        client,
+        headers,
+        docket["id"],
+        description="Associate fee actually invoiced for the opposition response.",
+        amount_minor=250000,
+        cost_nature="actual",
+        billing_link_type="invoice",
+        billing_link_id=invoice_id,
+        evidence_reference="attachment:associate-invoice-2026",
+    )
+    assert actual.status_code == 200, actual.text
+
+    report = _reconcile(client, headers, docket["id"]).json()
+    assert report["estimate_count"] == 1
+    assert report["matched_count"] == 1
+    statuses = sorted(row["status"] for row in report["rows"])
+    assert statuses == ["estimate", "matched"]
+
+
+def test_uj52_exc05_confidential_rates_are_permissioned(client: TestClient) -> None:
+    """IPLF-UJ-52-EXC-05 — a confidential rate is withheld, visibly, not zeroed."""
+
+    headers, docket, _matter = _setup(client)
+    partner_headers = _invite_partner(client, headers)
+
+    confidential = _cost(
+        client,
+        headers,
+        docket["id"],
+        category="associate_fee",
+        description="Negotiated associate rate under a confidential fee arrangement.",
+        amount_minor=475000,
+        currency="USD",
+        rate_confidential=True,
+        fx_rate="88.05",
+        fx_rate_source="RBI reference rate 2026-08-19",
+        fx_converted_at=datetime(2026, 8, 19, 9, 30, tzinfo=UTC).isoformat(),
+        base_amount_minor=41823750,
+        base_currency="INR",
+        evidence_reference="attachment:confidential-fee-agreement-2026",
+    )
+    assert confidential.status_code == 200, confidential.text
+
+    ordinary = _cost(
+        client,
+        headers,
+        docket["id"],
+        description="Ordinary official fee, not confidential.",
+        amount_minor=900000,
+        evidence_reference="receipt:registry-fee-2026",
+    )
+    assert ordinary.status_code == 200, ordinary.text
+
+    # The owner holds ip:fees_manage and sees everything.
+    owner_rows = {
+        row["description"]: row
+        for row in _docket(client, headers, docket["id"])["cost_items"]
+    }
+    owner_confidential = owner_rows[
+        "Negotiated associate rate under a confidential fee arrangement."
+    ]
+    assert owner_confidential["amount_minor"] == 475000
+    assert owner_confidential["base_amount_minor"] == 41823750
+    assert float(owner_confidential["fx_rate"]) == 88.05
+    assert owner_confidential["amount_withheld"] is False
+
+    # The partner holds ip:fees_view but not ip:fees_manage.
+    partner_rows = {
+        row["description"]: row
+        for row in _docket(client, partner_headers, docket["id"])["cost_items"]
+    }
+    withheld = partner_rows["Negotiated associate rate under a confidential fee arrangement."]
+    assert withheld["rate_confidential"] is True
+    assert withheld["amount_withheld"] is True, (
+        "the reader must be able to tell the amount was withheld; a silent None "
+        "reads as a cost of nothing"
+    )
+    assert withheld["amount_minor"] is None
+    assert withheld["fx_rate"] is None
+    assert withheld["base_amount_minor"] is None
+    assert withheld["canonical_amount_minor"] is None
+    assert withheld["reconciliation_difference_minor"] is None
+    # The existence of the cost, and what it was for, are not the secret.
+    assert withheld["category"] == "associate_fee"
+    assert withheld["evidence_reference"] == "attachment:confidential-fee-agreement-2026"
+
+    # Non-confidential costs on the same docket are unaffected.
+    visible = partner_rows["Ordinary official fee, not confidential."]
+    assert visible["amount_minor"] == 900000
+    assert visible["amount_withheld"] is False
+
+
+def test_uj52_exc05_a_confidential_amount_does_not_leak_through_the_audit_trail(
+    client: TestClient,
+) -> None:
+    """The amount withheld from the read path must not be recoverable elsewhere."""
+
+    headers, docket, _matter = _setup(client)
+    created = _cost(
+        client,
+        headers,
+        docket["id"],
+        amount_minor=475000,
+        rate_confidential=True,
+        description="Confidential negotiated rate.",
+    )
+    assert created.status_code == 200, created.text
+
+    with get_session_factory()() as session:
+        cost = session.scalar(select(IpCostItem).where(IpCostItem.docket_id == docket["id"]))
+        assert cost is not None
+        assert cost.rate_confidential is True
+        entry = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.target_type == "ip_cost_item",
+                AuditEvent.target_id == cost.id,
+            )
+        )
+        assert entry is not None, "creating a cost must still be audited"
+        serialized = str(entry.metadata_json)
+        assert "475000" not in serialized, (
+            "the audit records that a confidential cost was created, never its amount"
+        )
+        assert "rate_confidential" in serialized
 
 
 def test_uj52_normal_record_legal_cost_and_reconcile_against_billing(
@@ -189,6 +621,112 @@ def test_uj52_exc06_a_broken_billing_link_surfaces_instead_of_matching(
     second = _reconcile(client, headers, docket["id"]).json()
     assert second["missing_count"] == 1
     assert second["checksum_sha256"] == report["checksum_sha256"]
+
+
+def test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model(
+    client: TestClient,
+) -> None:
+    """The four IPLF-039F rules are database constraints, not just validation.
+
+    Every rule above is enforced twice on purpose. The Pydantic model gives the
+    caller an actionable 422; the CHECK constraints proven here are what a
+    future route, a bulk import, a backfill script, or a psql session must also
+    pass. A rule that lives only in one request schema is a rule the next
+    writer will not inherit.
+    """
+
+    headers, docket, matter = _setup(client)
+    company_id = docket["company_id"]
+
+    def _insert(**overrides: object) -> None:
+        row: dict[str, object] = {
+            "id": str(uuid.uuid4()),
+            "company_id": company_id,
+            "docket_id": docket["id"],
+            "matter_id": matter["id"],
+            "category": "official_fee",
+            "description": "Direct write bypassing the request model.",
+            "amount_minor": 900000,
+            "currency": "INR",
+            "evidence_reference": "receipt:direct-write",
+        }
+        row.update(overrides)
+        with get_session_factory()() as session:
+            session.add(IpCostItem(**row))  # type: ignore[arg-type]
+            session.commit()
+
+    # The control: the same insert without a violation must succeed, so a
+    # failure below is the constraint firing and not a broken fixture.
+    _insert()
+
+    violations: list[tuple[str, dict[str, object]]] = [
+        (
+            "a matterless cost cannot be billable",
+            {"matter_id": None, "billable": True},
+        ),
+        (
+            "a matterless cost cannot carry a billing link",
+            {
+                "matter_id": None,
+                "billable": False,
+                "billing_link_type": "invoice",
+                "billing_link_id": str(uuid.uuid4()),
+            },
+        ),
+        (
+            "a nonbillable cost cannot carry a billing link",
+            {
+                "billable": False,
+                "billing_link_type": "invoice",
+                "billing_link_id": str(uuid.uuid4()),
+            },
+        ),
+        (
+            "an estimate cannot carry a billing link",
+            {
+                "cost_nature": "estimate",
+                "billing_link_type": "invoice",
+                "billing_link_id": str(uuid.uuid4()),
+            },
+        ),
+        ("cost_nature is a closed set", {"cost_nature": "probably"}),
+        (
+            "a conversion cannot be partial",
+            {"currency": "USD", "fx_rate": Decimal("88.05")},
+        ),
+        (
+            "a conversion cannot target its own currency",
+            {
+                "fx_rate": Decimal("1"),
+                "fx_rate_source": "Self",
+                "fx_converted_at": datetime(2026, 8, 19, tzinfo=UTC),
+                "base_amount_minor": 900000,
+                "base_currency": "INR",
+            },
+        ),
+        (
+            "a conversion rate cannot be zero or negative",
+            {
+                "currency": "USD",
+                "fx_rate": Decimal("0"),
+                "fx_rate_source": "Nowhere",
+                "fx_converted_at": datetime(2026, 8, 19, tzinfo=UTC),
+                "base_amount_minor": 900000,
+                "base_currency": "INR",
+            },
+        ),
+        (
+            "a billing link must be a complete pair",
+            {"billing_link_id": str(uuid.uuid4())},
+        ),
+    ]
+
+    for reason, overrides in violations:
+        try:
+            _insert(**overrides)
+        except IntegrityError:
+            continue
+        pytest.fail(f"the database accepted a row that violates: {reason}")
 
 
 def test_uj52_costs_are_tenant_isolated(client: TestClient) -> None:

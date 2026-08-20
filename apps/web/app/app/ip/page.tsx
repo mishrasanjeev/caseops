@@ -2262,24 +2262,91 @@ function ObligationCard({ docket, enabled, onChanged }: { docket: IpDocket; enab
   );
 }
 
+const COST_STATUS_LABEL: Record<string, string> = {
+  matched: "Matched to billing",
+  mismatch: "Differs from billing",
+  missing: "Billing record not found",
+  unlinked: "Awaiting a billing link",
+  estimate: "Estimate — not an expense",
+  nonbillable: "Nonbillable",
+};
+
+function CostAmount({ row }: { row: IpDocket["cost_items"][number] }) {
+  // A withheld rate must read as withheld. Rendering 0.00 would be a lie the
+  // reader has no way to detect.
+  if (row.amount_withheld) {
+    return (
+      <span className="text-[var(--color-mute)]">
+        Amount withheld — requires fee-management access
+      </span>
+    );
+  }
+  const original = `${row.currency} ${((row.amount_minor ?? 0) / 100).toFixed(2)}`;
+  if (row.base_amount_minor === null || row.base_currency === null) {
+    return <span className="tabular-nums">{original}</span>;
+  }
+  return (
+    <span className="tabular-nums">
+      {original}
+      <span className="text-[var(--color-mute)]">
+        {" "}
+        → {row.base_currency} {(row.base_amount_minor / 100).toFixed(2)}
+        {row.fx_rate ? ` at ${row.fx_rate}` : null}
+        {row.fx_rate_source ? ` (${row.fx_rate_source})` : null}
+      </span>
+    </span>
+  );
+}
+
 function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [evidence, setEvidence] = useState("");
   const [billingLinkType, setBillingLinkType] = useState<"" | "invoice" | "invoice_line_item" | "time_entry">("");
   const [billingLinkId, setBillingLinkId] = useState("");
+  const [costNature, setCostNature] = useState<"actual" | "estimate">("actual");
+  const [rateConfidential, setRateConfidential] = useState(false);
+  const [converted, setConverted] = useState(false);
+  const [currency, setCurrency] = useState("INR");
+  const [fxRate, setFxRate] = useState("");
+  const [fxRateSource, setFxRateSource] = useState("");
+  const [fxConvertedAt, setFxConvertedAt] = useState("");
+  const [baseAmount, setBaseAmount] = useState("");
+  const [baseCurrency, setBaseCurrency] = useState("INR");
+
+  // UJ-52-EXC-01: with no billing Matter the cost is still recorded, but only
+  // as nonbillable evidence. The billing decision is deferred, not the fee.
+  const hasBillingOwner = Boolean(docket.matter_id);
+  // An estimate and a nonbillable cost have nothing in the ledger to point at.
+  const canLinkBilling = hasBillingOwner && costNature === "actual";
+
+  const resetForm = () => {
+    setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
+    setFxRate(""); setFxRateSource(""); setFxConvertedAt(""); setBaseAmount("");
+    setConverted(false); setCurrency("INR"); setRateConfidential(false);
+  };
+
   const mutation = useMutation({
     mutationFn: () => addIpCostItem(docket.id, {
       category: "official_fee",
       description,
       amountMinor: Math.round(Number(amount) * 100),
+      currency,
       evidenceReference: evidence,
-      billingLinkType: billingLinkType || null,
-      billingLinkId: billingLinkId || null,
+      billingLinkType: canLinkBilling ? billingLinkType || null : null,
+      billingLinkId: canLinkBilling ? billingLinkId || null : null,
+      billable: hasBillingOwner,
+      costNature,
+      rateConfidential,
+      fxRate: converted ? fxRate : null,
+      fxRateSource: converted ? fxRateSource : null,
+      fxConvertedAt: converted && fxConvertedAt ? new Date(fxConvertedAt).toISOString() : null,
+      baseAmountMinor: converted ? Math.round(Number(baseAmount) * 100) : null,
+      baseCurrency: converted ? baseCurrency : null,
     }),
     onSuccess: async () => {
       toast.success("Immutable cost evidence added.");
-      setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
+      resetForm();
       await onChanged();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not add cost evidence.")),
@@ -2292,37 +2359,92 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not reconcile IP costs.")),
   });
+
+  const conversionIncomplete = converted && (!fxRate || !fxRateSource || !fxConvertedAt || !baseAmount || baseCurrency === currency);
+
   return (
     <Card className="min-w-0">
       <CardHeader><CardTitle as="h3">IP cost evidence</CardTitle></CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {docket.cost_items.map((row) => (
           <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
-            <strong className="break-words">{row.description}</strong> · {row.currency} {(row.amount_minor / 100).toFixed(2)}
+            <strong className="break-words">{row.description}</strong>{" "}
+            <CostAmount row={row} />
+            <div className="mt-1 text-xs text-[var(--color-mute)]">
+              {COST_STATUS_LABEL[row.reconciliation_status] ?? row.reconciliation_status}
+              {row.cost_nature === "estimate" ? " · Provider estimate" : null}
+              {row.rate_confidential ? " · Confidential rate" : null}
+            </div>
           </div>
         ))}
-        {enabled && docket.matter_id ? (
+        {enabled ? (
           <form className="grid min-w-0 gap-2" onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}>
+            {!hasBillingOwner ? (
+              <p className="text-xs text-[var(--color-mute)]">
+                This record has no Matter billing owner, so the cost is captured as
+                nonbillable evidence. Link the record to a Matter to bill it; Matter
+                billing remains the only accounting owner either way.
+              </p>
+            ) : null}
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-            <Field label="Amount (INR)"><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+            <Field label={`Amount (${currency})`}><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>
-            <Field label="Matter billing link type">
-              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
-                <option value="">No billing link</option>
-                <option value="invoice">Invoice</option>
-                <option value="invoice_line_item">Invoice line item</option>
-                <option value="time_entry">Time entry</option>
+            <Field label="Cost nature">
+              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={costNature} onChange={(event) => setCostNature(event.target.value as typeof costNature)}>
+                <option value="actual">Actual expense incurred</option>
+                <option value="estimate">Provider estimate or quote</option>
               </select>
             </Field>
-            {billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={rateConfidential} onChange={(event) => setRateConfidential(event.target.checked)} />
+              Confidential rate — hide the amount from members without fee-management access
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={converted} onChange={(event) => setConverted(event.target.checked)} />
+              This cost was incurred in another currency
+            </label>
+            {converted ? (
+              <div className="grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3">
+                <p className="text-xs text-[var(--color-mute)]">
+                  The amount above stays as originally incurred. Record what it was
+                  converted to, at which rate, from which source, and when.
+                </p>
+                <Field label="Original currency"><Input value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} /></Field>
+                <Field label="Converted amount"><Input type="number" min="0" step="0.01" value={baseAmount} onChange={(event) => setBaseAmount(event.target.value)} /></Field>
+                <Field label="Converted currency"><Input value={baseCurrency} maxLength={3} onChange={(event) => setBaseCurrency(event.target.value.toUpperCase())} /></Field>
+                <Field label="Exchange rate"><Input value={fxRate} onChange={(event) => setFxRate(event.target.value)} /></Field>
+                <Field label="Rate source"><Input value={fxRateSource} onChange={(event) => setFxRateSource(event.target.value)} /></Field>
+                <Field label="Conversion date"><Input type="date" value={fxConvertedAt} onChange={(event) => setFxConvertedAt(event.target.value)} /></Field>
+                {baseCurrency === currency ? (
+                  <p className="text-xs text-[var(--color-mute)]">Choose a converted currency different from the original.</p>
+                ) : null}
+              </div>
+            ) : null}
+            {canLinkBilling ? (
+              <Field label="Matter billing link type">
+                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
+                  <option value="">No billing link</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="invoice_line_item">Invoice line item</option>
+                  <option value="time_entry">Time entry</option>
+                </select>
+              </Field>
+            ) : (
+              <p className="text-xs text-[var(--color-mute)]">
+                {costNature === "estimate"
+                  ? "An estimate is not an expense, so it is not linked to a billing record."
+                  : "A nonbillable cost is not linked to a billing record."}
+              </p>
+            )}
+            {canLinkBilling && billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || Boolean(billingLinkType) !== Boolean(billingLinkId) || mutation.isPending}>Add cost evidence</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
+                {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
+              </Button>
               <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>Reconcile with Matter billing</Button>
             </div>
           </form>
-        ) : (
-          <p className="text-xs text-[var(--color-mute)]">Cost items require a linked Matter so Matter billing remains the accounting owner.</p>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
