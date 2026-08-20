@@ -12,11 +12,13 @@ from caseops_api.schemas.data_governance import (
     TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
+    TenantLegalHoldSummary,
 )
 from caseops_api.services.data_governance import (
     create_dry_run_manifest,
     get_dry_run_manifest,
     get_tenant_integrity_report,
+    get_tenant_legal_hold_summary,
     list_dry_run_manifests,
     reject_data_operation_execution,
 )
@@ -53,6 +55,18 @@ def read_data_governance_integrity(
     session: DbSession,
 ) -> TenantDataGovernanceIntegrityReport:
     return get_tenant_integrity_report(session, context=context)
+
+
+@router.get(
+    "/holds/summary",
+    response_model=TenantLegalHoldSummary,
+    summary="Read aggregate tenant legal-hold preservation state",
+)
+def read_tenant_legal_hold_summary(
+    context: DataGovernanceOperator,
+    session: DbSession,
+) -> TenantLegalHoldSummary:
+    return get_tenant_legal_hold_summary(session, context=context)
 
 
 @router.get(
