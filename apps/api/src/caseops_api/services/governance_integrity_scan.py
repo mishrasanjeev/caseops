@@ -36,6 +36,10 @@ from sqlalchemy.orm import Session
 
 from caseops_api.core.repo_paths import repo_root_or_none
 from caseops_api.db.models import Base, LegalHold, LegalHoldItem, LegalHoldStatus
+from caseops_api.governance.data_class_projection import (
+    admitted_data_class_ids,
+    review_coverage,
+)
 
 CheckStatus = Literal["ok", "findings", "unavailable"]
 
@@ -76,13 +80,18 @@ class IntegrityScanReport:
         return self.unavailable_count == 0
 
 
-def _registered_data_class_ids() -> set[str]:
-    from caseops_api.services.data_governance import FOUNDATION_DATA_CLASS_IDS
+def _registered_data_class_ids() -> set[str] | None:
+    """Admitted ids, or None when the projection cannot be trusted.
 
-    return set(FOUNDATION_DATA_CLASS_IDS)
+    None rather than an empty set. An empty set here would make every active
+    legal hold look unresolvable and report the estate as catastrophically
+    broken, when the truth is that one artifact could not be read.
+    """
+
+    ids = admitted_data_class_ids()
+    return None if ids is None else set(ids)
 
 
-# repo-root/apps/api/src/caseops_api/services/<this file>
 def _unavailable(check_id: str, summary: str, blocked_by: str) -> IntegrityCheck:
     return IntegrityCheck(
         check_id=check_id, status="unavailable", summary=summary, blocked_by=blocked_by
@@ -160,6 +169,16 @@ def _check_held_at_risk(session: Session, *, company_id: str | None = None) -> I
     it promises does not happen.
     """
     registered = _registered_data_class_ids()
+    if registered is None:
+        # Without the reviewed projection every hold item would look
+        # unresolvable, which would report the estate as broken when in fact one
+        # artifact could not be read.
+        return _unavailable(
+            "held_at_risk",
+            "cannot resolve hold coverage: the reviewed data-class projection is "
+            "unavailable or stale",
+            "data-class-projection",
+        )
     statement = (
         select(LegalHoldItem.legal_hold_id, LegalHoldItem.data_class_id)
         .join(LegalHold, LegalHold.id == LegalHoldItem.legal_hold_id)
@@ -221,11 +240,59 @@ def _check_orphan_hold_items(session: Session, *, company_id: str | None = None)
     )
 
 
+def _check_data_class_review_coverage(session: Session) -> IntegrityCheck:
+    """How much of the inventoried estate carries a reviewed classification.
+
+    The dry run admits six classes. The map inventories 271. Both numbers are
+    true, and reporting only the first is how "we govern our data" becomes a
+    claim nobody checked. This check exists so the remainder is a published
+    count rather than an absence, and it cannot read ``ok`` while anything is
+    unreviewed.
+    """
+
+    coverage = review_coverage(session)
+    if coverage is None:
+        return _unavailable(
+            "data_class_review_coverage",
+            "cannot measure review coverage: the reviewed data-class projection is "
+            "unavailable or stale",
+            "data-class-projection",
+        )
+    if coverage.unreviewed or coverage.undeclared_deployed_tables:
+        findings = [
+            f"unreviewed:{class_id}" for class_id in coverage.unreviewed_ids[:50]
+        ] + [
+            f"undeclared-deployed:{table}"
+            for table in coverage.undeclared_deployed_tables[:50]
+        ]
+        return IntegrityCheck(
+            check_id="data_class_review_coverage",
+            status="findings",
+            summary=(
+                f"{coverage.reviewed} of {coverage.total} inventoried data classes "
+                f"carry a reviewed classification; {coverage.unreviewed} do not"
+                + (
+                    f", and {len(coverage.undeclared_deployed_tables)} deployed "
+                    "table(s) are not inventoried at all"
+                    if coverage.undeclared_deployed_tables
+                    else ""
+                )
+            ),
+            findings=tuple(findings),
+        )
+    return IntegrityCheck(
+        check_id="data_class_review_coverage",
+        status="ok",
+        summary=f"all {coverage.total} inventoried data classes are reviewed",
+    )
+
+
 def run_integrity_scan(session: Session, *, company_id: str | None = None) -> IntegrityScanReport:
     """Run every DATA-GOV-17 check, reporting unavailable ones as unavailable."""
     return IntegrityScanReport(
         checks=(
             _check_missing_data_map(),
+            _check_data_class_review_coverage(session),
             _check_held_at_risk(session, company_id=company_id),
             _check_orphan_hold_items(session, company_id=company_id),
             # The three that cannot run. Each names its blocker rather than

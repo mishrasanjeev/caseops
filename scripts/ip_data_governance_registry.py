@@ -47,6 +47,21 @@ EXPECTED_COMPONENTS = {
     },
 }
 EXPECTED_TABLES = set().union(*EXPECTED_COMPONENTS.values())
+
+
+def _runtime_admitted_ids() -> set[str] | None:
+    """What the deployed runtime would actually admit, or None if unreadable."""
+
+    api_src = REPO_ROOT / "apps" / "api" / "src"
+    if str(api_src) not in sys.path:
+        sys.path.insert(0, str(api_src))
+    try:
+        from caseops_api.governance import generated_data_class_projection as projection
+    except Exception:
+        return None
+    return set(projection.ADMITTED_DATA_CLASSES)
+
+
 CONFIDENTIALITY_VALUES = {"internal", "confidential", "privileged"}
 REGISTRY_STATUS = "repository_schema_implemented_dry_run_only"
 RUNTIME_STATUS = "repository_implemented_dry_run_only"
@@ -219,9 +234,29 @@ def validate(registry: dict[str, Any] | None = None) -> list[str]:
     for table_name in EXPECTED_TABLES:
         if f'"{table_name}"' not in migration_source:
             errors.append(f"migration does not create registered table {table_name}")
-        if f'"{table_name}"' not in handler_source:
+
+    # Admission used to be a frozenset literal in the handler, so this checked
+    # that each id appeared in that file's SOURCE TEXT. That bond was weak - a
+    # commented-out id or an unrelated string would satisfy it - and it broke
+    # the moment admission moved to the compiled projection, which is where it
+    # belongs. Compare against what the runtime actually admits instead, in both
+    # directions: a substring check can only catch a missing id, never an extra
+    # one, and an extra admitted class is the more dangerous of the two.
+    admitted = _runtime_admitted_ids()
+    if admitted is None:
+        errors.append(
+            "the compiled data-class projection could not be imported, so the "
+            "registry cannot be checked against what the runtime admits"
+        )
+    else:
+        for table_name in sorted(EXPECTED_TABLES - admitted):
             errors.append(
                 f"dry-run handler does not admit registered data class {table_name}"
+            )
+        for table_name in sorted(admitted - EXPECTED_TABLES):
+            errors.append(
+                f"dry-run handler admits {table_name}, which this registry does not "
+                "declare"
             )
     for safety_constraint in (
         "ck_tenant_data_operation_dry_run_only",
