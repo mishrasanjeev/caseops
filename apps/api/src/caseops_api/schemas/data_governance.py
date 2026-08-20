@@ -19,6 +19,9 @@ DataOperationType = Literal[
     "restore_validation",
 ]
 DataOperationItemStatus = Literal["pending", "eligible", "held", "blocked"]
+DataOperationDryRunApprovalStatus = Literal["not_requested", "requested", "rejected"]
+DataGovernanceIntegrityStatus = Literal["ok", "findings", "unavailable"]
+LegalHoldSummaryStatus = Literal["draft", "active", "released", "cancelled"]
 
 
 class TenantDataOperationItemInput(BaseModel):
@@ -115,7 +118,8 @@ class TenantDataOperationDryRunRecord(BaseModel):
     operation_type: DataOperationType
     execution_mode: Literal["dry_run"]
     status: Literal["dry_run_complete"]
-    approval_status: Literal["not_requested"]
+    approval_status: DataOperationDryRunApprovalStatus
+    rejection_reason: str | None
     request_scope_hash: str
     manifest_hash: str
     request_evidence_ref: str
@@ -125,3 +129,64 @@ class TenantDataOperationDryRunRecord(BaseModel):
     offboarding_plan: list[TenantDataOperationOffboardingCategory]
     exclusions: list[TenantDataOperationExclusion]
     items: list[TenantDataOperationItemRecord]
+
+
+class TenantDataOperationDryRunSummary(BaseModel):
+    """Bounded discovery record for a tenant-owned dry-run manifest.
+
+    The list endpoint deliberately omits items, exclusions, and other
+    manifest detail. Operators use the exact-ID endpoint to review one
+    immutable manifest after selecting it; a history listing must not become a
+    second high-volume data-export surface.
+    """
+
+    id: str
+    operation_type: DataOperationType
+    execution_mode: Literal["dry_run"]
+    status: Literal["dry_run_complete"]
+    approval_status: DataOperationDryRunApprovalStatus
+    rejection_reason: str | None
+    request_scope_hash: str
+    manifest_hash: str
+    request_evidence_ref: str
+    completed_at: datetime
+    as_of: datetime
+
+
+class TenantDataOperationDryRunListResponse(BaseModel):
+    """A bounded, newest-first page of reviewable dry-run manifests."""
+
+    operations: list[TenantDataOperationDryRunSummary]
+
+
+class TenantDataGovernanceIntegrityCheck(BaseModel):
+    """Content-minimized result from one DATA-GOV-17 integrity check."""
+
+    check_id: str
+    status: DataGovernanceIntegrityStatus
+    summary: str
+    findings: list[str]
+    blocked_by: str | None
+
+
+class TenantDataGovernanceIntegrityReport(BaseModel):
+    """Current tenant-safe integrity visibility; not an execution authorization."""
+
+    checks: list[TenantDataGovernanceIntegrityCheck]
+    ok_count: int
+    finding_count: int
+    unavailable_count: int
+    is_complete: bool
+
+
+class TenantLegalHoldSummary(BaseModel):
+    """Tenant-scoped aggregate preservation state, without hold payloads."""
+
+    draft_count: int
+    active_count: int
+    released_count: int
+    cancelled_count: int
+    active_company_wide_count: int
+    active_scoped_count: int
+    active_item_count: int
+    preservation_effective: bool

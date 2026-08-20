@@ -18,11 +18,11 @@
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
       "recorded_at": "2026-08-20T00:00:00+05:30",
-      "base_revision": "6c071ef553d94fc9176a4ea8162b5b69b58afd57",
+      "base_revision": "9e8d41c0",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
         "slice_id": "IPLF-039C",
-        "branch": "codex/iplf-039c-calendar-reconcile-20260820 (stacked on Claude PR #272 until invoice migration merges)",
+        "branch": "codex/iplf-039c-calendar-reconcile-20260820",
         "scope": "Implement UJ-62-EXC-03: immutable external-provider snapshots plus persisted, authorized accept/reject reconciliation candidates for calendar edits and deletes; add focused API/PostgreSQL tests and bounded OAuth-sandbox verification scaffolding.",
         "owned_components": [
           "IP calendar drift/reconciliation service and its dedicated schema/API contract",
@@ -31,8 +31,8 @@
         ],
         "merge_constraints": [
           "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
-          "Do not edit apps/api/tests/test_postgres_validation.py while Claude's invoice PR owns it. After PR #272 merges, add the named calendar PostgreSQL race to that CI-collected file without modifying Claude's invoice cases.",
-          "Do not alter data-governance policy fields or Claude's governed-operation inventory. After rebasing on Claude's merged invoice branch, Codex may run the repository generator solely to add the calendar-candidate table inventory."
+          "PR #272 is merged; calendar PostgreSQL coverage may be added to apps/api/tests/test_postgres_validation.py without modifying Claude's invoice cases.",
+          "Do not alter data-governance policy fields or Claude's governed-operation inventory; generator output may add only the calendar-candidate table inventory."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
@@ -42,23 +42,45 @@
         ]
       },
       "claude": {
-        "slice_id": "IPLF-028A",
-        "scope": "Continue the records-governance lane: keep execution fail-closed while completing policy/hold authorization artefacts, dry-run and recovery/export evidence, and the user-workflow handoff for IPLF-028B.",
+        "lanes": [
+          {
+            "slice_id": "IPLF-028A/IPLF-028B evidence",
+            "branch": "docs/iplf028a-evidence-20260820",
+            "status": "in_progress",
+            "scope": "Complete records-governance policy/hold authorization evidence and the IPLF-028B workflow handoff while real operations remain fail-closed."
+          },
+          {
+            "slice_id": "IPLF-039F",
+            "branch": "feat/iplf039f-cost-items-20260820",
+            "status": "assigned_not_started",
+            "scope": "Implement the independently owned IP cost-item and billing workflow after the merged invoice-immutability dependency."
+          }
+        ],
         "owned_components": [
-          "data-class registry/projection and data-operation approval/hold/purge/offboarding services",
-          "records-governance migrations, tests, maps, and evidence",
-          "IPLF-028A and IPLF-028B status, test, and evidence references"
+          "records-governance policy, hold, recovery/export evidence and IPLF-028A/IPLF-028B evidence references",
+          "IP cost-item/billing models, migrations, services, tests and IPLF-039F evidence"
         ],
         "merge_constraints": [
-          "Retain ownership of 20260820_0002_invoice_number_immutable.py, the data-governance projection/map, and apps/api/tests/test_postgres_validation.py for the active invoice change.",
-          "Do not edit the calendar snapshot/candidate model, service, API, or dedicated calendar test files reserved by Codex."
+          "Do not edit the calendar snapshot/candidate model, service, API, migration, or dedicated calendar tests reserved by Codex.",
+          "Do not reuse or amend the Codex-owned 20260821_0001 calendar migration."
         ],
         "excludes": [
-          "IP calendar snapshot/reconciliation-candidate contract",
-          "IPLF-039C schema, API, and tests",
+          "IP calendar snapshot/reconciliation-candidate contract and IPLF-039C evidence",
           "IPLF-027B destructive approval/deletion operation"
         ]
       },
+      "completed_handoffs": [
+        {
+          "slice_id": "IPLF-028B implementation",
+          "status": "merged_to_main",
+          "merge_revision": "9e8d41c0"
+        },
+        {
+          "slice_id": "invoice immutability",
+          "status": "merged_to_main",
+          "merge_revision": "6c071ef5"
+        }
+      ],
       "queued_unassigned": [
         {
           "slice_id": "IPLF-027B",
@@ -67,10 +89,6 @@
         {
           "slice_id": "IPLF-039D",
           "reason": "Keep queued until a separate owner is assigned; it must not share the calendar lane's model/migration work."
-        },
-        {
-          "slice_id": "IPLF-039F",
-          "reason": "Keep queued until Claude's current invoice-immutability PR is merged and a separate cost/billing worktree can be based on current main."
         },
         {
           "slice_id": "IPLF-029A",

@@ -16,6 +16,7 @@ from caseops_api.api.routes import (
     conflicts,
     contracts,
     courts,
+    data_governance,
     drafting,
     drive,
     email_templates,
@@ -74,6 +75,11 @@ api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(conflicts.router, tags=["conflicts"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(
+    data_governance.router,
+    prefix="/admin/data-governance",
+    tags=["data-governance"],
+)
 api_router.include_router(
     platform_admin.router,
     prefix="/platform-admin",

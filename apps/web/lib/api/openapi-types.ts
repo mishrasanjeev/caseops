@@ -110,6 +110,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/data-governance/holds/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read aggregate tenant legal-hold preservation state */
+        get: operations["read_tenant_legal_hold_summary_api_admin_data_governance_holds_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/integrity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read current tenant data-governance integrity visibility */
+        get: operations["read_data_governance_integrity_api_admin_data_governance_integrity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/operations/{operation_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refuse all tenant data-operation execution */
+        post: operations["execute_operation_is_unavailable_api_admin_data_governance_operations__operation_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/operations/dry-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reviewable non-executable tenant data-operation dry runs */
+        get: operations["list_operation_dry_runs_api_admin_data_governance_operations_dry_runs_get"];
+        put?: never;
+        /** Create a non-executable tenant data-operation dry run */
+        post: operations["create_operation_dry_run_api_admin_data_governance_operations_dry_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/operations/dry-runs/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a non-executable tenant data-operation dry run */
+        get: operations["read_operation_dry_run_api_admin_data_governance_operations_dry_runs__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/email-templates": {
         parameters: {
             query?: never;
@@ -31868,11 +31954,310 @@ export interface components {
             /** Connectors */
             connectors: components["schemas"]["TenantConnectorRecord"][];
         };
+        /**
+         * TenantDataGovernanceIntegrityCheck
+         * @description Content-minimized result from one DATA-GOV-17 integrity check.
+         */
+        TenantDataGovernanceIntegrityCheck: {
+            /** Blocked By */
+            blocked_by: string | null;
+            /** Check Id */
+            check_id: string;
+            /** Findings */
+            findings: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "findings" | "unavailable";
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * TenantDataGovernanceIntegrityReport
+         * @description Current tenant-safe integrity visibility; not an execution authorization.
+         */
+        TenantDataGovernanceIntegrityReport: {
+            /** Checks */
+            checks: components["schemas"]["TenantDataGovernanceIntegrityCheck"][];
+            /** Finding Count */
+            finding_count: number;
+            /** Is Complete */
+            is_complete: boolean;
+            /** Ok Count */
+            ok_count: number;
+            /** Unavailable Count */
+            unavailable_count: number;
+        };
+        /**
+         * TenantDataOperationDependencyPlan
+         * @description DATA-GOV-08 dependency plan: what is removed, in what order.
+         */
+        TenantDataOperationDependencyPlan: {
+            /** Deletion Order */
+            deletion_order: string[];
+            /** Order Is Complete */
+            order_is_complete: boolean;
+            /** Schema Version */
+            schema_version: number;
+            /** Unresolved Cycles */
+            unresolved_cycles: string[];
+            /** Unsatisfied Dependencies */
+            unsatisfied_dependencies: components["schemas"]["TenantDataOperationUnsatisfiedDependency"][];
+        };
+        /**
+         * TenantDataOperationDryRunListResponse
+         * @description A bounded, newest-first page of reviewable dry-run manifests.
+         */
+        TenantDataOperationDryRunListResponse: {
+            /** Operations */
+            operations: components["schemas"]["TenantDataOperationDryRunSummary"][];
+        };
+        /** TenantDataOperationDryRunRecord */
+        TenantDataOperationDryRunRecord: {
+            /**
+             * Approval Status
+             * @enum {string}
+             */
+            approval_status: "not_requested" | "requested" | "rejected";
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            dependency_plan: components["schemas"]["TenantDataOperationDependencyPlan"] | null;
+            /** Exclusions */
+            exclusions: components["schemas"]["TenantDataOperationExclusion"][];
+            /**
+             * Execution Mode
+             * @constant
+             */
+            execution_mode: "dry_run";
+            /** Id */
+            id: string;
+            /** Items */
+            items: components["schemas"]["TenantDataOperationItemRecord"][];
+            /** Manifest Hash */
+            manifest_hash: string;
+            /** Offboarding Plan */
+            offboarding_plan: components["schemas"]["TenantDataOperationOffboardingCategory"][];
+            /**
+             * Operation Type
+             * @enum {string}
+             */
+            operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Request Evidence Ref */
+            request_evidence_ref: string;
+            /** Request Scope Hash */
+            request_scope_hash: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "dry_run_complete";
+        };
+        /**
+         * TenantDataOperationDryRunRequest
+         * @description Request for an internal, non-executable manifest calculation.
+         */
+        TenantDataOperationDryRunRequest: {
+            /** As Of */
+            as_of?: string | null;
+            /** Items */
+            items: components["schemas"]["TenantDataOperationItemInput"][];
+            /**
+             * Operation Type
+             * @enum {string}
+             */
+            operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
+            /** Request Evidence Ref */
+            request_evidence_ref: string;
+            /** Retention Policy Version Id */
+            retention_policy_version_id?: string | null;
+        };
+        /**
+         * TenantDataOperationDryRunSummary
+         * @description Bounded discovery record for a tenant-owned dry-run manifest.
+         *
+         *     The list endpoint deliberately omits items, exclusions, and other
+         *     manifest detail. Operators use the exact-ID endpoint to review one
+         *     immutable manifest after selecting it; a history listing must not become a
+         *     second high-volume data-export surface.
+         */
+        TenantDataOperationDryRunSummary: {
+            /**
+             * Approval Status
+             * @enum {string}
+             */
+            approval_status: "not_requested" | "requested" | "rejected";
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /**
+             * Execution Mode
+             * @constant
+             */
+            execution_mode: "dry_run";
+            /** Id */
+            id: string;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /**
+             * Operation Type
+             * @enum {string}
+             */
+            operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Request Evidence Ref */
+            request_evidence_ref: string;
+            /** Request Scope Hash */
+            request_scope_hash: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "dry_run_complete";
+        };
+        /**
+         * TenantDataOperationExclusion
+         * @description A category the export withholds, and what the recipient can still ask for.
+         */
+        TenantDataOperationExclusion: {
+            /** Category */
+            category: string;
+            /** Reason */
+            reason: string;
+            /** Reference Metadata */
+            reference_metadata: string;
+        };
+        /**
+         * TenantDataOperationItemInput
+         * @description An opaque target in a future data-operation dry run.
+         *
+         *     ``target_reference_hash`` deliberately replaces a raw tenant/client/matter
+         *     identifier so an operation manifest cannot become a second confidential
+         *     record store.
+         */
+        TenantDataOperationItemInput: {
+            /**
+             * Candidate Record Count
+             * @default 0
+             */
+            candidate_record_count: number;
+            /** Data Class Id */
+            data_class_id: string;
+            /** Detail Redacted */
+            detail_redacted?: string | null;
+            /**
+             * Estimated Bytes
+             * @default 0
+             */
+            estimated_bytes: number;
+            /** Target Reference Hash */
+            target_reference_hash: string;
+            /** Target Type */
+            target_type: string;
+        };
+        /** TenantDataOperationItemRecord */
+        TenantDataOperationItemRecord: {
+            /** Candidate Record Count */
+            candidate_record_count: number;
+            /** Data Class Id */
+            data_class_id: string;
+            /** Detail Redacted */
+            detail_redacted: string | null;
+            /** Estimated Bytes */
+            estimated_bytes: number;
+            /** Id */
+            id: string;
+            /**
+             * Item Status
+             * @enum {string}
+             */
+            item_status: "pending" | "eligible" | "held" | "blocked";
+            /** Legal Hold Id */
+            legal_hold_id: string | null;
+            /**
+             * Safe To Execute
+             * @constant
+             */
+            safe_to_execute: false;
+            /** Target Reference Hash */
+            target_reference_hash: string;
+            /** Target Type */
+            target_type: string;
+        };
+        /**
+         * TenantDataOperationOffboardingCategory
+         * @description One access surface an offboarding would revoke, stop, or preserve.
+         */
+        TenantDataOperationOffboardingCategory: {
+            /** Category */
+            category: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "revoke" | "stop" | "preserve" | "unenumerable";
+            /** Record Count */
+            record_count: number | null;
+        };
+        /**
+         * TenantDataOperationUnsatisfiedDependency
+         * @description A table that references purge scope without being in it.
+         */
+        TenantDataOperationUnsatisfiedDependency: {
+            /** Detail */
+            detail: string;
+            /** References */
+            references: string;
+            /** Table */
+            table: string;
+        };
         /** TenantEnterpriseReadinessResponse */
         TenantEnterpriseReadinessResponse: {
             agent_trust_plane: components["schemas"]["AgentTrustReadinessResponse"];
             ai_governance: components["schemas"]["AIGovernanceReadinessResponse"];
             enterprise_identity: components["schemas"]["EnterpriseIdentityReadinessResponse"];
+        };
+        /**
+         * TenantLegalHoldSummary
+         * @description Tenant-scoped aggregate preservation state, without hold payloads.
+         */
+        TenantLegalHoldSummary: {
+            /** Active Company Wide Count */
+            active_company_wide_count: number;
+            /** Active Count */
+            active_count: number;
+            /** Active Item Count */
+            active_item_count: number;
+            /** Active Scoped Count */
+            active_scoped_count: number;
+            /** Cancelled Count */
+            cancelled_count: number;
+            /** Draft Count */
+            draft_count: number;
+            /** Preservation Effective */
+            preservation_effective: boolean;
+            /** Released Count */
+            released_count: number;
         };
         /** TenantPlaybookCompareFinding */
         TenantPlaybookCompareFinding: {
@@ -32783,6 +33168,172 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_tenant_legal_hold_summary_api_admin_data_governance_holds_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantLegalHoldSummary"];
+                };
+            };
+        };
+    };
+    read_data_governance_integrity_api_admin_data_governance_integrity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataGovernanceIntegrityReport"];
+                };
+            };
+        };
+    };
+    execute_operation_is_unavailable_api_admin_data_governance_operations__operation_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_operation_dry_runs_api_admin_data_governance_operations_dry_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationDryRunListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_operation_dry_run_api_admin_data_governance_operations_dry_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantDataOperationDryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationDryRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_operation_dry_run_api_admin_data_governance_operations_dry_runs__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationDryRunRecord"];
+                };
             };
             /** @description Validation Error */
             422: {

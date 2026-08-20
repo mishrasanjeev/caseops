@@ -361,6 +361,14 @@ export default function AdminPage() {
                 <CalendarCheck className="h-4 w-4" aria-hidden /> Outlook
               </Link>
             ) : null}
+            {canAudit ? (
+              <Link
+                href="/app/admin/data-governance"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+              >
+                <Shield className="h-4 w-4" aria-hidden /> Data governance
+              </Link>
+            ) : null}
             {canManageUsers ? (
               <Link
                 href="/app/admin/employees"
