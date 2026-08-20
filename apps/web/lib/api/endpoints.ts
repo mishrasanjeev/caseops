@@ -90,6 +90,7 @@ import {
   type InvoiceNumberPreviewResponse,
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
+  type TenantDataGovernanceIntegrityReport,
   type ProviderOperationReplayBatchResponse,
   type ProviderOperationReplayPreviewResponse,
   type ProviderCostProfileListResponse,
@@ -203,6 +204,7 @@ import {
   invoiceNumberPreviewResponse,
   providerOperationActionResponse,
   providerOperationListResponse,
+  tenantDataGovernanceIntegrityReport,
   providerOperationReplayBatchResponse,
   providerOperationReplayPreviewResponse,
   providerCostProfileListResponse,
@@ -6818,6 +6820,11 @@ export async function listProviderOperations(input?: {
     `/api/admin/provider-operations/jobs${suffix}`,
   );
   return providerOperationListResponse.parse(data);
+}
+
+export async function fetchTenantDataGovernanceIntegrity(): Promise<TenantDataGovernanceIntegrityReport> {
+  const data = await apiRequest<unknown>("/api/admin/data-governance/integrity");
+  return tenantDataGovernanceIntegrityReport.parse(data);
 }
 
 export async function fetchProviderReadiness(): Promise<ProviderReadinessListResponse> {
