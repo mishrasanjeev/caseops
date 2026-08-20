@@ -18,7 +18,7 @@
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
       "recorded_at": "2026-08-20T00:00:00+05:30",
-      "base_revision": "966e0caacb54e91b2491801de6c4b7fc5cafe017",
+      "base_revision": "6c071ef553d94fc9176a4ea8162b5b69b58afd57",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
         "slice_id": "IPLF-039C",
@@ -31,8 +31,8 @@
         ],
         "merge_constraints": [
           "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
-          "Use a dedicated calendar PostgreSQL test file; do not edit apps/api/tests/test_postgres_validation.py while Claude's invoice PR owns it.",
-          "Do not edit data-governance projections or maps; calendar snapshot metadata stays in its own operational-record class and documentation."
+          "Do not edit apps/api/tests/test_postgres_validation.py while Claude's invoice PR owns it. After PR #272 merges, add the named calendar PostgreSQL race to that CI-collected file without modifying Claude's invoice cases.",
+          "Do not alter data-governance policy fields or Claude's governed-operation inventory. After rebasing on Claude's merged invoice branch, Codex may run the repository generator solely to add the calendar-candidate table inventory."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
