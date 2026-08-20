@@ -2934,6 +2934,10 @@ class CalendarEventSync(Base):
             "neutralized_ip_docket_id",
             "neutralized_by_ip_lifecycle_version",
         ),
+        Index(
+            "ix_calendar_event_syncs_reconciliation_candidate_id",
+            "reconciliation_candidate_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

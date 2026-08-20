@@ -32,6 +32,7 @@ depends_on = None
 TABLE = "calendar_projection_reconciliation_candidates"
 IMMUTABLE_TRIGGER = "trg_calendar_projection_reconciliation_evidence_immutable"
 IMMUTABLE_FUNCTION = "caseops_reject_calendar_reconciliation_evidence_mutation"
+REPAIR_CLAIM_INDEX = "ix_calendar_event_syncs_reconciliation_candidate_id"
 
 
 def upgrade() -> None:
@@ -120,6 +121,11 @@ def upgrade() -> None:
         "calendar_event_syncs",
         sa.Column("reconciliation_provider_revision", sa.String(length=500), nullable=True),
     )
+    op.create_index(
+        REPAIR_CLAIM_INDEX,
+        "calendar_event_syncs",
+        ["reconciliation_candidate_id"],
+    )
     if bind.dialect.name == "postgresql":
         op.create_foreign_key(
             "fk_calendar_event_sync_reconciliation_candidate",
@@ -206,6 +212,7 @@ def downgrade() -> None:
             "calendar_event_syncs",
             type_="foreignkey",
         )
+    op.drop_index(REPAIR_CLAIM_INDEX, table_name="calendar_event_syncs")
     op.drop_column("calendar_event_syncs", "reconciliation_provider_revision")
     op.drop_column("calendar_event_syncs", "reconciliation_snapshot_sha256")
     op.drop_column("calendar_event_syncs", "reconciliation_candidate_id")
