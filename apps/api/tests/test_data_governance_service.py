@@ -16,7 +16,7 @@ from caseops_api.services.data_governance import (
     reject_data_operation_execution,
 )
 from caseops_api.services.session_context import SessionContext
-from tests.test_auth_company import bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company
 
 
 def _context_for_bootstrap(bootstrap: dict) -> SessionContext:
@@ -147,5 +147,39 @@ def test_unknown_class_and_execute_request_fail_closed_without_an_operation(
     with pytest.raises(HTTPException) as execution:
         reject_data_operation_execution(operation_id="fixture-operation")
     assert execution.value.status_code == 503
-    assert execution.value.detail["type"] == "data_operation_execution_unavailable"
+    assert execution.value.detail["code"] == "data_operation_execution_unavailable"
     assert "tenant_data_operations" in (admitted_data_class_ids() or frozenset())
+
+
+def test_iplf_028b_dry_run_routes_persist_reviewable_evidence_but_refuse_execution(
+    client: TestClient,
+) -> None:
+    """UJ-28's safe half is reviewable; its effectful half is not routable."""
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    payload = _payload().model_dump(mode="json")
+    created = client.post(
+        "/api/admin/data-governance/operations/dry-runs",
+        headers=auth_headers(token),
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    record = created.json()
+    assert record["execution_mode"] == "dry_run"
+    assert record["status"] == "dry_run_complete"
+    assert record["items"][0]["safe_to_execute"] is False
+
+    read = client.get(
+        f"/api/admin/data-governance/operations/dry-runs/{record['id']}",
+        headers=auth_headers(token),
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["manifest_hash"] == record["manifest_hash"]
+
+    execution = client.post(
+        f"/api/admin/data-governance/operations/{record['id']}/execute",
+        headers=auth_headers(token),
+    )
+    assert execution.status_code == 503, execution.text
+    assert execution.json()["code"] == "data_operation_execution_unavailable"
