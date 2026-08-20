@@ -996,7 +996,15 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 
 ### EH-SGR-01 - Intra-state invoices issued with the wrong GST head
 
-- **Status:** Missing.
+- **Status:** Implemented. Landed in PR #240 (merged 2026-08-17).
+- **Evidence:** `services/matter_billing.py` gains `_GST_STATE_CODES` (38
+  statutory codes), `gst_state_code_for_place` and
+  `resolve_place_of_supply_state_code`, which resolves in precedence order:
+  explicit place of supply, client GSTIN, profile default, supplier state.
+  Regression: `tests/test_20260816_gst_place_of_supply.py`.
+- **Was:** Missing. This entry was stale for three days — PR #240 shipped the
+  fix and touched no ledger file. Corrected 2026-08-20 after verifying the
+  symbols on `origin/main`, not from the PR description.
 - **Gap found:** intra-state B2C invoices are issued with IGST instead of
   CGST+SGST, and a malformed client GSTIN silently produces the same wrong head.
   Place of supply is a free-text display field that never reaches the tax engine,
@@ -1013,7 +1021,14 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 
 ### EH-SGR-02 - A matter can be made permanently unopenable
 
-- **Status:** Missing.
+- **Status:** Implemented. Landed in PR #240 (merged 2026-08-17).
+- **Evidence:** the OC-portal and refund-webhook writers no longer emit a
+  status the read schema rejects, so `GET /api/matters/{id}` cannot be
+  permanently 500ed by a write. Regression:
+  `tests/test_20260816_invoice_status_enum_drift.py`, with
+  `tests/test_20260816_legacy_invoice_data_safety.py` covering rows already
+  written in the bad state.
+- **Was:** Missing. Stale for three days; corrected 2026-08-20.
 - **Gap found:** an outside-counsel portal invoice submission writes
   `needs_review`, and a refund webhook writes an out-of-enum status; both are
   valid DB states the read schema rejects, so `GET /api/matters/{id}` 500s on
@@ -1026,7 +1041,13 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 
 ### EH-SGR-03 - Client payments under-credited
 
-- **Status:** Missing.
+- **Status:** Implemented. Landed in PR #240 (merged 2026-08-17).
+- **Evidence:** `services/payments.py` gains `_attempt_collected_minor` and
+  `recalculate_invoice_collection`, which sums credited attempts instead of
+  taking the largest, and returns early when an invoice has no attempts so a
+  receipt recorded outside the attempt flow is never zeroed. Regression:
+  `tests/test_20260816_invoice_collection_sum.py`.
+- **Was:** Missing. Stale for three days; corrected 2026-08-20.
 - **Gap found:** an invoice settled across several attempts credits only the
   largest attempt; the webhook cannot read the amount from the provider's
   documented nested payload and yields 0, so partial payments record as zero

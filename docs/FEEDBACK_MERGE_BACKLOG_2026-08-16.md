@@ -158,15 +158,46 @@ tests and hollow in production. Fix both together.
 
 ### 3.2 F-14 — keyword search returns nothing
 
-**There is no embedding-independent lexical retrieval path** (`F-14-7`). Keyword
-mode depends on the vector provider, and `embedding_provider` defaults to `mock`
-with no checked-in artifact setting it (`STRATEGIC_GAP_REVIEW_2026-08-16.md` §3).
-A keyword search therefore has no way to retrieve lexically when the provider is
-absent or unconfigured.
+**Corrected 2026-08-16 after reading the code.** The original text below said
+"there is no embedding-independent lexical retrieval path". That is not quite
+right, and the imprecision matters because it points at the wrong fix.
 
-**Not in any plan.** Add a Postgres full-text (tsvector + GIN) or trigram index
-over authority chunk content and a keyword query builder that uses it, so keyword
-mode retrieves candidates lexically rather than silently falling back.
+What is actually true:
+
+- Lexical *scoring* exists and is good. `services/retrieval.py` ranks candidates
+  on idf, exact overlap, coverage and trigram similarity, and falls back to
+  lexical-only when no vector is available.
+- Lexical *retrieval* exists but is narrow. `_exact_name_match_document_ids`
+  (`services/authorities.py`) is a Postgres trigram-indexed prefilter over
+  parties/title/bench. It is embedding-independent and it works — but only for
+  queries carrying proper nouns, and it requires *every* token to match. A
+  topical query ("bail triple test") returns `[]` by design.
+- The actual defect is **candidate selection**. When the name path returns
+  nothing and the vector path is unavailable, the query falls through to
+  `order_by(decision_date desc, updated_at desc)` capped at 180 rows. On a
+  corpus the module's own comment puts at >800K documents, keyword mode ranks
+  the 180 most *recent* documents against the query. The ranking is lexical;
+  the retrieval is recency. That is why keyword search returns nothing useful.
+
+So the status is `Partially implemented`, not `Missing`, and the fix is a
+query-driven candidate selector — Postgres FTS (tsvector + GIN) over authority
+summary/chunk content — unioned with the existing name-match path.
+
+On the provider half: `core/settings.py` does default `embedding_provider` to
+`mock`, and no checked-in artifact sets `CASEOPS_EMBEDDING_PROVIDER` for the API
+*service* (the ingest and eval *jobs* set it; `docs/GCP_DEPLOY.md` documents it
+as a manual step). What the live Cloud Run service has set is not provable from
+the repo — do not assert production is running mock without checking it.
+
+**BLOCKED — migration lane.** The six existing trigram indexes
+(`20260811_0005`) all cover metadata: parties/title, citation, bench/judges,
+court_name, sections_cited. None covers `summary` or chunk `content`, so this
+needs a new index, and an unindexed FTS scan over 800K rows is not an
+interactive path. Per the `EXECUTION_BACKLOG.md` hard rule, only one Alembic
+revision may be in flight at a time, and `EH-SGR-04` holds the `MIGRATION`
+claim with its DB-level work (CHECK/trigger/revision table for invoice
+immutability) still outstanding. Sequence `EH-SGR-04`'s migration first; that
+frees the lane for this one.
 
 ---
 
