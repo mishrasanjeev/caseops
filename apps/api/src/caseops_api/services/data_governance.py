@@ -1,9 +1,10 @@
 """Fail-closed records-governance foundations for IPLF-028A.
 
-This module creates evidence-only dry-run manifests.  It deliberately has no
-worker, HTTP route, storage adapter, provider adapter, or execution path.  A
-future slice must add explicit approval, step-up, rollout, and restore/export
-proof before any real data action is even representable.
+This module creates evidence-only dry-run manifests.  The bounded IPLF-028B
+API may create and review those manifests, but it deliberately has no worker,
+storage adapter, provider adapter, or execution path.  A future slice must add
+explicit approval, step-up, rollout, and restore/export proof before any real
+data action is even representable.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    CompanyMembership,
     DataRetentionPolicyVersion,
     DataRetentionPolicyVersionStatus,
     LegalHold,
@@ -32,14 +34,23 @@ from caseops_api.governance.data_class_projection import (
     require_current_projection,
 )
 from caseops_api.schemas.data_governance import (
+    TenantDataGovernanceIntegrityCheck,
+    TenantDataGovernanceIntegrityReport,
     TenantDataOperationDependencyPlan,
+    TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
+    TenantDataOperationDryRunSummary,
     TenantDataOperationExclusion,
     TenantDataOperationItemRecord,
     TenantDataOperationOffboardingCategory,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.governance_integrity_scan import run_integrity_scan
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
@@ -64,6 +75,33 @@ def _canonical_digest(value: object) -> str:
 
 def _actor_label(context: SessionContext) -> str:
     return context.user.full_name or context.user.email
+
+
+def _lock_dry_run_actor(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> SessionContext:
+    """Refresh the writer before this audit-producing mutation.
+
+    The route dependency prevents ordinary callers from entering.  This fence
+    closes the role/custom-role revocation window before the manifest or its
+    actor-backed audit row is persisted.
+    """
+
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=context.company.id,
+        membership_ids=(context.membership.id,),
+    )
+    actor: CompanyMembership | None = memberships.get(context.membership.id)
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Data-governance administration is required.",
+        )
+    require_locked_membership_capability(session, actor, "audit:export")
+    return SessionContext(company=context.company, membership=actor, user=actor.user)
 
 
 def _registered_item_scope(payload: TenantDataOperationDryRunRequest) -> list[dict]:
@@ -532,6 +570,7 @@ def create_dry_run_manifest(
     are the governance rows and a tenant audit event in the caller's company.
     """
 
+    context = _lock_dry_run_actor(session, context=context)
     # Before any per-item work: if the projection cannot be trusted, no answer
     # about any class is worth giving, and a partial manifest is worse than none.
     require_current_projection(session)
@@ -697,6 +736,7 @@ def create_dry_run_manifest(
         execution_mode="dry_run",
         status="dry_run_complete",
         approval_status="not_requested",
+        rejection_reason=None,
         request_scope_hash=request_scope_hash,
         manifest_hash=manifest_hash,
         request_evidence_ref=payload.request_evidence_ref,
@@ -732,13 +772,177 @@ def create_dry_run_manifest(
     )
 
 
+def get_dry_run_manifest(
+    session: Session,
+    *,
+    context: SessionContext,
+    operation_id: str,
+) -> TenantDataOperationDryRunRecord:
+    """Return one tenant-owned non-executable manifest for review."""
+
+    operation = session.get(TenantDataOperation, operation_id)
+    if (
+        operation is None
+        or operation.company_id != context.company.id
+        or operation.execution_mode != "dry_run"
+        or operation.status != "dry_run_complete"
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dry run not found.")
+    items = list(
+        session.scalars(
+            select(TenantDataOperationItem)
+            .where(TenantDataOperationItem.operation_id == operation.id)
+            .order_by(TenantDataOperationItem.id)
+        ).all()
+    )
+    manifest = operation.manifest_json if isinstance(operation.manifest_json, dict) else {}
+    completed_at = operation.dry_run_completed_at
+    if completed_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Dry-run evidence is incomplete.",
+        )
+    return TenantDataOperationDryRunRecord(
+        id=operation.id,
+        operation_type=operation.operation_type,
+        execution_mode="dry_run",
+        status="dry_run_complete",
+        approval_status=operation.approval_status,
+        rejection_reason=operation.rejection_reason,
+        request_scope_hash=operation.request_scope_hash,
+        manifest_hash=operation.manifest_hash,
+        request_evidence_ref=operation.request_evidence_ref,
+        completed_at=completed_at,
+        as_of=datetime.fromisoformat(str(manifest["as_of"])),
+        offboarding_plan=[
+            TenantDataOperationOffboardingCategory.model_validate(entry)
+            for entry in manifest.get("offboarding_plan", [])
+        ],
+        dependency_plan=(
+            TenantDataOperationDependencyPlan.model_validate(manifest["dependency_plan"])
+            if manifest.get("dependency_plan") is not None
+            else None
+        ),
+        exclusions=[
+            TenantDataOperationExclusion.model_validate(entry)
+            for entry in manifest.get("exclusions", [])
+        ],
+        items=[
+            TenantDataOperationItemRecord(
+                id=row.id,
+                data_class_id=row.data_class_id,
+                target_type=row.target_type,
+                target_reference_hash=row.target_reference_hash,
+                item_status=row.item_status,
+                candidate_record_count=row.candidate_record_count,
+                estimated_bytes=row.estimated_bytes,
+                legal_hold_id=row.legal_hold_id,
+                safe_to_execute=False,
+                detail_redacted=row.detail_redacted,
+            )
+            for row in items
+        ],
+    )
+
+
+def list_dry_run_manifests(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int,
+) -> TenantDataOperationDryRunListResponse:
+    """Discover a bounded page of completed dry runs in the caller's tenant.
+
+    This is review-only discovery.  It never exposes items or manifest
+    contents, starts no work, and cannot make a dry run executable.  The
+    exact-ID read endpoint remains the only detailed review surface.
+    """
+
+    operations = list(
+        session.scalars(
+            select(TenantDataOperation)
+            .where(
+                TenantDataOperation.company_id == context.company.id,
+                TenantDataOperation.execution_mode == "dry_run",
+                TenantDataOperation.status == "dry_run_complete",
+            )
+            .order_by(
+                TenantDataOperation.dry_run_completed_at.desc(),
+                TenantDataOperation.id.desc(),
+            )
+            .limit(limit)
+        ).all()
+    )
+    summaries: list[TenantDataOperationDryRunSummary] = []
+    for operation in operations:
+        completed_at = operation.dry_run_completed_at
+        manifest = operation.manifest_json if isinstance(operation.manifest_json, dict) else {}
+        as_of = manifest.get("as_of")
+        if completed_at is None or not isinstance(as_of, str):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Dry-run evidence is incomplete.",
+            )
+        summaries.append(
+            TenantDataOperationDryRunSummary(
+                id=operation.id,
+                operation_type=operation.operation_type,
+                execution_mode="dry_run",
+                status="dry_run_complete",
+                approval_status=operation.approval_status,
+                rejection_reason=operation.rejection_reason,
+                request_scope_hash=operation.request_scope_hash,
+                manifest_hash=operation.manifest_hash,
+                request_evidence_ref=operation.request_evidence_ref,
+                completed_at=completed_at,
+                as_of=datetime.fromisoformat(as_of),
+            )
+        )
+    return TenantDataOperationDryRunListResponse(operations=summaries)
+
+
+def get_tenant_integrity_report(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> TenantDataGovernanceIntegrityReport:
+    """Return content-minimized DATA-GOV-17 visibility for one tenant.
+
+    The scanner is intentionally candid when a control cannot be evaluated:
+    ``unavailable`` stays distinct from ``ok``. This reads current metadata
+    only; it does not schedule a scan, alter any hold, or authorize a data
+    operation.
+    """
+
+    report = run_integrity_scan(session, company_id=context.company.id)
+    return TenantDataGovernanceIntegrityReport(
+        checks=[
+            TenantDataGovernanceIntegrityCheck(
+                check_id=check.check_id,
+                status=check.status,
+                summary=check.summary,
+                findings=list(check.findings),
+                blocked_by=check.blocked_by,
+            )
+            for check in report.checks
+        ],
+        ok_count=report.ok_count,
+        finding_count=report.finding_count,
+        unavailable_count=report.unavailable_count,
+        is_complete=report.is_complete,
+    )
+
+
 def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
     """Ensure future callers cannot mistake a dry-run record for authority."""
 
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail={
-            "type": "data_operation_execution_unavailable",
+            # ``type`` is reserved by the RFC 7807 envelope. Keep the
+            # operation discriminator as an extension member so API clients
+            # receive it instead of losing it during error normalization.
+            "code": "data_operation_execution_unavailable",
             "detail": (
                 "IPLF-028A stores dry-run evidence only; execute, purge, export, "
                 "offboarding, restore, and provider actions are not implemented."
@@ -750,5 +954,8 @@ def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
 
 __all__ = [
     "create_dry_run_manifest",
+    "get_dry_run_manifest",
+    "get_tenant_integrity_report",
+    "list_dry_run_manifests",
     "reject_data_operation_execution",
 ]

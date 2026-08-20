@@ -16,7 +16,7 @@ from caseops_api.services.data_governance import (
     reject_data_operation_execution,
 )
 from caseops_api.services.session_context import SessionContext
-from tests.test_auth_company import bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company
 
 
 def _context_for_bootstrap(bootstrap: dict) -> SessionContext:
@@ -65,6 +65,7 @@ def test_dry_run_records_an_opaque_non_executable_manifest_and_audit_event(
         assert record.execution_mode == "dry_run"
         assert record.status == "dry_run_complete"
         assert record.approval_status == "not_requested"
+        assert record.rejection_reason is None
         assert record.items[0].item_status == "eligible"
         assert record.items[0].safe_to_execute is False
         assert len(record.manifest_hash) == 64
@@ -147,5 +148,111 @@ def test_unknown_class_and_execute_request_fail_closed_without_an_operation(
     with pytest.raises(HTTPException) as execution:
         reject_data_operation_execution(operation_id="fixture-operation")
     assert execution.value.status_code == 503
-    assert execution.value.detail["type"] == "data_operation_execution_unavailable"
+    assert execution.value.detail["code"] == "data_operation_execution_unavailable"
     assert "tenant_data_operations" in (admitted_data_class_ids() or frozenset())
+
+
+def test_iplf_028b_dry_run_routes_persist_reviewable_evidence_but_refuse_execution(
+    client: TestClient,
+) -> None:
+    """UJ-28's safe half is reviewable; its effectful half is not routable."""
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    payload = _payload().model_dump(mode="json")
+    created = client.post(
+        "/api/admin/data-governance/operations/dry-runs",
+        headers=auth_headers(token),
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    record = created.json()
+    assert record["execution_mode"] == "dry_run"
+    assert record["status"] == "dry_run_complete"
+    assert record["items"][0]["safe_to_execute"] is False
+
+    read = client.get(
+        f"/api/admin/data-governance/operations/dry-runs/{record['id']}",
+        headers=auth_headers(token),
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["manifest_hash"] == record["manifest_hash"]
+
+    execution = client.post(
+        f"/api/admin/data-governance/operations/{record['id']}/execute",
+        headers=auth_headers(token),
+    )
+    assert execution.status_code == 503, execution.text
+    assert execution.json()["code"] == "data_operation_execution_unavailable"
+
+
+def test_iplf_028b_dry_run_history_is_bounded_and_tenant_scoped(
+    client: TestClient,
+) -> None:
+    first = bootstrap_company(client)
+    first_token = str(first["access_token"])
+    second_response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Second Governance Firm",
+            "company_slug": "second-governance-firm",
+            "company_type": "law_firm",
+            "owner_full_name": "Second Owner",
+            "owner_email": "second-owner@governance.example",
+            "owner_password": "SecondFoundersPass123!",
+        },
+    )
+    assert second_response.status_code == 200, second_response.text
+    second_token = str(second_response.json()["access_token"])
+
+    first_created = client.post(
+        "/api/admin/data-governance/operations/dry-runs",
+        headers=auth_headers(first_token),
+        json=_payload().model_dump(mode="json"),
+    )
+    assert first_created.status_code == 201, first_created.text
+    second_payload = _payload().model_dump(mode="json")
+    second_payload["request_evidence_ref"] = "fixture://other-tenant"
+    second_created = client.post(
+        "/api/admin/data-governance/operations/dry-runs",
+        headers=auth_headers(second_token),
+        json=second_payload,
+    )
+    assert second_created.status_code == 201, second_created.text
+
+    history = client.get(
+        "/api/admin/data-governance/operations/dry-runs?limit=1",
+        headers=auth_headers(first_token),
+    )
+    assert history.status_code == 200, history.text
+    operations = history.json()["operations"]
+    assert [operation["id"] for operation in operations] == [first_created.json()["id"]]
+    assert operations[0]["execution_mode"] == "dry_run"
+    assert operations[0]["approval_status"] == "not_requested"
+    assert operations[0]["rejection_reason"] is None
+    assert "items" not in operations[0]
+
+    cross_tenant = client.get(
+        f"/api/admin/data-governance/operations/dry-runs/{first_created.json()['id']}",
+        headers=auth_headers(second_token),
+    )
+    assert cross_tenant.status_code == 404, cross_tenant.text
+
+
+def test_iplf_028b_integrity_route_reports_unavailable_checks_without_false_green(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    response = client.get(
+        "/api/admin/data-governance/integrity",
+        headers=auth_headers(str(bootstrap["access_token"])),
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    checks = {check["check_id"]: check for check in report["checks"]}
+    assert checks["expired_unpurged"]["status"] == "unavailable"
+    assert checks["expired_unpurged"]["blocked_by"] == "DATA-GOV-02"
+    assert checks["purged_still_searchable"]["status"] == "unavailable"
+    assert checks["provider_deletion_exceptions"]["status"] == "unavailable"
+    assert report["is_complete"] is False
+    assert report["unavailable_count"] >= 3
