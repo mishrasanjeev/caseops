@@ -91,6 +91,8 @@ import {
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
   type TenantDataGovernanceIntegrityReport,
+  type TenantDataOperationDryRunListResponse,
+  type TenantDataOperationDryRunRecord,
   type ProviderOperationReplayBatchResponse,
   type ProviderOperationReplayPreviewResponse,
   type ProviderCostProfileListResponse,
@@ -205,6 +207,8 @@ import {
   providerOperationActionResponse,
   providerOperationListResponse,
   tenantDataGovernanceIntegrityReport,
+  tenantDataOperationDryRunListResponse,
+  tenantDataOperationDryRunRecord,
   providerOperationReplayBatchResponse,
   providerOperationReplayPreviewResponse,
   providerCostProfileListResponse,
@@ -6825,6 +6829,24 @@ export async function listProviderOperations(input?: {
 export async function fetchTenantDataGovernanceIntegrity(): Promise<TenantDataGovernanceIntegrityReport> {
   const data = await apiRequest<unknown>("/api/admin/data-governance/integrity");
   return tenantDataGovernanceIntegrityReport.parse(data);
+}
+
+export async function listTenantDataOperationDryRuns(
+  limit = 20,
+): Promise<TenantDataOperationDryRunListResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/dry-runs?limit=${encodeURIComponent(String(limit))}`,
+  );
+  return tenantDataOperationDryRunListResponse.parse(data);
+}
+
+export async function fetchTenantDataOperationDryRun(
+  operationId: string,
+): Promise<TenantDataOperationDryRunRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/dry-runs/${encodeURIComponent(operationId)}`,
+  );
+  return tenantDataOperationDryRunRecord.parse(data);
 }
 
 export async function fetchProviderReadiness(): Promise<ProviderReadinessListResponse> {
