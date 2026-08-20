@@ -7819,14 +7819,15 @@
         "apps/api/tests/test_postgres_validation.py::test_records_governance_guards_reject_real_postgres_mutations"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md"
+        "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md",
+        "docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md"
       ],
       "evidence_metadata": [],
       "approvals": [],
       "blockers": [
         {
           "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
-          "summary": "No approved retention schedule, legal-hold activation/release workflow, step-up/four-eyes decision, or tenant-facing review contract has been supplied for a real data operation.",
+          "summary": "Two of the four named artefacts now exist and two do not. IMPLEMENTED: the legal-hold activation/release workflow (DATA-GOV-05), and the step-up/four-eyes decision for data-operation execution (PR #267). MECHANISM ONLY: the retention schedule has a propose/approve/activate/retire lifecycle under four eyes and step-up (PR #273), but no schedule CONTENT has been approved - which classes are kept, for how long, on what legal basis is a legal decision, and while none exists a retention purge cannot be authorized at all. MISSING: the tenant-facing review contract. Evidence: docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md.",
           "owner": "Authorized legal/privacy owner, security owner, and product owner",
           "evidence_needed": "Approved policy/version authority, named dual-approval and step-up controls, jurisdiction/tenant exceptions, and reviewed user workflow tests.",
           "safe_fallback": "Keep execution impossible in the schema and service; preserve only opaque dry-run evidence and typed 503 execute rejection.",
