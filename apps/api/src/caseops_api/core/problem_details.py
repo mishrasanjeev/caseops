@@ -135,12 +135,29 @@ STATUS_TITLES: dict[int, str] = {
 }
 
 
-def _resolve_type_slug(status_code: int, detail: str) -> str:
+def _generic_type_uri(status_code: int) -> str:
+    """The last-resort type: it identifies the status and nothing else."""
+
+    return f"https://httpstatuses.com/{status_code}"
+
+
+def _match_type_slug(status_code: int, detail: str) -> str | None:
+    """The mapped slug for this detail text, or None when nothing matches.
+
+    Split from the generic fallback so callers can distinguish "the map knows
+    this" from "the map has nothing" - previously the two were the same return
+    value, which made any `or` branch after it unreachable.
+    """
+
     detail_lower = detail.lower()
     for (code, needle, slug) in PROBLEM_TYPE_MAP:
         if code == status_code and needle.lower() in detail_lower:
             return slug
-    return f"https://httpstatuses.com/{status_code}"
+    return None
+
+
+def _resolve_type_slug(status_code: int, detail: str) -> str:
+    return _match_type_slug(status_code, detail) or _generic_type_uri(status_code)
 
 
 def _problem_payload(
@@ -157,6 +174,7 @@ def _problem_payload(
     # breakdown under `errors` for machine readers.
     errors: list[Any] | None = None
     detail_extensions: dict[str, Any] = {}
+    detail_slug: str | None = None
     if isinstance(detail, list):
         errors = jsonable_encoder(detail)
         detail_text = "; ".join(
@@ -174,6 +192,19 @@ def _problem_payload(
             or encoded_detail.pop("message", None)
             or STATUS_TITLES.get(status_code, "Error")
         )
+        # The caller's own machine-readable code. Services across this codebase
+        # raise `detail={"type": "some_slug", ...}`, and until now that slug was
+        # discarded as a reserved member - so over HTTP the refusal arrived as a
+        # generic https://httpstatuses.com/409 and a client could not tell "this
+        # class was never reviewed" from "no such class". Service-level tests
+        # never noticed, because they read exc.detail["type"] directly.
+        #
+        # Only a bare slug is taken: anything containing "/" is already a URI
+        # the caller meant as the problem type, and is left to the paths below.
+        candidate = encoded_detail.get("type")
+        if isinstance(candidate, str) and candidate and "/" not in candidate:
+            detail_slug = candidate
+
         reserved_problem_members = {
             "type",
             "title",
@@ -191,7 +222,16 @@ def _problem_payload(
     else:
         detail_text = str(detail)
 
-    slug = problem_type or _resolve_type_slug(status_code, detail_text)
+    # Order is deliberate and additive. An explicit problem_type still wins, and
+    # the substring map still beats the caller's dict slug, so no response that
+    # already resolved to a known slug changes shape. The dict slug only fills
+    # in where the answer used to be the generic status URL.
+    slug = (
+        problem_type
+        or _match_type_slug(status_code, detail_text)
+        or detail_slug
+        or _generic_type_uri(status_code)
+    )
     body: dict[str, Any] = {
         "type": slug,
         "title": STATUS_TITLES.get(status_code, "Error"),
