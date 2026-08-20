@@ -6,7 +6,8 @@ human can make a later accept/reject decision against stable evidence.  It
 intentionally excludes titles, descriptions, attendees, locations and provider
 tokens; only event identity, date-level state and lifecycle metadata are kept.
 
-DATA-GOVERNANCE-MAP: calendar projection reconciliation candidates inherit the
+DATA-GOVERNANCE-MAP: updated
+Calendar projection reconciliation candidates inherit the
 existing tenant_operational_record calendar-sync classification.  The stored
 JSON is restricted by service code to a content-minimised schema.
 
@@ -151,10 +152,13 @@ def upgrade() -> None:
                        OR NEW.ip_docket_id IS DISTINCT FROM OLD.ip_docket_id
                        OR NEW.drift_status IS DISTINCT FROM OLD.drift_status
                        OR NEW.snapshot_schema_version IS DISTINCT FROM OLD.snapshot_schema_version
-                       OR NEW.expected_snapshot_json::text IS DISTINCT FROM OLD.expected_snapshot_json::text
-                       OR NEW.observed_snapshot_json::text IS DISTINCT FROM OLD.observed_snapshot_json::text
+                       OR NEW.expected_snapshot_json::text
+                          IS DISTINCT FROM OLD.expected_snapshot_json::text
+                       OR NEW.observed_snapshot_json::text
+                          IS DISTINCT FROM OLD.observed_snapshot_json::text
                        OR NEW.snapshot_sha256 IS DISTINCT FROM OLD.snapshot_sha256
-                       OR NEW.detected_by_membership_id IS DISTINCT FROM OLD.detected_by_membership_id
+                       OR NEW.detected_by_membership_id
+                          IS DISTINCT FROM OLD.detected_by_membership_id
                        OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
                         RAISE EXCEPTION 'Calendar reconciliation snapshot evidence is immutable'
                             USING ERRCODE = 'restrict_violation';
