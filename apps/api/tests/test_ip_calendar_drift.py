@@ -742,6 +742,17 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
         purposes.append(str(kwargs["purpose"]))
 
     monkeypatch.setattr(calendar_sync, "require_recent_step_up", allow_step_up)
+    stale = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{first.reconciliation_candidate_id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "accept",
+            "evidence_reference": "matter-note:stale-calendar-review",
+            "expected_snapshot_sha256": "0" * 64,
+        },
+    )
+    assert stale.status_code == 409, stale.text
+    assert _candidates(seeded["sync_id"])[0].status == "pending"
     accepted = client.post(
         f"/api/ip/calendar-projections/reconciliation-candidates/{first.reconciliation_candidate_id}/decision",
         headers=seeded["headers"],
@@ -753,7 +764,10 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
     )
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["status"] == "accepted"
-    assert purposes == ["calendar_projection_reconciliation"]
+    assert purposes == [
+        "calendar_projection_reconciliation",
+        "calendar_projection_reconciliation",
+    ]
     factory = get_session_factory()
     with factory() as session:
         sync = session.get(CalendarEventSync, seeded["sync_id"])
