@@ -8490,6 +8490,13 @@ def decide_ip_calendar_projection_reconciliation_candidate(
         or candidate.ip_docket_id != docket.id
         or sync.sync_status != CalendarEventSyncStatus.SYNCED
         or not sync.provider_event_id
+        # Acceptance records review evidence and remains possible after a
+        # credential outage.  Rejection would queue an external PATCH, so it
+        # must not turn a disconnected/revoked connection into latent work.
+        or (
+            action == "reject"
+            and connection.status != CalendarConnectionStatus.CONNECTED
+        )
         or not can_access_ip_docket(session, context=context, docket=docket)
     ):
         session.rollback()

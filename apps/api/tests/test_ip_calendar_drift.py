@@ -785,6 +785,31 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
     second = _run(seeded["context_ids"])[0]
     assert second.reconciliation_candidate_id
     pending = _candidates(seeded["sync_id"])[-1]
+    # A rejection is a request to issue a provider PATCH.  It must not queue
+    # latent remote work while the credential has been disconnected.
+    with factory() as session:
+        connection = session.get(UserCalendarConnection, seeded["connection_id"])
+        assert connection is not None
+        connection.status = CalendarConnectionStatus.ERROR
+        session.commit()
+    unavailable = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{second.reconciliation_candidate_id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "reject",
+            "evidence_reference": "matter-note:connection-unavailable",
+            "expected_snapshot_sha256": pending.snapshot_sha256,
+        },
+    )
+    assert unavailable.status_code == 409, unavailable.text
+    with factory() as session:
+        connection = session.get(UserCalendarConnection, seeded["connection_id"])
+        sync = session.get(CalendarEventSync, seeded["sync_id"])
+        assert connection is not None and sync is not None
+        assert connection.status == CalendarConnectionStatus.ERROR
+        assert sync.sync_status == CalendarEventSyncStatus.SYNCED
+        connection.status = CalendarConnectionStatus.CONNECTED
+        session.commit()
     rejected = client.post(
         f"/api/ip/calendar-projections/reconciliation-candidates/{second.reconciliation_candidate_id}/decision",
         headers=seeded["headers"],
