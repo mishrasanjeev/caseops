@@ -2413,6 +2413,23 @@ const tenantDataOperationApprovalStatus = z.enum([
   "rejected",
 ]);
 
+export const tenantDataOperationDryRunInput = z.object({
+  operationType: tenantDataOperationType,
+  requestEvidenceRef: z.string().min(1).max(512),
+  items: z.array(
+    z.object({
+      dataClassId: z.string().min(1).max(160),
+      targetType: z.string().min(1).max(80),
+      targetReferenceHash: z.string().regex(/^[0-9a-f]{64}$/),
+      candidateRecordCount: z.number().int().min(0),
+      estimatedBytes: z.number().int().min(0),
+      detailRedacted: z.string().max(500).nullable().optional(),
+    }),
+  ).min(1).max(500),
+  retentionPolicyVersionId: z.string().max(36).nullable().optional(),
+  asOf: z.string().nullable().optional(),
+});
+
 export const tenantDataOperationDryRunSummary = z.object({
   id: z.string(),
   operation_type: tenantDataOperationType,
@@ -3378,6 +3395,8 @@ export type TenantDataGovernanceIntegrityReport =
   z.infer<typeof tenantDataGovernanceIntegrityReport>;
 export type TenantDataOperationDryRunSummary =
   z.infer<typeof tenantDataOperationDryRunSummary>;
+export type TenantDataOperationDryRunInput =
+  z.infer<typeof tenantDataOperationDryRunInput>;
 export type TenantDataOperationDryRunListResponse =
   z.infer<typeof tenantDataOperationDryRunListResponse>;
 export type TenantDataOperationDryRunRecord =
