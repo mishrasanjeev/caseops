@@ -34,8 +34,10 @@ from caseops_api.governance.data_class_projection import (
 )
 from caseops_api.schemas.data_governance import (
     TenantDataOperationDependencyPlan,
+    TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
+    TenantDataOperationDryRunSummary,
     TenantDataOperationExclusion,
     TenantDataOperationItemRecord,
     TenantDataOperationOffboardingCategory,
@@ -713,6 +715,7 @@ def create_dry_run_manifest(
         execution_mode="dry_run",
         status="dry_run_complete",
         approval_status="not_requested",
+        rejection_reason=None,
         request_scope_hash=request_scope_hash,
         manifest_hash=manifest_hash,
         request_evidence_ref=payload.request_evidence_ref,
@@ -783,7 +786,8 @@ def get_dry_run_manifest(
         operation_type=operation.operation_type,
         execution_mode="dry_run",
         status="dry_run_complete",
-        approval_status="not_requested",
+        approval_status=operation.approval_status,
+        rejection_reason=operation.rejection_reason,
         request_scope_hash=operation.request_scope_hash,
         manifest_hash=operation.manifest_hash,
         request_evidence_ref=operation.request_evidence_ref,
@@ -820,6 +824,62 @@ def get_dry_run_manifest(
     )
 
 
+def list_dry_run_manifests(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int,
+) -> TenantDataOperationDryRunListResponse:
+    """Discover a bounded page of completed dry runs in the caller's tenant.
+
+    This is review-only discovery.  It never exposes items or manifest
+    contents, starts no work, and cannot make a dry run executable.  The
+    exact-ID read endpoint remains the only detailed review surface.
+    """
+
+    operations = list(
+        session.scalars(
+            select(TenantDataOperation)
+            .where(
+                TenantDataOperation.company_id == context.company.id,
+                TenantDataOperation.execution_mode == "dry_run",
+                TenantDataOperation.status == "dry_run_complete",
+            )
+            .order_by(
+                TenantDataOperation.dry_run_completed_at.desc(),
+                TenantDataOperation.id.desc(),
+            )
+            .limit(limit)
+        ).all()
+    )
+    summaries: list[TenantDataOperationDryRunSummary] = []
+    for operation in operations:
+        completed_at = operation.dry_run_completed_at
+        manifest = operation.manifest_json if isinstance(operation.manifest_json, dict) else {}
+        as_of = manifest.get("as_of")
+        if completed_at is None or not isinstance(as_of, str):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Dry-run evidence is incomplete.",
+            )
+        summaries.append(
+            TenantDataOperationDryRunSummary(
+                id=operation.id,
+                operation_type=operation.operation_type,
+                execution_mode="dry_run",
+                status="dry_run_complete",
+                approval_status=operation.approval_status,
+                rejection_reason=operation.rejection_reason,
+                request_scope_hash=operation.request_scope_hash,
+                manifest_hash=operation.manifest_hash,
+                request_evidence_ref=operation.request_evidence_ref,
+                completed_at=completed_at,
+                as_of=datetime.fromisoformat(as_of),
+            )
+        )
+    return TenantDataOperationDryRunListResponse(operations=summaries)
+
+
 def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
     """Ensure future callers cannot mistake a dry-run record for authority."""
 
@@ -842,5 +902,6 @@ def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
 __all__ = [
     "create_dry_run_manifest",
     "get_dry_run_manifest",
+    "list_dry_run_manifests",
     "reject_data_operation_execution",
 ]

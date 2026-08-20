@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.data_governance import (
+    TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
 )
 from caseops_api.services.data_governance import (
     create_dry_run_manifest,
     get_dry_run_manifest,
+    list_dry_run_manifests,
     reject_data_operation_execution,
 )
 from caseops_api.services.session_context import SessionContext
@@ -37,6 +39,19 @@ def create_operation_dry_run(
     session: DbSession,
 ) -> TenantDataOperationDryRunRecord:
     return create_dry_run_manifest(session, context=context, payload=payload)
+
+
+@router.get(
+    "/operations/dry-runs",
+    response_model=TenantDataOperationDryRunListResponse,
+    summary="List reviewable non-executable tenant data-operation dry runs",
+)
+def list_operation_dry_runs(
+    context: DataGovernanceOperator,
+    session: DbSession,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> TenantDataOperationDryRunListResponse:
+    return list_dry_run_manifests(session, context=context, limit=limit)
 
 
 @router.get(

@@ -134,7 +134,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List reviewable non-executable tenant data-operation dry runs */
+        get: operations["list_operation_dry_runs_api_admin_data_governance_operations_dry_runs_get"];
         put?: never;
         /** Create a non-executable tenant data-operation dry run */
         post: operations["create_operation_dry_run_api_admin_data_governance_operations_dry_runs_post"];
@@ -31832,13 +31833,21 @@ export interface components {
             /** Unsatisfied Dependencies */
             unsatisfied_dependencies: components["schemas"]["TenantDataOperationUnsatisfiedDependency"][];
         };
+        /**
+         * TenantDataOperationDryRunListResponse
+         * @description A bounded, newest-first page of reviewable dry-run manifests.
+         */
+        TenantDataOperationDryRunListResponse: {
+            /** Operations */
+            operations: components["schemas"]["TenantDataOperationDryRunSummary"][];
+        };
         /** TenantDataOperationDryRunRecord */
         TenantDataOperationDryRunRecord: {
             /**
              * Approval Status
-             * @constant
+             * @enum {string}
              */
-            approval_status: "not_requested";
+            approval_status: "not_requested" | "requested" | "rejected";
             /**
              * As Of
              * Format: date-time
@@ -31870,6 +31879,8 @@ export interface components {
              * @enum {string}
              */
             operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
+            /** Rejection Reason */
+            rejection_reason: string | null;
             /** Request Evidence Ref */
             request_evidence_ref: string;
             /** Request Scope Hash */
@@ -31898,6 +31909,57 @@ export interface components {
             request_evidence_ref: string;
             /** Retention Policy Version Id */
             retention_policy_version_id?: string | null;
+        };
+        /**
+         * TenantDataOperationDryRunSummary
+         * @description Bounded discovery record for a tenant-owned dry-run manifest.
+         *
+         *     The list endpoint deliberately omits items, exclusions, and other
+         *     manifest detail. Operators use the exact-ID endpoint to review one
+         *     immutable manifest after selecting it; a history listing must not become a
+         *     second high-volume data-export surface.
+         */
+        TenantDataOperationDryRunSummary: {
+            /**
+             * Approval Status
+             * @enum {string}
+             */
+            approval_status: "not_requested" | "requested" | "rejected";
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /**
+             * Execution Mode
+             * @constant
+             */
+            execution_mode: "dry_run";
+            /** Id */
+            id: string;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /**
+             * Operation Type
+             * @enum {string}
+             */
+            operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Request Evidence Ref */
+            request_evidence_ref: string;
+            /** Request Scope Hash */
+            request_scope_hash: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "dry_run_complete";
         };
         /**
          * TenantDataOperationExclusion
@@ -32942,6 +33004,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_operation_dry_runs_api_admin_data_governance_operations_dry_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationDryRunListResponse"];
                 };
             };
             /** @description Validation Error */

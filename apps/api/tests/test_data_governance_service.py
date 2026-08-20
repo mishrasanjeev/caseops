@@ -65,6 +65,7 @@ def test_dry_run_records_an_opaque_non_executable_manifest_and_audit_event(
         assert record.execution_mode == "dry_run"
         assert record.status == "dry_run_complete"
         assert record.approval_status == "not_requested"
+        assert record.rejection_reason is None
         assert record.items[0].item_status == "eligible"
         assert record.items[0].safe_to_execute is False
         assert len(record.manifest_hash) == 64
@@ -183,3 +184,56 @@ def test_iplf_028b_dry_run_routes_persist_reviewable_evidence_but_refuse_executi
     )
     assert execution.status_code == 503, execution.text
     assert execution.json()["code"] == "data_operation_execution_unavailable"
+
+
+def test_iplf_028b_dry_run_history_is_bounded_and_tenant_scoped(
+    client: TestClient,
+) -> None:
+    first = bootstrap_company(client)
+    first_token = str(first["access_token"])
+    second_response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Second Governance Firm",
+            "company_slug": "second-governance-firm",
+            "company_type": "law_firm",
+            "owner_full_name": "Second Owner",
+            "owner_email": "second-owner@governance.example",
+            "owner_password": "SecondFoundersPass123!",
+        },
+    )
+    assert second_response.status_code == 200, second_response.text
+    second_token = str(second_response.json()["access_token"])
+
+    first_created = client.post(
+        "/api/admin/data-governance/operations/dry-runs",
+        headers=auth_headers(first_token),
+        json=_payload().model_dump(mode="json"),
+    )
+    assert first_created.status_code == 201, first_created.text
+    second_payload = _payload().model_dump(mode="json")
+    second_payload["request_evidence_ref"] = "fixture://other-tenant"
+    second_created = client.post(
+        "/api/admin/data-governance/operations/dry-runs",
+        headers=auth_headers(second_token),
+        json=second_payload,
+    )
+    assert second_created.status_code == 201, second_created.text
+
+    history = client.get(
+        "/api/admin/data-governance/operations/dry-runs?limit=1",
+        headers=auth_headers(first_token),
+    )
+    assert history.status_code == 200, history.text
+    operations = history.json()["operations"]
+    assert [operation["id"] for operation in operations] == [first_created.json()["id"]]
+    assert operations[0]["execution_mode"] == "dry_run"
+    assert operations[0]["approval_status"] == "not_requested"
+    assert operations[0]["rejection_reason"] is None
+    assert "items" not in operations[0]
+
+    cross_tenant = client.get(
+        f"/api/admin/data-governance/operations/dry-runs/{first_created.json()['id']}",
+        headers=auth_headers(second_token),
+    )
+    assert cross_tenant.status_code == 404, cross_tenant.text
