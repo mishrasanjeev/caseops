@@ -2384,6 +2384,22 @@ export const providerOperationListResponse = z.object({
   replayable_count: z.number().int().min(0),
 });
 
+export const tenantDataGovernanceIntegrityCheck = z.object({
+  check_id: z.string(),
+  status: z.enum(["ok", "findings", "unavailable"]),
+  summary: z.string(),
+  findings: z.array(z.string()),
+  blocked_by: z.string().nullable(),
+});
+
+export const tenantDataGovernanceIntegrityReport = z.object({
+  checks: z.array(tenantDataGovernanceIntegrityCheck),
+  ok_count: z.number().int().min(0),
+  finding_count: z.number().int().min(0),
+  unavailable_count: z.number().int().min(0),
+  is_complete: z.boolean(),
+});
+
 export const providerOperationActionResponse = z.object({
   action: z.enum(["replay", "ignore", "mark_resolved"]),
   changed: z.boolean(),
@@ -3305,6 +3321,10 @@ export type OutlookBulkSyncResponse = z.infer<typeof outlookBulkSyncResponse>;
 export type ProviderOperationRecord = z.infer<typeof providerOperationRecord>;
 export type ProviderOperationListResponse =
   z.infer<typeof providerOperationListResponse>;
+export type TenantDataGovernanceIntegrityCheck =
+  z.infer<typeof tenantDataGovernanceIntegrityCheck>;
+export type TenantDataGovernanceIntegrityReport =
+  z.infer<typeof tenantDataGovernanceIntegrityReport>;
 export type ProviderOperationActionResponse =
   z.infer<typeof providerOperationActionResponse>;
 export type ProviderOperationReplayPreviewResponse =
