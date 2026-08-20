@@ -2400,6 +2400,57 @@ export const tenantDataGovernanceIntegrityReport = z.object({
   is_complete: z.boolean(),
 });
 
+const tenantDataOperationType = z.enum([
+  "tenant_export",
+  "retention_purge",
+  "tenant_offboarding",
+  "restore_validation",
+]);
+
+const tenantDataOperationApprovalStatus = z.enum([
+  "not_requested",
+  "requested",
+  "rejected",
+]);
+
+export const tenantDataOperationDryRunSummary = z.object({
+  id: z.string(),
+  operation_type: tenantDataOperationType,
+  execution_mode: z.literal("dry_run"),
+  status: z.literal("dry_run_complete"),
+  approval_status: tenantDataOperationApprovalStatus,
+  rejection_reason: z.string().nullable(),
+  request_scope_hash: z.string(),
+  manifest_hash: z.string(),
+  request_evidence_ref: z.string(),
+  completed_at: z.string(),
+  as_of: z.string(),
+});
+
+export const tenantDataOperationDryRunListResponse = z.object({
+  operations: z.array(tenantDataOperationDryRunSummary),
+});
+
+export const tenantDataOperationDryRunRecord = tenantDataOperationDryRunSummary.extend({
+  items: z.array(
+    z.object({
+      id: z.string(),
+      data_class_id: z.string(),
+      target_type: z.string(),
+      target_reference_hash: z.string(),
+      item_status: z.enum(["pending", "eligible", "held", "blocked"]),
+      candidate_record_count: z.number().int().min(0),
+      estimated_bytes: z.number().int().min(0),
+      legal_hold_id: z.string().nullable(),
+      safe_to_execute: z.literal(false),
+      detail_redacted: z.string().nullable(),
+    }),
+  ),
+  exclusions: z.array(z.unknown()),
+  offboarding_plan: z.array(z.unknown()),
+  dependency_plan: z.unknown().nullable(),
+});
+
 export const providerOperationActionResponse = z.object({
   action: z.enum(["replay", "ignore", "mark_resolved"]),
   changed: z.boolean(),
@@ -3325,6 +3376,12 @@ export type TenantDataGovernanceIntegrityCheck =
   z.infer<typeof tenantDataGovernanceIntegrityCheck>;
 export type TenantDataGovernanceIntegrityReport =
   z.infer<typeof tenantDataGovernanceIntegrityReport>;
+export type TenantDataOperationDryRunSummary =
+  z.infer<typeof tenantDataOperationDryRunSummary>;
+export type TenantDataOperationDryRunListResponse =
+  z.infer<typeof tenantDataOperationDryRunListResponse>;
+export type TenantDataOperationDryRunRecord =
+  z.infer<typeof tenantDataOperationDryRunRecord>;
 export type ProviderOperationActionResponse =
   z.infer<typeof providerOperationActionResponse>;
 export type ProviderOperationReplayPreviewResponse =
