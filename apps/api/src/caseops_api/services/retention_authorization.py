@@ -155,6 +155,22 @@ def propose_version(
         .limit(1)
     )
 
+    # Only the term fields may come from the caller. Splatting `terms` straight
+    # into the constructor let it carry `reviewed_by_membership_id`,
+    # `reviewer_label_snapshot`, `approved_at` and `activated_at` - none of
+    # which are shadowed by the explicit kwargs below - so a proposer could
+    # stamp their own candidate with approval evidence it never received. The
+    # four-eyes CHECK does not object, because it only compares ids when both
+    # are present.
+    unknown = sorted(set(terms) - set(_HASHED_TERMS))
+    if unknown:
+        raise _conflict(
+            "retention_version_unknown_terms",
+            "A proposal may set only the policy terms; "
+            f"{', '.join(unknown)} is not one of them.",
+            fields=unknown,
+        )
+
     version = DataRetentionPolicyVersion(
         company_id=context.company.id,
         policy_id=policy_id,
@@ -169,13 +185,17 @@ def propose_version(
     # The schema forbids an open-ended retention that does not name what
     # approved it. Say so in the caller's language rather than surfacing a
     # constraint violation as a 500.
-    if version.retention_days is None and not version.indefinite_retention_approval_ref:
+    # .strip() matters: "   " is truthy, so without it a whitespace-only string
+    # counts as naming an approval, and "keep this forever" passes on a space bar.
+    approval_ref = (version.indefinite_retention_approval_ref or "").strip()
+    version.indefinite_retention_approval_ref = approval_ref or None
+    if version.retention_days is None and not approval_ref:
         raise _conflict(
             "retention_version_indefinite_needs_approval",
             "Keeping data indefinitely has to name the approval that permits it; "
             "an unbounded default is not a retention schedule.",
         )
-    if version.retention_days is not None and version.indefinite_retention_approval_ref:
+    if version.retention_days is not None and approval_ref:
         raise _conflict(
             "retention_version_cannot_be_both",
             "A version states either a bounded retention in days or a named "
@@ -251,9 +271,16 @@ def activate_version(
 ) -> DataRetentionPolicyVersion:
     """Put approved terms into force, retiring whichever version they supersede.
 
-    Separate from approval on purpose. Consenting to terms and putting them into
-    force are different acts, and keeping them apart means an approver cannot
-    quietly make their own consent effective.
+    Separate from approval on purpose: consenting to terms and putting them into
+    force are different acts, each deliberate and each separately audited.
+
+    It does NOT require a third person. An earlier version of this docstring
+    claimed an approver could not make their own consent effective, and nothing
+    in the code enforced that - the same membership may approve and then
+    activate. Two-person control is supplied by proposer != reviewer; a third
+    party here would be a rule with no stated rationale, and a comment asserting
+    a control that does not exist is worse than the missing control, because it
+    stops the next reader looking.
 
     Superseding is done here rather than left to the operator because two active
     versions of one policy is not a state anyone can act on: a purge would have
@@ -350,10 +377,16 @@ def active_version_for_policy(
     expected answer today: DATA-GOV-02 has no approved schedule.
     """
 
-    return session.scalar(
+    # scalar_one_or_none, not scalar. `scalar` returns the first row and discards
+    # the rest, so two active versions of one policy - the state activate_version
+    # exists to prevent - would be resolved by whichever row the database happened
+    # to return first. A purge would get one of two different answers about the
+    # same records and no one would know a second answer existed. Raising is the
+    # only honest response to an ambiguity this function cannot resolve.
+    return session.scalars(
         select(DataRetentionPolicyVersion).where(
             DataRetentionPolicyVersion.company_id == company_id,
             DataRetentionPolicyVersion.policy_id == policy_id,
             DataRetentionPolicyVersion.status == DataRetentionPolicyVersionStatus.ACTIVE,
         )
-    )
+    ).one_or_none()

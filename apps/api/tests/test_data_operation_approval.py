@@ -88,7 +88,13 @@ def _dry_run(
     now = datetime.now(UTC)
     values: dict = {
         "company_id": context.company.id,
-        "operation_type": "retention_purge",
+        # tenant_export, not retention_purge: these tests are about the approval
+        # state machine, which is operation-type agnostic. A retention purge now
+        # additionally requires an active retention schedule to be approved
+        # (DATA-GOV-02), and threading one through every fixture here would test
+        # retention authorization in the file that tests four eyes. That rule has
+        # its own tests in test_datagov02_retention_authorization.py.
+        "operation_type": "tenant_export",
         "execution_mode": "dry_run",
         "status": "dry_run_complete",
         "approval_status": "not_requested",

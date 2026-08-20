@@ -30,7 +30,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import TenantDataOperation
+from caseops_api.db.models import (
+    DataRetentionPolicyVersion,
+    DataRetentionPolicyVersionStatus,
+    TenantDataOperation,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
@@ -220,6 +224,37 @@ def approve_execution(
             "This manifest has already been approved; execution "
             f"{already.id} authorises it.",
         )
+
+    # A retention purge is BY DEFINITION an act under a retention schedule, and
+    # this is the point where it stops being a simulation. Omitting the field was
+    # strictly easier than citing an unapproved one - the dry run only checks a
+    # version it was given - so the way to skip authorization entirely was to say
+    # nothing. Checked here rather than at dry-run time because a dry run is
+    # explicitly non-executable: refusing to let an operator SIMULATE a purge
+    # before a schedule exists blocks the exploration the manifest is for, while
+    # authorizing one without a schedule is the thing DATA-GOV-02 forbids.
+    #
+    # While no schedule is approved, this makes retention purges unauthorizable.
+    # That is the honest consequence of having no schedule.
+    if dry_run.operation_type == "retention_purge":
+        version_id = dry_run.retention_policy_version_id
+        active = None
+        if version_id is not None:
+            active = session.scalar(
+                select(DataRetentionPolicyVersion).where(
+                    DataRetentionPolicyVersion.id == version_id,
+                    DataRetentionPolicyVersion.company_id == context.company.id,
+                    DataRetentionPolicyVersion.status
+                    == DataRetentionPolicyVersionStatus.ACTIVE,
+                )
+            )
+        if active is None:
+            raise _conflict(
+                "retention_purge_requires_an_active_policy_version",
+                "A retention purge can only be authorized under an active retention "
+                "policy version; this manifest names "
+                + (f"{version_id}, which is not active." if version_id else "none."),
+            )
 
     now = _now()
     execute = TenantDataOperation(

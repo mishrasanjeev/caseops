@@ -25,7 +25,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, MultipleResultsFound
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -33,6 +33,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     DataRetentionPolicy,
     DataRetentionPolicyVersion,
+    TenantDataOperation,
     User,
     UserMFASetting,
     UserMFAStepUp,
@@ -40,7 +41,9 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.data_governance import TenantDataOperationDryRunRequest
 from caseops_api.services.data_governance import create_dry_run_manifest
+from caseops_api.services.data_operation_approval import approve_execution
 from caseops_api.services.retention_authorization import (
+    _HASHED_TERMS,
     STEP_UP_PURPOSE,
     activate_version,
     active_version_for_policy,
@@ -147,10 +150,12 @@ def _step_up(session: Session, context: SessionContext, *, purpose: str) -> None
     session.flush()
 
 
-def _dry_run_payload(version_id: str | None) -> TenantDataOperationDryRunRequest:
+def _dry_run_payload(
+    version_id: str | None, *, operation_type: str = "retention_purge"
+) -> TenantDataOperationDryRunRequest:
     return TenantDataOperationDryRunRequest.model_validate(
         {
-            "operation_type": "retention_purge",
+            "operation_type": operation_type,
             "request_evidence_ref": "ticket://retention",
             "retention_policy_version_id": version_id,
             "items": [
@@ -213,12 +218,34 @@ class TestOnlyAnAuthorizedVersionCanBeCited:
 
         assert record.status == "dry_run_complete"
 
-    def test_citing_nothing_is_still_allowed(
+    def test_a_non_retention_operation_needs_no_schedule(
         self, session: Session, proposer: SessionContext
     ) -> None:
-        # A tenant export is not a retention act and needs no schedule. Forcing
-        # one would push operators to cite an unrelated policy to get past the
+        # A tenant export is not a retention act. Forcing it to cite a schedule
+        # would push operators to name an unrelated policy to get past the
         # check, which is worse than not asking.
+        #
+        # This test previously used the default operation_type - retention_purge
+        # - while its comment argued about exports, so it asserted the exact
+        # thing the comment was not defending: that a retention purge with no
+        # schedule is fine. The comment defended a case the test never ran.
+        record = create_dry_run_manifest(
+            session,
+            context=proposer,
+            payload=_dry_run_payload(None, operation_type="tenant_export"),
+        )
+
+        assert record.status == "dry_run_complete"
+
+    def test_simulating_a_purge_without_a_schedule_is_still_allowed(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # A dry run is explicitly non-executable. Refusing to let an operator
+        # SIMULATE a purge before a schedule exists blocks the exploration the
+        # manifest is for; the manifest records retention_policy_version_id as
+        # null, which is the honest statement that nothing authorized it.
+        # Authorization is required at approve_execution instead - see
+        # TestARealPurgeNeedsAnActiveSchedule.
         record = create_dry_run_manifest(
             session, context=proposer, payload=_dry_run_payload(None)
         )
@@ -471,6 +498,312 @@ class TestTheLifecycleIsDrivable:
             reason="superseded by the 2027 records policy",
         )
         assert retired.status == "retired"
+
+
+class TestARealPurgeNeedsAnActiveSchedule:
+    """The dry run may simulate freely; authorizing an execution may not.
+
+    Omitting `retention_policy_version_id` was strictly easier than citing an
+    unapproved one, because the status check is only reached when a version is
+    named. So the way to skip authorization entirely was to say nothing - and
+    `approve_execution` copied the null straight into the authorized execute row.
+    """
+
+    def _submitted_purge(
+        self, session: Session, requester: SessionContext, version_id: str | None
+    ) -> TenantDataOperation:
+        record = create_dry_run_manifest(
+            session, context=requester, payload=_dry_run_payload(version_id)
+        )
+        operation = session.get(TenantDataOperation, record.id)
+        assert operation is not None
+        operation.approval_status = "requested"
+        session.flush()
+        return operation
+
+    def test_a_purge_naming_no_schedule_cannot_be_approved(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        operation = self._submitted_purge(session, proposer, None)
+        approver = _colleague(session, proposer.company, "Approver")
+
+        with pytest.raises(HTTPException) as excinfo:
+            approve_execution(
+                session,
+                context=approver,
+                operation_id=operation.id,
+                approver_label="Approver",
+            )
+
+        assert (
+            excinfo.value.detail["type"]
+            == "retention_purge_requires_an_active_policy_version"
+        )
+
+    def test_a_purge_whose_schedule_was_retired_after_the_dry_run_cannot_be_approved(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # The status is re-checked at approval, not trusted from dry-run time.
+        # A schedule withdrawn between simulation and authorization must not
+        # still authorize.
+        policy = _policy(session, proposer.company.id)
+        reviewer = _colleague(session, proposer.company)
+        version = propose_version(
+            session,
+            context=proposer,
+            policy_id=policy.id,
+            terms=dict(_TERMS),
+            proposer_label="Records owner",
+        )
+        approve_version(
+            session, context=reviewer, version_id=version.id, reviewer_label="Reviewer"
+        )
+        activate_version(session, context=reviewer, version_id=version.id)
+        operation = self._submitted_purge(session, proposer, version.id)
+
+        retire_version(
+            session,
+            context=proposer,
+            version_id=version.id,
+            reason="withdrawn before execution",
+        )
+
+        with pytest.raises(HTTPException) as excinfo:
+            approve_execution(
+                session,
+                context=reviewer,
+                operation_id=operation.id,
+                approver_label="Reviewer",
+            )
+
+        assert (
+            excinfo.value.detail["type"]
+            == "retention_purge_requires_an_active_policy_version"
+        )
+
+    def test_a_purge_under_an_active_schedule_can_be_approved(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # The fence must not be a wall.
+        policy = _policy(session, proposer.company.id)
+        reviewer = _colleague(session, proposer.company)
+        version = propose_version(
+            session,
+            context=proposer,
+            policy_id=policy.id,
+            terms=dict(_TERMS),
+            proposer_label="Records owner",
+        )
+        approve_version(
+            session, context=reviewer, version_id=version.id, reviewer_label="Reviewer"
+        )
+        activate_version(session, context=reviewer, version_id=version.id)
+        operation = self._submitted_purge(session, proposer, version.id)
+
+        execution = approve_execution(
+            session,
+            context=reviewer,
+            operation_id=operation.id,
+            approver_label="Reviewer",
+        )
+
+        assert execution.approval_status == "approved"
+        assert execution.retention_policy_version_id == version.id
+
+
+class TestControlsThatHadNoKillingTest:
+    """Each of these controls existed and survived a mutant that disabled it.
+
+    An adversarial pass ran mutation testing against the first version of this
+    file: disable `_require_status`, or the tenant check in `_load`, or the
+    no-proposer guard, and all eighteen tests still passed. A control nothing
+    can kill is indistinguishable from one that is not there.
+    """
+
+    def _candidate(
+        self, session: Session, proposer: SessionContext
+    ) -> DataRetentionPolicyVersion:
+        policy = _policy(session, proposer.company.id)
+        return propose_version(
+            session,
+            context=proposer,
+            policy_id=policy.id,
+            terms=dict(_TERMS),
+            proposer_label="Records owner",
+        )
+
+    def test_an_approved_version_cannot_be_approved_again(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # Kills the _require_status mutant. approved -> approved is permitted by
+        # the immutability trigger, and reviewer columns are not immutable, so
+        # without this a second reviewer silently overwrites the first one's
+        # recorded consent - the audit trail then names the wrong person.
+        version = self._candidate(session, proposer)
+        first = _colleague(session, proposer.company, "First")
+        second = _colleague(session, proposer.company, "Second")
+        approve_version(
+            session, context=first, version_id=version.id, reviewer_label="First"
+        )
+
+        with pytest.raises(HTTPException) as excinfo:
+            approve_version(
+                session, context=second, version_id=version.id, reviewer_label="Second"
+            )
+
+        assert excinfo.value.detail["type"] == "retention_version_wrong_status"
+        assert version.reviewed_by_membership_id == first.membership.id
+
+    def test_a_candidate_with_no_recorded_proposer_cannot_be_approved(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # Kills the no-proposer mutant, and the state is reachable: the
+        # proposer FK is ON DELETE SET NULL, and a candidate row is mutable, so
+        # a departing colleague's membership leaves the columns NULL. Four eyes
+        # would then reduce to one with ck_..._reviewer_distinct vacuously
+        # satisfied - the same person who wrote the terms approving them.
+        version = self._candidate(session, proposer)
+        version.proposed_by_membership_id = None
+        version.proposed_by_membership_company_id = None
+        version.policy_hash = policy_terms_hash(version)
+        session.flush()
+
+        with pytest.raises(HTTPException) as excinfo:
+            approve_version(
+                session,
+                context=proposer,
+                version_id=version.id,
+                reviewer_label="The same person",
+            )
+
+        assert excinfo.value.detail["type"] == "retention_version_has_no_proposer"
+
+    @pytest.mark.parametrize("action", ["approve", "activate", "retire"])
+    def test_another_tenant_cannot_drive_this_lifecycle(
+        self, session: Session, proposer: SessionContext, action: str
+    ) -> None:
+        # Kills the _load tenant mutant. Only the dry-run path had a
+        # cross-tenant test; these three had none, so nothing proved one firm
+        # could not approve, activate or retire another firm's schedule.
+        version = self._candidate(session, proposer)
+        neighbour_company = Company(
+            name="Neighbour Legal",
+            slug=f"neighbour-{uuid4().hex[:8]}",
+            company_type="law_firm",
+            tenant_key=f"neighbour-{uuid4().hex[:8]}",
+        )
+        session.add(neighbour_company)
+        session.flush()
+        outsider = _colleague(session, neighbour_company, "Outsider")
+
+        with pytest.raises(HTTPException) as excinfo:
+            if action == "approve":
+                approve_version(
+                    session,
+                    context=outsider,
+                    version_id=version.id,
+                    reviewer_label="Outsider",
+                )
+            elif action == "activate":
+                activate_version(session, context=outsider, version_id=version.id)
+            else:
+                retire_version(
+                    session,
+                    context=outsider,
+                    version_id=version.id,
+                    reason="not mine to retire",
+                )
+
+        assert excinfo.value.status_code == 404
+
+    def test_a_proposal_cannot_carry_its_own_approval_evidence(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # Kills the terms-allowlist mutant. reviewed_by_*, reviewer_label and
+        # approved_at are not shadowed by the explicit kwargs, so splatting the
+        # caller's dict let a proposer stamp their own candidate with approval
+        # it never received.
+        policy = _policy(session, proposer.company.id)
+        reviewer = _colleague(session, proposer.company)
+
+        with pytest.raises(HTTPException) as excinfo:
+            propose_version(
+                session,
+                context=proposer,
+                policy_id=policy.id,
+                terms={
+                    **_TERMS,
+                    "reviewed_by_membership_id": reviewer.membership.id,
+                    "reviewer_label_snapshot": "General Counsel",
+                    "approved_at": datetime.now(UTC),
+                },
+                proposer_label="Records owner",
+            )
+
+        assert excinfo.value.detail["type"] == "retention_version_unknown_terms"
+
+    def test_a_whitespace_approval_reference_is_not_an_approval(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # `not "   "` is False, so before the strip a whitespace-only string
+        # counted as naming the approval for indefinite retention. "Keep this
+        # forever" passed on a space bar.
+        policy = _policy(session, proposer.company.id)
+
+        with pytest.raises(HTTPException) as excinfo:
+            propose_version(
+                session,
+                context=proposer,
+                policy_id=policy.id,
+                terms={
+                    **_TERMS,
+                    "retention_days": None,
+                    "indefinite_retention_approval_ref": "   ",
+                },
+                proposer_label="Records owner",
+            )
+
+        assert (
+            excinfo.value.detail["type"]
+            == "retention_version_indefinite_needs_approval"
+        )
+
+    def test_two_active_versions_raise_rather_than_picking_one(
+        self, session: Session, proposer: SessionContext
+    ) -> None:
+        # `session.scalar` returns the first row and discards the rest, so this
+        # state - which activate_version exists to prevent, and which no partial
+        # unique index forbids - was resolved by coin flip. A purge would get
+        # one of two answers about the same records and nobody would know a
+        # second existed.
+        policy = _policy(session, proposer.company.id)
+        for number in (1, 2):
+            _version(session, policy=policy, status="active", version=number)
+
+        with pytest.raises(MultipleResultsFound):
+            active_version_for_policy(
+                session, company_id=proposer.company.id, policy_id=policy.id
+            )
+
+    def test_every_settable_term_is_covered_by_the_hash(self) -> None:
+        # The hash is what makes an approval refer to a specific document. A
+        # term column outside it could be edited after review without detection,
+        # and nothing else would notice.
+        settable = {
+            "data_class_selector_json",
+            "purpose",
+            "legal_policy_basis",
+            "sensitivity",
+            "retention_days",
+            "indefinite_retention_approval_ref",
+            "disposition",
+            "hold_behavior",
+            "source_license_limits",
+            "region",
+            "subprocessor",
+        }
+
+        assert settable <= set(_HASHED_TERMS), sorted(settable - set(_HASHED_TERMS))
 
 
 class TestStepUpGatesTheAuthorizingDirection:
