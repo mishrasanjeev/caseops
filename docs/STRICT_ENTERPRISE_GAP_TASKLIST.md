@@ -1059,13 +1059,40 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 
 ### EH-SGR-04 - Invoice numbering not gapless, not concurrency-safe, not immutable
 
-- **Status:** Partially implemented.
+- **Status:** Implemented. Sequence half in PR #240 (2026-08-17), immutability
+  half in migration `20260820_0002`.
 - **Gap found:** arbitrary invoice numbers may be supplied by an admin or an
   outside-counsel portal user; the sequence is read unlocked so concurrent
   creation raises an uncaught IntegrityError (500, not retry); a tenant without a
   billing profile can auto-number exactly one invoice ever; immutability exists
   only because no edit endpoint was written - no CHECK, trigger or revision table.
-- **Severity:** stop-ship for GST invoicing.
+- **Closed by:**
+  - Gapless and concurrency-safe: `invoice_number_sequence_query` takes the
+    profile row with `FOR UPDATE` before the read-modify-write, and
+    `next_invoice_number` no longer returns a constant when a tenant has no
+    billing profile. Regression:
+    `tests/test_20260816_invoice_number_allocation.py`, whose locking assertion
+    compiles against the PostgreSQL dialect because SQLite ignores `FOR UPDATE`.
+  - Immutable: `20260820_0002` adds a BEFORE UPDATE trigger rejecting any change
+    to `invoice_number`, plus a non-blank CHECK declared on the model and applied
+    on every dialect. Regression:
+    `tests/test_20260820_invoice_number_immutable.py`.
+- **Corrected in the gap text above:** the "arbitrary numbers from an admin"
+  half was already wrong when written. The firm-issued create path exposes
+  `invoice_number` only on `InvoiceNumberPreviewResponse`, a response model; no
+  request schema accepts it. The outside-counsel portal does take a number
+  (`portal_outside_counsel.py`), but that is the OC firm's own invoice number on
+  a `NEEDS_REVIEW` submission, not an allocation from the firm's GST sequence —
+  correct data, not a defect.
+- **Deliberately not added:** a revision table. The ledger listed it as one of
+  three absent mechanisms, but a revision history records permitted changes;
+  once the column cannot change there is nothing to record, and adding one would
+  imply a mutation path that must not exist.
+- **Verification caveat:** the trigger assertions are `@pytest.mark.postgres`
+  and SKIP on the default suite (4 skipped locally). They run in the
+  `postgres-validation` CI job. Local evidence covers the CHECK, the model
+  declaration and the migration replay only.
+- **Severity:** was stop-ship for GST invoicing.
 
 ### EH-SGR-05 - Rate limiting covers 3.7% of the API and is per-instance
 

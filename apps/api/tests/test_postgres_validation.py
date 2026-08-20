@@ -7288,3 +7288,149 @@ def test_login_releases_identity_fence_before_background_audit_on_postgres(
         )
         assert audit is not None
         assert profile is not None and profile.last_login_at is not None
+
+
+# ---------------------------------------------------------------------------
+# EH-SGR-04 - invoice number immutability (migration 20260820_0002)
+#
+# These live here rather than beside the rest of the EH-SGR-04 regression
+# because the postgres-validation CI job runs exactly one file:
+#
+#     uv run pytest -q -m postgres tests/test_postgres_validation.py
+#
+# A @pytest.mark.postgres test in any other module is skipped on the default
+# shards AND never selected here, so it runs nowhere while still reading as
+# coverage. That is the "committed spec omitted by a manual allowlist is not
+# regression coverage" trap.
+#
+# Placing them here also buys better evidence: `_ensure_migrations` has run
+# `alembic upgrade head`, so these assert against the real migrated
+# `matter_invoices` table rather than a hand-built copy of the DDL. That
+# proves the migration applied the trigger, not merely that the SQL is valid.
+# ---------------------------------------------------------------------------
+
+
+def _seed_invoice(session: Session, company_id: str, matter_id: str, number: str) -> str:
+    invoice_id = str(uuid4())
+    session.execute(
+        text(
+            "INSERT INTO matter_invoices "
+            "(id, company_id, matter_id, invoice_number, status, currency, "
+            " subtotal_amount_minor, tax_amount_minor, total_amount_minor, "
+            " amount_received_minor, balance_due_minor, issued_on, "
+            " created_at, updated_at) "
+            "VALUES (:id, :co, :mt, :num, 'draft', 'INR', "
+            " 1000, 0, 1000, 0, 1000, :d, :ts, :ts)"
+        ),
+        {
+            "id": invoice_id,
+            "co": company_id,
+            "mt": matter_id,
+            "num": number,
+            "d": date(2026, 8, 20),
+            "ts": datetime.now(UTC),
+        },
+    )
+    return invoice_id
+
+
+@pytest.mark.postgres
+def test_invoice_number_cannot_be_rewritten_on_postgres(pg_engine):
+    """The control EH-SGR-04 was missing: an issued number is immutable.
+
+    Under Indian GST a tax invoice number is fixed at issue; corrections go
+    through a credit or debit note. Before 20260820_0002 nothing enforced that
+    - immutability existed only because no edit endpoint had been written.
+    """
+    from sqlalchemy.exc import DBAPIError
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        matter_id = _seed_matter(session, company_id)
+        invoice_id = _seed_invoice(session, company_id, matter_id, "GBA-0001")
+        session.commit()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError) as exc:
+            session.execute(
+                text(
+                    "UPDATE matter_invoices SET invoice_number = :n WHERE id = :i"
+                ),
+                {"n": "GBA-9999", "i": invoice_id},
+            )
+            session.commit()
+        assert "immutable" in str(exc.value).lower()
+        session.rollback()
+
+    with Session(pg_engine) as verify:
+        got = verify.execute(
+            text("SELECT invoice_number FROM matter_invoices WHERE id = :i"),
+            {"i": invoice_id},
+        ).scalar_one()
+        assert got == "GBA-0001", "the rejected UPDATE must not have applied"
+
+
+@pytest.mark.postgres
+def test_invoice_amounts_remain_updatable_on_postgres(pg_engine):
+    """An immutability control that freezes the whole row is a bug, not a
+    control: recording a payment legitimately rewrites amounts on an issued
+    invoice. Only the number is frozen."""
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        matter_id = _seed_matter(session, company_id)
+        invoice_id = _seed_invoice(session, company_id, matter_id, "GBA-0002")
+        session.commit()
+
+    with Session(pg_engine) as session:
+        session.execute(
+            text(
+                "UPDATE matter_invoices SET amount_received_minor = 400, "
+                "balance_due_minor = 600 WHERE id = :i"
+            ),
+            {"i": invoice_id},
+        )
+        session.commit()
+
+    with Session(pg_engine) as verify:
+        received = verify.execute(
+            text("SELECT amount_received_minor FROM matter_invoices WHERE id = :i"),
+            {"i": invoice_id},
+        ).scalar_one()
+        assert received == 400
+
+
+@pytest.mark.postgres
+def test_rewriting_the_same_invoice_number_is_not_an_error_on_postgres(pg_engine):
+    """A no-op rewrite is what an ORM flush of an unchanged row looks like.
+    The trigger's WHEN clause must let it through, or every ordinary save of
+    an invoice fails."""
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        matter_id = _seed_matter(session, company_id)
+        invoice_id = _seed_invoice(session, company_id, matter_id, "GBA-0003")
+        session.commit()
+
+    with Session(pg_engine) as session:
+        session.execute(
+            text("UPDATE matter_invoices SET invoice_number = :n WHERE id = :i"),
+            {"n": "GBA-0003", "i": invoice_id},
+        )
+        session.commit()
+
+
+@pytest.mark.postgres
+def test_blank_invoice_number_is_rejected_on_postgres(pg_engine):
+    """ck_matter_invoice_number_not_blank, on the real migrated table."""
+    from sqlalchemy.exc import DBAPIError
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        matter_id = _seed_matter(session, company_id)
+        session.commit()
+
+    for blank in ("", "   "):
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError):
+                _seed_invoice(session, company_id, matter_id, blank)
+                session.commit()
+            session.rollback()
