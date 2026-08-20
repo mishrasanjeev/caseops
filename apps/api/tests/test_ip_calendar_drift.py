@@ -759,6 +759,10 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
         sync = session.get(CalendarEventSync, seeded["sync_id"])
         assert sync is not None
         assert sync.sync_status == CalendarEventSyncStatus.SYNCED
+    # An accepted observation stays visible in history but is not re-opened or
+    # re-audited on each scan while the exact external state remains unchanged.
+    assert _run(seeded["context_ids"]) == []
+    assert _candidates(seeded["sync_id"])[0].status == "accepted"
 
     changed_date = (DUE + timedelta(days=2)).isoformat()
     calendar_sync.set_google_calendar_provider_for_tests(
@@ -784,6 +788,47 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
         assert sync.sync_status == CalendarEventSyncStatus.PENDING
         assert sync.provider_event_id == "provider-event-1"
         assert sync.source_id == seeded["deadline_id"]
+
+
+def test_uj62_exc03_candidate_listing_does_not_disclose_restricted_docket_evidence(
+    client: TestClient,
+) -> None:
+    """A candidate is no alternate route into a restricted docket's calendar."""
+
+    from caseops_api.db.models import Company, CompanyMembership
+    from caseops_api.services.calendar_sync import (
+        list_ip_calendar_projection_reconciliation_candidates,
+    )
+    from tests.test_ip_deadline_workflow import _member
+
+    seeded = _seed(client, restricted=True)
+    calendar_sync.set_google_calendar_provider_for_tests(_Reader(None))
+    assert _run(seeded["context_ids"])[0].reconciliation_candidate_id
+
+    outsider_id, _token = _member(
+        client,
+        str(seeded["headers"]["Authorization"]).removeprefix("Bearer "),
+        name="Candidate outsider",
+        email="candidate-outsider@asterlegal.in",
+    )
+    factory = get_session_factory()
+    with factory() as session:
+        company = session.get(Company, seeded["context_ids"][0])
+        outsider = session.get(CompanyMembership, outsider_id)
+        assert company is not None and outsider is not None
+        outsider_context = SessionContext(
+            company=company,
+            membership=outsider,
+            user=outsider.user,
+        )
+        assert (
+            list_ip_calendar_projection_reconciliation_candidates(
+                session,
+                context=outsider_context,
+                include_resolved=True,
+            )
+            == []
+        )
 
 
 def test_uj62_exc03b_a_successful_resync_resets_drift_in_the_source() -> None:

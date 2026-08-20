@@ -8006,30 +8006,31 @@ def _finalize_calendar_drift_read(
             drift_status=drift_status,
             observed_snapshot=observed_snapshot,
         )
-        finding = CalendarDriftFinding(
-            sync_id=sync.id,
-            connection_id=claim.connection_id,
-            membership_id=claim.owner_membership_id,
-            source_type=claim.source_type,
-            source_id=claim.source_id,
-            ip_docket_id=claim.generation.ip_authority.docket_id,
-            drift_status=drift_status,
-            detail=detail,
-            reconciliation_candidate_id=candidate.id,
-        )
-        record_from_context(
-            session,
-            actor_context,
-            action="calendar_event_sync.drift_detected",
-            target_type="calendar_event_sync",
-            target_id=sync.id,
-            ip_docket_id=claim.generation.ip_authority.docket_id,
-            metadata={
-                "drift_status": drift_status,
-                "source_type": claim.source_type,
-                "reconciliation_candidate_id": candidate.id,
-            },
-        )
+        if candidate.status == "pending":
+            finding = CalendarDriftFinding(
+                sync_id=sync.id,
+                connection_id=claim.connection_id,
+                membership_id=claim.owner_membership_id,
+                source_type=claim.source_type,
+                source_id=claim.source_id,
+                ip_docket_id=claim.generation.ip_authority.docket_id,
+                drift_status=drift_status,
+                detail=detail,
+                reconciliation_candidate_id=candidate.id,
+            )
+            record_from_context(
+                session,
+                actor_context,
+                action="calendar_event_sync.drift_detected",
+                target_type="calendar_event_sync",
+                target_id=sync.id,
+                ip_docket_id=claim.generation.ip_authority.docket_id,
+                metadata={
+                    "drift_status": drift_status,
+                    "source_type": claim.source_type,
+                    "reconciliation_candidate_id": candidate.id,
+                },
+            )
     session.commit()
     return finding
 
