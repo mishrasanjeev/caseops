@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.data_governance import (
+    TenantDataGovernanceIntegrityReport,
     TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
@@ -15,6 +16,7 @@ from caseops_api.schemas.data_governance import (
 from caseops_api.services.data_governance import (
     create_dry_run_manifest,
     get_dry_run_manifest,
+    get_tenant_integrity_report,
     list_dry_run_manifests,
     reject_data_operation_execution,
 )
@@ -39,6 +41,18 @@ def create_operation_dry_run(
     session: DbSession,
 ) -> TenantDataOperationDryRunRecord:
     return create_dry_run_manifest(session, context=context, payload=payload)
+
+
+@router.get(
+    "/integrity",
+    response_model=TenantDataGovernanceIntegrityReport,
+    summary="Read current tenant data-governance integrity visibility",
+)
+def read_data_governance_integrity(
+    context: DataGovernanceOperator,
+    session: DbSession,
+) -> TenantDataGovernanceIntegrityReport:
+    return get_tenant_integrity_report(session, context=context)
 
 
 @router.get(

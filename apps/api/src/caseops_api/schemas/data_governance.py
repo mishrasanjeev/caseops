@@ -20,6 +20,7 @@ DataOperationType = Literal[
 ]
 DataOperationItemStatus = Literal["pending", "eligible", "held", "blocked"]
 DataOperationDryRunApprovalStatus = Literal["not_requested", "requested", "rejected"]
+DataGovernanceIntegrityStatus = Literal["ok", "findings", "unavailable"]
 
 
 class TenantDataOperationItemInput(BaseModel):
@@ -155,3 +156,23 @@ class TenantDataOperationDryRunListResponse(BaseModel):
     """A bounded, newest-first page of reviewable dry-run manifests."""
 
     operations: list[TenantDataOperationDryRunSummary]
+
+
+class TenantDataGovernanceIntegrityCheck(BaseModel):
+    """Content-minimized result from one DATA-GOV-17 integrity check."""
+
+    check_id: str
+    status: DataGovernanceIntegrityStatus
+    summary: str
+    findings: list[str]
+    blocked_by: str | None
+
+
+class TenantDataGovernanceIntegrityReport(BaseModel):
+    """Current tenant-safe integrity visibility; not an execution authorization."""
+
+    checks: list[TenantDataGovernanceIntegrityCheck]
+    ok_count: int
+    finding_count: int
+    unavailable_count: int
+    is_complete: bool

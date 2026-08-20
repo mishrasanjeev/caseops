@@ -110,6 +110,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/data-governance/integrity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read current tenant data-governance integrity visibility */
+        get: operations["read_data_governance_integrity_api_admin_data_governance_integrity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/data-governance/operations/{operation_id}/execute": {
         parameters: {
             query?: never;
@@ -31818,6 +31835,41 @@ export interface components {
             connectors: components["schemas"]["TenantConnectorRecord"][];
         };
         /**
+         * TenantDataGovernanceIntegrityCheck
+         * @description Content-minimized result from one DATA-GOV-17 integrity check.
+         */
+        TenantDataGovernanceIntegrityCheck: {
+            /** Blocked By */
+            blocked_by: string | null;
+            /** Check Id */
+            check_id: string;
+            /** Findings */
+            findings: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "findings" | "unavailable";
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * TenantDataGovernanceIntegrityReport
+         * @description Current tenant-safe integrity visibility; not an execution authorization.
+         */
+        TenantDataGovernanceIntegrityReport: {
+            /** Checks */
+            checks: components["schemas"]["TenantDataGovernanceIntegrityCheck"][];
+            /** Finding Count */
+            finding_count: number;
+            /** Is Complete */
+            is_complete: boolean;
+            /** Ok Count */
+            ok_count: number;
+            /** Unavailable Count */
+            unavailable_count: number;
+        };
+        /**
          * TenantDataOperationDependencyPlan
          * @description DATA-GOV-08 dependency plan: what is removed, in what order.
          */
@@ -32982,6 +33034,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_data_governance_integrity_api_admin_data_governance_integrity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataGovernanceIntegrityReport"];
                 };
             };
         };

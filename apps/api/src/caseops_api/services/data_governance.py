@@ -33,6 +33,8 @@ from caseops_api.governance.data_class_projection import (
     require_current_projection,
 )
 from caseops_api.schemas.data_governance import (
+    TenantDataGovernanceIntegrityCheck,
+    TenantDataGovernanceIntegrityReport,
     TenantDataOperationDependencyPlan,
     TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
@@ -47,6 +49,7 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.governance_integrity_scan import run_integrity_scan
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
@@ -880,6 +883,38 @@ def list_dry_run_manifests(
     return TenantDataOperationDryRunListResponse(operations=summaries)
 
 
+def get_tenant_integrity_report(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> TenantDataGovernanceIntegrityReport:
+    """Return content-minimized DATA-GOV-17 visibility for one tenant.
+
+    The scanner is intentionally candid when a control cannot be evaluated:
+    ``unavailable`` stays distinct from ``ok``. This reads current metadata
+    only; it does not schedule a scan, alter any hold, or authorize a data
+    operation.
+    """
+
+    report = run_integrity_scan(session, company_id=context.company.id)
+    return TenantDataGovernanceIntegrityReport(
+        checks=[
+            TenantDataGovernanceIntegrityCheck(
+                check_id=check.check_id,
+                status=check.status,
+                summary=check.summary,
+                findings=list(check.findings),
+                blocked_by=check.blocked_by,
+            )
+            for check in report.checks
+        ],
+        ok_count=report.ok_count,
+        finding_count=report.finding_count,
+        unavailable_count=report.unavailable_count,
+        is_complete=report.is_complete,
+    )
+
+
 def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
     """Ensure future callers cannot mistake a dry-run record for authority."""
 
@@ -902,6 +937,7 @@ def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
 __all__ = [
     "create_dry_run_manifest",
     "get_dry_run_manifest",
+    "get_tenant_integrity_report",
     "list_dry_run_manifests",
     "reject_data_operation_execution",
 ]

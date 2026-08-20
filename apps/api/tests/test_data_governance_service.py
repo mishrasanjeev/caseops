@@ -237,3 +237,22 @@ def test_iplf_028b_dry_run_history_is_bounded_and_tenant_scoped(
         headers=auth_headers(second_token),
     )
     assert cross_tenant.status_code == 404, cross_tenant.text
+
+
+def test_iplf_028b_integrity_route_reports_unavailable_checks_without_false_green(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    response = client.get(
+        "/api/admin/data-governance/integrity",
+        headers=auth_headers(str(bootstrap["access_token"])),
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    checks = {check["check_id"]: check for check in report["checks"]}
+    assert checks["expired_unpurged"]["status"] == "unavailable"
+    assert checks["expired_unpurged"]["blocked_by"] == "DATA-GOV-02"
+    assert checks["purged_still_searchable"]["status"] == "unavailable"
+    assert checks["provider_deletion_exceptions"]["status"] == "unavailable"
+    assert report["is_complete"] is False
+    assert report["unavailable_count"] >= 3
