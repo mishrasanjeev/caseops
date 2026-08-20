@@ -7434,3 +7434,104 @@ def test_blank_invoice_number_is_rejected_on_postgres(pg_engine):
                 _seed_invoice(session, company_id, matter_id, blank)
                 session.commit()
             session.rollback()
+
+
+@pytest.mark.postgres
+def test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres(pg_engine):
+    """The drift-review row must have one exact, accountable observation.
+
+    SQLite exercises the authorization flow; this real-Postgres check proves
+    the migration's composite fingerprint uniqueness and evidence-state check
+    survive the production dialect.  A duplicate observation cannot create a
+    second review task, and a terminal decision cannot omit its human evidence.
+    """
+
+    from caseops_api.db.models import (
+        CalendarEventSync,
+        CalendarProjectionReconciliationCandidate,
+        UserCalendarConnection,
+    )
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        membership_id = _seed_membership(session, company_id, role="admin")
+        connection = UserCalendarConnection(
+            company_id=company_id,
+            membership_id=membership_id,
+            provider="google_calendar",
+            status="connected",
+        )
+        session.add(connection)
+        session.flush()
+        sync = CalendarEventSync(
+            company_id=company_id,
+            calendar_connection_id=connection.id,
+            source_type="matter_deadline",
+            source_id=str(uuid4()),
+            provider_event_id="pg-reconciliation-event",
+            sync_status="synced",
+        )
+        session.add(sync)
+        session.flush()
+        connection_id = connection.id
+        sync_id = sync.id
+        source_id = sync.source_id
+        candidate = CalendarProjectionReconciliationCandidate(
+            company_id=company_id,
+            calendar_event_sync_id=sync_id,
+            calendar_connection_id=connection_id,
+            source_type=sync.source_type,
+            source_id=source_id,
+            drift_status="moved",
+            snapshot_schema_version=1,
+            expected_snapshot_json={"occurs_on": "2099-01-10"},
+            observed_snapshot_json={"start_date": "2099-01-11"},
+            snapshot_sha256="a" * 64,
+            status="pending",
+            detected_by_membership_id=membership_id,
+        )
+        session.add(candidate)
+        session.commit()
+
+    with Session(pg_engine) as session:
+        duplicate = CalendarProjectionReconciliationCandidate(
+            company_id=company_id,
+            calendar_event_sync_id=sync_id,
+            calendar_connection_id=connection_id,
+            source_type="matter_deadline",
+            source_id=source_id,
+            drift_status="moved",
+            snapshot_schema_version=1,
+            expected_snapshot_json={"occurs_on": "2099-01-10"},
+            observed_snapshot_json={"start_date": "2099-01-11"},
+            snapshot_sha256="a" * 64,
+            status="pending",
+        )
+        session.add(duplicate)
+        with pytest.raises(IntegrityError) as duplicate_error:
+            session.commit()
+        assert "uq_calendar_projection_reconciliation_snapshot" in str(
+            duplicate_error.value
+        )
+        session.rollback()
+
+        incomplete_decision = CalendarProjectionReconciliationCandidate(
+            company_id=company_id,
+            calendar_event_sync_id=sync_id,
+            calendar_connection_id=connection_id,
+            source_type="matter_deadline",
+            source_id=source_id,
+            drift_status="missing",
+            snapshot_schema_version=1,
+            expected_snapshot_json={"occurs_on": "2099-01-10"},
+            observed_snapshot_json={"event_present": False},
+            snapshot_sha256="b" * 64,
+            status="accepted",
+        )
+        session.add(incomplete_decision)
+        with pytest.raises(IntegrityError) as evidence_error:
+            session.commit()
+        assert "ck_calendar_projection_reconciliation_decision_evidence" in str(
+            evidence_error.value
+        )
+        session.rollback()
