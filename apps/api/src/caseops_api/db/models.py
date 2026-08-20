@@ -6929,6 +6929,14 @@ class MatterInvoice(Base):
             "invoice_number",
             name="uq_company_invoice_number",
         ),
+        # EH-SGR-04: a blank number is not a number. Declared here as well as
+        # in 20260820_0002 so the model and the database agree, and so the
+        # SQLite test databases enforce it too. The companion immutability
+        # trigger is PostgreSQL-only and lives in that migration.
+        CheckConstraint(
+            "trim(invoice_number) <> ''",
+            name="ck_matter_invoice_number_not_blank",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

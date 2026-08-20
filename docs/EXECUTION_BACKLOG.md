@@ -80,7 +80,7 @@ they do not block unrelated repository implementation.
 | `EH-SGR-01` | Intra-state invoices issued with IGST instead of CGST+SGST; place of supply never reaches the tax engine | Claude | queued | gap review §2.1 |
 | `EH-SGR-02` | Matter permanently unopenable — OC-portal invoice and refund webhook write a status the read schema rejects; `GET /api/matters/{id}` 500s forever | Claude | queued | gap review §2.2 |
 | `EH-SGR-03` | Payments under-credited — multi-attempt invoices credit only the largest attempt; webhook reads amount as 0 from the nested payload | Claude | queued | gap review §2.3 |
-| `EH-SGR-04` | Invoice numbering not gapless, not concurrency-safe, not immutable | Claude MIGRATION | queued | gap review §2.4 |
+| `EH-SGR-04` | Invoice numbering not gapless, not concurrency-safe, not immutable | Claude | done | gap review §2.4 |
 | `EH-SGR-07` + `FMB-01` + `FMB-02` | Trust predicates. **One fix, not three** — citation verifier and source links are the same failure class: green in tests, hollow in production | Claude | active | gap review §2.7, backlog §3.1 |
 | `FMB-03` | Keyword search has no lexical retrieval path; depends on an embedding provider that defaults to mock | Claude | queued | backlog §3.2 |
 
