@@ -40797,6 +40797,7 @@ export interface operations {
         parameters: {
             query?: {
                 include_resolved?: boolean;
+                limit?: number;
             };
             header?: never;
             path?: never;

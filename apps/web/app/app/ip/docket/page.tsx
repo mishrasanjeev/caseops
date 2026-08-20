@@ -19,14 +19,18 @@ import {
   bulkAcknowledgeIpCoverage,
   checkIpCalendarDrift,
   createIpControlReview,
+  decideIpCalendarReconciliationCandidate,
   deleteIpDocketQueue,
   fetchIpAssignedCoverage,
+  fetchIpCalendarReconciliationCandidates,
   fetchIpDailyDocket,
   fetchIpDocketQueues,
   recordIpControlReviewExport,
   saveIpDocketQueue,
   signOffIpControlReview,
   type IpAssignedCoverage,
+  type IpCalendarDriftFinding,
+  type IpCalendarReconciliationCandidate,
   type IpControlReview,
   type IpDailyDocketQueue,
 } from "@/lib/api/endpoints";
@@ -195,7 +199,7 @@ export default function IpDailyDocketPage() {
 
       {canWrite ? <AcknowledgementCard onChanged={() => docket.refetch()} /> : null}
 
-      {canWrite ? <CalendarDriftCard /> : null}
+      {canWrite ? <CalendarDriftCard canApprove={canApprove} /> : null}
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
         {canWrite ? (
@@ -729,17 +733,20 @@ const DRIFT_LABEL: Record<string, string> = {
  * `unknown` is shown as its own outcome, never folded in with "fine": a
  * projection that could not be read is unverified, not verified.
  */
-function CalendarDriftCard() {
+function CalendarDriftCard({ canApprove }: { canApprove: boolean }) {
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
-  const [findings, setFindings] = useState<
-    { sync_id: string; drift_status: string; detail: string }[] | null
-  >(null);
+  const [findings, setFindings] = useState<IpCalendarDriftFinding[] | null>(null);
+  const candidates = useQuery({
+    queryKey: ["ip-calendar-reconciliation-candidates"],
+    queryFn: () => fetchIpCalendarReconciliationCandidates({ limit: 100 }),
+  });
 
   const check = useMutation({
     mutationFn: checkIpCalendarDrift,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       setCheckedAt(result.checked_at);
       setFindings(result.findings);
+      await candidates.refetch();
       toast.success(
         result.findings.length
           ? `${result.findings.length} projected event${result.findings.length === 1 ? "" : "s"} no longer match CaseOps.`
@@ -750,6 +757,14 @@ function CalendarDriftCard() {
   });
 
   const unknown = (findings ?? []).filter((row) => row.drift_status === "unknown").length;
+  const pendingCandidates = candidates.data?.candidates ?? [];
+
+  async function candidateDecided(candidateId: string) {
+    setFindings((current) =>
+      current?.filter((row) => row.reconciliation_candidate_id !== candidateId) ?? null,
+    );
+    await candidates.refetch();
+  }
 
   return (
     <Card className="min-w-0" data-testid="ip-docket-drift">
@@ -807,8 +822,143 @@ function CalendarDriftCard() {
             </>
           )
         ) : null}
+
+        <div className="border-t border-[var(--color-line)] pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-[var(--color-ink-2)]">Waiting for review</p>
+            {pendingCandidates.length ? (
+              <Badge tone="warning">{pendingCandidates.length}</Badge>
+            ) : null}
+          </div>
+
+          {candidates.isPending ? (
+            <div className="mt-3 flex flex-col gap-2" role="status" aria-label="Loading calendar reviews">
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : candidates.isError ? (
+            <div className="mt-3">
+              <QueryErrorState
+                error={candidates.error}
+                title="Could not load calendar reviews"
+                onRetry={() => candidates.refetch()}
+              />
+            </div>
+          ) : pendingCandidates.length ? (
+            <ul className="mt-3 flex min-w-0 flex-col gap-3" data-testid="ip-calendar-candidates">
+              {pendingCandidates.map((candidate) => (
+                <CalendarReconciliationCandidateRow
+                  key={candidate.id}
+                  candidate={candidate}
+                  canApprove={canApprove}
+                  onDecided={() => candidateDecided(candidate.id)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-[var(--color-mute)]" data-testid="ip-calendar-candidates-empty">
+              No calendar-copy reviews are waiting.
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function snapshotString(snapshot: Record<string, unknown>, key: string) {
+  const value = snapshot[key];
+  return typeof value === "string" && value ? value : null;
+}
+
+function CalendarReconciliationCandidateRow({
+  candidate,
+  canApprove,
+  onDecided,
+}: {
+  candidate: IpCalendarReconciliationCandidate;
+  canApprove: boolean;
+  onDecided: () => Promise<void>;
+}) {
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const decision = useMutation({
+    mutationFn: (action: "accept" | "reject") =>
+      decideIpCalendarReconciliationCandidate(candidate.id, {
+        action,
+        evidenceReference: evidenceReference.trim(),
+        expectedSnapshotSha256: candidate.snapshot_sha256,
+      }),
+    onSuccess: async (_result, action) => {
+      toast.success(
+        action === "reject"
+          ? "The CaseOps calendar copy is queued for restoration."
+          : "The calendar review is recorded.",
+      );
+      await onDecided();
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not record the calendar review.")),
+  });
+  const expectedDate = snapshotString(candidate.expected_snapshot, "occurs_on");
+  const observedDate = snapshotString(candidate.observed_snapshot, "start_date");
+  const validEvidence = evidenceReference.trim().length >= 8;
+
+  return (
+    <li
+      className="min-w-0 rounded-lg border border-[var(--color-line)] p-3"
+      data-testid={`ip-calendar-candidate-${candidate.id}`}
+    >
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">
+            {DRIFT_LABEL[candidate.drift_status] ?? candidate.drift_status}
+          </p>
+          <p className="mt-1 break-words text-sm text-[var(--color-mute)]">
+            CaseOps {expectedDate ?? "date unavailable"}
+            {observedDate ? ` · Calendar ${observedDate}` : " · Calendar date unavailable"}
+          </p>
+        </div>
+        <Badge tone={candidate.drift_status === "unknown" ? "neutral" : "warning"}>
+          {candidate.drift_status === "unknown" ? "Unverified" : "Review"}
+        </Badge>
+      </div>
+
+      {canApprove ? (
+        <div className="mt-3 flex min-w-0 flex-col gap-2">
+          <Label htmlFor={`calendar-evidence-${candidate.id}`}>Review evidence reference</Label>
+          <Input
+            id={`calendar-evidence-${candidate.id}`}
+            value={evidenceReference}
+            maxLength={500}
+            placeholder="Matter note or review reference"
+            onChange={(event) => setEvidenceReference(event.target.value)}
+          />
+          <div className="flex min-w-0 flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!validEvidence || decision.isPending}
+              onClick={() => decision.mutate("accept")}
+            >
+              Record review
+            </Button>
+            {candidate.drift_status === "moved" &&
+            snapshotString(candidate.observed_snapshot, "provider_precondition_revision") ? (
+              <Button
+                size="sm"
+                disabled={!validEvidence || decision.isPending}
+                onClick={() => decision.mutate("reject")}
+              >
+                Restore from CaseOps
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-[var(--color-mute)]">
+          IP approval is required to close this review.
+        </p>
+      )}
+    </li>
   );
 }
 

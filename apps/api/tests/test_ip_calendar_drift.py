@@ -19,7 +19,7 @@ Stable manifest test IDs:
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
@@ -41,6 +41,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.services import calendar_sync
 from caseops_api.services.calendar_sync import (
     CalendarProviderError,
+    CalendarProviderPreconditionError,
     GoogleCalendarProvider,
     MicrosoftGraphOutlookProvider,
     check_ip_calendar_projection_drift,
@@ -83,6 +84,28 @@ class _NoReadCapability:
     """An older provider with no read capability at all."""
 
     configured = True
+
+
+class _StaleReviewedWriter(_Reader):
+    """Provider stand-in that refuses a write against a later event version."""
+
+    def __init__(self, result: object) -> None:
+        super().__init__(result)
+        self.expected_revisions: list[str | None] = []
+
+    def upsert_calendar_item(
+        self,
+        *,
+        token_payload: dict,
+        item: object,
+        existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
+    ) -> str:
+        del token_payload, item, existing_provider_event_id
+        self.expected_revisions.append(expected_provider_revision)
+        raise CalendarProviderPreconditionError(
+            "Provider event changed after reconciliation review."
+        )
 
 
 def _seed(client: TestClient, *, restricted: bool = False):
@@ -282,6 +305,8 @@ def test_graph_fetch_event_uses_projection_timezone_and_parses_response(
                 "id": "graph-event/one",
                 "isAllDay": True,
                 "isCancelled": False,
+                "changeKey": "graph-revision-7",
+                "lastModifiedDateTime": "2026-08-20T05:00:00Z",
                 "start": {
                     "dateTime": "2026-08-20T00:00:00.0000000",
                     "timeZone": "India Standard Time",
@@ -300,9 +325,13 @@ def test_graph_fetch_event_uses_projection_timezone_and_parses_response(
         "id": "graph-event/one",
         "start_date": "2026-08-20",
         "cancelled": False,
+        "provider_revision": "graph-revision-7",
+        "provider_updated_at": "2026-08-20T05:00:00Z",
     }
     assert str(captured["url"]).endswith("/graph-event%2Fone")
-    assert captured["params"] == {"$select": "id,isAllDay,isCancelled,start"}
+    assert captured["params"] == {
+        "$select": "id,isAllDay,isCancelled,start,changeKey,lastModifiedDateTime"
+    }
     assert captured["timeout"] == 15
     assert captured["headers"] == {
         "Authorization": "Bearer graph-token",
@@ -331,7 +360,14 @@ def test_google_fetch_event_parses_documented_start_shapes(
         return httpx.Response(
             200,
             request=httpx.Request("GET", url),
-            json={"id": "google-event/one", "status": "confirmed", "start": start},
+            json={
+                "id": "google-event/one",
+                "status": "confirmed",
+                "start": start,
+                "etag": '"google-revision-9"',
+                "updated": "2026-08-20T05:05:00Z",
+                "sequence": 3,
+            },
         )
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -345,10 +381,96 @@ def test_google_fetch_event_parses_documented_start_shapes(
         "id": "google-event/one",
         "start_date": expected_date,
         "cancelled": False,
+        "provider_revision": '"google-revision-9"',
+        "provider_precondition_revision": '"google-revision-9"',
+        "provider_updated_at": "2026-08-20T05:05:00Z",
+        "provider_sequence": 3,
     }
     assert str(captured["url"]).endswith("/google-event%2Fone")
     assert captured["headers"] == {"Authorization": "Bearer google-token"}
     assert captured["timeout"] == 15
+
+
+def test_google_reviewed_repair_uses_provider_version_precondition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_patch(url: str, **kwargs: object) -> httpx.Response:
+        captured.update({"url": url, **kwargs})
+        return httpx.Response(200, request=httpx.Request("PATCH", url), json={})
+
+    monkeypatch.setattr(httpx, "patch", fake_patch)
+    GoogleCalendarProvider().upsert_calendar_item(
+        token_payload={"access_token": "provider-token"},
+        item=SimpleNamespace(
+            title="Renewal",
+            occurs_on=DUE,
+            detail_lines=("CaseOps projection",),
+            category="IP",
+            private_properties={},
+        ),
+        existing_provider_event_id="provider-event-1",
+        expected_provider_revision='"google-version-11"',
+    )
+
+    headers = captured["headers"]
+    payload = captured["json"]
+    assert isinstance(headers, dict)
+    assert isinstance(payload, dict)
+    assert headers.get("If-Match") == '"google-version-11"'
+    assert "changeKey" not in payload
+
+
+def test_graph_reviewed_repair_fails_closed_without_a_documented_precondition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_patch(url: str, **kwargs: object) -> httpx.Response:
+        del url, kwargs
+        nonlocal called
+        called = True
+        raise AssertionError("Graph PATCH must not be attempted")
+
+    monkeypatch.setattr(httpx, "patch", fake_patch)
+    with pytest.raises(CalendarProviderPreconditionError):
+        MicrosoftGraphOutlookProvider().upsert_calendar_item(
+            token_payload={"access_token": "provider-token"},
+            item=SimpleNamespace(
+                title="Renewal",
+                occurs_on=DUE,
+                detail_lines=("CaseOps projection",),
+                category="IP",
+                private_properties={},
+            ),
+            existing_provider_event_id="provider-event-1",
+            expected_provider_revision="graph-version-11",
+        )
+    assert called is False
+
+
+def test_google_reviewed_repair_refuses_a_stale_provider_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_patch(url: str, **kwargs: object) -> httpx.Response:
+        del kwargs
+        return httpx.Response(412, request=httpx.Request("PATCH", url))
+
+    monkeypatch.setattr(httpx, "patch", fake_patch)
+    with pytest.raises(CalendarProviderPreconditionError):
+        GoogleCalendarProvider().upsert_calendar_item(
+            token_payload={"access_token": "provider-token"},
+            item=SimpleNamespace(
+                title="Renewal",
+                occurs_on=DUE,
+                detail_lines=("CaseOps projection",),
+                category="IP",
+                private_properties={},
+            ),
+            existing_provider_event_id="provider-event-1",
+            expected_provider_revision='"reviewed-version"',
+        )
 
 
 @pytest.mark.parametrize(
@@ -665,7 +787,17 @@ def test_uj62_exc03_persists_an_immutable_content_minimised_candidate(
     seeded = _seed(client)
     first_observed_date = (DUE + timedelta(days=1)).isoformat()
     calendar_sync.set_google_calendar_provider_for_tests(
-        _Reader({"id": "provider-event-1", "start_date": first_observed_date, "cancelled": False})
+        _Reader(
+            {
+                "id": "provider-event-1",
+                "start_date": first_observed_date,
+                "cancelled": False,
+                "provider_revision": "revision-1",
+                "provider_updated_at": "2026-08-20T05:00:00Z",
+                "provider_sequence": 1,
+                "title": "must not persist",
+            }
+        )
     )
 
     first_findings = _run(seeded["context_ids"])
@@ -680,6 +812,7 @@ def test_uj62_exc03_persists_an_immutable_content_minimised_candidate(
     assert first[0].expected_snapshot_json == {
         "schema_version": 1,
         "provider_event_id": "provider-event-1",
+        "projection_synced_at": None,
         "source_type": "matter_deadline",
         "source_id": seeded["deadline_id"],
         "occurs_on": DUE.isoformat(),
@@ -690,6 +823,9 @@ def test_uj62_exc03_persists_an_immutable_content_minimised_candidate(
         "event_present": True,
         "cancelled": False,
         "start_date": first_observed_date,
+        "provider_revision": "revision-1",
+        "provider_updated_at": "2026-08-20T05:00:00Z",
+        "provider_sequence": 1,
     }
     assert len(first[0].snapshot_sha256) == 64
     assert "title" not in first[0].observed_snapshot_json
@@ -722,7 +858,14 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
     seeded = _seed(client)
     moved_date = (DUE + timedelta(days=1)).isoformat()
     calendar_sync.set_google_calendar_provider_for_tests(
-        _Reader({"id": "provider-event-1", "start_date": moved_date, "cancelled": False})
+        _Reader(
+            {
+                "id": "provider-event-1",
+                "start_date": moved_date,
+                "cancelled": False,
+                "provider_revision": '"revision-accepted"',
+            }
+        )
     )
     first = _run(seeded["context_ids"])[0]
     assert first.reconciliation_candidate_id
@@ -780,7 +923,15 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
 
     changed_date = (DUE + timedelta(days=2)).isoformat()
     calendar_sync.set_google_calendar_provider_for_tests(
-        _Reader({"id": "provider-event-1", "start_date": changed_date, "cancelled": False})
+        _Reader(
+            {
+                "id": "provider-event-1",
+                "start_date": changed_date,
+                "cancelled": False,
+                "provider_revision": '"revision-restored"',
+                "provider_precondition_revision": '"revision-restored"',
+            }
+        )
     )
     second = _run(seeded["context_ids"])[0]
     assert second.reconciliation_candidate_id
@@ -827,6 +978,145 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
         assert sync.sync_status == CalendarEventSyncStatus.PENDING
         assert sync.provider_event_id == "provider-event-1"
         assert sync.source_id == seeded["deadline_id"]
+        assert sync.reconciliation_candidate_id == second.reconciliation_candidate_id
+        assert sync.reconciliation_snapshot_sha256 == pending.snapshot_sha256
+        assert sync.reconciliation_provider_revision == '"revision-restored"'
+
+        # A successful worker repair advances the projection generation. If
+        # the same external edit then recurs, the old rejected snapshot must
+        # not suppress a new actionable candidate.
+        sync.sync_status = CalendarEventSyncStatus.SYNCED
+        sync.last_synced_at = datetime.now(UTC)
+        sync.drift_status = "unchecked"
+        sync.drift_checked_at = None
+        sync.drift_detail = None
+        sync.reconciliation_candidate_id = None
+        sync.reconciliation_snapshot_sha256 = None
+        sync.reconciliation_provider_revision = None
+        session.commit()
+    repeated = _run(seeded["context_ids"])[0]
+    assert repeated.reconciliation_candidate_id
+    assert repeated.reconciliation_candidate_id != second.reconciliation_candidate_id
+
+
+def test_uj62_exc03_unknown_snapshot_cannot_queue_an_external_rewrite(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unverified provider state is not evidence that a PATCH is required."""
+
+    seeded = _seed(client)
+    calendar_sync.set_google_calendar_provider_for_tests(_Unreadable())
+    finding = _run(seeded["context_ids"])[0]
+    assert finding.drift_status == "unknown"
+    candidate = _candidates(seeded["sync_id"])[0]
+    monkeypatch.setattr(calendar_sync, "require_recent_step_up", lambda *_a, **_kw: None)
+
+    rejected = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{candidate.id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "reject",
+            "evidence_reference": "matter-note:provider-unreadable",
+            "expected_snapshot_sha256": candidate.snapshot_sha256,
+        },
+    )
+    assert rejected.status_code == 409, rejected.text
+    with get_session_factory()() as session:
+        sync = session.get(CalendarEventSync, seeded["sync_id"])
+        assert sync is not None
+        assert sync.sync_status == CalendarEventSyncStatus.SYNCED
+
+
+def test_uj62_exc03_missing_snapshot_cannot_queue_an_external_rewrite(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing ID is not safe evidence for an automatic create or overwrite."""
+
+    seeded = _seed(client)
+    calendar_sync.set_google_calendar_provider_for_tests(_Reader(None))
+    finding = _run(seeded["context_ids"])[0]
+    assert finding.drift_status == "missing"
+    candidate = _candidates(seeded["sync_id"])[0]
+    monkeypatch.setattr(calendar_sync, "require_recent_step_up", lambda *_a, **_kw: None)
+
+    rejected = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{candidate.id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "reject",
+            "evidence_reference": "matter-note:provider-event-missing",
+            "expected_snapshot_sha256": candidate.snapshot_sha256,
+        },
+    )
+    assert rejected.status_code == 409, rejected.text
+    with get_session_factory()() as session:
+        sync = session.get(CalendarEventSync, seeded["sync_id"])
+        assert sync is not None
+        assert sync.sync_status == CalendarEventSyncStatus.SYNCED
+
+
+def test_uj62_exc03_stale_review_never_overwrites_a_later_provider_edit(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seeded = _seed(client)
+    moved_date = (DUE + timedelta(days=1)).isoformat()
+    provider = _StaleReviewedWriter(
+        {
+            "id": "provider-event-1",
+            "start_date": moved_date,
+            "cancelled": False,
+            "provider_revision": '"reviewed-version"',
+            "provider_precondition_revision": '"reviewed-version"',
+        }
+    )
+    calendar_sync.set_google_calendar_provider_for_tests(provider)
+    finding = _run(seeded["context_ids"])[0]
+    candidate = _candidates(seeded["sync_id"])[0]
+    monkeypatch.setattr(calendar_sync, "require_recent_step_up", lambda *_a, **_kw: None)
+    decision = client.post(
+        f"/api/ip/calendar-projections/reconciliation-candidates/{finding.reconciliation_candidate_id}/decision",
+        headers=seeded["headers"],
+        json={
+            "action": "reject",
+            "evidence_reference": "matter-note:guarded-provider-restore",
+            "expected_snapshot_sha256": candidate.snapshot_sha256,
+        },
+    )
+    assert decision.status_code == 200, decision.text
+
+    from caseops_api.db.models import Company, CompanyMembership
+
+    company_id, membership_id = seeded["context_ids"]
+    with get_session_factory()() as session:
+        company = session.get(Company, company_id)
+        membership = session.get(CompanyMembership, membership_id)
+        assert company is not None and membership is not None
+        response = calendar_sync._sync_source_to_provider(
+            session,
+            context=SessionContext(
+                company=company,
+                membership=membership,
+                user=membership.user,
+            ),
+            source_type="matter_deadline",
+            source_id=seeded["deadline_id"],
+            calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+        )
+
+    assert provider.expected_revisions == ['"reviewed-version"']
+    assert response.sync.sync_status == CalendarEventSyncStatus.SYNCED
+    with get_session_factory()() as session:
+        sync = session.get(CalendarEventSync, seeded["sync_id"])
+        assert sync is not None
+        assert sync.sync_status == CalendarEventSyncStatus.SYNCED
+        assert sync.provider_event_id == "provider-event-1"
+        assert sync.drift_status == "unknown"
+        assert sync.reconciliation_candidate_id is None
+        assert sync.reconciliation_snapshot_sha256 is None
+        assert sync.reconciliation_provider_revision is None
 
 
 def test_uj62_exc03_candidate_listing_does_not_disclose_restricted_docket_evidence(

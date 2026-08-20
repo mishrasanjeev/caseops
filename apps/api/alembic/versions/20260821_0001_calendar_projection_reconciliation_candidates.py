@@ -29,6 +29,8 @@ branch_labels = None
 depends_on = None
 
 TABLE = "calendar_projection_reconciliation_candidates"
+IMMUTABLE_TRIGGER = "trg_calendar_projection_reconciliation_evidence_immutable"
+IMMUTABLE_FUNCTION = "caseops_reject_calendar_reconciliation_evidence_mutation"
 
 
 def upgrade() -> None:
@@ -65,6 +67,10 @@ def upgrade() -> None:
             name="ck_calendar_projection_reconciliation_status",
         ),
         sa.CheckConstraint(
+            "snapshot_schema_version > 0 AND length(snapshot_sha256) = 64",
+            name="ck_calendar_projection_reconciliation_snapshot_identity",
+        ),
+        sa.CheckConstraint(
             "(status IN ('pending', 'superseded') AND decided_at IS NULL "
             "AND decided_by_membership_id IS NULL AND decision_evidence_reference IS NULL) OR "
             "(status IN ('accepted', 'rejected') AND decided_at IS NOT NULL "
@@ -73,13 +79,13 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
-            ["calendar_event_sync_id"], ["calendar_event_syncs.id"], ondelete="CASCADE"
+            ["calendar_event_sync_id"], ["calendar_event_syncs.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
-            ["calendar_connection_id"], ["user_calendar_connections.id"], ondelete="CASCADE"
+            ["calendar_connection_id"], ["user_calendar_connections.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
-            ["detected_by_membership_id"], ["company_memberships.id"], ondelete="SET NULL"
+            ["detected_by_membership_id"], ["company_memberships.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
             ["decided_by_membership_id"], ["company_memberships.id"], ondelete="RESTRICT"
@@ -101,6 +107,78 @@ def upgrade() -> None:
         TABLE,
         ["calendar_event_sync_id", "created_at"],
     )
+    op.add_column(
+        "calendar_event_syncs",
+        sa.Column("reconciliation_candidate_id", sa.String(length=36), nullable=True),
+    )
+    op.add_column(
+        "calendar_event_syncs",
+        sa.Column("reconciliation_snapshot_sha256", sa.String(length=64), nullable=True),
+    )
+    op.add_column(
+        "calendar_event_syncs",
+        sa.Column("reconciliation_provider_revision", sa.String(length=500), nullable=True),
+    )
+    if bind.dialect.name == "postgresql":
+        op.create_foreign_key(
+            "fk_calendar_event_sync_reconciliation_candidate",
+            "calendar_event_syncs",
+            TABLE,
+            ["reconciliation_candidate_id"],
+            ["id"],
+            ondelete="RESTRICT",
+        )
+        op.create_check_constraint(
+            "ck_calendar_event_sync_reconciliation_claim_complete",
+            "calendar_event_syncs",
+            "(reconciliation_candidate_id IS NULL AND "
+            "reconciliation_snapshot_sha256 IS NULL AND "
+            "reconciliation_provider_revision IS NULL) OR "
+            "(reconciliation_candidate_id IS NOT NULL AND "
+            "reconciliation_snapshot_sha256 IS NOT NULL AND "
+            "reconciliation_provider_revision IS NOT NULL)",
+        )
+        op.execute(
+            sa.text(
+                f"""
+                CREATE FUNCTION {IMMUTABLE_FUNCTION}() RETURNS trigger AS $$
+                BEGIN
+                    IF NEW.company_id IS DISTINCT FROM OLD.company_id
+                       OR NEW.calendar_event_sync_id IS DISTINCT FROM OLD.calendar_event_sync_id
+                       OR NEW.calendar_connection_id IS DISTINCT FROM OLD.calendar_connection_id
+                       OR NEW.source_type IS DISTINCT FROM OLD.source_type
+                       OR NEW.source_id IS DISTINCT FROM OLD.source_id
+                       OR NEW.ip_docket_id IS DISTINCT FROM OLD.ip_docket_id
+                       OR NEW.drift_status IS DISTINCT FROM OLD.drift_status
+                       OR NEW.snapshot_schema_version IS DISTINCT FROM OLD.snapshot_schema_version
+                       OR NEW.expected_snapshot_json::text IS DISTINCT FROM OLD.expected_snapshot_json::text
+                       OR NEW.observed_snapshot_json::text IS DISTINCT FROM OLD.observed_snapshot_json::text
+                       OR NEW.snapshot_sha256 IS DISTINCT FROM OLD.snapshot_sha256
+                       OR NEW.detected_by_membership_id IS DISTINCT FROM OLD.detected_by_membership_id
+                       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+                        RAISE EXCEPTION 'Calendar reconciliation snapshot evidence is immutable'
+                            USING ERRCODE = 'restrict_violation';
+                    END IF;
+                    IF OLD.status <> 'pending'
+                       OR NEW.status NOT IN ('accepted', 'rejected', 'superseded') THEN
+                        RAISE EXCEPTION 'Calendar reconciliation decision is terminal'
+                            USING ERRCODE = 'restrict_violation';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """
+            )
+        )
+        op.execute(
+            sa.text(
+                f"""
+                CREATE TRIGGER {IMMUTABLE_TRIGGER}
+                BEFORE UPDATE ON {TABLE}
+                FOR EACH ROW EXECUTE FUNCTION {IMMUTABLE_FUNCTION}()
+                """
+            )
+        )
 
 
 def downgrade() -> None:
@@ -111,6 +189,22 @@ def downgrade() -> None:
             f"refusing to downgrade: {recorded} calendar reconciliation candidate(s) "
             "would be destroyed; export the evidence or roll forward instead."
         )
+    if bind.dialect.name == "postgresql":
+        op.execute(sa.text(f"DROP TRIGGER IF EXISTS {IMMUTABLE_TRIGGER} ON {TABLE}"))
+        op.execute(sa.text(f"DROP FUNCTION IF EXISTS {IMMUTABLE_FUNCTION}()"))
+        op.drop_constraint(
+            "ck_calendar_event_sync_reconciliation_claim_complete",
+            "calendar_event_syncs",
+            type_="check",
+        )
+        op.drop_constraint(
+            "fk_calendar_event_sync_reconciliation_candidate",
+            "calendar_event_syncs",
+            type_="foreignkey",
+        )
+    op.drop_column("calendar_event_syncs", "reconciliation_provider_revision")
+    op.drop_column("calendar_event_syncs", "reconciliation_snapshot_sha256")
+    op.drop_column("calendar_event_syncs", "reconciliation_candidate_id")
     op.drop_index("ix_calendar_projection_reconciliation_sync", table_name=TABLE)
     op.drop_index("ix_calendar_projection_reconciliation_company_status", table_name=TABLE)
     op.drop_table(TABLE)

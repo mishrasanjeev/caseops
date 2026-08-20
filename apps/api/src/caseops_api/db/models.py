@@ -2912,6 +2912,15 @@ class CalendarEventSync(Base):
             name="ck_calendar_event_sync_drift_status",
         ),
         CheckConstraint(
+            "(reconciliation_candidate_id IS NULL AND "
+            "reconciliation_snapshot_sha256 IS NULL AND "
+            "reconciliation_provider_revision IS NULL) OR "
+            "(reconciliation_candidate_id IS NOT NULL AND "
+            "reconciliation_snapshot_sha256 IS NOT NULL AND "
+            "reconciliation_provider_revision IS NOT NULL)",
+            name="ck_calendar_event_sync_reconciliation_claim_complete",
+        ),
+        CheckConstraint(
             "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
             "neutralized_ip_docket_id IS NULL) OR "
             "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
@@ -2964,6 +2973,21 @@ class CalendarEventSync(Base):
     )
     # Content-free: a reason, never a title or a date from the record.
     drift_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reconciliation_candidate_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "calendar_projection_reconciliation_candidates.id",
+            ondelete="RESTRICT",
+            use_alter=True,
+            name="fk_calendar_event_sync_reconciliation_candidate",
+        ),
+        nullable=True,
+    )
+    reconciliation_snapshot_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    reconciliation_provider_revision: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -3021,6 +3045,10 @@ class CalendarProjectionReconciliationCandidate(Base):
             name="ck_calendar_projection_reconciliation_status",
         ),
         CheckConstraint(
+            "snapshot_schema_version > 0 AND length(snapshot_sha256) = 64",
+            name="ck_calendar_projection_reconciliation_snapshot_identity",
+        ),
+        CheckConstraint(
             "(status IN ('pending', 'superseded') AND decided_at IS NULL "
             "AND decided_by_membership_id IS NULL AND decision_evidence_reference IS NULL) OR "
             "(status IN ('accepted', 'rejected') AND decided_at IS NOT NULL "
@@ -3044,12 +3072,12 @@ class CalendarProjectionReconciliationCandidate(Base):
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
     )
     calendar_event_sync_id: Mapped[str] = mapped_column(
-        ForeignKey("calendar_event_syncs.id", ondelete="CASCADE"),
+        ForeignKey("calendar_event_syncs.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     calendar_connection_id: Mapped[str] = mapped_column(
-        ForeignKey("user_calendar_connections.id", ondelete="CASCADE"),
+        ForeignKey("user_calendar_connections.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -3063,7 +3091,7 @@ class CalendarProjectionReconciliationCandidate(Base):
     snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
     detected_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("company_memberships.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     decided_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -3075,7 +3103,9 @@ class CalendarProjectionReconciliationCandidate(Base):
     )
 
     company: Mapped[Company] = relationship()
-    calendar_event_sync: Mapped[CalendarEventSync] = relationship()
+    calendar_event_sync: Mapped[CalendarEventSync] = relationship(
+        foreign_keys=[calendar_event_sync_id]
+    )
 
 
 class UserMailboxConnection(Base):

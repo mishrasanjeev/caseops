@@ -7492,6 +7492,7 @@ def test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres(pg_e
         )
         session.add(candidate)
         session.commit()
+        candidate_id = candidate.id
 
     with Session(pg_engine) as session:
         duplicate = CalendarProjectionReconciliationCandidate(
@@ -7534,4 +7535,69 @@ def test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres(pg_e
         assert "ck_calendar_projection_reconciliation_decision_evidence" in str(
             evidence_error.value
         )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError) as incomplete_claim_error:
+            session.execute(
+                text(
+                    "UPDATE calendar_event_syncs "
+                    "SET reconciliation_candidate_id = :candidate_id WHERE id = :sync_id"
+                ),
+                {"candidate_id": candidate_id, "sync_id": sync_id},
+            )
+            session.commit()
+        assert "ck_calendar_event_sync_reconciliation_claim_complete" in str(
+            incomplete_claim_error.value
+        )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError, match="snapshot evidence is immutable"):
+            session.execute(
+                text(
+                    "UPDATE calendar_projection_reconciliation_candidates "
+                    "SET observed_snapshot_json = CAST(:payload AS json) WHERE id = :id"
+                ),
+                {"payload": '{"tampered": true}', "id": candidate_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        session.execute(
+            text(
+                "UPDATE calendar_projection_reconciliation_candidates "
+                "SET status = 'accepted', decided_by_membership_id = :actor, "
+                "decision_evidence_reference = :evidence, decided_at = :decided "
+                "WHERE id = :id"
+            ),
+            {
+                "actor": membership_id,
+                "evidence": "postgres:calendar-review",
+                "decided": datetime.now(UTC),
+                "id": candidate_id,
+            },
+        )
+        session.commit()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError, match="decision is terminal"):
+            session.execute(
+                text(
+                    "UPDATE calendar_projection_reconciliation_candidates "
+                    "SET status = 'rejected' WHERE id = :id"
+                ),
+                {"id": candidate_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError):
+            session.execute(
+                text("DELETE FROM calendar_event_syncs WHERE id = :id"),
+                {"id": sync_id},
+            )
+            session.commit()
         session.rollback()

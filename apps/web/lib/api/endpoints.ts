@@ -9756,6 +9756,7 @@ export type IpCalendarDriftFinding = {
   source_type: string;
   source_id: string;
   ip_docket_id: string | null;
+  reconciliation_candidate_id: string | null;
   // "unknown" is a real outcome: the provider could not be read, so the
   // projection is unverified rather than confirmed correct.
   drift_status: "moved" | "missing" | "unknown";
@@ -9767,6 +9768,58 @@ export async function checkIpCalendarDrift(): Promise<{
   findings: IpCalendarDriftFinding[];
 }> {
   return apiRequest("/api/ip/calendar-projections/drift-check", { method: "POST" });
+}
+
+export type IpCalendarReconciliationCandidate = {
+  id: string;
+  calendar_event_sync_id: string;
+  calendar_connection_id: string;
+  source_type: string;
+  source_id: string;
+  ip_docket_id: string | null;
+  drift_status: "moved" | "missing" | "unknown";
+  snapshot_schema_version: number;
+  expected_snapshot: Record<string, unknown>;
+  observed_snapshot: Record<string, unknown>;
+  snapshot_sha256: string;
+  status: "pending" | "accepted" | "rejected" | "superseded";
+  detected_by_membership_id: string | null;
+  decided_by_membership_id: string | null;
+  decision_evidence_reference: string | null;
+  decided_at: string | null;
+  created_at: string;
+};
+
+export async function fetchIpCalendarReconciliationCandidates(input?: {
+  includeResolved?: boolean;
+  limit?: number;
+}): Promise<{ candidates: IpCalendarReconciliationCandidate[] }> {
+  const params = new URLSearchParams();
+  if (input?.includeResolved) params.set("include_resolved", "true");
+  if (input?.limit) params.set("limit", String(input.limit));
+  const query = params.size ? `?${params.toString()}` : "";
+  return apiRequest(`/api/ip/calendar-projections/reconciliation-candidates${query}`);
+}
+
+export async function decideIpCalendarReconciliationCandidate(
+  candidateId: string,
+  input: {
+    action: "accept" | "reject";
+    evidenceReference: string;
+    expectedSnapshotSha256: string;
+  },
+): Promise<IpCalendarReconciliationCandidate> {
+  return apiRequest(
+    `/api/ip/calendar-projections/reconciliation-candidates/${candidateId}/decision`,
+    {
+      method: "POST",
+      body: {
+        action: input.action,
+        evidence_reference: input.evidenceReference,
+        expected_snapshot_sha256: input.expectedSnapshotSha256,
+      },
+    },
+  );
 }
 
 export type IpControlException = {

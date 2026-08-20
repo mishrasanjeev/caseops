@@ -15,6 +15,8 @@ const {
   recordIpControlReviewExportMock,
   downloadControlReviewManifestMock,
   checkIpCalendarDriftMock,
+  fetchIpCalendarReconciliationCandidatesMock,
+  decideIpCalendarReconciliationCandidateMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchIpDailyDocketMock: vi.fn(),
@@ -28,6 +30,8 @@ const {
   recordIpControlReviewExportMock: vi.fn(),
   downloadControlReviewManifestMock: vi.fn(),
   checkIpCalendarDriftMock: vi.fn(),
+  fetchIpCalendarReconciliationCandidatesMock: vi.fn(),
+  decideIpCalendarReconciliationCandidateMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -42,6 +46,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   signOffIpControlReview: signOffIpControlReviewMock,
   recordIpControlReviewExport: recordIpControlReviewExportMock,
   checkIpCalendarDrift: checkIpCalendarDriftMock,
+  fetchIpCalendarReconciliationCandidates: fetchIpCalendarReconciliationCandidatesMock,
+  decideIpCalendarReconciliationCandidate: decideIpCalendarReconciliationCandidateMock,
 }));
 
 vi.mock("@/lib/ip/control-review-manifest", () => ({
@@ -131,10 +137,13 @@ describe("IpDailyDocketPage", () => {
     recordIpControlReviewExportMock.mockReset();
     downloadControlReviewManifestMock.mockReset();
     checkIpCalendarDriftMock.mockReset();
+    fetchIpCalendarReconciliationCandidatesMock.mockReset();
+    decideIpCalendarReconciliationCandidateMock.mockReset();
     checkIpCalendarDriftMock.mockResolvedValue({
       checked_at: "2026-08-15T08:00:00Z",
       findings: [],
     });
+    fetchIpCalendarReconciliationCandidatesMock.mockResolvedValue({ candidates: [] });
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchIpDailyDocketMock.mockResolvedValue(FRESH_DOCKET);
@@ -860,6 +869,7 @@ describe("IpDailyDocketPage", () => {
           source_type: "matter_deadline",
           source_id: "deadline-1",
           ip_docket_id: "ip-1",
+          reconciliation_candidate_id: "candidate-1",
           drift_status: "moved",
           detail: "The event was moved away from the CaseOps date.",
         },
@@ -870,6 +880,7 @@ describe("IpDailyDocketPage", () => {
           source_type: "matter_deadline",
           source_id: "deadline-2",
           ip_docket_id: "ip-2",
+          reconciliation_candidate_id: "candidate-2",
           drift_status: "unknown",
           detail: "The calendar connection could not be read.",
         },
@@ -900,5 +911,93 @@ describe("IpDailyDocketPage", () => {
     expect(await within(card).findByTestId("ip-docket-drift-clean")).toHaveTextContent(
       "Every projected event matched when checked",
     );
+  });
+
+  it("lets an IP approver restore a reviewed calendar copy from CaseOps", async () => {
+    const candidate = {
+      id: "candidate-restore",
+      calendar_event_sync_id: "sync-restore",
+      calendar_connection_id: "connection-restore",
+      source_type: "matter_deadline",
+      source_id: "deadline-restore",
+      ip_docket_id: "ip-restore",
+      drift_status: "moved",
+      snapshot_schema_version: 1,
+      expected_snapshot: { occurs_on: "2026-09-20" },
+      observed_snapshot: {
+        start_date: "2026-09-22",
+        provider_revision: '"provider-version-1"',
+        provider_precondition_revision: '"provider-version-1"',
+      },
+      snapshot_sha256: "a".repeat(64),
+      status: "pending",
+      detected_by_membership_id: "member-1",
+      decided_by_membership_id: null,
+      decision_evidence_reference: null,
+      decided_at: null,
+      created_at: "2026-08-20T08:00:00Z",
+    };
+    fetchIpCalendarReconciliationCandidatesMock
+      .mockResolvedValueOnce({ candidates: [candidate] })
+      .mockResolvedValue({ candidates: [] });
+    decideIpCalendarReconciliationCandidateMock.mockResolvedValue({
+      ...candidate,
+      status: "rejected",
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const row = await screen.findByTestId("ip-calendar-candidate-candidate-restore");
+    const restore = within(row).getByRole("button", { name: "Restore from CaseOps" });
+    expect(restore).toBeDisabled();
+    fireEvent.change(within(row).getByLabelText("Review evidence reference"), {
+      target: { value: "matter-note:calendar-restore" },
+    });
+    fireEvent.click(restore);
+
+    await waitFor(() =>
+      expect(decideIpCalendarReconciliationCandidateMock).toHaveBeenCalledWith(
+        "candidate-restore",
+        {
+          action: "reject",
+          evidenceReference: "matter-note:calendar-restore",
+          expectedSnapshotSha256: "a".repeat(64),
+        },
+      ),
+    );
+    expect(await screen.findByTestId("ip-calendar-candidates-empty")).toBeVisible();
+  });
+
+  it("does not offer an external rewrite when the provider state is unverified", async () => {
+    fetchIpCalendarReconciliationCandidatesMock.mockResolvedValue({
+      candidates: [
+        {
+          id: "candidate-unknown",
+          calendar_event_sync_id: "sync-unknown",
+          calendar_connection_id: "connection-unknown",
+          source_type: "matter_deadline",
+          source_id: "deadline-unknown",
+          ip_docket_id: "ip-unknown",
+          drift_status: "unknown",
+          snapshot_schema_version: 1,
+          expected_snapshot: { occurs_on: "2026-09-20" },
+          observed_snapshot: { readable: false },
+          snapshot_sha256: "b".repeat(64),
+          status: "pending",
+          detected_by_membership_id: "member-1",
+          decided_by_membership_id: null,
+          decision_evidence_reference: null,
+          decided_at: null,
+          created_at: "2026-08-20T08:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const row = await screen.findByTestId("ip-calendar-candidate-candidate-unknown");
+    expect(within(row).getByText("Unverified")).toBeVisible();
+    expect(within(row).queryByRole("button", { name: "Restore from CaseOps" })).toBeNull();
+    expect(within(row).getByRole("button", { name: "Record review" })).toBeVisible();
   });
 });

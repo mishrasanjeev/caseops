@@ -80,6 +80,7 @@ from caseops_api.services.matter_access import (
     assert_access,
     can_access,
     can_access_ip_docket,
+    visible_ip_dockets_filter,
     visible_matters_filter,
 )
 from caseops_api.services.matter_operational_guard import matter_is_operational
@@ -120,6 +121,10 @@ _IP_OPERATIONAL_COVERAGE_STATUSES = {
 
 class CalendarProviderError(RuntimeError):
     """Provider failures safe to persist/display as sync errors."""
+
+
+class CalendarProviderPreconditionError(CalendarProviderError):
+    """The provider event changed after the reviewed snapshot was captured."""
 
 
 @dataclass(frozen=True)
@@ -279,6 +284,7 @@ class OutlookProvider(Protocol):
         hearing: MatterHearing,
         matter: Matter,
         existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -288,6 +294,7 @@ class OutlookProvider(Protocol):
         token_payload: dict[str, Any],
         item: CalendarSourcePayload,
         existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -451,11 +458,13 @@ class MicrosoftGraphOutlookProvider:
         hearing: MatterHearing,
         matter: Matter,
         existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
     ) -> str:
         return self.upsert_calendar_item(
             token_payload=token_payload,
             item=_hearing_source_payload(hearing, matter),
             existing_provider_event_id=existing_provider_event_id,
+            expected_provider_revision=expected_provider_revision,
         )
 
     def upsert_calendar_item(
@@ -464,6 +473,7 @@ class MicrosoftGraphOutlookProvider:
         token_payload: dict[str, Any],
         item: CalendarSourcePayload,
         existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
     ) -> str:
         try:
             import httpx
@@ -472,6 +482,13 @@ class MicrosoftGraphOutlookProvider:
         access_token = str(token_payload.get("access_token") or "")
         if not access_token:
             raise CalendarProviderError("Stored Outlook token is unavailable.")
+        if expected_provider_revision:
+            # The Graph event-update contract does not document a conditional
+            # request header or changeKey as an updateable property. Never
+            # turn a reviewed snapshot into an unguarded overwrite.
+            raise CalendarProviderPreconditionError(
+                "Microsoft Graph does not expose a verified conditional event update."
+            )
 
         start = f"{item.occurs_on.isoformat()}T00:00:00"
         end = f"{(item.occurs_on + timedelta(days=1)).isoformat()}T00:00:00"
@@ -505,6 +522,8 @@ class MicrosoftGraphOutlookProvider:
             )
             response.raise_for_status()
             event = response.json()
+        except CalendarProviderPreconditionError:
+            raise
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Microsoft Graph calendar sync failed.") from exc
         event_id = str(event.get("id") or "")
@@ -564,7 +583,11 @@ class MicrosoftGraphOutlookProvider:
                     # would falsely move every event to the preceding day.
                     "Prefer": 'outlook.timezone="India Standard Time"',
                 },
-                params={"$select": "id,isAllDay,isCancelled,start"},
+                params={
+                    "$select": (
+                        "id,isAllDay,isCancelled,start,changeKey,lastModifiedDateTime"
+                    )
+                },
                 timeout=15,
             )
             if response.status_code == 404:
@@ -581,6 +604,8 @@ class MicrosoftGraphOutlookProvider:
             # timezone arithmetic can move the obligation across a day.
             "start_date": raw[:10] or None,
             "cancelled": bool(body.get("isCancelled")),
+            "provider_revision": str(body.get("changeKey") or "") or None,
+            "provider_updated_at": str(body.get("lastModifiedDateTime") or "") or None,
         }
 
 
@@ -711,11 +736,13 @@ class GoogleCalendarProvider:
         hearing: MatterHearing,
         matter: Matter,
         existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
     ) -> str:
         return self.upsert_calendar_item(
             token_payload=token_payload,
             item=_hearing_source_payload(hearing, matter),
             existing_provider_event_id=existing_provider_event_id,
+            expected_provider_revision=expected_provider_revision,
         )
 
     def upsert_calendar_item(
@@ -724,6 +751,7 @@ class GoogleCalendarProvider:
         token_payload: dict[str, Any],
         item: CalendarSourcePayload,
         existing_provider_event_id: str | None,
+        expected_provider_revision: str | None = None,
     ) -> str:
         try:
             import httpx
@@ -743,6 +771,8 @@ class GoogleCalendarProvider:
             },
         }
         headers = {"Authorization": f"Bearer {access_token}"}
+        if expected_provider_revision:
+            headers["If-Match"] = expected_provider_revision
         try:
             if existing_provider_event_id:
                 response = httpx.patch(
@@ -752,6 +782,10 @@ class GoogleCalendarProvider:
                     json=payload,
                     timeout=15,
                 )
+                if response.status_code == 412 and expected_provider_revision:
+                    raise CalendarProviderPreconditionError(
+                        "Google Calendar event changed after reconciliation review."
+                    )
                 response.raise_for_status()
                 return existing_provider_event_id
             response = httpx.post(
@@ -762,6 +796,8 @@ class GoogleCalendarProvider:
             )
             response.raise_for_status()
             event = response.json()
+        except CalendarProviderPreconditionError:
+            raise
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Google Calendar sync failed.") from exc
         event_id = str(event.get("id") or "")
@@ -829,6 +865,14 @@ class GoogleCalendarProvider:
             "id": body.get("id"),
             "start_date": raw[:10] or None,
             "cancelled": str(body.get("status") or "") == "cancelled",
+            "provider_revision": str(body.get("etag") or "") or None,
+            "provider_precondition_revision": str(body.get("etag") or "") or None,
+            "provider_updated_at": str(body.get("updated") or "") or None,
+            "provider_sequence": (
+                int(body["sequence"])
+                if isinstance(body.get("sequence"), int)
+                else None
+            ),
         }
 
 
@@ -6205,6 +6249,7 @@ def _sync_source_to_provider(
     )
     sync_id = sync.id
     existing_provider_event_id = sync.provider_event_id
+    expected_provider_revision = sync.reconciliation_provider_revision
     # Publish the pending row before provider I/O. Coverage/lifecycle writers
     # can now tombstone it without waiting on an uncommitted unique-key insert;
     # the post-provider fence below decides which transaction won.
@@ -6502,12 +6547,22 @@ def _sync_source_to_provider(
                 hearing=hearing,
                 matter=item.matter,
                 existing_provider_event_id=existing_provider_event_id,
+                **(
+                    {"expected_provider_revision": expected_provider_revision}
+                    if expected_provider_revision
+                    else {}
+                ),
             )
         else:
             provider_event_id = provider.upsert_calendar_item(
                 token_payload=token_payload,
                 item=item,
                 existing_provider_event_id=existing_provider_event_id,
+                **(
+                    {"expected_provider_revision": expected_provider_revision}
+                    if expected_provider_revision
+                    else {}
+                ),
             )
     except Exception as exc:
         deletion_response = _post_provider_deletion_winner(
@@ -6532,21 +6587,37 @@ def _sync_source_to_provider(
             raise CalendarProviderError(
                 "Calendar sync state disappeared after provider call."
             ) from exc
+        stale_review = isinstance(exc, CalendarProviderPreconditionError)
         sync.sync_status = (
-            CalendarEventSyncStatus.DEAD_LETTER
-            if existing_provider_event_id is None
-            else CalendarEventSyncStatus.FAILED
+            CalendarEventSyncStatus.SYNCED
+            if stale_review
+            else (
+                CalendarEventSyncStatus.DEAD_LETTER
+                if existing_provider_event_id is None
+                else CalendarEventSyncStatus.FAILED
+            )
         )
         sync.last_error = (
-            "Calendar provider upsert outcome is unknown."
-            if existing_provider_event_id is None
-            else _safe_error(exc)
+            "Provider event changed after reconciliation review; run the drift check again."
+            if stale_review
+            else (
+                "Calendar provider upsert outcome is unknown."
+                if existing_provider_event_id is None
+                else _safe_error(exc)
+            )
         )
         sync.dead_letter_reason = (
             CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
-            if existing_provider_event_id is None
+            if existing_provider_event_id is None and not stale_review
             else None
         )
+        if stale_review:
+            sync.reconciliation_candidate_id = None
+            sync.reconciliation_snapshot_sha256 = None
+            sync.reconciliation_provider_revision = None
+            sync.drift_status = "unknown"
+            sync.drift_checked_at = _current_time()
+            sync.drift_detail = "Provider event changed after reconciliation review."
         sync.next_attempt_at = None
         session.add(sync)
         if sync.source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
@@ -6568,6 +6639,7 @@ def _sync_source_to_provider(
                 "source_type": item.source_type,
                 "source_id": item.source_id,
                 "error": sync.last_error,
+                "reconciliation_precondition_failed": stale_review,
                 **target_metadata,
             },
         )
@@ -6614,6 +6686,9 @@ def _sync_source_to_provider(
     sync.last_synced_at = now
     sync.next_attempt_at = None
     sync.dead_letter_reason = None
+    sync.reconciliation_candidate_id = None
+    sync.reconciliation_snapshot_sha256 = None
+    sync.reconciliation_provider_revision = None
     # Re-projecting is the repair, so any recorded drift is now stale rather
     # than resolved: it is cleared to `unchecked` and must be re-checked to be
     # claimed as matching (UJ-62-EXC-03).
@@ -7401,6 +7476,7 @@ class _CalendarDriftClaim:
     connection_id: str
     owner_membership_id: str
     provider_event_id: str
+    projection_synced_at: str | None
     claim_marker: str
     source_type: str
     source_id: str
@@ -7550,6 +7626,7 @@ def _calendar_drift_candidate_fingerprint(
     expected_snapshot: dict[str, object] = {
         "schema_version": 1,
         "provider_event_id": claim.provider_event_id,
+        "projection_synced_at": claim.projection_synced_at,
         "source_type": claim.source_type,
         "source_id": claim.source_id,
         "occurs_on": claim.generation.occurs_on.isoformat(),
@@ -7564,6 +7641,26 @@ def _calendar_drift_candidate_fingerprint(
         json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return expected_snapshot, observed, fingerprint
+
+
+def _calendar_provider_revision_snapshot(event: dict[str, Any] | None) -> dict[str, object]:
+    """Retain only bounded provider concurrency markers, never event content."""
+
+    if event is None:
+        return {}
+    snapshot: dict[str, object] = {}
+    for key in (
+        "provider_revision",
+        "provider_precondition_revision",
+        "provider_updated_at",
+    ):
+        value = event.get(key)
+        if isinstance(value, str) and value:
+            snapshot[key] = value[:200]
+    sequence = event.get("provider_sequence")
+    if isinstance(sequence, int) and sequence >= 0:
+        snapshot["provider_sequence"] = sequence
+    return snapshot
 
 
 def _record_calendar_drift_candidate(
@@ -7880,6 +7977,11 @@ def _claim_calendar_drift_read(
         connection_id=connection_id,
         owner_membership_id=owner_membership_id,
         provider_event_id=provider_event_id,
+        projection_synced_at=(
+            _aware(sync.last_synced_at).isoformat()
+            if sync.last_synced_at is not None
+            else None
+        ),
         claim_marker=claim_marker,
         source_type=source_type,
         source_id=source_id,
@@ -7936,6 +8038,12 @@ def _finalize_calendar_drift_read(
         and sync.source_id == claim.source_id
         and sync.sync_status == CalendarEventSyncStatus.SYNCED
         and str(sync.provider_event_id or "") == claim.provider_event_id
+        and (
+            _aware(sync.last_synced_at).isoformat()
+            if sync.last_synced_at is not None
+            else None
+        )
+        == claim.projection_synced_at
     )
     exact_connection = bool(
         connection is not None
@@ -8270,6 +8378,7 @@ def check_ip_calendar_projection_drift(
                         "readable": True,
                         "event_present": event is not None,
                         "cancelled": bool(event and event.get("cancelled")),
+                        **_calendar_provider_revision_snapshot(event),
                     }
                 else:
                     expected = claim.generation.occurs_on.isoformat()
@@ -8282,6 +8391,7 @@ def check_ip_calendar_projection_drift(
                             "event_present": True,
                             "cancelled": False,
                             "start_date": actual,
+                            **_calendar_provider_revision_snapshot(event),
                         }
                     elif not actual:
                         status_value = "unknown"
@@ -8291,6 +8401,7 @@ def check_ip_calendar_projection_drift(
                             "event_present": True,
                             "cancelled": False,
                             "start_date": None,
+                            **_calendar_provider_revision_snapshot(event),
                         }
                     else:
                         status_value = "matches"
@@ -8300,6 +8411,7 @@ def check_ip_calendar_projection_drift(
                             "event_present": True,
                             "cancelled": False,
                             "start_date": actual,
+                            **_calendar_provider_revision_snapshot(event),
                         }
 
         finding = _finalize_calendar_drift_read(
@@ -8320,39 +8432,33 @@ def list_ip_calendar_projection_reconciliation_candidates(
     *,
     context: SessionContext,
     include_resolved: bool = False,
+    limit: int = 100,
 ) -> list[CalendarProjectionReconciliationCandidate]:
     """List only candidate evidence the caller may open through its docket."""
 
     statement = (
         select(CalendarProjectionReconciliationCandidate)
-        .where(CalendarProjectionReconciliationCandidate.company_id == context.company.id)
+        .join(
+            IpDocketRecord,
+            IpDocketRecord.id
+            == CalendarProjectionReconciliationCandidate.ip_docket_id,
+        )
+        .where(
+            CalendarProjectionReconciliationCandidate.company_id == context.company.id,
+            IpDocketRecord.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+        )
         .order_by(
             CalendarProjectionReconciliationCandidate.created_at.desc(),
             CalendarProjectionReconciliationCandidate.id.desc(),
         )
+        .limit(limit)
     )
     if not include_resolved:
         statement = statement.where(
             CalendarProjectionReconciliationCandidate.status == "pending"
         )
-    rows = list(session.scalars(statement).all())
-    docket_ids = sorted({row.ip_docket_id for row in rows if row.ip_docket_id})
-    dockets = {
-        row.id: row
-        for row in session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.company_id == context.company.id,
-                IpDocketRecord.id.in_(docket_ids),
-            )
-        ).all()
-    }
-    return [
-        row
-        for row in rows
-        if row.ip_docket_id
-        and (docket := dockets.get(row.ip_docket_id)) is not None
-        and can_access_ip_docket(session, context=context, docket=docket)
-    ]
+    return list(session.scalars(statement).all())
 
 
 def decide_ip_calendar_projection_reconciliation_candidate(
@@ -8475,6 +8581,35 @@ def decide_ip_calendar_projection_reconciliation_candidate(
         .with_for_update(of=CalendarProjectionReconciliationCandidate)
         .execution_options(populate_existing=True)
     )
+    candidate_expected = (
+        dict(candidate.expected_snapshot_json or {})
+        if candidate is not None
+        else {}
+    )
+    candidate_observed = (
+        dict(candidate.observed_snapshot_json or {})
+        if candidate is not None
+        else {}
+    )
+    provider_revision = candidate_observed.get("provider_precondition_revision")
+    try:
+        current_payload = (
+            _source_payload_for(
+                session,
+                context=context,
+                source_type=str(sync.source_type),
+                source_id=sync.source_id,
+            )
+            if sync is not None
+            else None
+        )
+    except HTTPException:
+        current_payload = None
+    current_projection_synced_at = (
+        _aware(sync.last_synced_at).isoformat()
+        if sync is not None and sync.last_synced_at is not None
+        else None
+    )
     if (
         docket is None
         or locked_source is None
@@ -8490,12 +8625,24 @@ def decide_ip_calendar_projection_reconciliation_candidate(
         or candidate.ip_docket_id != docket.id
         or sync.sync_status != CalendarEventSyncStatus.SYNCED
         or not sync.provider_event_id
+        or current_payload is None
+        or current_payload.ip_docket is None
+        or current_payload.ip_docket.id != docket.id
+        or current_payload.occurs_on.isoformat() != candidate_expected.get("occurs_on")
+        or str(sync.provider_event_id) != candidate_expected.get("provider_event_id")
+        or current_projection_synced_at
+        != candidate_expected.get("projection_synced_at")
         # Acceptance records review evidence and remains possible after a
         # credential outage.  Rejection would queue an external PATCH, so it
         # must not turn a disconnected/revoked connection into latent work.
         or (
             action == "reject"
-            and connection.status != CalendarConnectionStatus.CONNECTED
+            and (
+                connection.status != CalendarConnectionStatus.CONNECTED
+                or candidate.drift_status != "moved"
+                or not isinstance(provider_revision, str)
+                or not provider_revision
+            )
         )
         or not can_access_ip_docket(session, context=context, docket=docket)
     ):
@@ -8516,12 +8663,16 @@ def decide_ip_calendar_projection_reconciliation_candidate(
     candidate.decided_at = now
     session.add(candidate)
     if action == "reject":
-        # A known ID means the regular projection worker issues an idempotent
-        # provider PATCH, never a second CREATE.
+        # The regular projection worker issues a conditional PATCH against the
+        # exact provider version reviewed above. Missing, unknown and
+        # unversioned observations cannot queue an automatic external write.
         sync.sync_status = CalendarEventSyncStatus.PENDING
         sync.next_attempt_at = now
         sync.last_error = None
         sync.dead_letter_reason = None
+        sync.reconciliation_candidate_id = candidate.id
+        sync.reconciliation_snapshot_sha256 = candidate.snapshot_sha256
+        sync.reconciliation_provider_revision = provider_revision
         sync.updated_at = now
         session.add(sync)
     record_from_context(
