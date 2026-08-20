@@ -26,6 +26,10 @@ from caseops_api.db.models import (
     TenantDataOperation,
     TenantDataOperationItem,
 )
+from caseops_api.governance.data_class_projection import (
+    require_admissible_data_class,
+    require_current_projection,
+)
 from caseops_api.schemas.data_governance import (
     TenantDataOperationDependencyPlan,
     TenantDataOperationDryRunRecord,
@@ -39,21 +43,10 @@ from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
 
+
 # This is only the IPLF-028A foundation inventory.  The later M2/M3 data-map
 # work must expand it to every in-scope SQL/object/index/cache/queue/log/export
 # class before an operation surface can be released.
-FOUNDATION_DATA_CLASS_IDS = frozenset(
-    {
-        "data_retention_policies",
-        "data_retention_versions",
-        "legal_holds",
-        "legal_hold_items",
-        "tenant_data_operations",
-        "tenant_data_operation_items",
-    }
-)
-
-
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -73,22 +66,19 @@ def _actor_label(context: SessionContext) -> str:
 
 
 def _registered_item_scope(payload: TenantDataOperationDryRunRequest) -> list[dict]:
+    """Resolve every requested class through the reviewed runtime projection.
+
+    Admission used to be a six-name frozenset declared here - a duplicate of the
+    reviewed registry, free to drift from it, and unable to distinguish a real
+    but unclassified table from a typo. It now comes from the compiled
+    projection, which is regenerated from the reviewed artifacts and gated in CI.
+    """
+
     seen: set[tuple[str, str, str]] = set()
     normalized: list[dict] = []
     for item in payload.items:
         data_class_id = item.data_class_id.strip()
-        if data_class_id not in FOUNDATION_DATA_CLASS_IDS:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "type": "data_class_not_registered_for_dry_run",
-                    "detail": (
-                        "The IPLF-028A dry-run foundation accepts only its "
-                        "registered governance data classes."
-                    ),
-                    "data_class_id": data_class_id,
-                },
-            )
+        require_admissible_data_class(data_class_id)
         target_type = item.target_type.strip().lower()
         key = (data_class_id, target_type, item.target_reference_hash)
         if key in seen:
@@ -541,6 +531,10 @@ def create_dry_run_manifest(
     are the governance rows and a tenant audit event in the caller's company.
     """
 
+    # Before any per-item work: if the projection cannot be trusted, no answer
+    # about any class is worth giving, and a partial manifest is worse than none.
+    require_current_projection(session)
+
     item_scope = _registered_item_scope(payload)
     policy_version_id = payload.retention_policy_version_id
     if policy_version_id is not None:
@@ -737,7 +731,6 @@ def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
 
 
 __all__ = [
-    "FOUNDATION_DATA_CLASS_IDS",
     "create_dry_run_manifest",
     "reject_data_operation_execution",
 ]

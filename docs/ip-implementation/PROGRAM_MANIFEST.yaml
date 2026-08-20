@@ -7798,15 +7798,6 @@
       "approvals": [],
       "blockers": [
         {
-          "id": "IPLF-028A-RUNTIME-DATA-CLASS-REGISTRY",
-          "summary": "The repository-wide IPLF-028C map inventories the exact current SQL schema and the registered/known object, index, cache, queue, log, export, provider, and backup boundaries, but the IPLF-028A dry-run service still accepts only the six governance classes hard-coded in FOUNDATION_DATA_CLASS_IDS and does not consume a reviewed runtime projection of that map.",
-          "owner": "Platform records-governance owner and Engineering",
-          "evidence_needed": "Define and review a versioned runtime data-class projection, bind the existing company-scoped dry-run request validation to it with fail-closed rejection of unknown or stale IDs, and prove that repository map changes cannot silently diverge from the runtime allowlist.",
-          "safe_fallback": "Keep FOUNDATION_DATA_CLASS_IDS restricted to the six IPLF-028A governance tables, reject every other dry-run class, and retain the no-execution boundary.",
-          "milestone_impact": "Blocks IPLF-028A completion and operational DATA-GOV claims while leaving the additive six-table dry-run foundation and repository-wide IPLF-028C inventory valid.",
-          "next_independent_slice": "Implement only the reviewed fail-closed runtime registry bridge; do not expose an export, purge, offboarding, restore, or other execution endpoint."
-        },
-        {
           "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
           "summary": "No approved retention schedule, legal-hold activation/release workflow, step-up/four-eyes decision, or tenant-facing review contract has been supplied for a real data operation.",
           "owner": "Authorized legal/privacy owner, security owner, and product owner",
@@ -7827,7 +7818,7 @@
       ],
       "next_actions": [
         "Keep the new records-governance tables unseeded and all repository implementation fail-closed; complete dry-run routes, workers, schedulers, adapters, tests, and deployment wiring now, but do not activate effectful execute mode.",
-        "Replace the six-class dry-run constant with a reviewed, versioned, fail-closed runtime projection of the repository-wide map before marking the foundation implementation complete.",
+        "DONE 2026-08-19: the six-class dry-run constant is replaced by a compiled runtime projection of the reviewed IPLF-028A/IPLF-027A registries, rendered by scripts/ip_data_class_projection.py and gated in CI by its validate verb. What changed is provenance, versioning and failure behaviour: the projection carries fingerprints of the artifacts and the ORM schema it was rendered from, refuses the whole request when it is missing or no longer describes the build, and distinguishes an inventoried-but-unreviewed table from an unknown id. What did NOT change is which classes are admitted - still exactly the six reviewed ones. The remaining 260 inventoried tables are now a published count in the data_class_review_coverage integrity check rather than an absence.",
         "Design, build, test, and deploy real-command contracts behind default-off, dry-run, effectless controls; obtain explicit legal/privacy/security approval for policy, holds, step-up, four-eyes, and user workflow before activation or any non-anonymized tenant-data effect.",
         "After exact integrated-candidate CI and approved non-live resilience preparation, run the required database-plus-object cutover restore and tenant-export dry run with named operators and reviewers."
       ],

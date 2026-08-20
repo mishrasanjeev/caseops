@@ -9,9 +9,9 @@ from sqlalchemy import select
 
 from caseops_api.db.models import AuditEvent, Company, CompanyMembership, LegalHold, User
 from caseops_api.db.session import get_session_factory
+from caseops_api.governance.data_class_projection import admitted_data_class_ids
 from caseops_api.schemas.data_governance import TenantDataOperationDryRunRequest
 from caseops_api.services.data_governance import (
-    FOUNDATION_DATA_CLASS_IDS,
     create_dry_run_manifest,
     reject_data_operation_execution,
 )
@@ -148,4 +148,4 @@ def test_unknown_class_and_execute_request_fail_closed_without_an_operation(
         reject_data_operation_execution(operation_id="fixture-operation")
     assert execution.value.status_code == 503
     assert execution.value.detail["type"] == "data_operation_execution_unavailable"
-    assert "tenant_data_operations" in FOUNDATION_DATA_CLASS_IDS
+    assert "tenant_data_operations" in (admitted_data_class_ids() or frozenset())

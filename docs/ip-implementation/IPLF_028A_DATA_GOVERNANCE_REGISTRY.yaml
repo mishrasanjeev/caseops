@@ -4,6 +4,9 @@
   "status": "repository_schema_implemented_dry_run_only",
   "ownership_ledger_ref": "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
   "ownership_decision_id": "M2M3-IPLF-028",
+  "projection_version": 1,
+  "projection_ref": "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+  "projection_rule": "The runtime admits exactly the data_classes below. It reads them from the compiled projection at projection_ref, not from this file, because the API image ships src/ and not docs/. scripts/ip_data_class_projection.py validate fails CI if the two disagree.",
   "completion_boundary": "This is the initial IPLF-028A governance-table registry. It does not claim a complete platform data map, approved retention policy, legal-hold workflow, tenant export, purge, offboarding, restore, provider cleanup, or production resilience rehearsal.",
   "data_classes": [
     {
