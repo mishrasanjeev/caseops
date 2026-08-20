@@ -9,21 +9,24 @@ Under Indian GST a tax invoice number is fixed at issue; corrections go through
 a credit or debit note. So this is a statutory expectation, and the control
 belongs where every writer must pass through it.
 
-Migration `20260820_0002` adds both halves. The trigger half is PostgreSQL-only
-and is asserted here under `@pytest.mark.postgres`, because SQLite would
-silently accept the UPDATE and a green local run would prove nothing about
-production - the same trap `test_20260816_invoice_number_allocation.py` calls
-out for `FOR UPDATE`.
+Migration `20260820_0002` adds both halves.
+
+This file holds only the assertions that run everywhere. The trigger itself is
+PostgreSQL-only and is proven in `tests/test_postgres_validation.py`, because
+the `postgres-validation` CI job runs exactly one file:
+
+    uv run pytest -q -m postgres tests/test_postgres_validation.py
+
+A `@pytest.mark.postgres` test in any other module is skipped on the default
+shards AND never selected by that job - it runs nowhere while still reading as
+coverage. The first draft of this file made exactly that mistake, and its four
+"skipped" results looked like evidence of a control nobody had exercised.
 """
 
 from __future__ import annotations
 
 import pathlib
 import re
-import uuid
-
-import pytest
-from sqlalchemy import text
 
 _MIGRATION = pathlib.Path(
     "alembic/versions/20260820_0002_invoice_number_immutable.py"
@@ -31,7 +34,7 @@ _MIGRATION = pathlib.Path(
 
 
 class TestTheControlIsDeclaredNotIncidental:
-    """Cheap assertions that run everywhere, including a plain SQLite shard."""
+    """Cheap assertions that run on every shard, including plain SQLite."""
 
     def test_model_declares_the_non_blank_check(self) -> None:
         from caseops_api.db.models import MatterInvoice
@@ -46,7 +49,7 @@ class TestTheControlIsDeclaredNotIncidental:
 
         If a legitimate rewrite path is ever added, this fails first and forces
         the question to be answered deliberately, rather than discovered as a
-        production exception.
+        production exception when the trigger rejects the UPDATE.
         """
         assign = re.compile(r"\.invoice_number\s*=(?!=)")
         offenders: list[str] = []
@@ -61,7 +64,7 @@ class TestTheControlIsDeclaredNotIncidental:
             "trigger will reject this at runtime:\n" + "\n".join(offenders)
         )
 
-    def test_migration_is_postgres_guarded_and_carries_the_marker(self) -> None:
+    def test_migration_is_dialect_guarded_and_carries_the_marker(self) -> None:
         body = _MIGRATION.read_text(encoding="utf-8")
         assert "DATA-GOVERNANCE-MAP: updated" in body
         assert 'dialect.name == "postgresql"' in body
@@ -70,130 +73,31 @@ class TestTheControlIsDeclaredNotIncidental:
         assert "IS DISTINCT FROM OLD.invoice_number)" in body
 
 
-@pytest.mark.postgres
-class TestTheTriggerActuallyFires:
-    """The half that matters. SQLite cannot prove any of this."""
+class TestTheTriggerProofIsSomewhereCIRunsIt:
+    """Guard against the coverage illusion this file was briefly an example of.
 
-    @staticmethod
-    def _setup(conn) -> None:
-        conn.execute(text("DROP TABLE IF EXISTS matter_invoices CASCADE"))
-        conn.execute(
-            text(
-                "CREATE TABLE matter_invoices ("
-                " id text PRIMARY KEY,"
-                " company_id text NOT NULL,"
-                " invoice_number text NOT NULL,"
-                " total_amount_minor bigint NOT NULL DEFAULT 0)"
-            )
+    A `@pytest.mark.postgres` test only executes if it lives in the single file
+    the `postgres-validation` job names. If the trigger assertions drift back
+    out of that file, they stop running and nothing else notices.
+    """
+
+    def test_the_trigger_assertions_live_in_the_file_ci_runs(self) -> None:
+        pg_suite = pathlib.Path("tests/test_postgres_validation.py").read_text(
+            encoding="utf-8"
         )
-        conn.execute(
-            text(
-                "ALTER TABLE matter_invoices ADD CONSTRAINT "
-                "ck_matter_invoice_number_not_blank "
-                "CHECK (btrim(invoice_number) <> '')"
-            )
+        assert "test_invoice_number_cannot_be_rewritten_on_postgres" in pg_suite
+        assert "test_blank_invoice_number_is_rejected_on_postgres" in pg_suite
+
+    def test_this_file_declares_no_postgres_tests(self) -> None:
+        """If someone adds one here, it would silently never run."""
+        body = pathlib.Path(__file__).read_text(encoding="utf-8")
+        decorators = [
+            line
+            for line in body.splitlines()
+            if line.strip().startswith("@pytest.mark.postgres")
+        ]
+        assert not decorators, (
+            "a @pytest.mark.postgres test in this module runs nowhere: it is "
+            "skipped on the default shards and not selected by the "
+            "postgres-validation job. Move it to tests/test_postgres_validation.py"
         )
-        conn.execute(
-            text(
-                "CREATE OR REPLACE FUNCTION caseops_reject_invoice_number_change() "
-                "RETURNS trigger AS $fn$ "
-                "BEGIN "
-                " IF NEW.invoice_number IS DISTINCT FROM OLD.invoice_number THEN "
-                "  RAISE EXCEPTION 'invoice_number is immutable (invoice %, % -> %)',"
-                "   OLD.id, OLD.invoice_number, NEW.invoice_number "
-                "   USING ERRCODE = 'restrict_violation'; "
-                " END IF; "
-                " RETURN NEW; "
-                "END; "
-                "$fn$ LANGUAGE plpgsql"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE TRIGGER matter_invoices_invoice_number_immutable "
-                "BEFORE UPDATE ON matter_invoices FOR EACH ROW "
-                "WHEN (NEW.invoice_number IS DISTINCT FROM OLD.invoice_number) "
-                "EXECUTE FUNCTION caseops_reject_invoice_number_change()"
-            )
-        )
-
-    @staticmethod
-    def _insert(conn, number: str = "GBA-0001") -> str:
-        invoice_id = str(uuid.uuid4())
-        conn.execute(
-            text(
-                "INSERT INTO matter_invoices (id, company_id, invoice_number) "
-                "VALUES (:i, :c, :n)"
-            ),
-            {"i": invoice_id, "c": "co-1", "n": number},
-        )
-        return invoice_id
-
-    def test_rewriting_the_number_is_rejected(self, pg_engine) -> None:
-        from sqlalchemy.exc import DBAPIError
-
-        with pg_engine.begin() as conn:
-            self._setup(conn)
-            invoice_id = self._insert(conn)
-
-        with pg_engine.connect() as conn:
-            with pytest.raises(DBAPIError) as exc:
-                with conn.begin():
-                    conn.execute(
-                        text(
-                            "UPDATE matter_invoices SET invoice_number = :n "
-                            "WHERE id = :i"
-                        ),
-                        {"n": "GBA-9999", "i": invoice_id},
-                    )
-            assert "immutable" in str(exc.value).lower()
-
-        with pg_engine.connect() as conn:
-            got = conn.execute(
-                text("SELECT invoice_number FROM matter_invoices WHERE id = :i"),
-                {"i": invoice_id},
-            ).scalar_one()
-            assert got == "GBA-0001", "the rejected UPDATE must not have applied"
-
-    def test_other_columns_remain_updatable(self, pg_engine) -> None:
-        """An immutability control that freezes the whole row is a bug, not a
-        control: payments legitimately rewrite amounts on an issued invoice."""
-        with pg_engine.begin() as conn:
-            self._setup(conn)
-            invoice_id = self._insert(conn)
-            conn.execute(
-                text(
-                    "UPDATE matter_invoices SET total_amount_minor = 500 "
-                    "WHERE id = :i"
-                ),
-                {"i": invoice_id},
-            )
-            got = conn.execute(
-                text("SELECT total_amount_minor FROM matter_invoices WHERE id = :i"),
-                {"i": invoice_id},
-            ).scalar_one()
-            assert got == 500
-
-    def test_writing_the_same_number_is_not_an_error(self, pg_engine) -> None:
-        """A no-op rewrite is what an ORM flush of an unchanged row looks like.
-        Rejecting it would break ordinary saves for no safety gain."""
-        with pg_engine.begin() as conn:
-            self._setup(conn)
-            invoice_id = self._insert(conn)
-            conn.execute(
-                text(
-                    "UPDATE matter_invoices SET invoice_number = :n WHERE id = :i"
-                ),
-                {"n": "GBA-0001", "i": invoice_id},
-            )
-
-    def test_blank_number_is_rejected_on_insert(self, pg_engine) -> None:
-        from sqlalchemy.exc import DBAPIError
-
-        with pg_engine.begin() as conn:
-            self._setup(conn)
-        with pg_engine.connect() as conn:
-            for blank in ("", "   ", "\t"):
-                with pytest.raises(DBAPIError):
-                    with conn.begin():
-                        self._insert(conn, blank)
