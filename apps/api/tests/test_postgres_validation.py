@@ -7772,3 +7772,100 @@ def test_uj59_control_review_evidence_is_immutable_and_tenant_correlated_on_post
         assert session.get(IpControlReviewExceptionDecision, decision_id) is not None
         assert session.get(IpControlReviewSampleEvidence, sample_id) is not None
         assert session.get(IpControlReviewSignature, signature_id) is not None
+
+
+@pytest.mark.postgres
+def test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on_postgres(
+    pg_engine,
+):
+    from caseops_api.db.models import (
+        IpDeadlineIncident,
+        IpDeadlineIncidentImpact,
+    )
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        fixture = _seed_ip_coverage_lifecycle_fixture(session)
+        other_company_id = _seed_company(session)
+        other_actor_id = _seed_membership(session, other_company_id)
+        incident = IpDeadlineIncident(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            matter_deadline_id=fixture["deadline_id"],
+            severity="critical",
+            summary="PostgreSQL immutable incident evidence",
+            impact_json={"affected_rights": ["opaque-right"]},
+            evidence_snapshot_json={"rule_version_refs": ["rule:v7"]},
+            preservation_manifest_sha256="a" * 64,
+            defect_scope="shared_rule",
+            defect_fingerprint_sha256="b" * 64,
+            status="open",
+            created_by_membership_id=fixture["owner_id"],
+            created_at=now,
+        )
+        session.add(incident)
+        session.flush()
+        impact = IpDeadlineIncidentImpact(
+            company_id=fixture["company_id"],
+            incident_id=incident.id,
+            record_type="trademark_application",
+            record_reference_sha256="c" * 64,
+            relationship="same defective rule",
+            assessment="affected",
+            scan_method="fingerprint scan",
+            evidence_reference="postgres:impact:1",
+            assessed_by_membership_id=fixture["owner_id"],
+            assessed_at=now,
+        )
+        session.add(impact)
+        session.commit()
+        incident_id = incident.id
+        impact_id = impact.id
+
+    attempts = [
+        (
+            "UPDATE ip_deadline_incidents SET summary = 'rewritten' WHERE id = :id",
+            {"id": incident_id},
+            "discovery evidence is immutable",
+        ),
+        (
+            "DELETE FROM ip_deadline_incidents WHERE id = :id",
+            {"id": incident_id},
+            "evidence is retained",
+        ),
+        (
+            "UPDATE ip_deadline_incident_impacts SET assessment = 'not_affected' "
+            "WHERE id = :id",
+            {"id": impact_id},
+            "append-only",
+        ),
+    ]
+    for statement, parameters, message in attempts:
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError, match=message):
+                session.execute(text(statement), parameters)
+                session.commit()
+            session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.add(
+                IpDeadlineIncidentImpact(
+                    company_id=fixture["company_id"],
+                    incident_id=incident_id,
+                    record_type="trademark_application",
+                    record_reference_sha256="d" * 64,
+                    relationship="cross-tenant actor attempt",
+                    assessment="pending",
+                    scan_method="invalid actor test",
+                    evidence_reference="postgres:impact:cross-tenant",
+                    assessed_by_membership_id=other_actor_id,
+                    assessed_at=now,
+                )
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.get(IpDeadlineIncident, incident_id) is not None
+        assert session.get(IpDeadlineIncidentImpact, impact_id) is not None
