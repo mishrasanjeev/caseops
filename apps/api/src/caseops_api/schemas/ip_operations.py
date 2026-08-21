@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
@@ -510,11 +511,26 @@ class IpRelatedRightObligationRecord(BaseModel):
 class IpCostItemCreateRequest(BaseModel):
     category: Literal["official_fee", "professional_fee", "associate_fee", "disbursement", "other"]
     description: str = Field(min_length=3, max_length=500)
+    #: The amount exactly as incurred. When the ``fx_*`` block is supplied this
+    #: remains the ORIGINAL amount and currency (UJ-52-EXC-02).
     amount_minor: int = Field(ge=0)
     currency: str = Field(default="INR", min_length=3, max_length=3)
     evidence_reference: str = Field(min_length=3, max_length=500)
     billing_link_type: Literal["invoice", "invoice_line_item", "time_entry"] | None = None
     billing_link_id: str | None = Field(default=None, max_length=64)
+    #: UJ-52-EXC-01. A cost on a docket with no billing Matter must be declared
+    #: nonbillable; the caller states the billing decision, it is never guessed.
+    billable: bool = True
+    #: UJ-52-EXC-04. A provider's quote is not an expense.
+    cost_nature: Literal["actual", "estimate"] = "actual"
+    #: UJ-52-EXC-05. Withhold the amount from readers without ``ip:fees_manage``.
+    rate_confidential: bool = False
+    #: UJ-52-EXC-02. Supplied together or not at all.
+    fx_rate: Decimal | None = Field(default=None, gt=0)
+    fx_rate_source: str | None = Field(default=None, min_length=2, max_length=120)
+    fx_converted_at: datetime | None = None
+    base_amount_minor: int | None = Field(default=None, ge=0)
+    base_currency: str | None = Field(default=None, min_length=3, max_length=3)
 
     @model_validator(mode="after")
     def complete_billing_link(self) -> IpCostItemCreateRequest:
@@ -522,15 +538,60 @@ class IpCostItemCreateRequest(BaseModel):
             raise ValueError("billing_link_type and billing_link_id must be supplied together.")
         return self
 
+    @model_validator(mode="after")
+    def complete_conversion(self) -> IpCostItemCreateRequest:
+        """A partial conversion preserves nothing, so refuse it outright."""
+
+        supplied = {
+            "fx_rate": self.fx_rate is not None,
+            "fx_rate_source": self.fx_rate_source is not None,
+            "fx_converted_at": self.fx_converted_at is not None,
+            "base_amount_minor": self.base_amount_minor is not None,
+            "base_currency": self.base_currency is not None,
+        }
+        if any(supplied.values()) and not all(supplied.values()):
+            missing = sorted(name for name, present in supplied.items() if not present)
+            raise ValueError(
+                "An exchange conversion must preserve the original amount, rate, "
+                f"source and time together; missing: {', '.join(missing)}."
+            )
+        if self.base_currency is not None and self.base_currency.upper() == self.currency.upper():
+            raise ValueError("A conversion must target a different currency than the original.")
+        return self
+
+    @model_validator(mode="after")
+    def estimate_is_not_an_expense(self) -> IpCostItemCreateRequest:
+        if self.cost_nature == "estimate" and self.billing_link_type is not None:
+            raise ValueError(
+                "A provider estimate is not an actual expense and cannot be linked "
+                "to a Matter billing record."
+            )
+        if not self.billable and self.billing_link_type is not None:
+            raise ValueError("A nonbillable cost cannot be linked to a Matter billing record.")
+        return self
+
 
 class IpCostItemRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    matter_id: str | None
     category: str
     description: str
-    amount_minor: int
+    #: ``None`` when the row is rate-confidential and the reader does not hold
+    #: ``ip:fees_manage``. ``amount_withheld`` says which of the two it is, so a
+    #: withheld rate can never be misread as a zero or absent cost.
+    amount_minor: int | None
     currency: str
+    billable: bool
+    cost_nature: str
+    rate_confidential: bool
+    amount_withheld: bool = False
+    fx_rate: Decimal | None = None
+    fx_rate_source: str | None = None
+    fx_converted_at: datetime | None = None
+    base_amount_minor: int | None = None
+    base_currency: str | None = None
     evidence_reference: str
     billing_link_type: str | None
     billing_link_id: str | None
@@ -549,7 +610,15 @@ class IpCostReconciliationRow(BaseModel):
     canonical_amount_minor: int | None
     difference_minor: int | None
     currency: str
-    status: Literal["matched", "mismatch", "missing", "unlinked"]
+    #: ``comparison_amount_minor``/``comparison_currency`` are what was actually
+    #: compared against the ledger. They equal the evidence amount unless the
+    #: cost preserves a conversion, in which case the converted amount is the
+    #: only one the ledger could match (UJ-52-EXC-02).
+    comparison_amount_minor: int
+    comparison_currency: str
+    #: ``estimate`` and ``nonbillable`` are terminal, not stages: neither can
+    #: become ``matched``, because neither belongs in the client ledger.
+    status: Literal["matched", "mismatch", "missing", "unlinked", "estimate", "nonbillable"]
 
 
 class IpCostReconciliationReport(BaseModel):
@@ -561,6 +630,8 @@ class IpCostReconciliationReport(BaseModel):
     mismatch_count: int
     missing_count: int
     unlinked_count: int
+    estimate_count: int = 0
+    nonbillable_count: int = 0
     checksum_sha256: str
 
 
@@ -608,7 +679,15 @@ class IpDocketControlReport(BaseModel):
     open_incident_count: int
     unprojected_calendar_count: int
     inactive_coverage_count: int
+    #: Covers only the costs this reader may see. A confidential rate is
+    #: excluded rather than added as a zero, so the total is honest for the
+    #: reader but not necessarily complete.
     total_cost_minor_by_currency: dict[str, int]
+    #: How many cost amounts the total could not include, so an incomplete
+    #: total can never be mistaken for a complete one (UJ-52-EXC-05, and the
+    #: UJ-59 rule that a control report cannot claim all clear while something
+    #: is hidden).
+    withheld_cost_item_count: int = 0
 
 
 __all__ = [

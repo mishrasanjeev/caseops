@@ -19052,6 +19052,15 @@ export interface components {
         IpCostItemCreateRequest: {
             /** Amount Minor */
             amount_minor: number;
+            /** Base Amount Minor */
+            base_amount_minor?: number | null;
+            /** Base Currency */
+            base_currency?: string | null;
+            /**
+             * Billable
+             * @default true
+             */
+            billable: boolean;
             /** Billing Link Id */
             billing_link_id?: string | null;
             /** Billing Link Type */
@@ -19062,6 +19071,12 @@ export interface components {
              */
             category: "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other";
             /**
+             * Cost Nature
+             * @default actual
+             * @enum {string}
+             */
+            cost_nature: "actual" | "estimate";
+            /**
              * Currency
              * @default INR
              */
@@ -19070,11 +19085,33 @@ export interface components {
             description: string;
             /** Evidence Reference */
             evidence_reference: string;
+            /** Fx Converted At */
+            fx_converted_at?: string | null;
+            /** Fx Rate */
+            fx_rate?: number | string | null;
+            /** Fx Rate Source */
+            fx_rate_source?: string | null;
+            /**
+             * Rate Confidential
+             * @default false
+             */
+            rate_confidential: boolean;
         };
         /** IpCostItemRecord */
         IpCostItemRecord: {
             /** Amount Minor */
-            amount_minor: number;
+            amount_minor: number | null;
+            /**
+             * Amount Withheld
+             * @default false
+             */
+            amount_withheld: boolean;
+            /** Base Amount Minor */
+            base_amount_minor?: number | null;
+            /** Base Currency */
+            base_currency?: string | null;
+            /** Billable */
+            billable: boolean;
             /** Billing Link Id */
             billing_link_id: string | null;
             /** Billing Link Type */
@@ -19083,6 +19120,8 @@ export interface components {
             canonical_amount_minor: number | null;
             /** Category */
             category: string;
+            /** Cost Nature */
+            cost_nature: string;
             /**
              * Created At
              * Format: date-time
@@ -19094,8 +19133,18 @@ export interface components {
             description: string;
             /** Evidence Reference */
             evidence_reference: string;
+            /** Fx Converted At */
+            fx_converted_at?: string | null;
+            /** Fx Rate */
+            fx_rate?: string | null;
+            /** Fx Rate Source */
+            fx_rate_source?: string | null;
             /** Id */
             id: string;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Rate Confidential */
+            rate_confidential: boolean;
             /** Reconciled At */
             reconciled_at: string | null;
             /** Reconciliation Difference Minor */
@@ -19116,6 +19165,11 @@ export interface components {
             /** Docket Id */
             docket_id: string;
             /**
+             * Estimate Count
+             * @default 0
+             */
+            estimate_count: number;
+            /**
              * Generated At
              * Format: date-time
              */
@@ -19126,6 +19180,11 @@ export interface components {
             mismatch_count: number;
             /** Missing Count */
             missing_count: number;
+            /**
+             * Nonbillable Count
+             * @default 0
+             */
+            nonbillable_count: number;
             /** Rows */
             rows: components["schemas"]["IpCostReconciliationRow"][];
             /** Unlinked Count */
@@ -19139,6 +19198,10 @@ export interface components {
             billing_link_type: string | null;
             /** Canonical Amount Minor */
             canonical_amount_minor: number | null;
+            /** Comparison Amount Minor */
+            comparison_amount_minor: number;
+            /** Comparison Currency */
+            comparison_currency: string;
             /** Cost Item Id */
             cost_item_id: string;
             /** Currency */
@@ -19151,7 +19214,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "matched" | "mismatch" | "missing" | "unlinked";
+            status: "matched" | "mismatch" | "missing" | "unlinked" | "estimate" | "nonbillable";
         };
         /**
          * IpCoverageAcknowledgeOutcome
@@ -20131,6 +20194,11 @@ export interface components {
             uncovered_deadline_count: number;
             /** Unprojected Calendar Count */
             unprojected_calendar_count: number;
+            /**
+             * Withheld Cost Item Count
+             * @default 0
+             */
+            withheld_cost_item_count: number;
         };
         /** IpDocketCreateRequest */
         IpDocketCreateRequest: {
