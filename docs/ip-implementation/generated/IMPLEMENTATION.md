@@ -57,7 +57,7 @@ Generated; do not edit.
 | IPLF-032A | derived | IPLF-032 | M3 | ARCH-OPS-23 | UJ-02-NORMAL, UJ-02-EXC-01, UJ-02-EXC-02, UJ-02-EXC-03, UJ-02-EXC-04 | implemented | passed | blocked | not_required |
 | IPLF-032B | derived | IPLF-032 | M3 |  |  | implemented | passed | blocked | not_required |
 | IPLF-033A | derived | IPLF-033 | M3 | IP-PROS-11 | UJ-06-NORMAL | implemented | passed | blocked | not_required |
-| IPLF-033B | derived | IPLF-033 | M3 | IP-PROS-01, IP-PROS-02, IP-PROS-03, IP-PROS-04, IP-PROS-05, IP-PROS-06, IP-PROS-07, IP-PROS-08, IP-PROS-09, IP-PROS-10, IP-PROS-12 | UJ-06-EXC-01, UJ-06-EXC-02, UJ-06-EXC-03 | not_started | not_run | blocked | not_required |
+| IPLF-033B | derived | IPLF-033 | M3 | IP-PROS-01, IP-PROS-02, IP-PROS-03, IP-PROS-04, IP-PROS-05, IP-PROS-06, IP-PROS-07, IP-PROS-08, IP-PROS-09, IP-PROS-10, IP-PROS-12 | UJ-06-EXC-01, UJ-06-EXC-02, UJ-06-EXC-03 | implemented | passed | blocked | not_required |
 | IPLF-034A | derived | IPLF-034 | M3 | CAL-OPS-06 | UJ-09-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-034B | derived | IPLF-034 | M3 | CAL-OPS-01, CAL-OPS-02, CAL-OPS-03, CAL-OPS-04, CAL-OPS-05, CAL-OPS-07, CAL-OPS-08, CAL-OPS-09, CAL-OPS-10, CAL-OPS-11, CAL-OPS-12, CAL-OPS-13, CAL-OPS-14, IP-DL-01, IP-DL-02, IP-DL-03, IP-DL-04, IP-DL-05, IP-DL-06, IP-DL-07, IP-DL-08 | UJ-08-EXC-01, UJ-08-EXC-02, UJ-08-NORMAL, UJ-09-EXC-01, UJ-09-EXC-02, UJ-56-EXC-01, UJ-56-EXC-02, UJ-56-EXC-03, UJ-56-NORMAL | not_started | not_run | blocked | not_required |
 | IPLF-035A | derived | IPLF-035 | M3 | NOTIF-01 | UJ-10-NORMAL, UJ-10-EXC-03 | implemented | passed | blocked | not_required |

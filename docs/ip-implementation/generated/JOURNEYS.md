@@ -9,7 +9,7 @@ Generated; do not edit.
 | UJ-03 | Create trademark application manually | 3 | IPLF-031B, IPLF-039A, IPLF-039H | 10 | 4 | in_progress | not_run | false |
 | UJ-04 | Find and work from portfolio listing | 4 | IPLF-030A, IPLF-030B | 7 | 2 | implemented | passed | false |
 | UJ-05 | Detect and resolve duplicate | 2 | IPLF-031A | 2 | 1 | implemented | passed | false |
-| UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033A, IPLF-033B | 4 | 3 | in_progress | not_run | false |
+| UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033A, IPLF-033B | 4 | 3 | implemented | passed | false |
 | UJ-07 | Reconcile registry update | 4 | IPLF-051B | 4 | 0 | not_started | not_run | false |
 | UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 3 | 1 | in_progress | not_run | false |
 | UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034A, IPLF-034B | 4 | 2 | in_progress | not_run | false |

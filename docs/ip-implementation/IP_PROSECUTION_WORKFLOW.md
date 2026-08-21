@@ -1,12 +1,13 @@
 # IP prosecution workflow contract
 
-Last updated: 7 August 2026
+Last updated: 22 August 2026
 
-Implementation slice: `IPLF-022B`
+Implementation slices: `IPLF-022B`, `IPLF-033A`, `IPLF-033B`
 
-Status: repository implementation and local verification complete at
-`08ae3ecd0a8eedd3d5f2bc2e994b48732fddfaf1`; independent CI, canonical-main
-release, exact production verification, and human acceptance remain pending.
+Status: IPLF-033B repository implementation and local verification complete at
+`048a541d1b182bced5579030a27b93d7a6fc465a`; exact-head CI, canonical-main
+merge, deployment, production verification, and independent acceptance remain
+pending until their dated evidence exists.
 
 ## Purpose and ownership
 
@@ -48,6 +49,18 @@ remain candidates until an explicit `same_fact`, `keep_separate`, or
 `reject_candidate` reconciliation. Corrections append a new event linked by
 `supersedes_event_id`; the original row is never rewritten.
 
+A confirmed manual duplicate is rejected until the operator previews and
+records an explicit reconciliation. A backdated event exposes
+`backdated_recalculation_review_required` and cannot commit without a matching
+acknowledgement. Once acknowledged, it appends to history but does not rewind
+an application or proceeding past a later accepted event. The payload records
+that the current phase was preserved.
+
+Optional typed correspondence records inward/outward direction and received,
+due, prepared, approved, filed, and accepted timestamps. Chronology and
+timezone validation happen at the API boundary. These fields link prosecution
+evidence without replacing the existing Matter communication owner.
+
 ## Application lifecycle
 
 Alembic revision `20260807_0004` adds `is_active` and `lifecycle_version` to
@@ -61,6 +74,22 @@ ordinary child events cannot reactivate them. Only a version-checked
 `restoration` legal event can return the application to an active phase. Each
 application keeps its own identifier, event history, version, and lifecycle
 version even when dockets are grouped at client, mark, or family level.
+
+## Application family workspace
+
+`GET /api/ip/portfolio/application-families` reuses the canonical portfolio
+access and filter query. Mark families key on the existing asset; client
+families key on the canonical primary `MatterClientAssignment` and `Client`,
+with a stable legacy Matter client-name fallback only where no assignment
+exists. No family table or shared lifecycle owner is introduced.
+
+The endpoint performs aggregate-first cursor pagination and returns whole
+families, never partial member pages. Each member retains its own application,
+docket, identifier, office, jurisdiction, phase, lifecycle version, and
+deadline counts. Alembic revision `20260822_0001` adds the tenant-leading
+`(company_id, asset_id)` index for the mark-family aggregate. The family view
+supports mark/client switching, member navigation, loading further pages, and
+narrow-mobile layouts.
 
 ## Checklist and legal-effect boundary
 
@@ -120,16 +149,23 @@ The authoritative executable proofs are:
 - `test_20260807_application_lifecycle_migration.py` for exact upgrade,
   downgrade, re-upgrade, defaults, normalization, and indexes;
 - `apps/web/app/app/ip/page.test.tsx` for preview gating, blocker
-  acknowledgement, reporting language, and responsive controls; and
-- `tests/e2e/ram-2026-08-01-bugs.spec.ts` for the full synthetic browser flow
-  through real API persistence at 360 pixels.
+  acknowledgement, correction/reconciliation, typed correspondence, reporting
+  language, and responsive controls;
+- `test_ip_application_families.py` and
+  `apps/web/app/app/ip/portfolio/page.test.tsx` for canonical client grouping,
+  independent member state, cursor pagination, access filtering, and family UI;
+- `test_20260822_ip_application_family_index_migration.py` plus the PostgreSQL
+  validation suite for reversible schema and bounded index-backed query plans;
+  and
+- `tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts` for the complete
+  synthetic browser flow through family views, backdated acknowledgement,
+  correspondence, reconciliation, persistence, and 390-pixel overflow checks.
 
 Before legal event writes, the additive migration can be downgraded. After
 append-only history exists, rollback is rollout-off plus a forward,
 history-preserving correction. Destructive removal of legal events is not an
 authorized production rollback.
 
-IPLF-033B still owns the later trademark-specific workflow depth allocated to
-the same `IP-PROS-01..12`, UJ-06, and UJ-53 records. Therefore this slice can be
-implemented and verified without claiming those reciprocal program records,
-M2, M3, or the full program complete.
+IPLF-033B closes the repository implementation assigned to the M3 application
+workspace and UJ-06 exception paths. It does not claim UJ-53, M3, deployment,
+provider, legal, or program acceptance complete.

@@ -1582,11 +1582,14 @@
         "IPLF-033A",
         "IPLF-033B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-033B/local-2026-08-22.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -9056,19 +9059,16 @@
       "blockers": [
         {
           "id": "IPLF-033A-RELEASE-VERIFICATION",
-          "summary": "Family grouping is verified only on isolated SQLite fixtures with small synthetic data. There is no real-PostgreSQL CI, no query-plan evidence at representative volume, no pagination on the grouped view, no frontend, no E2E, and no deployment. Grouping is derived from asset_id/matter_id with no first-class family entity and no priority relationships between members.",
+          "summary": "IPLF-033B supplied bounded cursor pagination, canonical client grouping, family UI, E2E, an additive family-query index, and committed PostgreSQL plan proof. Exact-head CI, deployment, and dated production acceptance remain pending.",
           "owner": "Engineering and the authorized release operator",
-          "evidence_needed": "Exact-commit CI on real PostgreSQL, query-plan and index evidence for the grouped read at representative volume, pagination or a bounded result contract, a family UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
-          "safe_fallback": "The route is read-only and access-filtered by the canonical policy; no client consumes it.",
-          "milestone_impact": "Blocks IPLF-033A release closure; IP-PROS-01..10 and IP-PROS-12 remain open on IPLF-033B.",
-          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-034A."
+          "evidence_needed": "Green exact-head CI including real PostgreSQL, canonical-main merge, deployment, and dated exact-production acceptance.",
+          "safe_fallback": "Keep the family view rollout disabled; the canonical portfolio and independent application records remain available.",
+          "milestone_impact": "Blocks only release closure, not repository implementation or local verification.",
+          "next_independent_slice": "Proceed to IPLF-034B while release automation evaluates IPLF-033B."
         }
       ],
       "next_actions": [
-        "Decide whether a first-class family entity with priority relationships is required and scope it on IPLF-033B.",
-        "Add pagination or a bounded result contract to the grouped view.",
-        "Add query-plan and index evidence for the grouped read per ARCH-OPS-11.",
-        "Build the family UI with desktop and narrow-mobile evidence."
+        "Run exact-head CI, including the committed PostgreSQL index-plan assertion, then deploy and record dated production acceptance."
       ],
       "data_impact": [
         "No schema change, no migration, no backfill, no data mutation."
@@ -9104,7 +9104,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-033",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Additive index-only revision 20260822_0001; no backfill, legal-row mutation, new family table, or new lifecycle owner.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [
         "IP-PROS-01",
@@ -9136,29 +9136,69 @@
       "dependencies": [
         "IPLF-033A"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260822_0001_ip_application_family_index.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/ip_lifecycle.py",
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/app/ip/portfolio/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "tests/e2e/ram-2026-08-01-bugs.spec.ts",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL"
+        "apps/api/tests/test_ip_application_families.py",
+        "apps/api/tests/test_20260822_ip_application_family_index_migration.py",
+        "apps/api/tests/test_postgres_validation.py::test_application_family_query_is_bounded_and_uses_tenant_asset_index",
+        "apps/web/app/app/ip/page.test.tsx",
+        "apps/web/app/app/ip/portfolio/page.test.tsx",
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-033B/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-033B/local-2026-08-22.md",
+          "revision": "048a541d1b182bced5579030a27b93d7a6fc465a",
+          "recorded_at": "2026-08-22T01:30:00+05:30",
+          "environment": "Windows 11, CPython 3.13, locked API dependencies, migrated SQLite fixtures, production Next.js build and local Playwright Chromium. The real-PostgreSQL plan test is committed for exact-head CI and is not claimed as locally executed.",
+          "fixtures": "Synthetic law-firm tenant, canonical client assigned to two Matters, three independent applications across mark/client families, manual and registry prosecution events, backdated correspondence, and no real client or registry data.",
+          "assertions": "Whole-family cursor pagination; canonical client grouping; independent identifiers/phases/versions; family desktop/mobile UI; immutable correction and explicit reconciliation; registry provenance; typed correspondence; mandatory backdated acknowledgement; later accepted phase is not rewound; index migration reversibility; governance and OpenAPI freshness. Local counts and limitations are in the evidence record.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-033B-RELEASE-VERIFICATION",
+          "summary": "Repository implementation and local verification pass, but exact-head CI, real-PostgreSQL execution, canonical-main merge, deployment, and exact-production acceptance are not yet recorded.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Green exact-head CI, merge commit with verified parent, deployed release identity, production health, and dated production E2E evidence.",
+          "safe_fallback": "Keep the family view rollout disabled and continue using the canonical portfolio; append-only event history remains readable.",
+          "milestone_impact": "Blocks IPLF-033B release closure only.",
+          "next_independent_slice": "Proceed to IPLF-034B after publishing this PR."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run exact-head CI, merge only the verified head, deploy, and record exact-production acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds only ix_tm_applications_company_asset on existing tenant and asset keys; no legal row, family entity, backfill, retention class, or deletion authority is added."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_PROSECUTION_WORKFLOW.md",
+        "docs/ip-implementation/IP_APPLICATION_FAMILY_AND_PROSECUTION_USER_GUIDE.md",
+        "docs/ip-implementation/evidence/m3/IPLF-033B/local-2026-08-22.md",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml and generated projections"
+      ],
+      "allocation_review": "Brutally re-audited against current main and IPLF-022B/030B/033A. This slice extends the existing IpDocketEvent, TrademarkApplication, Matter client assignment, access-policy and portfolio owners. It creates no family table, task/deadline/correspondence duplicate, registry writer, shared phase, or alternate authorization path. First-class family priority relationships were not added because the PRD requires optional presentation grouping while each application remains independent; the existing asset/client identities are sufficient and avoid duplicate work.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -20399,23 +20439,14 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-01",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20446,23 +20477,14 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-02",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20493,23 +20515,14 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-03",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20540,23 +20553,14 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-04",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20587,23 +20591,14 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-05",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20636,23 +20631,14 @@
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
         "tests/e2e/ram-2026-08-01-bugs.spec.ts",
-        "planned:IPLF-REQ-IP-PROS-06",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20683,23 +20669,14 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
-        "planned:IPLF-REQ-IP-PROS-07",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20732,23 +20709,14 @@
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
         "apps/api/tests/test_20260807_application_lifecycle_migration.py",
-        "planned:IPLF-REQ-IP-PROS-08",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20781,23 +20749,14 @@
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
         "apps/web/app/app/ip/page.test.tsx",
-        "planned:IPLF-REQ-IP-PROS-09",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20830,23 +20789,14 @@
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
         "apps/web/app/app/ip/page.test.tsx",
-        "planned:IPLF-REQ-IP-PROS-10",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20919,23 +20869,14 @@
       "test_refs": [
         "apps/api/tests/test_ip_prosecution_workflow.py",
         "apps/web/app/app/ip/page.test.tsx",
-        "planned:IPLF-REQ-IP-PROS-12",
-        "planned:IPLF-UJ-06-EXC-01",
-        "planned:IPLF-UJ-06-EXC-02",
-        "planned:IPLF-UJ-06-EXC-03",
-        "planned:IPLF-UJ-06-NORMAL",
-        "planned:IPLF-UJ-53-EXC-01",
-        "planned:IPLF-UJ-53-EXC-02",
-        "planned:IPLF-UJ-53-EXC-03",
-        "planned:IPLF-UJ-53-EXC-04",
-        "planned:IPLF-UJ-53-NORMAL"
+        "tests/e2e/iplf-033b-prosecution-families-2026-08-22.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -43427,8 +43368,8 @@
         "docs/ip-implementation/evidence/m3/IPLF-033A/local-2026-08-14.md",
         "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49074,8 +49015,8 @@
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
         "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49119,8 +49060,8 @@
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
         "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49164,8 +49105,8 @@
         "docs/ip-implementation/evidence/m2/IPLF-022B/release-2026-08-07.md",
         "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
