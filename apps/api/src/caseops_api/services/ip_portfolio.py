@@ -108,6 +108,57 @@ def _latest_registry_sync_at():
     )
 
 
+def _primary_application_identifier():
+    """Return the current primary number owned by the projected application."""
+
+    return (
+        select(IpIdentifier.raw_value)
+        .where(
+            IpIdentifier.company_id == TrademarkApplication.company_id,
+            IpIdentifier.application_id == TrademarkApplication.id,
+            IpIdentifier.identifier_kind == "application",
+            IpIdentifier.is_primary.is_(True),
+            IpIdentifier.effective_until.is_(None),
+            IpIdentifier.superseded_by_identifier_id.is_(None),
+        )
+        .order_by(IpIdentifier.created_at.desc(), IpIdentifier.id.desc())
+        .limit(1)
+        .correlate(TrademarkApplication)
+        .scalar_subquery()
+    )
+
+
+def _primary_application_identifiers(
+    session: Session,
+    *,
+    company_id: str,
+    application_ids: list[str],
+) -> dict[str, str]:
+    if not application_ids:
+        return {}
+    rows = session.execute(
+        select(IpIdentifier.application_id, IpIdentifier.raw_value)
+        .where(
+            IpIdentifier.company_id == company_id,
+            IpIdentifier.application_id.in_(application_ids),
+            IpIdentifier.identifier_kind == "application",
+            IpIdentifier.is_primary.is_(True),
+            IpIdentifier.effective_until.is_(None),
+            IpIdentifier.superseded_by_identifier_id.is_(None),
+        )
+        .order_by(
+            IpIdentifier.application_id,
+            IpIdentifier.created_at.desc(),
+            IpIdentifier.id.desc(),
+        )
+    ).all()
+    result: dict[str, str] = {}
+    for application_id, raw_value in rows:
+        if application_id is not None:
+            result.setdefault(application_id, raw_value)
+    return result
+
+
 def _registry_state_predicate(state: str):
     latest = _latest_registry_sync_at()
     threshold = datetime.now(UTC) - REGISTRY_FRESHNESS_WINDOW
@@ -349,7 +400,6 @@ def _scoped_query(
             or_(
                 func.lower(IpDocketRecord.title).like(like),
                 func.lower(func.coalesce(IpAsset.title, "")).like(like),
-                func.lower(func.coalesce(IpDocketRecord.primary_identifier, "")).like(like),
                 func.lower(func.coalesce(Matter.client_name, "")).like(like),
                 identifier_match,
                 party_match,
@@ -652,7 +702,7 @@ def _portfolio_counts(
         statement.with_only_columns(
             TrademarkApplication.id.label("application_id"),
             IpDocketRecord.id.label("docket_id"),
-            IpDocketRecord.primary_identifier.label("primary_identifier"),
+            _primary_application_identifier().label("primary_identifier"),
             TrademarkApplication.source_pending_identifier_allocation.label("pending_identifier"),
             TrademarkApplication.office.label("office"),
             TrademarkApplication.jurisdiction.label("jurisdiction"),
@@ -715,14 +765,14 @@ def _portfolio_counts(
 def _incomplete_reasons(
     application: TrademarkApplication,
     asset: IpAsset | None,
-    docket: IpDocketRecord,
+    primary_identifier: str | None,
 ) -> list[str]:
     reasons: list[str] = []
     if asset is None:
         reasons.append("missing_mark")
     elif not (asset.title or "").strip():
         reasons.append("missing_mark_title")
-    if not docket.primary_identifier:
+    if not primary_identifier:
         reasons.append("missing_identifier")
     if application.source_pending_identifier_allocation:
         reasons.append("pending_identifier_allocation")
@@ -775,6 +825,11 @@ def list_ip_portfolio(
         application_ids=application_ids,
         docket_ids=docket_ids,
     )
+    primary_identifiers = _primary_application_identifiers(
+        session,
+        company_id=context.company.id,
+        application_ids=application_ids,
+    )
     matters = _matter_details(
         session,
         company_id=context.company.id,
@@ -789,7 +844,8 @@ def list_ip_portfolio(
     rows: list[IpPortfolioRow] = []
     for application, asset, docket in visible:
         open_count, unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
-        reasons = _incomplete_reasons(application, asset, docket)
+        primary_identifier = primary_identifiers.get(application.id)
+        reasons = _incomplete_reasons(application, asset, primary_identifier)
         detail = details[application.id]
         matter_detail = matters.get(docket.matter_id or "", {})
         registry_state, registry_at = registry_sync[docket.id]
@@ -804,7 +860,7 @@ def list_ip_portfolio(
                 asset_jurisdiction=asset.jurisdiction if asset else None,
                 docket_title=docket.title,
                 docket_status=docket.status,
-                primary_identifier=docket.primary_identifier,
+                primary_identifier=primary_identifier,
                 application_numbers=detail["application_numbers"],
                 opposition_numbers=detail["opposition_numbers"],
                 nice_classes=detail["nice_classes"],
@@ -876,6 +932,11 @@ def list_ip_portfolio_families(
         company_id=context.company.id,
         docket_ids=[docket.id for _a, _s, docket in visible],
     )
+    primary_identifiers = _primary_application_identifiers(
+        session,
+        company_id=context.company.id,
+        application_ids=[application.id for application, _asset, _docket in visible],
+    )
 
     grouped: dict[str, dict] = {}
     ungrouped = 0
@@ -907,7 +968,7 @@ def list_ip_portfolio_families(
                 jurisdiction=application.jurisdiction,
                 filing_phase=application.filing_phase,
                 lifecycle_version=application.lifecycle_version,
-                primary_identifier=docket.primary_identifier,
+                primary_identifier=primary_identifiers.get(application.id),
                 open_deadline_count=open_count,
                 overdue_deadline_count=overdue,
             )

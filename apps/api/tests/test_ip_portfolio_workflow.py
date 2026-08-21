@@ -153,6 +153,7 @@ def test_uj04_normal_exact_identifier_lookup_and_register_depth(
 
     row = _portfolio(client, headers, query="OPP/88/2026").json()["rows"][0]
     assert row["docket_id"] == docket["id"]
+    assert row["primary_identifier"] == "TM / 2026 / 00421"
     assert row["application_numbers"] == ["TM / 2026 / 00421"]
     assert row["opposition_numbers"] == ["OPP / 88 / 2026"]
     assert row["nice_classes"] == [9]

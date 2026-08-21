@@ -289,8 +289,6 @@ def create_trademark_application(
         )
         session.add(identifier)
         session.flush()
-        if number.is_primary:
-            docket.primary_identifier = number.raw_value
     if payload.filing_phase == "filed":
         assert_application_can_enter_filed_phase(
             row,
