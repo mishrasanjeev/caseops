@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "4520e2e953dba878b63adfb1e4ee561d90e09774ebd89eb8f0f6fd120d8a2d05"
-MAP_SCHEMA_FINGERPRINT = "3102282000b0042df0e8e57378257d2efd8b082921c3004792dd89e65dc2cef8"
+MAP_DOCUMENT_FINGERPRINT = "8108b88d8d24869357126e49356b73796efba98276431ecefbea0511706a29d8"
+MAP_SCHEMA_FINGERPRINT = "102ef973147c73e0777c55e7b0def457e60af89fee675f76915b1008c2441270"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "6c47c789ecd53070d712682bda753b4ff35b59709336e7edbf0126a8838ee251"
+ORM_SCHEMA_FINGERPRINT = "8cd6ce888107bf41b3607ebaa6dd45ac22b14b6fdcb6f938b91c7a394ea9c7d3"
 
-PROJECTION_ID = "75d4691d03374db2b5a3a1de2c47716549625a1af3cd93a8720ac3bd24d5801d"
+PROJECTION_ID = "4af691c5c6144b39ee6d7912b6a4439686ec337e2aabbe7494d6f98f3a488ec7"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -169,6 +169,8 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_import_rows",
         "ip_incident_kill_switches",
         "ip_parties_and_roles",
+        "ip_portfolio_export_jobs",
+        "ip_portfolio_saved_views",
         "ip_proceedings",
         "ip_related_right_obligations",
         "ip_relationships",

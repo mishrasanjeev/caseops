@@ -10,6 +10,7 @@ import {
   Gavel,
   Landmark,
   Lock,
+  PanelsTopLeft,
   Scale,
   Search,
   ShieldCheck,
@@ -95,6 +96,11 @@ const hearingFlow = [
 ] as const;
 
 const platformMoves = [
+  {
+    icon: PanelsTopLeft,
+    title: "Trademark portfolio",
+    body: "Search exact application and opposition numbers, work from permission-scoped saved views, configure register columns, and export an audited provenance-bearing CSV.",
+  },
   {
     icon: FileText,
     title: "Contracts and playbooks",

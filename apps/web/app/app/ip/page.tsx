@@ -9,6 +9,7 @@ import {
   Scale,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -91,6 +92,7 @@ import { useSession } from "@/lib/use-session";
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function IpDocketPage() {
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
@@ -103,7 +105,9 @@ export default function IpDocketPage() {
   const canConfigure = useCapability("ip:taxonomy_admin");
   const canManageAccess = useCapability("matter_access:manage");
   const session = useSession();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    searchParams.get("docket"),
+  );
   const [showCreate, setShowCreate] = useState(false);
 
   const readiness = useQuery({

@@ -5517,6 +5517,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/imports/{job_id}/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Import Errors */
+        get: operations["get_ip_import_errors_api_ip_imports__job_id__errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Reconciliation */
+        post: operations["post_ip_import_reconciliation_api_ip_imports__job_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/imports/{job_id}/revalidate": {
         parameters: {
             query?: never;
@@ -5528,6 +5562,40 @@ export interface paths {
         put?: never;
         /** Post Ip Import Revalidation */
         post: operations["post_ip_import_revalidation_api_ip_imports__job_id__revalidate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Import History */
+        get: operations["get_ip_import_history_api_ip_imports_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import File */
+        post: operations["post_ip_import_file_api_ip_imports_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5603,6 +5671,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/portfolio/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio Exports */
+        get: operations["get_ip_portfolio_exports_api_ip_portfolio_exports_get"];
+        put?: never;
+        /** Post Ip Portfolio Export */
+        post: operations["post_ip_portfolio_export_api_ip_portfolio_exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/exports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio Export */
+        get: operations["get_ip_portfolio_export_api_ip_portfolio_exports__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/exports/{job_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Ip Portfolio Export */
+        get: operations["download_ip_portfolio_export_api_ip_portfolio_exports__job_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/exports/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Portfolio Export Retry */
+        post: operations["post_ip_portfolio_export_retry_api_ip_portfolio_exports__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/exports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Portfolio Export Preview */
+        post: operations["post_ip_portfolio_export_preview_api_ip_portfolio_exports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/portfolio/families": {
         parameters: {
             query?: never;
@@ -5615,6 +5769,42 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portfolio Saved Views */
+        get: operations["get_ip_portfolio_saved_views_api_ip_portfolio_views_get"];
+        put?: never;
+        /** Post Ip Portfolio Saved View */
+        post: operations["post_ip_portfolio_saved_view_api_ip_portfolio_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Ip Portfolio Saved View */
+        put: operations["put_ip_portfolio_saved_view_api_ip_portfolio_views__view_id__put"];
+        post?: never;
+        /** Delete Ip Portfolio Saved View */
+        delete: operations["delete_ip_portfolio_saved_view_api_ip_portfolio_views__view_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -12080,6 +12270,11 @@ export interface components {
             metadata_json: string;
             /** Upload */
             upload: string;
+        };
+        /** Body_post_ip_import_file_api_ip_imports_upload_post */
+        Body_post_ip_import_file_api_ip_imports_upload_post: {
+            /** File */
+            file: string;
         };
         /** Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post */
         Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post: {
@@ -21413,6 +21608,11 @@ export interface components {
             /** Rows */
             rows: components["schemas"]["IpImportRowInput"][];
         };
+        /** IpImportJobListResponse */
+        IpImportJobListResponse: {
+            /** Jobs */
+            jobs?: components["schemas"]["IpImportJobRecord"][];
+        };
         /** IpImportJobRecord */
         IpImportJobRecord: {
             /** Committed At */
@@ -21462,6 +21662,25 @@ export interface components {
             /** Rows */
             rows: components["schemas"]["IpImportRowRecord"][];
         };
+        /** IpImportReconciliationDecision */
+        IpImportReconciliationDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "create_separate" | "link_existing" | "skip";
+            /** Row Id */
+            row_id: string;
+            /** Target Docket Id */
+            target_docket_id?: string | null;
+        };
+        /** IpImportReconciliationRequest */
+        IpImportReconciliationRequest: {
+            /** Decisions */
+            decisions: components["schemas"]["IpImportReconciliationDecision"][];
+            /** Expected Job Version */
+            expected_job_version: number;
+        };
         /**
          * IpImportRowInput
          * @description One staged portfolio row as supplied by the operator.
@@ -21482,6 +21701,10 @@ export interface components {
             commit_status: string;
             /** Created Docket Id */
             created_docket_id?: string | null;
+            /** Duplicate Candidates */
+            duplicate_candidates?: {
+                [key: string]: unknown;
+            }[];
             /** Errors */
             errors?: {
                 [key: string]: unknown;
@@ -21492,6 +21715,10 @@ export interface components {
             normalized?: {
                 [key: string]: unknown;
             };
+            /** Reconciled Target Docket Id */
+            reconciled_target_docket_id?: string | null;
+            /** Reconciliation Decision */
+            reconciliation_decision?: ("create_separate" | "link_existing" | "skip") | null;
             /** Row Number */
             row_number: number;
             /** Validation Status */
@@ -21923,12 +22150,118 @@ export interface components {
             /**
              * Registry Sync State
              * @default unavailable
+             * @enum {string}
              */
-            registry_sync_state: string;
+            registry_sync_state: "available" | "unavailable";
+            /**
+             * Stale Sync Records
+             * @default 0
+             */
+            stale_sync_records: number;
+            /** Sync Failure Records */
+            sync_failure_records?: number | null;
             /** Total */
             total: number;
             /** Unconfirmed Deadline Records */
             unconfirmed_deadline_records: number;
+        };
+        /** IpPortfolioExportCreate */
+        IpPortfolioExportCreate: {
+            /** Columns */
+            columns?: string[];
+            filters?: components["schemas"]["IpPortfolioFilters"];
+            /**
+             * Format
+             * @default csv
+             * @constant
+             */
+            format: "csv";
+            /** Preview Token */
+            preview_token: string;
+            /**
+             * Row Limit
+             * @default 10000
+             */
+            row_limit: number;
+        };
+        /** IpPortfolioExportListResponse */
+        IpPortfolioExportListResponse: {
+            /** Jobs */
+            jobs?: components["schemas"]["IpPortfolioExportRecord"][];
+        };
+        /** IpPortfolioExportPreview */
+        IpPortfolioExportPreview: {
+            /** Columns */
+            columns: string[];
+            /**
+             * Format
+             * @default csv
+             * @constant
+             */
+            format: "csv";
+            /** Omitted Restricted Count */
+            omitted_restricted_count?: null;
+            /** Preview Token */
+            preview_token: string;
+            /** Row Count */
+            row_count: number;
+            /** Row Limit */
+            row_limit: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** IpPortfolioExportPreviewRequest */
+        IpPortfolioExportPreviewRequest: {
+            /** Columns */
+            columns?: string[];
+            filters?: components["schemas"]["IpPortfolioFilters"];
+            /**
+             * Format
+             * @default csv
+             * @constant
+             */
+            format: "csv";
+            /**
+             * Row Limit
+             * @default 10000
+             */
+            row_limit: number;
+        };
+        /** IpPortfolioExportRecord */
+        IpPortfolioExportRecord: {
+            /** Columns */
+            columns: string[];
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Download Ready */
+            download_ready: boolean;
+            /** Error */
+            error: string | null;
+            /**
+             * Format
+             * @constant
+             */
+            format: "csv";
+            /** Id */
+            id: string;
+            /** Row Count */
+            row_count: number | null;
+            /** Row Limit */
+            row_limit: number;
+            /** Size Bytes */
+            size_bytes: number | null;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed";
         };
         /**
          * IpPortfolioFamily
@@ -22005,6 +22338,10 @@ export interface components {
         IpPortfolioFilters: {
             /** Asset Kind */
             asset_kind?: string[];
+            /** Client */
+            client?: string[];
+            /** Deadline State */
+            deadline_state?: string[];
             /** Docket Status */
             docket_status?: string[];
             /** Filing Phase */
@@ -22018,10 +22355,25 @@ export interface components {
             jurisdiction?: string[];
             /** Matter Id */
             matter_id?: string | null;
+            /** Nice Class */
+            nice_class?: number[];
             /** Office */
             office?: string[];
+            /**
+             * Opposition Only
+             * @default false
+             */
+            opposition_only: boolean;
+            /** Proprietor */
+            proprietor?: string[];
             /** Query */
             query?: string | null;
+            /** Registry Sync State */
+            registry_sync_state?: ("current" | "stale" | "failed" | "unavailable")[];
+            /** Responsible Membership Id */
+            responsible_membership_id?: string[];
+            /** Team Id */
+            team_id?: string[];
         };
         /** IpPortfolioListResponse */
         IpPortfolioListResponse: {
@@ -22039,8 +22391,17 @@ export interface components {
          * @description One jurisdiction/application record with its owning mark.
          */
         IpPortfolioRow: {
+            /** Agents */
+            agents?: string[];
+            /**
+             * Application Created At
+             * Format: date-time
+             */
+            application_created_at: string;
             /** Application Id */
             application_id: string;
+            /** Application Numbers */
+            application_numbers?: string[];
             /** Asset Id */
             asset_id: string | null;
             /** Asset Jurisdiction */
@@ -22049,6 +22410,8 @@ export interface components {
             asset_kind: string | null;
             /** Asset Title */
             asset_title: string | null;
+            /** Client Name */
+            client_name?: string | null;
             /** Docket Id */
             docket_id: string;
             /** Docket Status */
@@ -22057,6 +22420,8 @@ export interface components {
             docket_title: string;
             /** Filing Phase */
             filing_phase: string;
+            /** Goods Services */
+            goods_services?: string[];
             /** Incomplete Reasons */
             incomplete_reasons?: string[];
             /** Is Active */
@@ -22067,6 +22432,8 @@ export interface components {
             lifecycle_version: number;
             /** Matter Id */
             matter_id: string | null;
+            /** Nice Classes */
+            nice_classes?: number[];
             /** Office */
             office: string | null;
             /**
@@ -22074,6 +22441,8 @@ export interface components {
              * @default 0
              */
             open_deadline_count: number;
+            /** Opposition Numbers */
+            opposition_numbers?: string[];
             /**
              * Overdue Deadline Count
              * @default 0
@@ -22083,8 +22452,30 @@ export interface components {
             pending_identifier_allocation: boolean;
             /** Primary Identifier */
             primary_identifier: string | null;
+            /** Proprietors */
+            proprietors?: string[];
+            /** Provenance */
+            provenance?: string[];
             /** Record Complete */
             record_complete: boolean;
+            /** Registry Last Success At */
+            registry_last_success_at?: string | null;
+            /**
+             * Registry Sync State
+             * @default unavailable
+             * @enum {string}
+             */
+            registry_sync_state: "current" | "stale" | "failed" | "unavailable";
+            /** Representation Kinds */
+            representation_kinds?: string[];
+            /** Responsible Lawyer */
+            responsible_lawyer?: string | null;
+            /** Responsible Membership Id */
+            responsible_membership_id?: string | null;
+            /** Team Id */
+            team_id?: string | null;
+            /** Team Name */
+            team_name?: string | null;
             /**
              * Unconfirmed Deadline Count
              * @default 0
@@ -22095,6 +22486,88 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** IpPortfolioSavedViewCreate */
+        IpPortfolioSavedViewCreate: {
+            /** Columns */
+            columns?: string[];
+            filters?: components["schemas"]["IpPortfolioFilters"];
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Scope
+             * @default personal
+             * @enum {string}
+             */
+            scope: "personal" | "team";
+            /** Team Id */
+            team_id?: string | null;
+        };
+        /** IpPortfolioSavedViewListResponse */
+        IpPortfolioSavedViewListResponse: {
+            /** Views */
+            views?: components["schemas"]["IpPortfolioSavedViewRecord"][];
+        };
+        /** IpPortfolioSavedViewRecord */
+        IpPortfolioSavedViewRecord: {
+            /** Columns */
+            columns: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Editable */
+            editable: boolean;
+            filters: components["schemas"]["IpPortfolioFilters"];
+            /** Id */
+            id: string;
+            /** Is Default */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "personal" | "team";
+            /** Team Id */
+            team_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** IpPortfolioSavedViewUpdate */
+        IpPortfolioSavedViewUpdate: {
+            /** Columns */
+            columns?: string[];
+            /** Expected Version */
+            expected_version: number;
+            filters?: components["schemas"]["IpPortfolioFilters"];
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Scope
+             * @default personal
+             * @enum {string}
+             */
+            scope: "personal" | "team";
+            /** Team Id */
+            team_id?: string | null;
         };
         /** IpProceedingCreateRequest */
         IpProceedingCreateRequest: {
@@ -44552,6 +45025,72 @@ export interface operations {
             };
         };
     };
+    get_ip_import_errors_api_ip_imports__job_id__errors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_reconciliation_api_ip_imports__job_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpImportReconciliationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_import_revalidation_api_ip_imports__job_id__revalidate_post: {
         parameters: {
             query?: never;
@@ -44565,6 +45104,70 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_import_history_api_ip_imports_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_file_api_ip_imports_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_ip_import_file_api_ip_imports_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -44722,15 +45325,23 @@ export interface operations {
         parameters: {
             query?: {
                 asset_kind?: string[] | null;
+                client?: string[] | null;
                 cursor?: string | null;
+                deadline_state?: string[] | null;
                 docket_status?: string[] | null;
                 filing_phase?: string[] | null;
                 include_inactive?: boolean;
                 jurisdiction?: string[] | null;
                 limit?: number;
                 matter_id?: string | null;
+                nice_class?: number[] | null;
                 office?: string[] | null;
+                opposition_only?: boolean;
+                proprietor?: string[] | null;
                 query?: string | null;
+                registry_sync_state?: string[] | null;
+                responsible_membership_id?: string[] | null;
+                team_id?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -44745,6 +45356,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpPortfolioListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portfolio_exports_api_ip_portfolio_exports_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioExportListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_portfolio_export_api_ip_portfolio_exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPortfolioExportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioExportRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portfolio_export_api_ip_portfolio_exports__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioExportRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_ip_portfolio_export_api_ip_portfolio_exports__job_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_portfolio_export_retry_api_ip_portfolio_exports__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioExportRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_portfolio_export_preview_api_ip_portfolio_exports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPortfolioExportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioExportPreview"];
                 };
             };
             /** @description Validation Error */
@@ -44781,6 +45582,123 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IpPortfolioFamilyResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portfolio_saved_views_api_ip_portfolio_views_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioSavedViewListResponse"];
+                };
+            };
+        };
+    };
+    post_ip_portfolio_saved_view_api_ip_portfolio_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPortfolioSavedViewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioSavedViewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_ip_portfolio_saved_view_api_ip_portfolio_views__view_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPortfolioSavedViewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioSavedViewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ip_portfolio_saved_view_api_ip_portfolio_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

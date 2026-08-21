@@ -1,4 +1,4 @@
-import { apiRequest, getCsrfHeaders } from "./client";
+import { apiBlobRequest, apiRequest, getCsrfHeaders } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import {
   type AuthContext,
@@ -8076,6 +8076,167 @@ export type IpDeadlineIncident = {
   created_at: string;
 };
 
+export type IpPortfolioFilters = {
+  query?: string | null;
+  matter_id?: string | null;
+  client?: string[];
+  proprietor?: string[];
+  nice_class?: number[];
+  responsible_membership_id?: string[];
+  team_id?: string[];
+  asset_kind?: string[];
+  jurisdiction?: string[];
+  office?: string[];
+  filing_phase?: string[];
+  docket_status?: string[];
+  deadline_state?: string[];
+  opposition_only?: boolean;
+  registry_sync_state?: Array<"current" | "stale" | "failed" | "unavailable">;
+  include_inactive?: boolean;
+};
+
+export type IpPortfolioRow = {
+  application_id: string;
+  docket_id: string;
+  matter_id: string | null;
+  asset_id: string | null;
+  asset_kind: string | null;
+  asset_title: string | null;
+  asset_jurisdiction: string | null;
+  docket_title: string;
+  docket_status: string;
+  primary_identifier: string | null;
+  application_numbers: string[];
+  opposition_numbers: string[];
+  nice_classes: number[];
+  goods_services: string[];
+  representation_kinds: string[];
+  proprietors: string[];
+  agents: string[];
+  client_name: string | null;
+  responsible_lawyer: string | null;
+  responsible_membership_id: string | null;
+  team_name: string | null;
+  team_id: string | null;
+  office: string | null;
+  jurisdiction: string | null;
+  filing_phase: string;
+  is_active: boolean;
+  lifecycle_version: number;
+  pending_identifier_allocation: boolean;
+  record_complete: boolean;
+  incomplete_reasons: string[];
+  open_deadline_count: number;
+  unconfirmed_deadline_count: number;
+  overdue_deadline_count: number;
+  registry_sync_state: "current" | "stale" | "failed" | "unavailable";
+  registry_last_success_at: string | null;
+  provenance: string[];
+  application_created_at: string;
+  updated_at: string;
+};
+
+export type IpPortfolioResponse = {
+  rows: IpPortfolioRow[];
+  counts: {
+    total: number;
+    complete_records: number;
+    incomplete_records: number;
+    unconfirmed_deadline_records: number;
+    overdue_records: number;
+    stale_sync_records: number;
+    sync_failure_records: number | null;
+    registry_sync_state: "available" | "unavailable";
+  };
+  filters: IpPortfolioFilters;
+  limit: number;
+  next_cursor: string | null;
+};
+
+export type IpPortfolioSavedView = {
+  id: string;
+  name: string;
+  filters: IpPortfolioFilters;
+  columns: string[];
+  is_default: boolean;
+  scope: "personal" | "team";
+  team_id: string | null;
+  editable: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpPortfolioExportJob = {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  format: "csv";
+  columns: string[];
+  row_limit: number;
+  row_count: number | null;
+  size_bytes: number | null;
+  error: string | null;
+  download_ready: boolean;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type IpPortfolioExportPreview = {
+  format: "csv";
+  columns: string[];
+  row_limit: number;
+  row_count: number;
+  truncated: boolean;
+  omitted_restricted_count: null;
+  preview_token: string;
+};
+
+export type IpImportRow = {
+  id: string;
+  row_number: number;
+  validation_status: string;
+  errors: Array<{ field?: string; code?: string }>;
+  commit_status: string;
+  commit_error_code: string | null;
+  created_docket_id: string | null;
+  normalized: Record<string, unknown>;
+  duplicate_candidates: Array<{
+    docket_id?: string;
+    staged_row_id?: string;
+    row_number?: number;
+    title?: string;
+    match_reasons?: string[];
+  }>;
+  reconciliation_decision: "create_separate" | "link_existing" | "skip" | null;
+  reconciled_target_docket_id: string | null;
+};
+
+export type IpImportJob = {
+  id: string;
+  domain: string;
+  filename: string;
+  source_sha256: string;
+  status: string;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  committed_rows: number;
+  failed_rows: number;
+  preview_token: string | null;
+  preview_expires_at: string | null;
+  committed_at: string | null;
+  creator_label_snapshot: string;
+  version: number;
+  created_at: string;
+};
+
+export type IpImportPreview = {
+  job: IpImportJob;
+  rows: IpImportRow[];
+  preview_expired: boolean;
+};
+
 export type IpDocket = {
   id: string;
   company_id: string;
@@ -8998,6 +9159,221 @@ export async function enableIpWorkspace(input: {
       enabled_automations: input.enabledAutomations,
     },
   });
+}
+
+function ipPortfolioParams(
+  filters: IpPortfolioFilters,
+  input?: { limit?: number; cursor?: string | null },
+) {
+  const params = new URLSearchParams();
+  if (filters.query?.trim()) params.set("query", filters.query.trim());
+  if (filters.matter_id) params.set("matter_id", filters.matter_id);
+  for (const key of [
+    "asset_kind",
+    "client",
+    "proprietor",
+    "responsible_membership_id",
+    "team_id",
+    "jurisdiction",
+    "office",
+    "filing_phase",
+    "docket_status",
+    "deadline_state",
+    "registry_sync_state",
+  ] as const) {
+    for (const value of filters[key] ?? []) params.append(key, value);
+  }
+  for (const value of filters.nice_class ?? []) params.append("nice_class", String(value));
+  if (filters.opposition_only) params.set("opposition_only", "true");
+  if (filters.include_inactive) params.set("include_inactive", "true");
+  if (input?.limit) params.set("limit", String(input.limit));
+  if (input?.cursor) params.set("cursor", input.cursor);
+  return params;
+}
+
+export async function fetchIpPortfolio(
+  filters: IpPortfolioFilters,
+  input?: { limit?: number; cursor?: string | null },
+): Promise<IpPortfolioResponse> {
+  const params = ipPortfolioParams(filters, input);
+  return apiRequest(`/api/ip/portfolio?${params.toString()}`);
+}
+
+export async function listIpPortfolioSavedViews(): Promise<{
+  views: IpPortfolioSavedView[];
+}> {
+  return apiRequest("/api/ip/portfolio/views");
+}
+
+export async function createIpPortfolioSavedView(input: {
+  name: string;
+  filters: IpPortfolioFilters;
+  columns: string[];
+  isDefault?: boolean;
+  scope?: "personal" | "team";
+  teamId?: string | null;
+}): Promise<IpPortfolioSavedView> {
+  return apiRequest("/api/ip/portfolio/views", {
+    method: "POST",
+    body: {
+      name: input.name,
+      filters: input.filters,
+      columns: input.columns,
+      is_default: input.isDefault ?? false,
+      scope: input.scope ?? "personal",
+      team_id: input.teamId ?? null,
+    },
+  });
+}
+
+export async function updateIpPortfolioSavedView(input: {
+  id: string;
+  name: string;
+  filters: IpPortfolioFilters;
+  columns: string[];
+  isDefault: boolean;
+  expectedVersion: number;
+  scope?: "personal" | "team";
+  teamId?: string | null;
+}): Promise<IpPortfolioSavedView> {
+  return apiRequest(`/api/ip/portfolio/views/${encodeURIComponent(input.id)}`, {
+    method: "PUT",
+    body: {
+      name: input.name,
+      filters: input.filters,
+      columns: input.columns,
+      is_default: input.isDefault,
+      expected_version: input.expectedVersion,
+      scope: input.scope ?? "personal",
+      team_id: input.teamId ?? null,
+    },
+  });
+}
+
+export async function deleteIpPortfolioSavedView(id: string): Promise<void> {
+  return apiRequest(`/api/ip/portfolio/views/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function createIpPortfolioExport(input: {
+  filters: IpPortfolioFilters;
+  columns: string[];
+  rowLimit?: number;
+  previewToken: string;
+}): Promise<IpPortfolioExportJob> {
+  return apiRequest("/api/ip/portfolio/exports", {
+    method: "POST",
+    body: {
+      format: "csv",
+      filters: input.filters,
+      columns: input.columns,
+      row_limit: input.rowLimit ?? 10000,
+      preview_token: input.previewToken,
+    },
+  });
+}
+
+export async function previewIpPortfolioExport(input: {
+  filters: IpPortfolioFilters;
+  columns: string[];
+  rowLimit?: number;
+}): Promise<IpPortfolioExportPreview> {
+  return apiRequest("/api/ip/portfolio/exports/preview", {
+    method: "POST",
+    body: {
+      format: "csv",
+      filters: input.filters,
+      columns: input.columns,
+      row_limit: input.rowLimit ?? 10000,
+    },
+  });
+}
+
+export async function listIpPortfolioExports(): Promise<{
+  jobs: IpPortfolioExportJob[];
+}> {
+  return apiRequest("/api/ip/portfolio/exports");
+}
+
+export async function getIpPortfolioExport(id: string): Promise<IpPortfolioExportJob> {
+  return apiRequest(`/api/ip/portfolio/exports/${encodeURIComponent(id)}`);
+}
+
+export async function retryIpPortfolioExport(id: string): Promise<IpPortfolioExportJob> {
+  return apiRequest(`/api/ip/portfolio/exports/${encodeURIComponent(id)}/retry`, {
+    method: "POST",
+  });
+}
+
+export async function downloadIpPortfolioExport(id: string): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/ip/portfolio/exports/${encodeURIComponent(id)}/download`,
+  );
+  return response.blob();
+}
+
+export async function uploadIpPortfolioImport(file: File): Promise<IpImportPreview> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest("/api/ip/imports/upload", { method: "POST", body });
+}
+
+export async function listIpPortfolioImports(): Promise<{ jobs: IpImportJob[] }> {
+  return apiRequest("/api/ip/imports/history");
+}
+
+export async function getIpPortfolioImport(id: string): Promise<IpImportPreview> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(id)}`);
+}
+
+export async function revalidateIpPortfolioImport(id: string): Promise<IpImportPreview> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(id)}/revalidate`, {
+    method: "POST",
+  });
+}
+
+export async function reconcileIpPortfolioImport(input: {
+  jobId: string;
+  expectedJobVersion: number;
+  decisions: Array<{
+    rowId: string;
+    decision: "create_separate" | "link_existing" | "skip";
+    targetDocketId?: string | null;
+  }>;
+}): Promise<IpImportPreview> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(input.jobId)}/reconcile`, {
+    method: "POST",
+    body: {
+      expected_job_version: input.expectedJobVersion,
+      decisions: input.decisions.map((decision) => ({
+        row_id: decision.rowId,
+        decision: decision.decision,
+        target_docket_id: decision.targetDocketId ?? null,
+      })),
+    },
+  });
+}
+
+export async function commitIpPortfolioImport(input: {
+  jobId: string;
+  previewToken: string;
+  idempotencyKey: string;
+}): Promise<IpImportPreview & { replayed: boolean }> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(input.jobId)}/commit`, {
+    method: "POST",
+    body: {
+      preview_token: input.previewToken,
+      idempotency_key: input.idempotencyKey,
+    },
+  });
+}
+
+export async function downloadIpPortfolioImportErrors(id: string): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/ip/imports/${encodeURIComponent(id)}/errors`,
+  );
+  return response.blob();
 }
 
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {

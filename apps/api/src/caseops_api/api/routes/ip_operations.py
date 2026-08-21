@@ -14,7 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import ValidationError
 
 from caseops_api.api.dependencies import DbSession, require_capability
@@ -80,7 +80,9 @@ from caseops_api.schemas.ip_imports import (
     IpImportCommitRequest,
     IpImportCommitResponse,
     IpImportJobCreateRequest,
+    IpImportJobListResponse,
     IpImportPreviewResponse,
+    IpImportReconciliationRequest,
 )
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
@@ -142,9 +144,18 @@ from caseops_api.schemas.ip_operations import (
     IpWorkspaceReadinessResponse,
 )
 from caseops_api.schemas.ip_portfolio import (
+    IpPortfolioExportCreate,
+    IpPortfolioExportListResponse,
+    IpPortfolioExportPreview,
+    IpPortfolioExportPreviewRequest,
+    IpPortfolioExportRecord,
     IpPortfolioFamilyResponse,
     IpPortfolioFilters,
     IpPortfolioListResponse,
+    IpPortfolioSavedViewCreate,
+    IpPortfolioSavedViewListResponse,
+    IpPortfolioSavedViewRecord,
+    IpPortfolioSavedViewUpdate,
 )
 from caseops_api.schemas.ip_records import (
     IpAssetCreateRequest,
@@ -231,10 +242,14 @@ from caseops_api.services.ip_documents import (
     seed_ip_document_taxonomy,
     upsert_ip_document_taxonomy_entry,
 )
+from caseops_api.services.ip_import_files import MAX_IMPORT_BYTES, parse_ip_import_file
 from caseops_api.services.ip_imports import (
     commit_ip_import_job,
     create_ip_import_job,
+    ip_import_error_report,
+    list_ip_import_jobs,
     preview_ip_import_job,
+    reconcile_ip_import_job,
     revalidate_ip_import_job,
 )
 from caseops_api.services.ip_lifecycle import (
@@ -291,6 +306,19 @@ from caseops_api.services.ip_operations import (
 from caseops_api.services.ip_portfolio import (
     list_ip_portfolio,
     list_ip_portfolio_families,
+)
+from caseops_api.services.ip_portfolio_workflow import (
+    create_saved_view,
+    delete_saved_view,
+    enqueue_portfolio_export,
+    get_portfolio_export,
+    list_portfolio_exports,
+    list_saved_views,
+    preview_portfolio_export,
+    read_portfolio_export,
+    retry_portfolio_export,
+    run_portfolio_export_job,
+    update_saved_view,
 )
 from caseops_api.services.ip_records import (
     correct_ip_identifier,
@@ -1245,6 +1273,34 @@ async def post_ip_import_job(
     return create_ip_import_job(session, context=context, payload=payload)
 
 
+@router.post(
+    "/imports/upload",
+    response_model=IpImportPreviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_import_file(
+    file: UploadFile,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    payload = parse_ip_import_file(
+        filename=file.filename or "portfolio.csv",
+        content=await file.read(MAX_IMPORT_BYTES + 1),
+    )
+    return create_ip_import_job(session, context=context, payload=payload)
+
+
+@router.get("/imports/history", response_model=IpImportJobListResponse)
+async def get_ip_import_history(
+    context: IpViewer,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> IpImportJobListResponse:
+    return IpImportJobListResponse(
+        jobs=list_ip_import_jobs(session, context=context, limit=limit)
+    )
+
+
 @router.get("/imports/{job_id}", response_model=IpImportPreviewResponse)
 async def get_ip_import_job(
     job_id: str,
@@ -1263,6 +1319,42 @@ async def post_ip_import_revalidation(
     return revalidate_ip_import_job(session, context=context, job_id=job_id)
 
 
+@router.post("/imports/{job_id}/reconcile", response_model=IpImportPreviewResponse)
+async def post_ip_import_reconciliation(
+    job_id: str,
+    payload: IpImportReconciliationRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportPreviewResponse:
+    return reconcile_ip_import_job(
+        session,
+        context=context,
+        job_id=job_id,
+        payload=payload,
+    )
+
+
+@router.get("/imports/{job_id}/errors")
+async def get_ip_import_errors(
+    job_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> StreamingResponse:
+    content = ip_import_error_report(
+        session,
+        context=context,
+        job_id=job_id,
+    )
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="ip-import-{job_id}-errors.csv"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
 @router.post("/imports/{job_id}/commit", response_model=IpImportCommitResponse)
 async def post_ip_import_commit(
     job_id: str,
@@ -1271,6 +1363,136 @@ async def post_ip_import_commit(
     session: DbSession,
 ) -> IpImportCommitResponse:
     return commit_ip_import_job(session, context=context, job_id=job_id, payload=payload)
+
+
+@router.get("/portfolio/views", response_model=IpPortfolioSavedViewListResponse)
+async def get_ip_portfolio_saved_views(
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioSavedViewListResponse:
+    return IpPortfolioSavedViewListResponse(views=list_saved_views(session, context=context))
+
+
+@router.post(
+    "/portfolio/views",
+    response_model=IpPortfolioSavedViewRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_portfolio_saved_view(
+    payload: IpPortfolioSavedViewCreate,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioSavedViewRecord:
+    return create_saved_view(session, context=context, payload=payload)
+
+
+@router.put("/portfolio/views/{view_id}", response_model=IpPortfolioSavedViewRecord)
+async def put_ip_portfolio_saved_view(
+    view_id: str,
+    payload: IpPortfolioSavedViewUpdate,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioSavedViewRecord:
+    return update_saved_view(
+        session,
+        context=context,
+        view_id=view_id,
+        payload=payload,
+    )
+
+
+@router.delete("/portfolio/views/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ip_portfolio_saved_view(
+    view_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> None:
+    delete_saved_view(session, context=context, view_id=view_id)
+
+
+@router.post(
+    "/portfolio/exports/preview",
+    response_model=IpPortfolioExportPreview,
+)
+async def post_ip_portfolio_export_preview(
+    payload: IpPortfolioExportPreviewRequest,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioExportPreview:
+    return preview_portfolio_export(session, context=context, payload=payload)
+
+
+@router.post(
+    "/portfolio/exports",
+    response_model=IpPortfolioExportRecord,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def post_ip_portfolio_export(
+    payload: IpPortfolioExportCreate,
+    background_tasks: BackgroundTasks,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioExportRecord:
+    job = enqueue_portfolio_export(session, context=context, payload=payload)
+    background_tasks.add_task(run_portfolio_export_job, job.id)
+    return job
+
+
+@router.post(
+    "/portfolio/exports/{job_id}/retry",
+    response_model=IpPortfolioExportRecord,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def post_ip_portfolio_export_retry(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioExportRecord:
+    job = retry_portfolio_export(session, context=context, job_id=job_id)
+    background_tasks.add_task(run_portfolio_export_job, job.id)
+    return job
+
+
+@router.get("/portfolio/exports", response_model=IpPortfolioExportListResponse)
+async def get_ip_portfolio_exports(
+    context: IpViewer,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> IpPortfolioExportListResponse:
+    return IpPortfolioExportListResponse(
+        jobs=list_portfolio_exports(session, context=context, limit=limit)
+    )
+
+
+@router.get("/portfolio/exports/{job_id}", response_model=IpPortfolioExportRecord)
+async def get_ip_portfolio_export(
+    job_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPortfolioExportRecord:
+    return get_portfolio_export(session, context=context, job_id=job_id)
+
+
+@router.get("/portfolio/exports/{job_id}/download")
+async def download_ip_portfolio_export(
+    job_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> StreamingResponse:
+    _job, stream = read_portfolio_export(
+        session,
+        context=context,
+        job_id=job_id,
+    )
+    return StreamingResponse(
+        stream,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="trademark-portfolio-{job_id}.csv"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.get("/portfolio/families", response_model=IpPortfolioFamilyResponse)
@@ -1627,11 +1849,19 @@ async def get_ip_portfolio(
     session: DbSession,
     query: Annotated[str | None, Query(max_length=200)] = None,
     matter_id: Annotated[str | None, Query(max_length=36)] = None,
+    client: Annotated[list[str] | None, Query()] = None,
+    proprietor: Annotated[list[str] | None, Query()] = None,
+    nice_class: Annotated[list[int] | None, Query()] = None,
+    responsible_membership_id: Annotated[list[str] | None, Query()] = None,
+    team_id: Annotated[list[str] | None, Query()] = None,
     asset_kind: Annotated[list[str] | None, Query()] = None,
     jurisdiction: Annotated[list[str] | None, Query()] = None,
     office: Annotated[list[str] | None, Query()] = None,
     filing_phase: Annotated[list[str] | None, Query()] = None,
     docket_status: Annotated[list[str] | None, Query()] = None,
+    deadline_state: Annotated[list[str] | None, Query()] = None,
+    opposition_only: bool = False,
+    registry_sync_state: Annotated[list[str] | None, Query()] = None,
     include_inactive: bool = False,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: str | None = None,
@@ -1639,11 +1869,19 @@ async def get_ip_portfolio(
     filters = IpPortfolioFilters(
         query=query,
         matter_id=matter_id,
+        client=client or [],
+        proprietor=proprietor or [],
+        nice_class=nice_class or [],
+        responsible_membership_id=responsible_membership_id or [],
+        team_id=team_id or [],
         asset_kind=asset_kind or [],
         jurisdiction=jurisdiction or [],
         office=office or [],
         filing_phase=filing_phase or [],
         docket_status=docket_status or [],
+        deadline_state=deadline_state or [],
+        opposition_only=opposition_only,
+        registry_sync_state=registry_sync_state or [],
         include_inactive=include_inactive,
     )
     return list_ip_portfolio(

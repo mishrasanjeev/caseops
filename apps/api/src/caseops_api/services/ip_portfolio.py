@@ -1,8 +1,8 @@
-"""IPLF-030A trademark portfolio listing (IP-PORT-02, IP-PORT-05, UJ-04-EXC-02).
+"""Trademark portfolio projection for IPLF-030A/B.
 
-Read-only projection over the existing IP owners. It creates no new record and
-no second portfolio store: rows are assembled from ``TrademarkApplication``,
-``IpAsset``, ``IpDocketRecord`` and the existing legal-deadline evidence.
+The legal rows remain a read-only projection over existing IP owners. IPLF-030B
+adds only user-scoped presentation preferences and export-job control records;
+neither becomes a second portfolio or legal-record writer.
 
 Access is delegated to the canonical ``visible_ip_dockets_filter`` policy, so a
 restricted record a user cannot open is **omitted entirely** rather than shown
@@ -12,19 +12,31 @@ as a redacted teaser.
 from __future__ import annotations
 
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, String, and_, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    Client,
+    CompanyMembership,
     IpAsset,
     IpDeadline,
+    IpDocketEvent,
     IpDocketRecord,
+    IpIdentifier,
+    IpPartyAndRole,
+    IpProceeding,
+    IpTrademarkParticularVersion,
     Matter,
+    MatterClientAssignment,
     MatterStatus,
+    Team,
     TrademarkApplication,
+    TrademarkApplicationScope,
+    TrademarkRepresentation,
+    User,
 )
 from caseops_api.schemas.ip_portfolio import (
     IpPortfolioCounts,
@@ -35,11 +47,16 @@ from caseops_api.schemas.ip_portfolio import (
     IpPortfolioListResponse,
     IpPortfolioRow,
 )
+from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
+REGISTRY_FRESHNESS_WINDOW = timedelta(hours=24)
+
+PROPRIETOR_ROLES = {"applicant", "owner", "proprietor"}
+AGENT_ROLES = {"agent", "attorney", "counsel", "representative"}
 
 
 def _normalize(values: list[str], *, lower: bool = True) -> list[str]:
@@ -75,6 +92,34 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
     if not application_id:
         raise HTTPException(status_code=400, detail="Invalid portfolio cursor.")
     return parsed, application_id
+
+
+def _latest_registry_sync_at():
+    return (
+        select(func.max(IpDocketEvent.entered_at))
+        .where(
+            IpDocketEvent.company_id == TrademarkApplication.company_id,
+            IpDocketEvent.docket_id == IpDocketRecord.id,
+            IpDocketEvent.source == "registry_sync",
+            IpDocketEvent.candidate_status == "confirmed",
+        )
+        .correlate(TrademarkApplication, IpDocketRecord)
+        .scalar_subquery()
+    )
+
+
+def _registry_state_predicate(state: str):
+    latest = _latest_registry_sync_at()
+    threshold = datetime.now(UTC) - REGISTRY_FRESHNESS_WINDOW
+    if state == "current":
+        return latest >= threshold
+    if state == "stale":
+        return and_(latest.is_not(None), latest < threshold)
+    if state == "unavailable":
+        return latest.is_(None)
+    # No per-docket provider-failure owner exists before IPLF-043B. A caller
+    # asking for failures therefore gets an empty scope, never a fabricated 0.
+    return false()
 
 
 def _scoped_query(
@@ -129,6 +174,54 @@ def _scoped_query(
         )
     if filters.matter_id:
         statement = statement.where(IpDocketRecord.matter_id == filters.matter_id)
+    if filters.client:
+        client_terms = _normalize(filters.client)
+        linked_client_match = (
+            select(MatterClientAssignment.id)
+            .join(Client, Client.id == MatterClientAssignment.client_id)
+            .where(
+                MatterClientAssignment.matter_id == Matter.id,
+                Client.company_id == context.company.id,
+                func.lower(Client.name).in_(client_terms),
+            )
+            .exists()
+        )
+        statement = statement.where(
+            or_(
+                func.lower(func.coalesce(Matter.client_name, "")).in_(client_terms),
+                linked_client_match,
+            )
+        )
+    if filters.proprietor:
+        proprietor_terms = _normalize(filters.proprietor)
+        statement = statement.where(
+            select(IpPartyAndRole.id)
+            .where(
+                IpPartyAndRole.company_id == context.company.id,
+                IpPartyAndRole.docket_id == IpDocketRecord.id,
+                func.lower(IpPartyAndRole.role_kind).in_(PROPRIETOR_ROLES),
+                func.lower(IpPartyAndRole.party_name).in_(proprietor_terms),
+                IpPartyAndRole.effective_until.is_(None),
+            )
+            .exists()
+        )
+    if filters.nice_class:
+        statement = statement.where(
+            select(TrademarkApplicationScope.id)
+            .where(
+                TrademarkApplicationScope.company_id == context.company.id,
+                TrademarkApplicationScope.application_id == TrademarkApplication.id,
+                TrademarkApplicationScope.class_number.in_(filters.nice_class),
+                TrademarkApplicationScope.effective_until.is_(None),
+            )
+            .exists()
+        )
+    if filters.responsible_membership_id:
+        statement = statement.where(
+            Matter.responsible_lawyer_membership_id.in_(filters.responsible_membership_id)
+        )
+    if filters.team_id:
+        statement = statement.where(Matter.team_id.in_(filters.team_id))
     if filters.jurisdiction:
         statement = statement.where(
             func.upper(TrademarkApplication.jurisdiction).in_(
@@ -145,13 +238,125 @@ def _scoped_query(
         statement = statement.where(IpAsset.asset_kind.in_(_normalize(filters.asset_kind)))
     if filters.docket_status:
         statement = statement.where(IpDocketRecord.status.in_(_normalize(filters.docket_status)))
+    if filters.deadline_state:
+        deadline_states = set(_normalize(filters.deadline_state))
+        deadline_predicates = []
+        if "open" in deadline_states:
+            deadline_predicates.append(IpDeadline.state.in_(("confirmed", "overdue")))
+        if "unconfirmed" in deadline_states:
+            deadline_predicates.append(IpDeadline.state.in_(("candidate", "provisional")))
+        if "overdue" in deadline_states:
+            deadline_predicates.append(
+                and_(
+                    IpDeadline.state.in_(("confirmed", "overdue")),
+                    IpDeadline.result_on.is_not(None),
+                    IpDeadline.result_on < date.today(),
+                )
+            )
+        statement = statement.where(
+            select(IpDeadline.id)
+            .where(
+                IpDeadline.company_id == context.company.id,
+                IpDeadline.docket_id == IpDocketRecord.id,
+                or_(*deadline_predicates) if deadline_predicates else false(),
+            )
+            .exists()
+        )
+    if filters.opposition_only:
+        statement = statement.where(
+            select(IpProceeding.id)
+            .where(
+                IpProceeding.company_id == context.company.id,
+                IpProceeding.docket_id == IpDocketRecord.id,
+                IpProceeding.application_id == TrademarkApplication.id,
+                IpProceeding.proceeding_kind == "opposition",
+            )
+            .exists()
+        )
+    if filters.registry_sync_state:
+        statement = statement.where(
+            or_(*[_registry_state_predicate(state) for state in filters.registry_sync_state])
+        )
     if filters.query:
         like = f"%{filters.query.strip().lower()}%"
+        normalized_identifier = normalize_ip_identifier(filters.query)
+        identifier_match = (
+            select(IpIdentifier.id)
+            .where(
+                IpIdentifier.company_id == context.company.id,
+                IpIdentifier.docket_id == IpDocketRecord.id,
+                IpIdentifier.effective_until.is_(None),
+                IpIdentifier.superseded_by_identifier_id.is_(None),
+                IpIdentifier.normalized_value == normalized_identifier,
+            )
+            .exists()
+        )
+        party_match = (
+            select(IpPartyAndRole.id)
+            .where(
+                IpPartyAndRole.company_id == context.company.id,
+                IpPartyAndRole.docket_id == IpDocketRecord.id,
+                IpPartyAndRole.effective_until.is_(None),
+                func.lower(IpPartyAndRole.party_name).like(like),
+            )
+            .exists()
+        )
+        scope_match = (
+            select(TrademarkApplicationScope.id)
+            .where(
+                TrademarkApplicationScope.company_id == context.company.id,
+                TrademarkApplicationScope.application_id == TrademarkApplication.id,
+                TrademarkApplicationScope.effective_until.is_(None),
+                or_(
+                    func.lower(TrademarkApplicationScope.specification).like(like),
+                    func.cast(TrademarkApplicationScope.class_number, String).like(
+                        filters.query.strip()
+                    ),
+                ),
+            )
+            .exists()
+        )
+        linked_client_match = (
+            select(MatterClientAssignment.id)
+            .join(Client, Client.id == MatterClientAssignment.client_id)
+            .where(
+                MatterClientAssignment.matter_id == Matter.id,
+                Client.company_id == context.company.id,
+                func.lower(Client.name).like(like),
+            )
+            .exists()
+        )
+        lawyer_match = (
+            select(CompanyMembership.id)
+            .join(User, User.id == CompanyMembership.user_id)
+            .where(
+                CompanyMembership.id == Matter.responsible_lawyer_membership_id,
+                CompanyMembership.company_id == context.company.id,
+                func.lower(User.full_name).like(like),
+            )
+            .exists()
+        )
+        team_match = (
+            select(Team.id)
+            .where(
+                Team.id == Matter.team_id,
+                Team.company_id == context.company.id,
+                func.lower(Team.name).like(like),
+            )
+            .exists()
+        )
         statement = statement.where(
             or_(
                 func.lower(IpDocketRecord.title).like(like),
                 func.lower(func.coalesce(IpAsset.title, "")).like(like),
                 func.lower(func.coalesce(IpDocketRecord.primary_identifier, "")).like(like),
+                func.lower(func.coalesce(Matter.client_name, "")).like(like),
+                identifier_match,
+                party_match,
+                scope_match,
+                linked_client_match,
+                lawyer_match,
+                team_match,
             )
         )
     return statement
@@ -179,6 +384,332 @@ def _deadline_counts(session: Session, *, company_id: str, docket_ids: list[str]
         .group_by(IpDeadline.docket_id)
     ).all()
     return {row[0]: (int(row[1]), int(row[2]), int(row[3])) for row in rows}
+
+
+def _portfolio_details(
+    session: Session,
+    *,
+    company_id: str,
+    application_ids: list[str],
+    docket_ids: list[str],
+) -> dict[str, dict[str, list]]:
+    details = {
+        application_id: {
+            "application_numbers": [],
+            "opposition_numbers": [],
+            "nice_classes": [],
+            "goods_services": [],
+            "representation_kinds": [],
+            "proprietors": [],
+            "agents": [],
+            "provenance": ["CaseOps legal record"],
+        }
+        for application_id in application_ids
+    }
+    if not application_ids:
+        return details
+
+    docket_to_applications: dict[str, list[str]] = {}
+    for application_id, docket_id in session.execute(
+        select(TrademarkApplication.id, TrademarkApplication.docket_id).where(
+            TrademarkApplication.company_id == company_id,
+            TrademarkApplication.id.in_(application_ids),
+        )
+    ):
+        docket_to_applications.setdefault(docket_id, []).append(application_id)
+
+    for identifier in session.scalars(
+        select(IpIdentifier).where(
+            IpIdentifier.company_id == company_id,
+            IpIdentifier.docket_id.in_(docket_ids),
+            IpIdentifier.effective_until.is_(None),
+            IpIdentifier.superseded_by_identifier_id.is_(None),
+        )
+    ):
+        targets = (
+            [identifier.application_id]
+            if identifier.application_id in details
+            else docket_to_applications.get(identifier.docket_id, [])
+        )
+        if identifier.identifier_kind == "application":
+            field = "application_numbers"
+        elif identifier.identifier_kind == "opposition":
+            field = "opposition_numbers"
+        else:
+            continue
+        for target in targets:
+            bucket = details[target]
+            if identifier.raw_value not in bucket[field]:
+                bucket[field].append(identifier.raw_value)
+            provenance = f"Identifier: {identifier.source}"
+            if provenance not in bucket["provenance"]:
+                bucket["provenance"].append(provenance)
+
+    today = date.today()
+    for scope in session.scalars(
+        select(TrademarkApplicationScope).where(
+            TrademarkApplicationScope.company_id == company_id,
+            TrademarkApplicationScope.application_id.in_(application_ids),
+            TrademarkApplicationScope.effective_from <= today,
+            or_(
+                TrademarkApplicationScope.effective_until.is_(None),
+                TrademarkApplicationScope.effective_until >= today,
+            ),
+        )
+    ):
+        bucket = details[scope.application_id]
+        if scope.class_number not in bucket["nice_classes"]:
+            bucket["nice_classes"].append(scope.class_number)
+        if scope.specification not in bucket["goods_services"]:
+            bucket["goods_services"].append(scope.specification)
+        provenance = f"Class scope: {scope.source}"
+        if provenance not in bucket["provenance"]:
+            bucket["provenance"].append(provenance)
+
+    for representation in session.scalars(
+        select(TrademarkRepresentation).where(
+            TrademarkRepresentation.company_id == company_id,
+            TrademarkRepresentation.application_id.in_(application_ids),
+        )
+    ):
+        kinds = details[representation.application_id]["representation_kinds"]
+        if representation.representation_kind not in kinds:
+            kinds.append(representation.representation_kind)
+
+    for party in session.scalars(
+        select(IpPartyAndRole).where(
+            IpPartyAndRole.company_id == company_id,
+            IpPartyAndRole.docket_id.in_(docket_ids),
+            IpPartyAndRole.effective_from <= today,
+            or_(
+                IpPartyAndRole.effective_until.is_(None),
+                IpPartyAndRole.effective_until >= today,
+            ),
+        )
+    ):
+        role = party.role_kind.casefold()
+        if role in AGENT_ROLES:
+            field = "agents"
+        elif role in PROPRIETOR_ROLES:
+            field = "proprietors"
+        else:
+            continue
+        for target in docket_to_applications.get(party.docket_id, []):
+            if party.party_name not in details[target][field]:
+                details[target][field].append(party.party_name)
+            provenance = f"Party: {party.source}"
+            if provenance not in details[target]["provenance"]:
+                details[target]["provenance"].append(provenance)
+
+    for particulars in session.scalars(
+        select(IpTrademarkParticularVersion)
+        .join(
+            IpDocketRecord,
+            and_(
+                IpDocketRecord.id == IpTrademarkParticularVersion.docket_id,
+                IpDocketRecord.company_id == IpTrademarkParticularVersion.company_id,
+                IpDocketRecord.current_version == IpTrademarkParticularVersion.version,
+            ),
+        )
+        .where(
+            IpTrademarkParticularVersion.company_id == company_id,
+            IpTrademarkParticularVersion.docket_id.in_(docket_ids),
+        )
+    ):
+        for target in docket_to_applications.get(particulars.docket_id, []):
+            bucket = details[target]
+            if particulars.mark_kind not in bucket["representation_kinds"]:
+                bucket["representation_kinds"].append(particulars.mark_kind)
+            for scope in particulars.classes_json or []:
+                class_number = scope.get("class_number")
+                specification = scope.get("specification")
+                if isinstance(class_number, int) and class_number not in bucket["nice_classes"]:
+                    bucket["nice_classes"].append(class_number)
+                if isinstance(specification, str) and specification not in bucket["goods_services"]:
+                    bucket["goods_services"].append(specification)
+            for party in particulars.parties_json or []:
+                role = str(party.get("role", "")).casefold()
+                name = party.get("name")
+                if role in PROPRIETOR_ROLES and isinstance(name, str):
+                    if name not in bucket["proprietors"]:
+                        bucket["proprietors"].append(name)
+            agent_name = (particulars.agent_json or {}).get("name")
+            if isinstance(agent_name, str) and agent_name not in bucket["agents"]:
+                bucket["agents"].append(agent_name)
+            provenance = f"Docket particulars: version {particulars.version}"
+            if provenance not in bucket["provenance"]:
+                bucket["provenance"].append(provenance)
+
+    for bucket in details.values():
+        for key in bucket:
+            bucket[key] = sorted(bucket[key])
+    return details
+
+
+def _matter_details(
+    session: Session,
+    *,
+    company_id: str,
+    matter_ids: list[str],
+) -> dict[str, dict[str, str | None]]:
+    if not matter_ids:
+        return {}
+    matters = list(
+        session.scalars(
+            select(Matter).where(Matter.company_id == company_id, Matter.id.in_(matter_ids))
+        ).all()
+    )
+    details = {
+        matter.id: {
+            "client_name": matter.client_name,
+            "responsible_membership_id": matter.responsible_lawyer_membership_id,
+            "responsible_lawyer": None,
+            "team_id": matter.team_id,
+            "team_name": None,
+        }
+        for matter in matters
+    }
+    for matter_id, client_name in session.execute(
+        select(MatterClientAssignment.matter_id, Client.name)
+        .join(Client, Client.id == MatterClientAssignment.client_id)
+        .where(
+            MatterClientAssignment.matter_id.in_(matter_ids),
+            MatterClientAssignment.is_primary.is_(True),
+            Client.company_id == company_id,
+        )
+    ):
+        if matter_id in details:
+            details[matter_id]["client_name"] = client_name
+    membership_ids = {
+        value["responsible_membership_id"]
+        for value in details.values()
+        if value["responsible_membership_id"]
+    }
+    if membership_ids:
+        for membership_id, full_name in session.execute(
+            select(CompanyMembership.id, User.full_name)
+            .join(User, User.id == CompanyMembership.user_id)
+            .where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.id.in_(membership_ids),
+            )
+        ):
+            for value in details.values():
+                if value["responsible_membership_id"] == membership_id:
+                    value["responsible_lawyer"] = full_name
+    team_ids = {value["team_id"] for value in details.values() if value["team_id"]}
+    if team_ids:
+        team_names = dict(
+            session.execute(
+                select(Team.id, Team.name).where(
+                    Team.company_id == company_id,
+                    Team.id.in_(team_ids),
+                )
+            ).all()
+        )
+        for value in details.values():
+            value["team_name"] = team_names.get(value["team_id"])
+    return details
+
+
+def _registry_sync_details(
+    session: Session,
+    *,
+    company_id: str,
+    docket_ids: list[str],
+) -> dict[str, tuple[str, datetime | None]]:
+    latest_by_docket = dict(
+        session.execute(
+            select(IpDocketEvent.docket_id, func.max(IpDocketEvent.entered_at))
+            .where(
+                IpDocketEvent.company_id == company_id,
+                IpDocketEvent.docket_id.in_(docket_ids),
+                IpDocketEvent.source == "registry_sync",
+                IpDocketEvent.candidate_status == "confirmed",
+            )
+            .group_by(IpDocketEvent.docket_id)
+        ).all()
+    )
+    threshold = datetime.now(UTC) - REGISTRY_FRESHNESS_WINDOW
+    result: dict[str, tuple[str, datetime | None]] = {}
+    for docket_id in docket_ids:
+        latest = latest_by_docket.get(docket_id)
+        if latest is None:
+            result[docket_id] = ("unavailable", None)
+            continue
+        aware = latest if latest.tzinfo else latest.replace(tzinfo=UTC)
+        result[docket_id] = ("current" if aware >= threshold else "stale", latest)
+    return result
+
+
+def _portfolio_counts(
+    session: Session,
+    *,
+    context: SessionContext,
+    statement: Select,
+) -> IpPortfolioCounts:
+    projection = (
+        statement.with_only_columns(
+            TrademarkApplication.id.label("application_id"),
+            IpDocketRecord.id.label("docket_id"),
+            IpDocketRecord.primary_identifier.label("primary_identifier"),
+            TrademarkApplication.source_pending_identifier_allocation.label("pending_identifier"),
+            TrademarkApplication.office.label("office"),
+            TrademarkApplication.jurisdiction.label("jurisdiction"),
+            IpAsset.id.label("asset_id"),
+            IpAsset.title.label("asset_title"),
+            _latest_registry_sync_at().label("registry_last_success_at"),
+        )
+        .order_by(None)
+        .subquery()
+    )
+    complete = and_(
+        projection.c.asset_id.is_not(None),
+        func.trim(func.coalesce(projection.c.asset_title, "")) != "",
+        projection.c.primary_identifier.is_not(None),
+        projection.c.pending_identifier.is_(False),
+        func.trim(func.coalesce(projection.c.office, "")) != "",
+        func.trim(func.coalesce(projection.c.jurisdiction, "")) != "",
+    )
+    today = date.today()
+    unconfirmed_dockets = select(IpDeadline.docket_id).where(
+        IpDeadline.company_id == context.company.id,
+        IpDeadline.state.in_(("candidate", "provisional")),
+    )
+    overdue_dockets = select(IpDeadline.docket_id).where(
+        IpDeadline.company_id == context.company.id,
+        IpDeadline.state.in_(("confirmed", "overdue")),
+        IpDeadline.result_on.is_not(None),
+        IpDeadline.result_on < today,
+    )
+    freshness_threshold = datetime.now(UTC) - REGISTRY_FRESHNESS_WINDOW
+    total, complete_records, unconfirmed, overdue, stale, synchronized = session.execute(
+        select(
+            func.count(),
+            func.count().filter(complete),
+            func.count().filter(projection.c.docket_id.in_(unconfirmed_dockets)),
+            func.count().filter(projection.c.docket_id.in_(overdue_dockets)),
+            func.count().filter(
+                and_(
+                    projection.c.registry_last_success_at.is_not(None),
+                    projection.c.registry_last_success_at < freshness_threshold,
+                )
+            ),
+            func.count().filter(projection.c.registry_last_success_at.is_not(None)),
+        ).select_from(projection)
+    ).one()
+    total = int(total or 0)
+    complete_records = int(complete_records or 0)
+    return IpPortfolioCounts(
+        total=total,
+        complete_records=complete_records,
+        incomplete_records=total - complete_records,
+        unconfirmed_deadline_records=int(unconfirmed or 0),
+        overdue_records=int(overdue or 0),
+        stale_sync_records=int(stale or 0),
+        sync_failure_records=None,
+        registry_sync_state="available" if int(synchronized or 0) else "unavailable",
+    )
 
 
 def _incomplete_reasons(
@@ -234,13 +765,34 @@ def list_ip_portfolio(
 
     visible = candidates
 
+    application_ids = [application.id for application, _asset, _docket in visible]
     docket_ids = [docket.id for _a, _s, docket in visible]
+    matter_ids = list({docket.matter_id for _a, _s, docket in visible if docket.matter_id})
     deadlines = _deadline_counts(session, company_id=context.company.id, docket_ids=docket_ids)
+    details = _portfolio_details(
+        session,
+        company_id=context.company.id,
+        application_ids=application_ids,
+        docket_ids=docket_ids,
+    )
+    matters = _matter_details(
+        session,
+        company_id=context.company.id,
+        matter_ids=matter_ids,
+    )
+    registry_sync = _registry_sync_details(
+        session,
+        company_id=context.company.id,
+        docket_ids=docket_ids,
+    )
 
     rows: list[IpPortfolioRow] = []
     for application, asset, docket in visible:
         open_count, unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
         reasons = _incomplete_reasons(application, asset, docket)
+        detail = details[application.id]
+        matter_detail = matters.get(docket.matter_id or "", {})
+        registry_state, registry_at = registry_sync[docket.id]
         rows.append(
             IpPortfolioRow(
                 application_id=application.id,
@@ -253,6 +805,18 @@ def list_ip_portfolio(
                 docket_title=docket.title,
                 docket_status=docket.status,
                 primary_identifier=docket.primary_identifier,
+                application_numbers=detail["application_numbers"],
+                opposition_numbers=detail["opposition_numbers"],
+                nice_classes=detail["nice_classes"],
+                goods_services=detail["goods_services"],
+                representation_kinds=detail["representation_kinds"],
+                proprietors=detail["proprietors"],
+                agents=detail["agents"],
+                client_name=matter_detail.get("client_name"),
+                responsible_lawyer=matter_detail.get("responsible_lawyer"),
+                responsible_membership_id=matter_detail.get("responsible_membership_id"),
+                team_name=matter_detail.get("team_name"),
+                team_id=matter_detail.get("team_id"),
                 office=application.office,
                 jurisdiction=application.jurisdiction,
                 filing_phase=application.filing_phase,
@@ -264,17 +828,15 @@ def list_ip_portfolio(
                 open_deadline_count=open_count,
                 unconfirmed_deadline_count=unconfirmed,
                 overdue_deadline_count=overdue,
+                registry_sync_state=registry_state,
+                registry_last_success_at=registry_at,
+                provenance=detail["provenance"],
+                application_created_at=application.created_at,
                 updated_at=application.updated_at,
             )
         )
 
-    counts = IpPortfolioCounts(
-        total=len(rows),
-        complete_records=sum(1 for row in rows if row.record_complete),
-        incomplete_records=sum(1 for row in rows if not row.record_complete),
-        unconfirmed_deadline_records=sum(1 for row in rows if row.unconfirmed_deadline_count),
-        overdue_records=sum(1 for row in rows if row.overdue_deadline_count),
-    )
+    counts = _portfolio_counts(session, context=context, statement=statement)
     next_cursor = (
         _encode_cursor(rows[-1].updated_at, rows[-1].application_id) if has_more and rows else None
     )

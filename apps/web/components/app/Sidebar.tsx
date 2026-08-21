@@ -66,6 +66,13 @@ const NAV: NavItem[] = [
     section: "ip",
     requiresCapability: "ip:read",
   },
+  {
+    href: "/app/ip/portfolio",
+    label: "Trademark portfolio",
+    icon: PanelsTopLeft,
+    section: "ip",
+    requiresCapability: "ip:read",
+  },
   // CAL-OPS-09 / CAL-OPS-13 — deadline control: who holds what, what is
   // unacknowledged, what is escalating, and the signed daily control review.
   {
