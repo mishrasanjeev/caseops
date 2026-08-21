@@ -5931,6 +5931,23 @@ export interface paths {
         patch: operations["patch_ip_shared_task_api_ip_tasks__task_id__patch"];
         trace?: never;
     };
+    "/api/ip/trademark-applications/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Manual Trademark Application */
+        post: operations["post_manual_trademark_application_api_ip_trademark_applications_manual_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/working-calendars": {
         parameters: {
             query?: never;
@@ -24940,6 +24957,49 @@ export interface components {
              * @enum {string}
              */
             status: "queued" | "processed" | "failed" | "dead_letter";
+        };
+        /**
+         * ManualTrademarkApplicationCreateRequest
+         * @description One manual command for the canonical docket, asset, application and number.
+         */
+        ManualTrademarkApplicationCreateRequest: {
+            application_number?: components["schemas"]["IpApplicationNumberCreate"] | null;
+            /** Asset Title */
+            asset_title: string;
+            /**
+             * Filing Phase
+             * @default draft
+             * @enum {string}
+             */
+            filing_phase: "draft" | "pre_filing" | "filed";
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Office */
+            office: string;
+            particulars: components["schemas"]["TrademarkParticularPayload"];
+            /**
+             * Restricted
+             * @default false
+             */
+            restricted: boolean;
+            /**
+             * Source Pending Identifier Allocation
+             * @default false
+             */
+            source_pending_identifier_allocation: boolean;
+            /** Title */
+            title: string;
+        };
+        /** ManualTrademarkApplicationCreateResponse */
+        ManualTrademarkApplicationCreateResponse: {
+            application: components["schemas"]["TrademarkApplicationResponse"];
+            asset: components["schemas"]["IpAssetResponse"];
+            docket: components["schemas"]["IpDocketRecordResponse"];
+            /** Duplicate Candidates */
+            duplicate_candidates?: components["schemas"]["IpIdentifierResponse"][];
+            identifier: components["schemas"]["IpIdentifierResponse"] | null;
         };
         /** MarginReadinessResponse */
         MarginReadinessResponse: {
@@ -45931,6 +45991,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpSharedTaskRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_manual_trademark_application_api_ip_trademark_applications_manual_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualTrademarkApplicationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualTrademarkApplicationCreateResponse"];
                 };
             };
             /** @description Validation Error */

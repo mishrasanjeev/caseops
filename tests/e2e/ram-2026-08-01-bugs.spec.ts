@@ -186,16 +186,19 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     expect(createBox!.x + createBox!.width).toBeLessThanOrEqual(360);
     await create.click();
 
-    await page.getByLabel("Docket title").fill("ASTER mobile mark");
-    await page.getByLabel("Application / client reference").fill("TM-MOBILE-001");
-    await page.getByLabel("Word mark").fill("ASTER");
-    await page.getByLabel("Nice class").fill("42");
-    await page.getByLabel("Goods / services specification").fill("Legal software services");
-    await page.getByLabel("Applicant").fill("Aster Legal LLP");
-    await page
+    const creationForm = page.locator("form").filter({ has: page.getByLabel("Docket title") });
+    await creationForm.getByLabel("Docket title").fill("ASTER mobile mark");
+    await creationForm.getByLabel("Word mark").fill("ASTER");
+    await creationForm.getByLabel("Nice class").fill("42");
+    await creationForm.getByLabel("Goods / services specification").fill("Legal software services");
+    await creationForm.getByLabel("Applicant").fill("Aster Legal LLP");
+    await creationForm
       .getByLabel("Representation evidence reference")
       .fill("attachment:mobile-mark-proof");
-    const submit = page.getByRole("button", { name: "Validate and create" });
+    await creationForm
+      .getByLabel("Application number (optional before filing)")
+      .fill("TM-MOBILE-001");
+    const submit = creationForm.getByRole("button", { name: "Create application" });
     await expect(submit).toBeVisible();
     const submitBox = await submit.boundingBox();
     expect(submitBox).not.toBeNull();

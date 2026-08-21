@@ -617,6 +617,42 @@ export default function GuidePage() {
                     when a user opens it.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Manual trademark applications
+                  </h3>
+                  <p>
+                    In <a className="underline" href="/app/ip">IP docket</a>, select{" "}
+                    <strong>New trademark</strong> to create the docket, trademark asset,
+                    application, class scope, representation, parties, and any application
+                    number as one controlled operation. A draft or pre-filing record does
+                    not require an application number. A filed record requires either a
+                    confirmed application number or an explicit registry-source statement
+                    that allocation is pending.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Application, registration, opposition, rectification, appeal, and
+                      court identifiers retain separate labels and legal owners. An
+                      opposition number is never displayed or stored as the trademark
+                      application number.
+                    </li>
+                    <li>
+                      Punctuation and spacing variants are normalized for matching while
+                      the source form remains visible. A possible duplicate is saved for
+                      review and cannot silently merge records or enter filed phase.
+                    </li>
+                    <li>
+                      Duplicate review shows the accessible candidates and blocking reasons
+                      before a decision. Confirming a separate filing or superseding a number
+                      requires a current preview and a written reason; supersession does not
+                      delete or merge either docket.
+                    </li>
+                    <li>
+                      Correcting a number creates a new identifier version. The prior source
+                      value, effective range, correction reason, and audit evidence remain in
+                      history.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     IP document workflow
                   </h3>
                   <p>

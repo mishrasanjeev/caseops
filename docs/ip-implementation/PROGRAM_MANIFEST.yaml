@@ -17,37 +17,37 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-21T09:44:19+05:30",
-      "base_revision": "3802de0f",
+      "recorded_at": "2026-08-21T22:45:00+05:30",
+      "base_revision": "a773ef68",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-030B",
-        "branch": "codex/iplf-030b-portfolio-workflow-20260821",
-        "status": "implementation_complete_pr_open",
-        "scope": "Complete the portfolio user workflow and exception paths over the existing IPLF-030A read-only projection: permission-scoped listing, composed filters, saved views, stable columns, bounded export, responsive UI, and exact API/UI/PostgreSQL/E2E evidence.",
+        "slice_id": "IPLF-031B",
+        "branch": "codex/iplf-031b-manual-create-20260821",
+        "status": "implementation_complete_local_verified",
+        "scope": "Complete the manual trademark application workflow over the existing canonical docket, asset, application and typed-identifier writers: atomic create, explicit pre-filing and pending-allocation states, duplicate/correction decisions, phase progression, responsive identity UI and exact UJ-03 evidence.",
         "owned_components": [
-          "IP portfolio read-only projection extensions, saved-view preferences, export contract, and portfolio UI",
-          "IPLF-030B tests for UJ-04 normal and exception paths, including access filtering and narrow-mobile behavior",
-          "IPLF-030B status, test, and evidence references"
+          "Atomic manual-application command composed over canonical IP writers without a second identity store",
+          "Manual trademark form and selected-docket identity/duplicate/correction workflow",
+          "IPLF-031B API, web, production-mode Playwright, guide and status evidence"
         ],
         "merge_constraints": [
-          "Extend the existing IPLF-030A read-only portfolio route and canonical visible_ip_dockets_filter policy; do not introduce a second portfolio, deadline, or access-policy owner.",
-          "Keep exports permission-filtered and bounded, and persist only user-scoped presentation preferences if required.",
-          "Reuse established web table, saved-view, export, capability, and rollout patterns and preserve fail-closed behavior."
+          "Reuse IpIdentifier, docket visibility and duplicate-decision policies; application numbers must not populate the legacy docket primary identifier.",
+          "Never silently merge identifier collisions or transition to filed without a confirmed application number or explicit source-pending allocation state.",
+          "Keep the composite command atomic and preserve historical identifier values and decision reasons."
         ],
         "excludes": [
+          "IPLF-032B bulk-import work already delivered within the IPLF-030B controlled-import boundary unless a later audit finds a concrete uncovered requirement",
           "records-governance policy/hold/execute workflow",
-          "IP cost/billing models and migrations",
-          "IPLF-039G integration until IPLF-039F is merged",
-          "IPLF-027B irreversible A0 retirement"
+          "IPLF-027B irreversible A0 retirement",
+          "later post-filing, deadline, provider and billing operations"
         ],
         "prior_lane": {
-          "slice_id": "IPLF-039D",
-          "branch": "codex/iplf-039d-deadline-incidents-20260821",
-          "pull_request": 285,
+          "slice_id": "IPLF-030B",
+          "branch": "codex/iplf-030b-portfolio-workflow-20260821",
+          "pull_request": 286,
           "status": "merged",
-          "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
-          "merge_revision": "de5d330f96b28f11469ac0dcd26a0155c0119eeb"
+          "implementation_revision": "7d97469f9ed236a6479f6c406b2f72a03b00cbe4",
+          "merge_revision": "a773ef68202001584e91b7424d9c4b3e7f3b320f"
         }
       },
       "claude": {
@@ -1514,11 +1514,13 @@
         "IPLF-031A",
         "IPLF-031B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -8711,28 +8713,72 @@
       "dependencies": [
         "IPLF-031A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md",
+          "revision": "5ea084c18c2de776cdfa0b5c5a3a645f709c0c5b",
+          "environment": "Windows 11, CPython 3.13, Node 24, Next.js 16.3, locked dependencies, isolated SQLite/API fixtures and local Chromium; exact-head PostgreSQL CI and deployment remain required",
+          "fixtures": "Synthetic entitled law-firm tenants, draft/filed applications, typed application/opposition identifiers and duplicate candidates; no real client or registry data",
+          "assertions": "Atomic canonical docket/asset/application/identifier creation and rollback, explicit no-number draft/pending-allocation behavior, separate typed identifiers, duplicate decisions, historical corrections, phase progression, responsive UI, generated API contract and production-mode API/UI journey",
+          "result": "passed",
+          "recorded_at": "2026-08-21T22:45:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass exact-head CI, including PostgreSQL and the complete Playwright app suite, before merge or release claims.",
+        "Deploy an immutable merged candidate and record dated production acceptance before changing release_status from blocked."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema migration or backfill. The atomic command writes existing canonical IpDocketRecord, IpAsset, IpApplication, IpIdentifier and trademark-particular records in one transaction.",
+        "Application numbers remain in typed IpIdentifier rows; the legacy docket primary identifier remains unset and duplicate/correction history is preserved by existing identity policies."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "apps/web/app/guide/page.tsx",
+          "disposition": "updated",
+          "owner": "In-product user guide",
+          "evidence": "Manual filing, pending-allocation, duplicate-review and typed-identifier guidance"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Delivered scope, requirement/path accounting, local gates, data boundary and explicit release caveats"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Concrete implementation, test and evidence references with release status kept blocked"
+        }
+      ],
+      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25. | IPLF-031B 2026-08-21: implemented atomic manual trademark creation, explicit identifier-allocation state, typed identity display, duplicate/correction decisions and phase progression over existing canonical writers. This avoids duplicating IPLF-030B controlled import and IPLF-031A identity persistence. Local API/web/build/Playwright proof passed; exact-head CI, deployment and dated production acceptance remain outstanding.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -19885,27 +19931,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/services/ip_records.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-01",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19934,27 +19985,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/services/ip_records.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-02",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19983,27 +20039,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/services/ip_records.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-03",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20032,27 +20093,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/ip_records.py",
         "apps/api/tests/test_ip_record_workflow.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-04",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20081,27 +20147,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/services/ip_records.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-05",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20130,28 +20201,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/ip_records.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_search_is_tenant_scoped",
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-06",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -20221,27 +20296,32 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/ip_records.py",
         "apps/api/tests/test_ip_record_workflow.py",
-        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md"
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/guide/page.tsx"
       ],
       "test_refs": [
         "apps/api/tests/test_ip_record_workflow.py::test_identifier_workflow_preserves_types_history_search_and_duplicates",
-        "planned:IPLF-REQ-IP-ID-08",
-        "planned:IPLF-UJ-01-EXC-01",
-        "planned:IPLF-UJ-01-EXC-02",
-        "planned:IPLF-UJ-01-EXC-03",
-        "planned:IPLF-UJ-01-NORMAL",
-        "planned:IPLF-UJ-03-EXC-01",
-        "planned:IPLF-UJ-03-EXC-02",
-        "planned:IPLF-UJ-03-NORMAL",
-        "planned:IPLF-UJ-05-EXC-01",
-        "planned:IPLF-UJ-05-NORMAL"
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_manual_duplicate_is_flagged_without_reusing_legacy_docket_identity",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md"
+        "docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -43125,9 +43205,17 @@
       "test_refs": [
         "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc01_pre_filing_draft_saves_without_an_application_number#IPLF-UJ-03-EXC-01",
         "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc02_filed_phase_requires_explicit_identifier_allocation#IPLF-UJ-03-EXC-02",
-        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_normal_create_trademark_application_manually#IPLF-UJ-03-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_normal_create_trademark_application_manually#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md",
         "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md",
         "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
@@ -48319,11 +48407,15 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_normal_create_trademark_application_manually#IPLF-UJ-03-NORMAL"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_normal_create_trademark_application_manually#IPLF-UJ-03-NORMAL",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_normal_manual_command_materializes_every_canonical_owner#IPLF-UJ-03-NORMAL",
+        "apps/web/app/app/ip/page.test.tsx::keeps typed numbers separate and resolves duplicates on narrow mobile#IPLF-UJ-03-NORMAL",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-NORMAL"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -48438,11 +48530,14 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc01_pre_filing_draft_saves_without_an_application_number#IPLF-UJ-03-EXC-01"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc01_pre_filing_draft_saves_without_an_application_number#IPLF-UJ-03-EXC-01",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc01_pre_filing_manual_draft_does_not_invent_a_number#IPLF-UJ-03-EXC-01",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-01"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -48557,12 +48652,15 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc02_filed_phase_requires_explicit_identifier_allocation#IPLF-UJ-03-EXC-02"
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_uj03_exc02_filed_phase_requires_explicit_identifier_allocation#IPLF-UJ-03-EXC-02",
+        "apps/api/tests/test_ip_manual_application_workflow.py::test_uj03_exc02_invalid_filed_command_rolls_back_the_whole_record#IPLF-UJ-03-EXC-02",
+        "tests/e2e/iplf-031b-manual-application-2026-08-21.spec.ts::IPLF-031B completes manual identity and duplicate exception paths#IPLF-UJ-03-EXC-02"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
         "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039A/per-path-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-031B/local-2026-08-21.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
