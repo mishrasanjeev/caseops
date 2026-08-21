@@ -55,7 +55,7 @@ Generated; do not edit.
 | IPLF-031A | derived | IPLF-031 | M3 | IP-ID-07 | UJ-05-NORMAL, UJ-05-EXC-01 | implemented | passed | blocked | not_required |
 | IPLF-031B | derived | IPLF-031 | M3 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-08 | UJ-03-EXC-01, UJ-03-EXC-02, UJ-03-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-032A | derived | IPLF-032 | M3 | ARCH-OPS-23 | UJ-02-NORMAL, UJ-02-EXC-01, UJ-02-EXC-02, UJ-02-EXC-03, UJ-02-EXC-04 | implemented | passed | blocked | not_required |
-| IPLF-032B | derived | IPLF-032 | M3 |  |  | not_started | not_run | blocked | not_required |
+| IPLF-032B | derived | IPLF-032 | M3 |  |  | implemented | passed | blocked | not_required |
 | IPLF-033A | derived | IPLF-033 | M3 | IP-PROS-11 | UJ-06-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-033B | derived | IPLF-033 | M3 | IP-PROS-01, IP-PROS-02, IP-PROS-03, IP-PROS-04, IP-PROS-05, IP-PROS-06, IP-PROS-07, IP-PROS-08, IP-PROS-09, IP-PROS-10, IP-PROS-12 | UJ-06-EXC-01, UJ-06-EXC-02, UJ-06-EXC-03 | not_started | not_run | blocked | not_required |
 | IPLF-034A | derived | IPLF-034 | M3 | CAL-OPS-06 | UJ-09-NORMAL | implemented | passed | blocked | not_required |

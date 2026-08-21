@@ -18,36 +18,36 @@
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
       "recorded_at": "2026-08-21T22:45:00+05:30",
-      "base_revision": "a773ef68",
+      "base_revision": "d824192c",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-031B",
-        "branch": "codex/iplf-031b-manual-create-20260821",
+        "slice_id": "IPLF-032B",
+        "branch": "codex/iplf-032b-import-reconcile-20260821",
         "status": "implementation_complete_local_verified",
-        "scope": "Complete the manual trademark application workflow over the existing canonical docket, asset, application and typed-identifier writers: atomic create, explicit pre-filing and pending-allocation states, duplicate/correction decisions, phase progression, responsive identity UI and exact UJ-03 evidence.",
+        "scope": "Close the distinct ARCH-OPS-23 compatibility gap with read-only shared history, summary, manifest and error-report adapters over the canonical IP and legacy Matter/Employee import owners, plus one responsive activity view that links back to each existing importer.",
         "owned_components": [
-          "Atomic manual-application command composed over canonical IP writers without a second identity store",
-          "Manual trademark form and selected-docket identity/duplicate/correction workflow",
-          "IPLF-031B API, web, production-mode Playwright, guide and status evidence"
+          "Read-only normalized import API over bulk_import_jobs, matter_bulk_import_jobs and employee_bulk_import_jobs",
+          "Shared import activity view and links to the canonical domain workflows",
+          "IPLF-032B API, web, Playwright, guide, contract and local evidence"
         ],
         "merge_constraints": [
-          "Reuse IpIdentifier, docket visibility and duplicate-decision policies; application numbers must not populate the legacy docket primary identifier.",
-          "Never silently merge identifier collisions or transition to filed without a confirmed application number or explicit source-pending allocation state.",
-          "Keep the composite command atomic and preserve historical identifier values and decision reasons."
+          "Do not migrate, alias, copy or dual-write Matter/Employee import jobs or rows.",
+          "Retain each canonical workflow's capability, tenant and creator visibility rules on history, manifests and error reports.",
+          "Do not clone upload, preview, commit, retry, cancel or template controls into the shared activity view."
         ],
         "excludes": [
-          "IPLF-032B bulk-import work already delivered within the IPLF-030B controlled-import boundary unless a later audit finds a concrete uncovered requirement",
+          "IPLF-030B controlled trademark upload, validation, duplicate reconciliation and commit workflow already delivered",
           "records-governance policy/hold/execute workflow",
           "IPLF-027B irreversible A0 retirement",
-          "later post-filing, deadline, provider and billing operations"
+          "IPLF-033B application workspace and prosecution timeline"
         ],
         "prior_lane": {
-          "slice_id": "IPLF-030B",
-          "branch": "codex/iplf-030b-portfolio-workflow-20260821",
-          "pull_request": 286,
+          "slice_id": "IPLF-031B",
+          "branch": "codex/iplf-031b-manual-create-20260821",
+          "pull_request": 288,
           "status": "merged",
-          "implementation_revision": "7d97469f9ed236a6479f6c406b2f72a03b00cbe4",
-          "merge_revision": "a773ef68202001584e91b7424d9c4b3e7f3b320f"
+          "implementation_revision": "e3f2e86e",
+          "merge_revision": "d824192cc2409d8adbf94a06963e6928873b96bc"
         }
       },
       "claude": {
@@ -1541,11 +1541,14 @@
         "IPLF-032A",
         "IPLF-032B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-032B/local-2026-08-22.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -8815,7 +8818,7 @@
           "component": "bulk_import_jobs (neutral, domain-tagged) and ip_import_rows (typed IP staging).",
           "canonical_writer": "services/ip_imports.py owns staging and orchestration only. Portfolio records are materialised through the existing create_ip_docket writer. matter_bulk_import_jobs and employee_bulk_import_jobs remain canonical for their own domains and are neither migrated nor rewritten; no ip_import_jobs table exists and Matter row-commit logic is not reused as generic orchestration.",
           "compatibility_path": "Additive tables and four additive routes; no existing import surface changes.",
-          "retirement_gate": "No legacy import owner is retired. Read-only adapters over the legacy jobs remain unbuilt and are tracked on IPLF-032B."
+          "retirement_gate": "No legacy import owner is retired. IPLF-032B exposes read-only compatibility views only; any later job-control migration requires a separately approved convergence slice."
         }
       ],
       "dependencies": [],
@@ -8850,19 +8853,17 @@
       "blockers": [
         {
           "id": "IPLF-032A-RELEASE-VERIFICATION",
-          "summary": "The import API accepts already-parsed JSON rows only. There is no CSV/XLSX upload or template, no duplicate suggestion, no cancel/retry/history, no background execution for large imports, a 1000-row cap, no frontend, no E2E, and no real-PostgreSQL CI or deployment.",
+          "summary": "IPLF-030B delivered the controlled file workflow and IPLF-032B delivered the legacy read-only adapters. Release closure still requires exact-candidate CI, merge and deployment evidence; this foundation's original local record alone does not prove those release gates.",
           "owner": "Engineering and the authorized release operator",
-          "evidence_needed": "Exact-commit CI on real PostgreSQL, file parsing with encoding/delimiter handling and a template, duplicate suggestion and reconciliation, background execution with cancel/retry/history, an import UI with desktop and narrow-mobile evidence, and dated deployed acceptance.",
-          "safe_fallback": "All four routes are additive and access-scoped; no client consumes them and commit only creates dockets through the canonical writer.",
-          "milestone_impact": "Blocks IPLF-032A release closure; IP-PORT-08 and the legacy read-only adapters remain open on IPLF-030B and IPLF-032B.",
-          "next_independent_slice": "Continue the M3 foundation coverage allocation with IPLF-033A."
+          "evidence_needed": "Exact-head GitHub CI including real PostgreSQL, security, OpenAPI freshness, production web build and full Playwright, followed by merge and exact deployed acceptance for the integrated candidate.",
+          "safe_fallback": "The canonical IP workflow remains access-scoped and IPLF-032B adapters are read-only; Matter and Employee owners and workflows remain unchanged.",
+          "milestone_impact": "Blocks release status only; repository implementation and local verification are complete across IPLF-030B, IPLF-032A and IPLF-032B.",
+          "next_independent_slice": "Continue the dependency-ready M3 lane with IPLF-033B after the IPLF-032B PR is merged."
         }
       ],
       "next_actions": [
-        "Add CSV/XLSX parsing, a template download, and encoding/delimiter handling for IP-PORT-08.",
-        "Add duplicate suggestion across the staged set and against existing records.",
-        "Add cancel, retry and history, and move large commits to background execution.",
-        "Build read-only adapters over the legacy Matter/Employee import jobs on IPLF-032B."
+        "Retain the canonical foundation while IPLF-030B remains the controlled trademark file workflow and IPLF-032B remains the read-only compatibility surface.",
+        "Advance release status only from exact-head CI, merge and deployed evidence; do not infer it from the original local foundation record."
       ],
       "data_impact": [
         "Adds bulk_import_jobs and ip_import_rows, both company-scoped and registered in the data-governance map with registry_fail_closed disposition.",
@@ -8871,7 +8872,7 @@
       "documentation_impact": [
         "docs/ip-implementation/evidence/m3/IPLF-032A/local-2026-08-14.md"
       ],
-      "allocation_review": "M3 foundation slices shipped with empty coverage. This allocates the UJ-02 paths and the ARCH-OPS-23 neutral-import ownership rule that IPLF-032A actually implements, out of IPLF-032B. ARCH-OPS-23 stays co-owned and open because legacy read-only adapters are not built. PRD scope unchanged.",
+      "allocation_review": "M3 foundation slices shipped with empty coverage. IPLF-032A owns the neutral job and typed IP staging foundation. IPLF-030B later supplied the controlled trademark file workflow, and IPLF-032B supplied the distinct shared read-only legacy adapters. No work is duplicated and PRD scope is unchanged.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
@@ -8899,7 +8900,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-032",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "No schema change, migration, backfill, alias, copy or dual write; read-only adapters query each canonical owner in place.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [],
       "journey_path_ids": [],
@@ -8907,36 +8908,82 @@
         {
           "classification": "REPLACE",
           "component": "IPLF-032 canonical scope: Introduce neutral `bulk_import_jobs`, typed `ip_import_rows`, validation/preview/commit/history/error report and read-only adapters over legacy Matter/Employee jobs; do not alias or dual-write their job state.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "services/ip_imports.py, services/matter_imports.py and services/employee_imports.py remain the only domain writers. services/bulk_imports.py performs tenant-scoped reads and response normalization only.",
+          "compatibility_path": "The adapter preserves source_owner and source_status, enforces each domain's existing visibility rule, and links users back to the existing canonical import page for mutations.",
+          "retirement_gate": "No owner or compatibility path is retired by this slice. A future migration of legacy job-control fields requires separately approved expand/reconcile/switch/rollback evidence."
         }
       ],
       "dependencies": [
         "IPLF-032A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-02-EXC-01",
-        "planned:IPLF-UJ-02-EXC-02",
-        "planned:IPLF-UJ-02-EXC-03",
-        "planned:IPLF-UJ-02-EXC-04",
-        "planned:IPLF-UJ-02-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/bulk_imports.py",
+        "apps/api/src/caseops_api/services/bulk_imports.py",
+        "apps/api/src/caseops_api/api/routes/bulk_imports.py",
+        "apps/api/src/caseops_api/api/router.py",
+        "apps/web/app/app/imports/page.tsx",
+        "apps/web/components/app/Sidebar.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/app/guide/page.tsx",
+        "docs/ip-implementation/BULK_IMPORT_COMPATIBILITY.md"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_bulk_import_compatibility.py",
+        "apps/api/tests/test_ip_bulk_import.py",
+        "apps/api/tests/test_ip_portfolio_import_files.py",
+        "apps/api/tests/test_matter_imports.py",
+        "apps/api/tests/test_legalworkspace_bulk_employee_upload.py",
+        "apps/web/app/app/imports/page.test.tsx",
+        "apps/web/app/app/ip/portfolio/imports/page.test.tsx",
+        "apps/web/app/app/matters/imports/page.test.tsx",
+        "apps/web/app/app/matters/imports/duplicate-rows.test.tsx",
+        "apps/web/app/app/admin/employees/page.test.tsx",
+        "tests/e2e/iplf-032b-import-compatibility-2026-08-22.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-032B/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-032B/local-2026-08-22.md",
+          "revision": "778fc3bae553e82d05235b99660e162e2ef4e41e",
+          "recorded_at": "2026-08-22T00:20:00+05:30",
+          "environment": "Windows 11 local locked API/web dependencies, isolated SQLite fixtures, Next.js production build and local Chromium against real local API/web servers. Exact-head GitHub PostgreSQL/security/full-suite CI and deployment remain pending.",
+          "fixtures": "Synthetic isolated tenants; real staged trademark, matter and employee CSV jobs through canonical APIs; valid and invalid rows; source and normalized statuses; employee job without a persisted checksum; restricted capability actor; foreign-tenant job probes; desktop and 390 by 844 browser viewport. No real client or production data.",
+          "assertions": "All three canonical owners surface without mutation; source owner/status and read-only mode remain explicit; lifecycle/count normalization is correct; employee checksum absence is declared; manifests and UTF-8 error CSVs are stable; domain capabilities, creator visibility and tenant isolation fail closed; shared UI filters, manifest detail, downloads and canonical workflow links work; related importer suites remain green; OpenAPI, typecheck and production build pass. Counts: 72 API passed and one PostgreSQL-only skipped, 23 web passed, one Playwright journey passed, ruff and diff checks passed.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-032B-RELEASE-VERIFICATION",
+          "summary": "Repository implementation and local verification are complete; exact-head GitHub CI, merge and exact deployed acceptance are not yet recorded.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Passing exact-head CI including real PostgreSQL, security, OpenAPI freshness, web build/unit tests and full Playwright; reviewed merge revision; then exact deployed identity and acceptance if this candidate is released.",
+          "safe_fallback": "Do not mount the additive router/page in a release. Canonical IP, Matter and Employee import jobs and workflows remain unchanged.",
+          "milestone_impact": "Blocks IPLF-032B release status only; implementation and local verification are complete.",
+          "next_independent_slice": "Audit and execute IPLF-033B after this PR merges."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact implementation/evidence PR and require the full GitHub matrix to pass on its head before merge.",
+        "After merge, record the merge revision and advance to the next dependency-ready slice without claiming deployment unless exact runtime evidence exists."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, migration, backfill, data copy, alias or dual write. The adapter reads bounded tenant-scoped rows from each existing owner and does not flush or commit.",
+        "No import command, provider call, notification, filing, fee, payment, external message or other legal effect is added."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/BULK_IMPORT_COMPATIBILITY.md",
+        "docs/ip-implementation/evidence/m3/IPLF-032B/local-2026-08-22.md",
+        "apps/web/app/guide/page.tsx",
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml and generated projections"
+      ],
+      "allocation_review": "Brutally re-audited against PRD Sections 11.2 and 11.3 and current main. IPLF-032A owns neutral persistence and typed staging; IPLF-030B already owns the complete trademark file workflow. IPLF-032B implements only the uncovered shared status/manifest/error/download compatibility contract and read-only cross-owner activity UI. No uploader, domain validation, commit, retry, cancel, template, job row, or history state is duplicated.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
