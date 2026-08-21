@@ -24,7 +24,7 @@
         "slice_id": "IPLF-039C",
         "branch": "codex/iplf-039c-calendar-reconcile-20260820",
         "status": "repository_implemented_local_verified",
-        "implementation_revision": "3082506368c8c34807a14d89ffe04f573f7129c8",
+        "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
         "scope": "Complete IPLF-039C repository behavior: UJ-62-EXC-03 immutable external-provider reconciliation and UJ-59 immutable daily-docket exception decisions, independent reviewer samples, two-role signatures, accessible history, and signed-report deltas; retain fail-closed provider gates.",
         "owned_components": [
           "IP calendar drift/reconciliation and daily docket control-review services with their dedicated schema/API contracts",
@@ -10154,7 +10154,7 @@
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "The known IPLF-039C repository gaps are implemented: UJ-62-EXC-03 at 5af8f032 and UJ-59 at 30825063 are locally verified, including PostgreSQL 17, SQLite migration, API, UI, and independent two-user E2E proof. Both OAuth sandboxes, hosted exact-candidate CI, exact deployment, and dated production acceptance remain unverified; Microsoft Graph automatic restore remains disabled until a documented live conditional-update contract is proved.",
+          "summary": "The known IPLF-039C repository gaps are implemented: UJ-62-EXC-03 at 5af8f032 and UJ-59 at final implementation head b47724a8 are locally verified, including PostgreSQL 17, SQLite migration, API, UI, schema-index governance, and independent two-user E2E proof. Both OAuth sandboxes, hosted exact-candidate CI, exact deployment, and dated production acceptance remain unverified; Microsoft Graph automatic restore remains disabled until a documented live conditional-update contract is proved.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
           "evidence_needed": "Run the read-only verifier against Microsoft Graph and Google OAuth sandboxes; prove a guarded Graph update contract before enabling Outlook restore; then obtain hosted exact-candidate CI, exact deployment, and dated production acceptance.",
           "safe_fallback": "Calendar drift automation stays default-off unless readiness, entitlement and rollout gates pass; CaseOps remains authoritative. Missing, unknown, unversioned and Outlook observations allow evidence review but no automatic provider overwrite.",
@@ -10187,7 +10187,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
-          "revision": "3082506368c8c34807a14d89ffe04f573f7129c8",
+          "revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
           "environment": "local SQLite plus ephemeral PostgreSQL 17/pgvector and fresh local API/web Playwright servers",
           "fixtures": "deterministic tenant-isolated docket-control fixtures and two independent authenticated members; no live provider credential",
           "assertions": "exception decisions, reviewer sampling, two-role exact-manifest signatures, report archive authorization, signed deltas, append-only persistence, tenant correlation, UI download, and independent two-user E2E",
@@ -10213,7 +10213,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. | 2026-08-20 reconciliation audit: UJ-62-EXC-03 repository behavior is now implemented and locally verified at 5af8f032. | 2026-08-21 UJ-59 audit: exception decisions, independent source/calculation/coverage sampling, two-role exact-manifest signatures, accessible history and predecessor deltas are implemented and locally verified at 30825063. Repository implementation is implemented/passed; release remains blocked only on live OAuth-provider, hosted exact-candidate, deployment and dated production evidence. Claude-owned IPLF-028A/IPLF-028B evidence and IPLF-039F cost work remain separate lanes.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. | 2026-08-20 reconciliation audit: UJ-62-EXC-03 repository behavior is now implemented and locally verified at 5af8f032. | 2026-08-21 UJ-59 audit: exception decisions, independent source/calculation/coverage sampling, two-role exact-manifest signatures, accessible history, predecessor deltas and required foreign-key indexes are implemented and locally verified at final implementation head b47724a8. Repository implementation is implemented/passed; release remains blocked only on live OAuth-provider, hosted exact-candidate, deployment and dated production evidence. Claude-owned IPLF-028A/IPLF-028B evidence and IPLF-039F cost work remain separate lanes.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",

@@ -2,7 +2,7 @@
 
 ## Truth status
 
-- Repository implementation commit: `3082506368c8c34807a14d89ffe04f573f7129c8`.
+- Repository implementation commits: feature `3082506368c8c34807a14d89ffe04f573f7129c8`; final schema-index head `b47724a8171576be9f74f8d5677cdce2a7f10731`.
 - Scope verified locally: UJ-59 daily docket control report exception decisions, independent reviewer sampling, two-role signatures, immutable manifest binding, accessible report history, and signed-report deltas.
 - Together with the previously recorded UJ-62-EXC-03 increment, the known IPLF-039C repository implementation gap is closed.
 - IPLF-039C release remains blocked. Live Microsoft Graph and Google OAuth sandbox verification, hosted exact-candidate CI, exact deployment, and dated production acceptance have not been completed by this record.
@@ -49,7 +49,7 @@
 | Independent two-user Playwright journey and docket regression | `2 passed` |
 | PostgreSQL 17 migration plus UJ-59 immutability/tenant test | `2 passed, 93 deselected` |
 | Fresh SQLite migration from base through `20260821_0002` | passed |
-| Data-governance, migration-order, and projection gate bundle | `25 passed` |
+| Data-governance, migration-order, projection, and foreign-key index gates | passed; focused schema/migration rerun `5 passed` |
 | Ruff, web TypeScript typecheck, Alembic single head, and `git diff --check` | passed |
 
 The first PostgreSQL invocation used only `CASEOPS_TEST_POSTGRES_URL`; Alembic deliberately reads `CASEOPS_DATABASE_URL`, so that harness attempt timed out against the repository default before reaching a migration or assertion. The corrected isolated run set both variables and passed. The disposable PostgreSQL container and SQLite file were removed.
