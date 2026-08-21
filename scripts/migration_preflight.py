@@ -62,6 +62,7 @@ _DESTRUCTIVE_OPS = {"drop_column", "drop_table"}
 # labelled as though they were.
 MULTIPLE_HEADS_CODE = "MIGRATION-MULTIPLE-HEADS"
 DUPLICATE_REVISION_CODE = "MIGRATION-DUPLICATE-REVISION"
+REVISION_CYCLE_CODE = "MIGRATION-REVISION-CYCLE"
 
 
 @dataclass(frozen=True)
@@ -206,6 +207,33 @@ def _literal(node: ast.expr | None) -> object:
         return None
 
 
+def _ungrounded_revisions(down_map: dict[str, tuple[str, ...]]) -> set[str]:
+    """Revisions that cannot be traced back to a base, i.e. cycle members.
+
+    A revision is *grounded* when every parent it names is either a base
+    (``down_revision = None``), a revision outside this file set, or itself
+    grounded. Anything still ungrounded once that reaches a fixpoint is inside a
+    cycle or sits behind one, and can never be upgraded through.
+
+    ``all()`` rather than ``any()`` for a merge revision with several parents:
+    alembic has to walk every branch, so one poisoned parent is enough to make
+    the merge unreachable.
+    """
+
+    grounded: set[str] = set()
+    pending = set(down_map)
+    changed = True
+    while changed:
+        changed = False
+        for revision in sorted(pending):
+            parents = down_map[revision]
+            if all(parent not in down_map or parent in grounded for parent in parents):
+                grounded.add(revision)
+                pending.discard(revision)
+                changed = True
+    return pending
+
+
 def revision_graph(paths: list[Path]) -> tuple[dict[str, Path], list[str], list[Finding]]:
     """Read the revision graph statically and report defects in its shape.
 
@@ -229,6 +257,7 @@ def revision_graph(paths: list[Path]) -> tuple[dict[str, Path], list[str], list[
     """
     revisions: dict[str, Path] = {}
     parents: set[str] = set()
+    down_map: dict[str, tuple[str, ...]] = {}
     findings: list[Finding] = []
 
     for path in sorted(paths):
@@ -262,8 +291,39 @@ def revision_graph(paths: list[Path]) -> tuple[dict[str, Path], list[str], list[
         down = _literal(assignments.get("down_revision"))
         if isinstance(down, str):
             parents.add(down)
+            down_map[revision] = (down,)
         elif isinstance(down, (list, tuple)):
-            parents.update(item for item in down if isinstance(item, str))
+            named = tuple(item for item in down if isinstance(item, str))
+            parents.update(named)
+            down_map[revision] = named
+        else:
+            down_map[revision] = ()
+
+    # Cycles are checked independently of the head count, not as a special case
+    # of it. A graph that is *only* a cycle has zero heads, and a healthy chain
+    # beside a disconnected cycle has exactly one - so neither "more than one
+    # head" nor "exactly one head" sees it. Only walking the parents does.
+    ungrounded = _ungrounded_revisions(down_map)
+    if ungrounded:
+        listed = ", ".join(
+            f"{revision} ({_display_path(revisions[revision])})"
+            for revision in sorted(ungrounded)
+            if revision in revisions
+        )
+        findings.append(
+            Finding(
+                _display_path(revisions[sorted(ungrounded)[0]]),
+                1,
+                REVISION_CYCLE_CODE,
+                "down_revision",
+                (
+                    f"{len(ungrounded)} revision(s) cannot be traced back to a base, "
+                    f"so they are inside a cycle or behind one and can never be "
+                    f"upgraded through: {listed}. Break the loop so every revision "
+                    f"reaches a base by following down_revision."
+                ),
+            )
+        )
 
     heads = sorted(set(revisions) - parents)
     if len(heads) > 1:
@@ -329,7 +389,15 @@ def main(argv: list[str] | None = None) -> int:
             for finding in graph_findings:
                 print(f"ERROR [{finding.code}] {finding.path}:{finding.line} {finding.detail}")
             return 1
-        print(f"migration graph: single head {heads[0] if heads else '(none)'}")
+        # Reaching here means the graph checks found nothing, so an empty head
+        # set can only mean there are no migrations at all - not a cycle, which
+        # is now its own finding above. Say which it is rather than printing
+        # "single head (none)", a sentence that contradicts itself.
+        print(
+            f"migration graph: single head {heads[0]}"
+            if heads
+            else "migration graph: no migrations found"
+        )
         return 0
 
     targets = _changed_migrations(args.base)

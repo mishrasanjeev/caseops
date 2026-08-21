@@ -1326,6 +1326,14 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   was irregular. Any two parallel branches adding a migration from the same
   parent produce this, and the repository runs many concurrent lanes by design.
   The default outcome of ordinary work was a broken trunk.
+- **A blind spot in the first version of this control, found in review.**
+  Checking `len(heads) > 1` misses a cycle entirely. A graph that is *only* a
+  cycle has **zero** heads, and — the harder case — a sound chain beside a
+  disconnected cycle has **exactly one**, so neither "more than one head" nor
+  "exactly one head" sees it. `MIGRATION-REVISION-CYCLE` therefore walks
+  `down_revision` to a base independently of the head count, and a merge
+  revision counts as grounded only when *every* parent is: one poisoned branch
+  makes the merge unreachable.
 - **Control required:** evaluate the revision graph over every migration present
   rather than only the changed one, so the pull-request merge commit — which is
   what CI builds — sees both files and fails before merge. Report the heads and

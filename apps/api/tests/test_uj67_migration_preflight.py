@@ -226,6 +226,77 @@ class TestRevisionGraphShape:
 
         assert migration_preflight.DUPLICATE_REVISION_CODE in _codes(findings)
 
+    def test_a_graph_that_is_only_a_cycle_is_flagged(self, tmp_path: Path) -> None:
+        # Two migrations naming each other. Every revision is someone's parent,
+        # so the head set is EMPTY - which a "more than one head" check reads as
+        # fine. Nothing here can ever be upgraded.
+        paths = [
+            _revision(tmp_path, "0001", "0002", name="0001_a.py"),
+            _revision(tmp_path, "0002", "0001", name="0002_b.py"),
+        ]
+
+        _revisions, heads, findings = migration_preflight.revision_graph(paths)
+
+        assert heads == [], "the premise of this test is that the head set is empty"
+        assert migration_preflight.REVISION_CYCLE_CODE in _codes(findings)
+
+    def test_a_cycle_beside_a_healthy_chain_is_flagged(self, tmp_path: Path) -> None:
+        # The harder shape, and the reason this check is not folded into the
+        # head count: a sound chain plus a disconnected cycle yields EXACTLY
+        # ONE head, so neither "more than one head" nor "exactly one head"
+        # notices the cycle. Only walking down_revision to a base does.
+        paths = [
+            _revision(tmp_path, "aaa1", None, name="aaa1.py"),
+            _revision(tmp_path, "aaa2", "aaa1", name="aaa2.py"),
+            _revision(tmp_path, "bbb1", "bbb2", name="bbb1.py"),
+            _revision(tmp_path, "bbb2", "bbb1", name="bbb2.py"),
+        ]
+
+        _revisions, heads, findings = migration_preflight.revision_graph(paths)
+
+        assert heads == ["aaa2"], "the premise is that the head count looks healthy"
+        assert migration_preflight.REVISION_CYCLE_CODE in _codes(findings)
+        detail = next(
+            f for f in findings if f.code == migration_preflight.REVISION_CYCLE_CODE
+        ).detail
+        # Only the cycle members, never the sound chain beside them.
+        assert "bbb1" in detail and "bbb2" in detail
+        assert "aaa1" not in detail and "aaa2" not in detail
+
+    def test_a_merge_revision_behind_a_cycle_is_not_grounded(self, tmp_path: Path) -> None:
+        # A merge revision is grounded only if EVERY parent is. One poisoned
+        # branch is enough to make the merge unreachable, so `all` and not `any`.
+        paths = [
+            _revision(tmp_path, "ok1", None, name="ok1.py"),
+            _revision(tmp_path, "bad1", "bad2", name="bad1.py"),
+            _revision(tmp_path, "bad2", "bad1", name="bad2.py"),
+            _migration(
+                tmp_path,
+                'revision = "merge1"\ndown_revision = ("ok1", "bad1")\n\n'
+                "def upgrade():\n    pass\n\n\ndef downgrade():\n    pass\n",
+                name="merge1.py",
+            ),
+        ]
+
+        _revisions, _heads, findings = migration_preflight.revision_graph(paths)
+
+        detail = next(
+            f for f in findings if f.code == migration_preflight.REVISION_CYCLE_CODE
+        ).detail
+        assert "merge1" in detail, "a merge with one poisoned parent is not grounded"
+
+    def test_a_healthy_chain_reports_no_cycle(self, tmp_path: Path) -> None:
+        paths = [
+            _revision(tmp_path, "c1", None, name="c1.py"),
+            _revision(tmp_path, "c2", "c1", name="c2.py"),
+            _revision(tmp_path, "c3", "c2", name="c3.py"),
+        ]
+
+        _revisions, heads, findings = migration_preflight.revision_graph(paths)
+
+        assert heads == ["c3"]
+        assert findings == []
+
     def test_the_committed_graph_has_exactly_one_head(self) -> None:
         versions = sorted(migration_preflight.VERSIONS_DIR.glob("*.py"))
 
