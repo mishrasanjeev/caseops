@@ -1,7 +1,7 @@
 """Let an IP cost be nonbillable, converted, estimated, or rate-confidential.
 
-Revision ID: 20260821_0003
-Revises: 20260821_0002
+Revision ID: 20260821_0004
+Revises: 20260821_0003
 
 DATA-GOVERNANCE-MAP: updated
 Every column added here extends the existing ``ip_cost_items`` record.
@@ -63,8 +63,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "20260821_0003"
-down_revision = "20260821_0002"
+revision = "20260821_0004"
+down_revision = "20260821_0003"
 branch_labels = None
 depends_on = None
 

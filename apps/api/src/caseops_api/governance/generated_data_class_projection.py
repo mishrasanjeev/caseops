@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "5e9269fb8c93bb2883d9a0a8aa8a6bdf965696a527100734867d4d770d32d9af"
-MAP_SCHEMA_FINGERPRINT = "db6fab96e6c0ad4c62948ec4877a715a1a03e45e91f4cc0b24e0a46d0db638f6"
+MAP_DOCUMENT_FINGERPRINT = "4520e2e953dba878b63adfb1e4ee561d90e09774ebd89eb8f0f6fd120d8a2d05"
+MAP_SCHEMA_FINGERPRINT = "3102282000b0042df0e8e57378257d2efd8b082921c3004792dd89e65dc2cef8"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "dfb04120d652645c77105fe8431b910a96fc23e8d94a58d662255ee270ce093e"
+ORM_SCHEMA_FINGERPRINT = "6c47c789ecd53070d712682bda753b4ff35b59709336e7edbf0126a8838ee251"
 
-PROJECTION_ID = "f936b04777cd2acc7bd88556b2d9310ef55c2b3090b10724021caf26c02e7ccd"
+PROJECTION_ID = "75d4691d03374db2b5a3a1de2c47716549625a1af3cd93a8720ac3bd24d5801d"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -150,6 +150,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_control_review_signatures",
         "ip_cost_items",
         "ip_deadline_coverages",
+        "ip_deadline_incident_actions",
+        "ip_deadline_incident_impacts",
+        "ip_deadline_incident_notification_decisions",
         "ip_deadline_incidents",
         "ip_deadlines",
         "ip_docket_control_reviews",
@@ -164,6 +167,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_evidence_candidates",
         "ip_identifiers",
         "ip_import_rows",
+        "ip_incident_kill_switches",
         "ip_parties_and_roles",
         "ip_proceedings",
         "ip_related_right_obligations",

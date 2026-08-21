@@ -23,6 +23,7 @@ class IpFeatureReadinessRecord(BaseModel):
         "workspace_not_configured",
         "tenant_disabled",
         "readiness_test_failed",
+        "incident_kill_switch",
     ]
     owner: str
     required_capabilities: list[str]
@@ -33,6 +34,7 @@ class IpFeatureReadinessRecord(BaseModel):
     rollout_enabled: bool
     rollout_expires_at: datetime | None
     manual_fallback_feature_id: str | None
+    blocked_by_incident_id: str | None = None
 
 
 class IpWorkspaceReadinessResponse(BaseModel):
@@ -227,17 +229,175 @@ class IpCoverageBulkReassignResponse(BaseModel):
     pending_count: int = 0
 
 
+class IpIncidentEvidenceSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    calculation_version_refs: list[str] = Field(default_factory=list, max_length=100)
+    rule_version_refs: list[str] = Field(default_factory=list, max_length=100)
+    calendar_version_refs: list[str] = Field(default_factory=list, max_length=100)
+    source_refs: list[str] = Field(default_factory=list, max_length=200)
+    message_refs: list[str] = Field(default_factory=list, max_length=200)
+    provider_event_refs: list[str] = Field(default_factory=list, max_length=200)
+    audit_refs: list[str] = Field(default_factory=list, max_length=200)
+
+
 class IpDeadlineIncidentCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     matter_deadline_id: str | None = None
     severity: Literal["low", "medium", "high", "critical"]
     summary: str = Field(min_length=5, max_length=500)
     impact: dict = Field(default_factory=dict)
     containment: str | None = Field(default=None, max_length=4000)
     correction_deadline_id: str | None = None
+    defect_scope: Literal[
+        "record_specific", "shared_rule", "shared_source", "platform_wide"
+    ] = "record_specific"
+    defect_fingerprint: str | None = Field(default=None, min_length=3, max_length=500)
+    evidence_snapshot: IpIncidentEvidenceSnapshot = Field(
+        default_factory=IpIncidentEvidenceSnapshot
+    )
+    kill_switch_features: list[str] = Field(default_factory=list, max_length=20)
+    kill_switch_evidence_reference: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_platform_containment(self) -> IpDeadlineIncidentCreateRequest:
+        if len(self.kill_switch_features) != len(set(self.kill_switch_features)):
+            raise ValueError("kill_switch_features must not contain duplicates.")
+        if self.defect_scope == "platform_wide":
+            if not self.kill_switch_features:
+                raise ValueError("Platform-wide incidents require at least one kill switch.")
+            if not self.kill_switch_evidence_reference:
+                raise ValueError("Platform-wide incidents require kill-switch evidence.")
+        elif self.kill_switch_features:
+            raise ValueError("Kill switches are restricted to platform-wide incidents.")
+        return self
+
+
+class IpDeadlineIncidentImpactItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: str = Field(min_length=2, max_length=40)
+    record_reference: str = Field(min_length=1, max_length=500)
+    relationship: str = Field(min_length=2, max_length=120)
+    assessment: Literal["affected", "not_affected", "pending"]
+    scan_method: str = Field(min_length=2, max_length=80)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpDeadlineIncidentImpactScanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[IpDeadlineIncidentImpactItem] = Field(min_length=1, max_length=500)
+    complete: bool = False
+
+
+class IpDeadlineIncidentActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_type: Literal[
+        "containment", "corrective_task", "filing", "external_advice", "prevention"
+    ]
+    action_status: Literal["planned", "completed", "not_available"]
+    action_reference: str = Field(min_length=3, max_length=500)
+    details: str = Field(min_length=5, max_length=4000)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpDeadlineIncidentNotificationDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipient_type: Literal["client", "insurer", "regulator", "court", "external_counsel"]
+    recipient_reference: str = Field(min_length=1, max_length=500)
+    decision: Literal["pending", "notify", "do_not_notify", "not_applicable"]
+    rationale: str = Field(min_length=5, max_length=4000)
+    approval_evidence_reference: str = Field(min_length=3, max_length=500)
+    communication_reference: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_communication_reference(
+        self,
+    ) -> IpDeadlineIncidentNotificationDecisionRequest:
+        if self.decision == "notify" and not self.communication_reference:
+            raise ValueError("Notify decisions require a communication reference.")
+        return self
 
 
 class IpDeadlineIncidentVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["verified", "disproved"] = "verified"
     corrective_action: str = Field(min_length=5, max_length=4000)
+    root_cause: str = Field(min_length=5, max_length=4000)
+    preventive_action: str = Field(min_length=5, max_length=4000)
+    resolution_evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpIncidentKillSwitchReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    release_reason: str = Field(min_length=5, max_length=4000)
+    release_evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpDeadlineIncidentImpactRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    record_type: str
+    record_reference_sha256: str
+    relationship: str
+    assessment: str
+    scan_method: str
+    evidence_reference: str
+    assessed_by_membership_id: str
+    assessed_at: datetime
+
+
+class IpDeadlineIncidentActionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    action_type: str
+    action_status: str
+    action_reference: str
+    details: str
+    evidence_reference: str
+    recorded_by_membership_id: str
+    recorded_at: datetime
+
+
+class IpDeadlineIncidentNotificationDecisionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    recipient_type: str
+    recipient_reference_sha256: str
+    decision: str
+    decision_version: int
+    rationale: str
+    approval_evidence_reference: str
+    communication_reference: str | None
+    decided_by_membership_id: str
+    decided_at: datetime
+
+
+class IpIncidentKillSwitchRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    feature_id: str
+    status: str
+    reason: str
+    activation_evidence_reference: str
+    activated_by_membership_id: str
+    activated_at: datetime
+    release_reason: str | None
+    release_evidence_reference: str | None
+    released_by_membership_id: str | None
+    released_at: datetime | None
+    version: int
 
 
 class IpDeadlineIncidentRecord(BaseModel):
@@ -248,11 +408,28 @@ class IpDeadlineIncidentRecord(BaseModel):
     severity: str
     summary: str
     impact_json: dict
+    evidence_snapshot_json: dict
+    preservation_manifest_sha256: str
+    defect_scope: str
+    defect_fingerprint_sha256: str | None
     containment: str | None
     correction_deadline_id: str | None
     status: str
+    impact_scan_completed_at: datetime | None
     corrective_action: str | None
+    root_cause: str | None
+    preventive_action: str | None
+    prevention_verified_at: datetime | None
+    resolution_evidence_reference: str | None
+    resolved_at: datetime | None
     verified_at: datetime | None
+    version: int
+    impacts: list[IpDeadlineIncidentImpactRecord] = Field(default_factory=list)
+    actions: list[IpDeadlineIncidentActionRecord] = Field(default_factory=list)
+    notification_decisions: list[IpDeadlineIncidentNotificationDecisionRecord] = Field(
+        default_factory=list
+    )
+    kill_switches: list[IpIncidentKillSwitchRecord] = Field(default_factory=list)
     created_at: datetime
 
 

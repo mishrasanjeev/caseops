@@ -17,31 +17,39 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-21T07:35:00+05:30",
+      "recorded_at": "2026-08-21T08:52:00+05:30",
       "base_revision": "9e8d41c0",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-039C",
-        "branch": "codex/iplf-039c-calendar-reconcile-20260820",
-        "status": "repository_implemented_local_verified",
-        "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
-        "scope": "Complete IPLF-039C repository behavior: UJ-62-EXC-03 immutable external-provider reconciliation and UJ-59 immutable daily-docket exception decisions, independent reviewer samples, two-role signatures, accessible history, and signed-report deltas; retain fail-closed provider gates.",
+        "slice_id": "IPLF-039D",
+        "branch": "codex/iplf-039d-deadline-incidents-20260821",
+        "status": "repository_implemented_local_verified_pr_open",
+        "pull_request": 285,
+        "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
+        "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
         "owned_components": [
-          "IP calendar drift/reconciliation and daily docket control-review services with their dedicated schema/API contracts",
-          "IP calendar projection and drift tests, including UJ-62-EXC-03",
-          "IPLF-039C status, test, and evidence references"
+          "IP deadline-incident lifecycle, evidence, impact, action, communication-decision and kill-switch schema/API/UI contracts",
+          "IP deadline-incident tests for all UJ-58 normal and exception paths",
+          "IPLF-039D status, test, and evidence references"
         ],
         "merge_constraints": [
-          "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
-          "PR #272 is merged; calendar PostgreSQL coverage may be added to apps/api/tests/test_postgres_validation.py without modifying Claude's invoice cases.",
-          "Do not alter data-governance policy fields or Claude's governed-operation inventory; generator output may add only the calendar-candidate table inventory."
+          "This is stacked from PR #282 exact head cf424e4c; do not amend the IPLF-039C 20260821_0001 or 20260821_0002 migrations.",
+          "Use additive migration identifier 20260821_0003 or later and keep incident data company-correlated, append-only where evidence is frozen, and fail closed.",
+          "Reuse the existing legal-hold resolver and capability/rollout catalog; do not alter Claude's data-governance policy workflow or cost-item models."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
-          "IP incident lifecycle",
           "IP cost/billing models and migrations",
+          "IP calendar reconciliation and daily docket control-review implementation",
           "IPLF-027B irreversible A0 retirement"
-        ]
+        ],
+        "prior_lane": {
+          "slice_id": "IPLF-039C",
+          "branch": "codex/iplf-039c-calendar-reconcile-20260820",
+          "pull_request": 282,
+          "status": "merged",
+          "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731"
+        }
       },
       "claude": {
         "lanes": [
@@ -87,10 +95,6 @@
         {
           "slice_id": "IPLF-027B",
           "reason": "Blocked on consolidated authorized A0-retirement approval, resealed deletion packet, second drain, and scheduled full-history security evidence; no parallel destructive work is authorized."
-        },
-        {
-          "slice_id": "IPLF-039D",
-          "reason": "Keep queued until a separate owner is assigned; it must not share the calendar lane's model/migration work."
         },
         {
           "slice_id": "IPLF-029A",
@@ -10256,16 +10260,28 @@
       ],
       "dependencies": [],
       "implementation_refs": [
+        "apps/api/alembic/versions/20260821_0003_ip_deadline_incident_lifecycle.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/api/src/caseops_api/services/ip_operations.py",
-        "apps/api/tests/test_ip_prd_slices.py"
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_workspace.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prd_slices.py",
-        "apps/api/tests/test_ip_039d_deadline_incidents.py",
-        "planned:IPLF-UJ-58-EXC-01",
-        "planned:IPLF-UJ-58-EXC-03",
-        "planned:IPLF-UJ-58-EXC-04",
-        "planned:IPLF-UJ-58-EXC-05"
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_normal_complete_human_review_and_immutable_resolution#IPLF-UJ-58-NORMAL",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc01_disproved_suspicion_retains_scan_and_decisions#IPLF-UJ-58-EXC-01",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc02_never_invents_remedy_deadline_or_communication#IPLF-UJ-58-EXC-02",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc03_legal_hold_and_policy_both_block_deletion#IPLF-UJ-58-EXC-03",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc04_recipient_decisions_are_versioned_and_identity_hashed#IPLF-UJ-58-EXC-04",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc05_platform_defect_stops_automation_until_evidenced_release#IPLF-UJ-58-EXC-05",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_restricted_incident_is_tenant_hidden",
+        "apps/api/tests/test_20260821_ip_deadline_incident_lifecycle_migration.py::test_incident_lifecycle_migration_is_additive_indexed_and_reversible_when_empty",
+        "apps/api/tests/test_postgres_validation.py::test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on_postgres",
+        "apps/web/app/app/ip/page.test.tsx::maps the complete restricted incident review journey",
+        "tests/e2e/iplf-039d-deadline-incidents-2026-08-21.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
@@ -10274,31 +10290,37 @@
       "approvals": [],
       "blockers": [
         {
-          "id": "IPLF-039D-UNIMPLEMENTED-PATHS",
-          "summary": "Four of the six UJ-58 paths this slice owns are not implemented. Incident status is an unconstrained string only ever set to open or verified, so a disproved suspicion cannot be recorded; no legal-hold check exists in the IP incident path; impact_json is unstructured so per-client/insurer/regulator notification decisions cannot be represented let alone differ; and no kill switch is reachable. The incident surface is two routes, create and verify.",
-          "owner": "Engineering with the product and legal owners for the incident contract",
-          "evidence_needed": "A constrained incident lifecycle including a disproved/closed-without-fault state, a legal-hold check before any incident evidence deletion, a structured per-recipient notification-decision record, and a kill-switch path for platform-wide defects, each with per-path tests.",
-          "safe_fallback": "Incidents remain record-only: no automated remedy, notification or deletion occurs today, which the abstention test pins.",
-          "milestone_impact": "Blocks IPLF-039D implementation and release closure and leaves IP-INC-01..08 open.",
+          "id": "IPLF-039D-RELEASE-EVIDENCE",
+          "summary": "All six UJ-58 paths are repository implemented and locally verified at a2c3d56c9a005792ed989f81c577064ea24798e1. The stacked exact candidate has not yet completed hosted CI, merge, deployment and dated production acceptance.",
+          "owner": "Release engineering",
+          "evidence_needed": "Green hosted checks for the exact IPLF-039D PR head, merged/deployed revision identity, health proof and dated production UJ-58 acceptance evidence.",
+          "safe_fallback": "Keep the slice release-blocked. Incident evidence is retained, automated remedies and communications are never invented, and active platform incident kill switches fail closed.",
+          "milestone_impact": "Blocks only IPLF-039D deployment_verified closure; repository implementation and verification are complete.",
           "next_independent_slice": "Continue per-path evidence with IPLF-039F (UJ-52, 7 paths)."
         }
       ],
       "next_actions": [
-        "Implement a constrained incident lifecycle with a disproved/closed-without-fault state (UJ-58-EXC-01).",
-        "Consult legal holds before any incident evidence deletion (UJ-58-EXC-03).",
-        "Model per-recipient notification decisions for client, insurer, regulator and court (UJ-58-EXC-04).",
-        "Provide a kill-switch path for platform-wide defects (UJ-58-EXC-05)."
+        "Run hosted CI for the exact stacked IPLF-039D candidate and preserve immutable check URLs.",
+        "After merge and deployment, bind deployed revision identity, health proof and dated production UJ-58 acceptance to this slice."
       ],
-      "data_impact": [],
-      "documentation_impact": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "data_impact": [
+        "Add constrained evidence and lifecycle fields to ip_deadline_incidents without rewriting existing rows.",
+        "Add tenant-correlated append-only ip_deadline_incident_impacts, ip_deadline_incident_actions and ip_deadline_incident_notification_decisions tables.",
+        "Add tenant-correlated ip_incident_kill_switches with one active switch per automated feature and an evidenced, versioned release path.",
+        "Retain incident and child evidence; deletion fails closed with legal-hold-specific or records-policy-specific reasons."
+      ],
+      "documentation_impact": [
+        "Replace the stale two-of-six path audit with complete UJ-58 per-path implementation and verification evidence.",
+        "Regenerate journey projections and data-governance maps from the canonical schema and slice record."
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039D",
       "primary_behavior": "Restricted deadline-incident evidence, impact scan, containment, ordinary-docket correction linkage and corrective-action verification.",
-      "migration_boundary": "No schema change unless named by release evidence; preserve the PRD expand/backfill/verify/switch contract.",
+      "migration_boundary": "Additive migration 20260821_0003 extends the existing incident parent and adds four tenant-correlated lifecycle tables. Empty rollback is tested; downgrade refuses when retained incident evidence exists.",
       "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; fail-closed acceptance-pending scope may share the train.",
       "evidence_metadata": [
         {
@@ -10306,12 +10328,21 @@
           "revision": "b7365cc1ca972662a7ae30d897610bfa92644f46",
           "environment": "production",
           "fixtures": "deterministic anonymized release fixtures and dated QA tenant",
-          "assertions": "slice-specific API, persistence, permission, UI, and deployed behavior assertions",
+          "assertions": "Historical baseline only; this predates the complete six-path UJ-58 implementation and cannot prove the current candidate.",
           "result": "passed",
           "recorded_at": "2026-08-02T06:25:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md",
+          "revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
+          "environment": "local_e2e",
+          "fixtures": "fresh isolated synthetic tenant, restricted trademark docket and content-minimised incident evidence",
+          "assertions": "All six UJ-58 paths, restricted tenant isolation, additive migration, retention, automation kill switch, API/UI workflow and exact browser resolution path.",
+          "result": "passed",
+          "recorded_at": "2026-08-21T08:46:45+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification was reset until the paths existed. | 2026-08-21 completion review: all six UJ-58 paths, tenant isolation, append-only PostgreSQL evidence, additive migration, operational automation shutdown, dense UI workflow and exact browser journey are implemented and locally verified at a2c3d56c9a005792ed989f81c577064ea24798e1. Release remains blocked on exact hosted CI, merge/deployment identity and dated production acceptance only.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",

@@ -5,7 +5,7 @@ import json
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, false, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -23,13 +23,18 @@ from caseops_api.db.models import (
     IpDeadline,
     IpDeadlineCoverage,
     IpDeadlineIncident,
+    IpDeadlineIncidentAction,
+    IpDeadlineIncidentImpact,
+    IpDeadlineIncidentNotificationDecision,
     IpDocketControlReview,
     IpDocketQueue,
     IpDocketRecord,
     IpEvidenceCandidate,
+    IpIncidentKillSwitch,
     IpRelatedRightObligation,
     IpTitleInterest,
     IpTrademarkParticularVersion,
+    IpWorkspaceConfiguration,
     Matter,
     MatterAccessGrant,
     MatterAccessLevel,
@@ -80,7 +85,13 @@ from caseops_api.schemas.ip_operations import (
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
     IpDeadlineCoverageRecord,
+    IpDeadlineIncidentActionRecord,
+    IpDeadlineIncidentActionRequest,
     IpDeadlineIncidentCreateRequest,
+    IpDeadlineIncidentImpactRecord,
+    IpDeadlineIncidentImpactScanRequest,
+    IpDeadlineIncidentNotificationDecisionRecord,
+    IpDeadlineIncidentNotificationDecisionRequest,
     IpDeadlineIncidentRecord,
     IpDeadlineIncidentVerifyRequest,
     IpDocketControlReport,
@@ -94,6 +105,8 @@ from caseops_api.schemas.ip_operations import (
     IpEvidenceCandidateRecord,
     IpEvidenceCandidateReviewRequest,
     IpEvidenceDiscoveryResponse,
+    IpIncidentKillSwitchRecord,
+    IpIncidentKillSwitchReleaseRequest,
     IpNoticeLinkCreateRequest,
     IpNoticeLinkRecord,
     IpRelatedRightObligationCompleteRequest,
@@ -110,6 +123,8 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import membership_has_capability
+from caseops_api.services.data_governance import resolve_hold_for_target
+from caseops_api.services.ip_capability_catalog import IP_FEATURE_BY_ID
 from caseops_api.services.ip_coverage_projection import (
     cutover_ip_coverage_projection,
 )
@@ -421,6 +436,67 @@ def _current_particulars(session: Session, docket: IpDocketRecord) -> IpTrademar
     return row
 
 
+def _serialize_deadline_incident(
+    session: Session, incident: IpDeadlineIncident
+) -> IpDeadlineIncidentRecord:
+    impacts = list(
+        session.scalars(
+            select(IpDeadlineIncidentImpact)
+            .where(
+                IpDeadlineIncidentImpact.company_id == incident.company_id,
+                IpDeadlineIncidentImpact.incident_id == incident.id,
+            )
+            .order_by(IpDeadlineIncidentImpact.assessed_at, IpDeadlineIncidentImpact.id)
+        ).all()
+    )
+    actions = list(
+        session.scalars(
+            select(IpDeadlineIncidentAction)
+            .where(
+                IpDeadlineIncidentAction.company_id == incident.company_id,
+                IpDeadlineIncidentAction.incident_id == incident.id,
+            )
+            .order_by(IpDeadlineIncidentAction.recorded_at, IpDeadlineIncidentAction.id)
+        ).all()
+    )
+    notification_decisions = list(
+        session.scalars(
+            select(IpDeadlineIncidentNotificationDecision)
+            .where(
+                IpDeadlineIncidentNotificationDecision.company_id == incident.company_id,
+                IpDeadlineIncidentNotificationDecision.incident_id == incident.id,
+            )
+            .order_by(
+                IpDeadlineIncidentNotificationDecision.decided_at,
+                IpDeadlineIncidentNotificationDecision.id,
+            )
+        ).all()
+    )
+    kill_switches = list(
+        session.scalars(
+            select(IpIncidentKillSwitch)
+            .where(
+                IpIncidentKillSwitch.company_id == incident.company_id,
+                IpIncidentKillSwitch.incident_id == incident.id,
+            )
+            .order_by(IpIncidentKillSwitch.feature_id)
+        ).all()
+    )
+    return IpDeadlineIncidentRecord.model_validate(incident).model_copy(
+        update={
+            "impacts": [IpDeadlineIncidentImpactRecord.model_validate(row) for row in impacts],
+            "actions": [IpDeadlineIncidentActionRecord.model_validate(row) for row in actions],
+            "notification_decisions": [
+                IpDeadlineIncidentNotificationDecisionRecord.model_validate(row)
+                for row in notification_decisions
+            ],
+            "kill_switches": [
+                IpIncidentKillSwitchRecord.model_validate(row) for row in kill_switches
+            ],
+        }
+    )
+
+
 def _serialize_docket(
     session: Session,
     docket: IpDocketRecord,
@@ -521,7 +597,7 @@ def _serialize_docket(
             IpEvidenceCandidateRecord.model_validate(row) for row in evidence_candidates
         ],
         deadline_coverages=[IpDeadlineCoverageRecord.model_validate(row) for row in coverages],
-        deadline_incidents=[IpDeadlineIncidentRecord.model_validate(row) for row in incidents],
+        deadline_incidents=[_serialize_deadline_incident(session, row) for row in incidents],
         title_interests=[IpTitleInterestRecord.model_validate(row) for row in interests],
         related_right_obligations=[
             IpRelatedRightObligationRecord.model_validate(row) for row in obligations
@@ -2305,6 +2381,52 @@ def add_ip_deadline_incident(
     for deadline_id in (payload.matter_deadline_id, payload.correction_deadline_id):
         if deadline_id:
             _deadline_for_docket(session, docket=docket, deadline_id=deadline_id)
+    kill_switch_features: list[str] = []
+    for feature_id in payload.kill_switch_features:
+        feature = IP_FEATURE_BY_ID.get(feature_id)
+        if feature is None or not feature.automated:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_incident_kill_switch_feature",
+                    "feature_id": feature_id,
+                },
+            )
+        existing_switch = session.scalar(
+            select(IpIncidentKillSwitch.id).where(
+                IpIncidentKillSwitch.company_id == context.company.id,
+                IpIncidentKillSwitch.feature_id == feature_id,
+                IpIncidentKillSwitch.status == "active",
+            )
+        )
+        if existing_switch is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "incident_kill_switch_already_active",
+                    "feature_id": feature_id,
+                },
+            )
+        kill_switch_features.append(feature_id)
+    evidence_snapshot = payload.evidence_snapshot.model_dump(mode="json")
+    preservation_manifest = _sha256_json(
+        {
+            "docket_id": docket.id,
+            "matter_deadline_id": payload.matter_deadline_id,
+            "severity": payload.severity,
+            "summary": payload.summary.strip(),
+            "impact": payload.impact,
+            "evidence_snapshot": evidence_snapshot,
+            "defect_scope": payload.defect_scope,
+        }
+    )
+    fingerprint_source = payload.defect_fingerprint or _canonical_json(
+        {
+            "summary": payload.summary.strip(),
+            "defect_scope": payload.defect_scope,
+            "source_refs": evidence_snapshot["source_refs"],
+        }
+    )
     incident = IpDeadlineIncident(
         company_id=context.company.id,
         docket_id=docket.id,
@@ -2312,12 +2434,59 @@ def add_ip_deadline_incident(
         severity=payload.severity,
         summary=payload.summary.strip(),
         impact_json=payload.impact,
+        evidence_snapshot_json=evidence_snapshot,
+        preservation_manifest_sha256=preservation_manifest,
+        defect_scope=payload.defect_scope,
+        defect_fingerprint_sha256=hashlib.sha256(
+            fingerprint_source.strip().encode("utf-8")
+        ).hexdigest(),
         containment=payload.containment,
         correction_deadline_id=payload.correction_deadline_id,
         status="contained" if payload.containment else "open",
+        created_by_membership_id=context.membership.id,
     )
     session.add(incident)
     session.flush()
+    now = _now()
+    for feature_id in kill_switch_features:
+        session.add(
+            IpIncidentKillSwitch(
+                company_id=context.company.id,
+                incident_id=incident.id,
+                feature_id=feature_id,
+                status="active",
+                reason=payload.summary.strip(),
+                activation_evidence_reference=payload.kill_switch_evidence_reference,
+                activated_by_membership_id=context.membership.id,
+                activated_at=now,
+            )
+        )
+    if kill_switch_features:
+        with session.no_autoflush:
+            configuration = session.scalar(
+                select(IpWorkspaceConfiguration)
+                .where(IpWorkspaceConfiguration.company_id == context.company.id)
+                .with_for_update()
+            )
+        if configuration is not None:
+            enabled_before = list(configuration.enabled_automations_json)
+            configuration.enabled_automations_json = [
+                feature_id
+                for feature_id in enabled_before
+                if feature_id not in kill_switch_features
+            ]
+            if configuration.enabled_automations_json != enabled_before:
+                configuration.version += 1
+                configuration.updated_by_membership_id = context.membership.id
+                configuration.updated_at = now
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "incident_kill_switch_already_active"},
+        ) from exc
     record_from_context(
         session,
         context,
@@ -2326,10 +2495,281 @@ def add_ip_deadline_incident(
         target_id=incident.id,
         matter_id=docket.matter_id,
         ip_docket_id=docket.id,
-        metadata={"severity": payload.severity, "status": incident.status},
+        metadata={
+            "severity": payload.severity,
+            "status": incident.status,
+            "defect_scope": payload.defect_scope,
+            "preservation_manifest_sha256": preservation_manifest,
+            "kill_switch_features": kill_switch_features,
+        },
     )
     session.commit()
     return _serialize_docket(session, docket, context=context)
+
+
+def _deadline_incident_or_404(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    incident_id: str,
+    for_update: bool = False,
+) -> IpDeadlineIncident:
+    statement = select(IpDeadlineIncident).where(
+        IpDeadlineIncident.id == incident_id,
+        IpDeadlineIncident.docket_id == docket.id,
+        IpDeadlineIncident.company_id == context.company.id,
+    )
+    if for_update:
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    incident = session.scalar(statement)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Deadline incident not found.")
+    return incident
+
+
+def _assert_incident_open(incident: IpDeadlineIncident) -> None:
+    if incident.status in {"disproved", "verified"}:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "deadline_incident_terminal", "status": incident.status},
+        )
+
+
+def _reference_sha256(reference: str) -> str:
+    return hashlib.sha256(reference.strip().encode("utf-8")).hexdigest()
+
+
+def record_ip_deadline_incident_impact_scan(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    incident_id: str,
+    payload: IpDeadlineIncidentImpactScanRequest,
+) -> IpDocketRecordResponse:
+    context = _lock_ip_writer_context(session, context=context, required_capability="ip:approve")
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
+    incident = _deadline_incident_or_404(
+        session,
+        context=context,
+        docket=docket,
+        incident_id=incident_id,
+        for_update=True,
+    )
+    _assert_incident_open(incident)
+    existing_keys = set(
+        session.execute(
+            select(
+                IpDeadlineIncidentImpact.record_type,
+                IpDeadlineIncidentImpact.record_reference_sha256,
+            ).where(
+                IpDeadlineIncidentImpact.company_id == context.company.id,
+                IpDeadlineIncidentImpact.incident_id == incident.id,
+            )
+        ).all()
+    )
+    batch_keys: set[tuple[str, str]] = set()
+    now = _now()
+    for item in payload.items:
+        key = (item.record_type.strip(), _reference_sha256(item.record_reference))
+        if key in existing_keys or key in batch_keys:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "incident_impact_evidence_already_recorded"},
+            )
+        batch_keys.add(key)
+        session.add(
+            IpDeadlineIncidentImpact(
+                company_id=context.company.id,
+                incident_id=incident.id,
+                record_type=key[0],
+                record_reference_sha256=key[1],
+                relationship=item.relationship.strip(),
+                assessment=item.assessment,
+                scan_method=item.scan_method.strip(),
+                evidence_reference=item.evidence_reference.strip(),
+                assessed_by_membership_id=context.membership.id,
+                assessed_at=now,
+            )
+        )
+    if payload.complete:
+        pending_existing = session.scalar(
+            select(func.count())
+            .select_from(IpDeadlineIncidentImpact)
+            .where(
+                IpDeadlineIncidentImpact.company_id == context.company.id,
+                IpDeadlineIncidentImpact.incident_id == incident.id,
+                IpDeadlineIncidentImpact.assessment == "pending",
+            )
+        )
+        if pending_existing or any(item.assessment == "pending" for item in payload.items):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "incident_impact_scan_has_pending_results"},
+            )
+        incident.impact_scan_completed_at = now
+        incident.impact_scan_completed_by_membership_id = context.membership.id
+        incident.status = "impact_assessed"
+        incident.version += 1
+    record_from_context(
+        session,
+        context,
+        action="ip_deadline_incident.impact_scan_recorded",
+        target_type="ip_deadline_incident",
+        target_id=incident.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={"item_count": len(payload.items), "complete": payload.complete},
+    )
+    session.commit()
+    return _serialize_docket(session, docket, context=context)
+
+
+def record_ip_deadline_incident_action(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    incident_id: str,
+    payload: IpDeadlineIncidentActionRequest,
+) -> IpDocketRecordResponse:
+    context = _lock_ip_writer_context(session, context=context, required_capability="ip:approve")
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
+    incident = _deadline_incident_or_404(
+        session,
+        context=context,
+        docket=docket,
+        incident_id=incident_id,
+        for_update=True,
+    )
+    _assert_incident_open(incident)
+    row = IpDeadlineIncidentAction(
+        company_id=context.company.id,
+        incident_id=incident.id,
+        action_type=payload.action_type,
+        action_status=payload.action_status,
+        action_reference=payload.action_reference.strip(),
+        details=payload.details.strip(),
+        evidence_reference=payload.evidence_reference.strip(),
+        recorded_by_membership_id=context.membership.id,
+        recorded_at=_now(),
+    )
+    session.add(row)
+    if payload.action_type == "containment" and payload.action_status == "completed":
+        incident.containment = payload.details.strip()
+        if incident.status == "open":
+            incident.status = "contained"
+        incident.version += 1
+    record_from_context(
+        session,
+        context,
+        action="ip_deadline_incident.action_recorded",
+        target_type="ip_deadline_incident",
+        target_id=incident.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={"action_type": payload.action_type, "action_status": payload.action_status},
+    )
+    session.commit()
+    return _serialize_docket(session, docket, context=context)
+
+
+def decide_ip_deadline_incident_notification(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    incident_id: str,
+    payload: IpDeadlineIncidentNotificationDecisionRequest,
+) -> IpDocketRecordResponse:
+    context = _lock_ip_writer_context(session, context=context, required_capability="ip:approve")
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
+    incident = _deadline_incident_or_404(
+        session,
+        context=context,
+        docket=docket,
+        incident_id=incident_id,
+        for_update=True,
+    )
+    _assert_incident_open(incident)
+    recipient_hash = _reference_sha256(payload.recipient_reference)
+    latest_version = session.scalar(
+        select(func.max(IpDeadlineIncidentNotificationDecision.decision_version)).where(
+            IpDeadlineIncidentNotificationDecision.company_id == context.company.id,
+            IpDeadlineIncidentNotificationDecision.incident_id == incident.id,
+            IpDeadlineIncidentNotificationDecision.recipient_type == payload.recipient_type,
+            IpDeadlineIncidentNotificationDecision.recipient_reference_sha256 == recipient_hash,
+        )
+    )
+    session.add(
+        IpDeadlineIncidentNotificationDecision(
+            company_id=context.company.id,
+            incident_id=incident.id,
+            recipient_type=payload.recipient_type,
+            recipient_reference_sha256=recipient_hash,
+            decision=payload.decision,
+            decision_version=int(latest_version or 0) + 1,
+            rationale=payload.rationale.strip(),
+            approval_evidence_reference=payload.approval_evidence_reference.strip(),
+            communication_reference=(
+                payload.communication_reference.strip()
+                if payload.communication_reference
+                else None
+            ),
+            decided_by_membership_id=context.membership.id,
+            decided_at=_now(),
+        )
+    )
+    record_from_context(
+        session,
+        context,
+        action="ip_deadline_incident.notification_decided",
+        target_type="ip_deadline_incident",
+        target_id=incident.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={"recipient_type": payload.recipient_type, "decision": payload.decision},
+    )
+    session.commit()
+    return _serialize_docket(session, docket, context=context)
+
+
+def _latest_incident_notification_decisions(
+    session: Session, *, company_id: str, incident_id: str
+) -> list[IpDeadlineIncidentNotificationDecision]:
+    rows = list(
+        session.scalars(
+            select(IpDeadlineIncidentNotificationDecision)
+            .where(
+                IpDeadlineIncidentNotificationDecision.company_id == company_id,
+                IpDeadlineIncidentNotificationDecision.incident_id == incident_id,
+            )
+            .order_by(IpDeadlineIncidentNotificationDecision.decision_version.desc())
+        ).all()
+    )
+    latest: dict[tuple[str, str], IpDeadlineIncidentNotificationDecision] = {}
+    for row in rows:
+        latest.setdefault((row.recipient_type, row.recipient_reference_sha256), row)
+    return list(latest.values())
 
 
 def verify_ip_deadline_incident(
@@ -2352,35 +2792,233 @@ def verify_ip_deadline_incident(
         for_update=True,
         required_capability="ip:approve",
     )
-    incident = session.scalar(
-        select(IpDeadlineIncident)
-        .where(
-            IpDeadlineIncident.id == incident_id,
-            IpDeadlineIncident.docket_id == docket.id,
-            IpDeadlineIncident.company_id == context.company.id,
-        )
-        .with_for_update()
+    incident = _deadline_incident_or_404(
+        session,
+        context=context,
+        docket=docket,
+        incident_id=incident_id,
+        for_update=True,
     )
-    if incident is None:
-        raise HTTPException(status_code=404, detail="Deadline incident not found.")
-    if not incident.containment:
-        raise HTTPException(status_code=409, detail="Containment is required before verification.")
-    incident.status = "verified"
+    _assert_incident_open(incident)
+    if incident.impact_scan_completed_at is None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "incident_impact_scan_incomplete"},
+        )
+    latest_decisions = _latest_incident_notification_decisions(
+        session, company_id=context.company.id, incident_id=incident.id
+    )
+    required_recipient_types = {"client", "insurer", "regulator", "court"}
+    recorded_recipient_types = {row.recipient_type for row in latest_decisions}
+    if not required_recipient_types.issubset(recorded_recipient_types):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "incident_notification_assessment_incomplete",
+                "missing_recipient_types": sorted(
+                    required_recipient_types - recorded_recipient_types
+                ),
+            },
+        )
+    if any(row.decision == "pending" for row in latest_decisions):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "incident_notification_decision_pending"},
+        )
+    if payload.outcome == "verified":
+        completed_action_types = set(
+            session.scalars(
+                select(IpDeadlineIncidentAction.action_type).where(
+                    IpDeadlineIncidentAction.company_id == context.company.id,
+                    IpDeadlineIncidentAction.incident_id == incident.id,
+                    IpDeadlineIncidentAction.action_status == "completed",
+                )
+            ).all()
+        )
+        required_action_types = {"containment", "corrective_task", "prevention"}
+        if not required_action_types.issubset(completed_action_types):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "incident_corrective_actions_incomplete",
+                    "missing_action_types": sorted(
+                        required_action_types - completed_action_types
+                    ),
+                },
+            )
+    now = _now()
+    incident.status = payload.outcome
     incident.corrective_action = payload.corrective_action.strip()
-    incident.verified_at = _now()
-    incident.verified_by_membership_id = context.membership.id
+    incident.root_cause = payload.root_cause.strip()
+    incident.preventive_action = payload.preventive_action.strip()
+    incident.prevention_verified_at = now
+    incident.resolution_evidence_reference = payload.resolution_evidence_reference.strip()
+    incident.resolved_at = now
+    incident.resolved_by_membership_id = context.membership.id
+    if payload.outcome == "verified":
+        incident.verified_at = now
+        incident.verified_by_membership_id = context.membership.id
+    incident.version += 1
     record_from_context(
         session,
         context,
-        action="ip_deadline_incident.verified",
+        action=f"ip_deadline_incident.{payload.outcome}",
         target_type="ip_deadline_incident",
         target_id=incident.id,
         matter_id=docket.matter_id,
         ip_docket_id=docket.id,
-        metadata={"severity": incident.severity},
+        metadata={
+            "severity": incident.severity,
+            "outcome": payload.outcome,
+            "resolution_evidence_reference": payload.resolution_evidence_reference,
+        },
     )
     session.commit()
     return _serialize_docket(session, docket, context=context)
+
+
+def release_ip_incident_kill_switch(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    incident_id: str,
+    feature_id: str,
+    payload: IpIncidentKillSwitchReleaseRequest,
+) -> IpDocketRecordResponse:
+    context = _lock_ip_writer_context(session, context=context, required_capability="ip:approve")
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
+    incident = _deadline_incident_or_404(
+        session,
+        context=context,
+        docket=docket,
+        incident_id=incident_id,
+        for_update=True,
+    )
+    if incident.status not in {"disproved", "verified"} or not incident.prevention_verified_at:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "incident_kill_switch_release_gate_incomplete"},
+        )
+    kill_switch = session.scalar(
+        select(IpIncidentKillSwitch)
+        .where(
+            IpIncidentKillSwitch.company_id == context.company.id,
+            IpIncidentKillSwitch.incident_id == incident.id,
+            IpIncidentKillSwitch.feature_id == feature_id,
+        )
+        .with_for_update()
+    )
+    if kill_switch is None:
+        raise HTTPException(status_code=404, detail="Incident kill switch not found.")
+    if kill_switch.status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "incident_kill_switch_already_released"},
+        )
+    if kill_switch.version != payload.expected_version:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "incident_kill_switch_version_conflict"},
+        )
+    kill_switch.status = "released"
+    kill_switch.release_reason = payload.release_reason.strip()
+    kill_switch.release_evidence_reference = payload.release_evidence_reference.strip()
+    kill_switch.released_by_membership_id = context.membership.id
+    kill_switch.released_at = _now()
+    kill_switch.version += 1
+    record_from_context(
+        session,
+        context,
+        action="ip_deadline_incident.kill_switch_released",
+        target_type="ip_deadline_incident",
+        target_id=incident.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={"feature_id": feature_id, "version": kill_switch.version},
+    )
+    session.commit()
+    return _serialize_docket(session, docket, context=context)
+
+
+def retain_ip_deadline_incident(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    incident_id: str,
+) -> None:
+    context = _lock_ip_writer_context(session, context=context, required_capability="ip:approve")
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:approve",
+    )
+    incident = _deadline_incident_or_404(
+        session,
+        context=context,
+        docket=docket,
+        incident_id=incident_id,
+        for_update=True,
+    )
+    hold_id = resolve_hold_for_target(
+        session,
+        company_id=context.company.id,
+        data_class_id="ip_deadline_incidents",
+        target_type="ip_deadline_incident",
+        target_reference_hash=_reference_sha256(incident.id),
+    )
+    if hold_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "legal_hold_blocks_incident_deletion", "legal_hold_id": hold_id},
+        )
+    raise HTTPException(
+        status_code=409,
+        detail={"code": "incident_evidence_retained_by_policy"},
+    )
+
+
+def active_ip_incident_kill_switches(
+    session: Session, *, company_id: str
+) -> dict[str, str]:
+    rows = session.execute(
+        select(IpIncidentKillSwitch.feature_id, IpIncidentKillSwitch.incident_id).where(
+            IpIncidentKillSwitch.company_id == company_id,
+            IpIncidentKillSwitch.status == "active",
+        )
+    ).all()
+    return {feature_id: incident_id for feature_id, incident_id in rows}
+
+
+def assert_no_active_ip_incident_kill_switch(
+    session: Session, *, company_id: str, feature_id: str
+) -> None:
+    incident_id = session.scalar(
+        select(IpIncidentKillSwitch.incident_id).where(
+            IpIncidentKillSwitch.company_id == company_id,
+            IpIncidentKillSwitch.feature_id == feature_id,
+            IpIncidentKillSwitch.status == "active",
+        )
+    )
+    if incident_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ip_feature_incident_kill_switch",
+                "reason": "incident_kill_switch",
+                "feature_id": feature_id,
+                "incident_id": incident_id,
+            },
+        )
 
 
 def add_ip_title_interest(
@@ -2984,6 +3622,7 @@ def ip_docket_control_report(session: Session, *, context: SessionContext) -> Ip
 
 
 __all__ = [
+    "active_ip_incident_kill_switches",
     "list_ip_assigned_coverage",
     "bulk_acknowledge_ip_coverage",
     "save_ip_docket_queue",
@@ -3000,12 +3639,17 @@ __all__ = [
     "bulk_reassign_ip_deadline_coverages",
     "complete_ip_related_right_obligation",
     "create_ip_docket",
+    "decide_ip_deadline_incident_notification",
     "discover_ip_evidence_candidates",
     "get_ip_docket",
     "ip_docket_control_report",
     "list_ip_dockets",
     "reconcile_ip_cost_items",
     "reassign_ip_deadline_coverage",
+    "record_ip_deadline_incident_action",
+    "record_ip_deadline_incident_impact_scan",
+    "release_ip_incident_kill_switch",
+    "retain_ip_deadline_incident",
     "review_ip_evidence_candidate",
     "verify_ip_deadline_incident",
 ]
@@ -3041,7 +3685,7 @@ def _control_exceptions(
                     IpControlExceptionRecord(docket_id=docket.id, kind="unprojected_calendar")
                 )
         for incident in docket.deadline_incidents:
-            if incident.status != "verified":
+            if incident.status not in {"disproved", "verified"}:
                 found.append(IpControlExceptionRecord(docket_id=docket.id, kind="open_incident"))
     return found
 

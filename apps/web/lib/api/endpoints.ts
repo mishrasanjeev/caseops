@@ -8008,6 +8008,74 @@ export type IpTrademarkParticularVersion = {
   created_at: string;
 };
 
+export type IpDeadlineIncident = {
+  id: string;
+  matter_deadline_id: string | null;
+  severity: "low" | "medium" | "high" | "critical";
+  summary: string;
+  impact_json: Record<string, unknown>;
+  evidence_snapshot_json: Record<string, string[]>;
+  preservation_manifest_sha256: string;
+  defect_scope: "record_specific" | "shared_rule" | "shared_source" | "platform_wide";
+  defect_fingerprint_sha256: string | null;
+  containment: string | null;
+  correction_deadline_id: string | null;
+  status: "open" | "contained" | "impact_assessed" | "disproved" | "verified";
+  impact_scan_completed_at: string | null;
+  corrective_action: string | null;
+  root_cause: string | null;
+  preventive_action: string | null;
+  prevention_verified_at: string | null;
+  resolution_evidence_reference: string | null;
+  resolved_at: string | null;
+  verified_at: string | null;
+  version: number;
+  impacts: Array<{
+    id: string;
+    record_type: string;
+    record_reference_sha256: string;
+    relationship: string;
+    assessment: "affected" | "not_affected" | "pending";
+    scan_method: string;
+    evidence_reference: string;
+    assessed_by_membership_id: string;
+    assessed_at: string;
+  }>;
+  actions: Array<{
+    id: string;
+    action_type: string;
+    action_status: "planned" | "completed" | "not_available";
+    action_reference: string;
+    details: string;
+    evidence_reference: string;
+    recorded_by_membership_id: string;
+    recorded_at: string;
+  }>;
+  notification_decisions: Array<{
+    id: string;
+    recipient_type: "client" | "insurer" | "regulator" | "court" | "external_counsel";
+    recipient_reference_sha256: string;
+    decision: "pending" | "notify" | "do_not_notify" | "not_applicable";
+    decision_version: number;
+    rationale: string;
+    approval_evidence_reference: string;
+    communication_reference: string | null;
+    decided_by_membership_id: string;
+    decided_at: string;
+  }>;
+  kill_switches: Array<{
+    id: string;
+    feature_id: string;
+    status: "active" | "released";
+    reason: string;
+    activation_evidence_reference: string;
+    release_reason: string | null;
+    release_evidence_reference: string | null;
+    version: number;
+  }>;
+  created_at: string;
+};
+
 export type IpDocket = {
   id: string;
   company_id: string;
@@ -8040,7 +8108,7 @@ export type IpDocket = {
     reassignment_version: number;
     updated_at: string;
   }>;
-  deadline_incidents: Array<Record<string, unknown>>;
+  deadline_incidents: IpDeadlineIncident[];
   title_interests: Array<{
     id: string;
     interest_type: string;
@@ -8355,7 +8423,8 @@ export type IpFeatureReadiness = {
     | "rollout_expired"
     | "workspace_not_configured"
     | "tenant_disabled"
-    | "readiness_test_failed";
+    | "readiness_test_failed"
+    | "incident_kill_switch";
   owner: string;
   required_capabilities: string[];
   missing_capabilities: string[];
@@ -8365,6 +8434,7 @@ export type IpFeatureReadiness = {
   rollout_enabled: boolean;
   rollout_expires_at: string | null;
   manual_fallback_feature_id: string | null;
+  blocked_by_incident_id: string | null;
 };
 
 export type IpWorkspaceConfiguration = {
@@ -9436,6 +9506,173 @@ export async function createIpDocket(input: {
       },
     },
   });
+}
+
+export async function createIpDeadlineIncident(input: {
+  docketId: string;
+  severity: "low" | "medium" | "high" | "critical";
+  summary: string;
+  defectScope: "record_specific" | "shared_rule" | "shared_source" | "platform_wide";
+  defectFingerprint: string;
+  sourceReference: string;
+  killSwitchFeatures: string[];
+  killSwitchEvidenceReference: string | null;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadline-incidents`,
+    {
+      method: "POST",
+      body: {
+        severity: input.severity,
+        summary: input.summary,
+        impact: { affected_rights: [], assessment: "pending_human_review" },
+        defect_scope: input.defectScope,
+        defect_fingerprint: input.defectFingerprint,
+        evidence_snapshot: {
+          source_refs: [input.sourceReference],
+          calculation_version_refs: [],
+          rule_version_refs: [],
+          calendar_version_refs: [],
+          message_refs: [],
+          provider_event_refs: [],
+          audit_refs: [],
+        },
+        kill_switch_features: input.killSwitchFeatures,
+        kill_switch_evidence_reference: input.killSwitchEvidenceReference,
+      },
+    },
+  );
+}
+
+export async function recordIpDeadlineIncidentAction(input: {
+  docketId: string;
+  incidentId: string;
+  actionType: "containment" | "corrective_task" | "filing" | "external_advice" | "prevention";
+  actionStatus: "planned" | "completed" | "not_available";
+  actionReference: string;
+  details: string;
+  evidenceReference: string;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadline-incidents/`
+      + `${encodeURIComponent(input.incidentId)}/actions`,
+    {
+      method: "POST",
+      body: {
+        action_type: input.actionType,
+        action_status: input.actionStatus,
+        action_reference: input.actionReference,
+        details: input.details,
+        evidence_reference: input.evidenceReference,
+      },
+    },
+  );
+}
+
+export async function recordIpDeadlineIncidentImpact(input: {
+  docketId: string;
+  incidentId: string;
+  recordType: string;
+  recordReference: string;
+  relationship: string;
+  assessment: "affected" | "not_affected" | "pending";
+  scanMethod: string;
+  evidenceReference: string;
+  complete: boolean;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadline-incidents/`
+      + `${encodeURIComponent(input.incidentId)}/impact-scan`,
+    {
+      method: "POST",
+      body: {
+        complete: input.complete,
+        items: [{
+          record_type: input.recordType,
+          record_reference: input.recordReference,
+          relationship: input.relationship,
+          assessment: input.assessment,
+          scan_method: input.scanMethod,
+          evidence_reference: input.evidenceReference,
+        }],
+      },
+    },
+  );
+}
+
+export async function decideIpDeadlineIncidentNotification(input: {
+  docketId: string;
+  incidentId: string;
+  recipientType: "client" | "insurer" | "regulator" | "court" | "external_counsel";
+  recipientReference: string;
+  decision: "pending" | "notify" | "do_not_notify" | "not_applicable";
+  rationale: string;
+  approvalEvidenceReference: string;
+  communicationReference: string | null;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadline-incidents/`
+      + `${encodeURIComponent(input.incidentId)}/notification-decisions`,
+    {
+      method: "POST",
+      body: {
+        recipient_type: input.recipientType,
+        recipient_reference: input.recipientReference,
+        decision: input.decision,
+        rationale: input.rationale,
+        approval_evidence_reference: input.approvalEvidenceReference,
+        communication_reference: input.communicationReference,
+      },
+    },
+  );
+}
+
+export async function resolveIpDeadlineIncident(input: {
+  docketId: string;
+  incidentId: string;
+  outcome: "verified" | "disproved";
+  correctiveAction: string;
+  rootCause: string;
+  preventiveAction: string;
+  resolutionEvidenceReference: string;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadline-incidents/`
+      + `${encodeURIComponent(input.incidentId)}/verify`,
+    {
+      method: "POST",
+      body: {
+        outcome: input.outcome,
+        corrective_action: input.correctiveAction,
+        root_cause: input.rootCause,
+        preventive_action: input.preventiveAction,
+        resolution_evidence_reference: input.resolutionEvidenceReference,
+      },
+    },
+  );
+}
+
+export async function releaseIpIncidentKillSwitch(input: {
+  docketId: string;
+  incidentId: string;
+  featureId: string;
+  expectedVersion: number;
+  releaseReason: string;
+  releaseEvidenceReference: string;
+}): Promise<IpDocket> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/deadline-incidents/`
+      + `${encodeURIComponent(input.incidentId)}/kill-switches/`
+      + `${encodeURIComponent(input.featureId)}/release`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        release_reason: input.releaseReason,
+        release_evidence_reference: input.releaseEvidenceReference,
+      },
+    },
+  );
 }
 
 export type IpAccessSubjectType = "membership" | "team";
