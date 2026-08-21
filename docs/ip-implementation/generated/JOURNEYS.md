@@ -65,7 +65,7 @@ Generated; do not edit.
 | UJ-59 | Produce and sign off a daily docket control report | 4 | IPLF-038B, IPLF-039C, IPLF-039H | 6 | 2 | in_progress | not_run | false |
 | UJ-60 | Qualify and launch a non-trademark IP domain | 5 | IPLF-079B | 5 | 0 | not_started | not_run | false |
 | UJ-61 | Reconcile chain of title and related-right family | 3 | IPLF-039E, IPLF-039H, IPLF-058B | 3 | 2 | in_progress | not_run | false |
-| UJ-62 | Synchronize an external calendar without surrendering docket authority | 6 | IPLF-025B, IPLF-035B, IPLF-039C, IPLF-039H | 7 | 2 | in_progress | not_run | false |
+| UJ-62 | Synchronize an external calendar without surrendering docket authority | 6 | IPLF-025B, IPLF-035B, IPLF-039C, IPLF-039H | 10 | 3 | in_progress | not_run | false |
 | UJ-63 | Grant, use, expire, and review emergency access | 5 | IPLF-073B | 5 | 0 | not_started | not_run | false |
 | UJ-64 | Place legal hold, export, and purge governed tenant data | 6 | IPLF-071B | 6 | 0 | not_started | not_run | false |
 | UJ-65 | Restore CaseOps and resume legal operations without duplicate effects | 6 | IPLF-028B, IPLF-072B | 6 | 0 | not_started | not_run | false |

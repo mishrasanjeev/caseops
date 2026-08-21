@@ -7434,3 +7434,438 @@ def test_blank_invoice_number_is_rejected_on_postgres(pg_engine):
                 _seed_invoice(session, company_id, matter_id, blank)
                 session.commit()
             session.rollback()
+
+
+@pytest.mark.postgres
+def test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres(pg_engine):
+    """The drift-review row must have one exact, accountable observation.
+
+    SQLite exercises the authorization flow; this real-Postgres check proves
+    the migration's composite fingerprint uniqueness and evidence-state check
+    survive the production dialect.  A duplicate observation cannot create a
+    second review task, and a terminal decision cannot omit its human evidence.
+    """
+
+    from caseops_api.db.models import (
+        CalendarEventSync,
+        CalendarProjectionReconciliationCandidate,
+        UserCalendarConnection,
+    )
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        membership_id = _seed_membership(session, company_id, role="admin")
+        connection = UserCalendarConnection(
+            company_id=company_id,
+            membership_id=membership_id,
+            provider="google_calendar",
+            status="connected",
+        )
+        session.add(connection)
+        session.flush()
+        sync = CalendarEventSync(
+            company_id=company_id,
+            calendar_connection_id=connection.id,
+            source_type="matter_deadline",
+            source_id=str(uuid4()),
+            provider_event_id="pg-reconciliation-event",
+            sync_status="synced",
+        )
+        session.add(sync)
+        session.flush()
+        connection_id = connection.id
+        sync_id = sync.id
+        source_id = sync.source_id
+        candidate = CalendarProjectionReconciliationCandidate(
+            company_id=company_id,
+            calendar_event_sync_id=sync_id,
+            calendar_connection_id=connection_id,
+            source_type=sync.source_type,
+            source_id=source_id,
+            drift_status="moved",
+            snapshot_schema_version=1,
+            expected_snapshot_json={"occurs_on": "2099-01-10"},
+            observed_snapshot_json={"start_date": "2099-01-11"},
+            snapshot_sha256="a" * 64,
+            status="pending",
+            detected_by_membership_id=membership_id,
+        )
+        session.add(candidate)
+        session.commit()
+        candidate_id = candidate.id
+
+    with Session(pg_engine) as session:
+        duplicate = CalendarProjectionReconciliationCandidate(
+            company_id=company_id,
+            calendar_event_sync_id=sync_id,
+            calendar_connection_id=connection_id,
+            source_type="matter_deadline",
+            source_id=source_id,
+            drift_status="moved",
+            snapshot_schema_version=1,
+            expected_snapshot_json={"occurs_on": "2099-01-10"},
+            observed_snapshot_json={"start_date": "2099-01-11"},
+            snapshot_sha256="a" * 64,
+            status="pending",
+        )
+        session.add(duplicate)
+        with pytest.raises(IntegrityError) as duplicate_error:
+            session.commit()
+        assert "uq_calendar_projection_reconciliation_snapshot" in str(
+            duplicate_error.value
+        )
+        session.rollback()
+
+        incomplete_decision = CalendarProjectionReconciliationCandidate(
+            company_id=company_id,
+            calendar_event_sync_id=sync_id,
+            calendar_connection_id=connection_id,
+            source_type="matter_deadline",
+            source_id=source_id,
+            drift_status="missing",
+            snapshot_schema_version=1,
+            expected_snapshot_json={"occurs_on": "2099-01-10"},
+            observed_snapshot_json={"event_present": False},
+            snapshot_sha256="b" * 64,
+            status="accepted",
+        )
+        session.add(incomplete_decision)
+        with pytest.raises(IntegrityError) as evidence_error:
+            session.commit()
+        assert "ck_calendar_projection_reconciliation_decision_evidence" in str(
+            evidence_error.value
+        )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError) as incomplete_claim_error:
+            session.execute(
+                text(
+                    "UPDATE calendar_event_syncs "
+                    "SET reconciliation_candidate_id = :candidate_id WHERE id = :sync_id"
+                ),
+                {"candidate_id": candidate_id, "sync_id": sync_id},
+            )
+            session.commit()
+        assert "ck_calendar_event_sync_reconciliation_claim_complete" in str(
+            incomplete_claim_error.value
+        )
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError, match="snapshot evidence is immutable"):
+            session.execute(
+                text(
+                    "UPDATE calendar_projection_reconciliation_candidates "
+                    "SET observed_snapshot_json = CAST(:payload AS json) WHERE id = :id"
+                ),
+                {"payload": '{"tampered": true}', "id": candidate_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        session.execute(
+            text(
+                "UPDATE calendar_projection_reconciliation_candidates "
+                "SET status = 'accepted', decided_by_membership_id = :actor, "
+                "decision_evidence_reference = :evidence, decided_at = :decided "
+                "WHERE id = :id"
+            ),
+            {
+                "actor": membership_id,
+                "evidence": "postgres:calendar-review",
+                "decided": datetime.now(UTC),
+                "id": candidate_id,
+            },
+        )
+        session.commit()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError, match="decision is terminal"):
+            session.execute(
+                text(
+                    "UPDATE calendar_projection_reconciliation_candidates "
+                    "SET status = 'rejected' WHERE id = :id"
+                ),
+                {"id": candidate_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(DBAPIError):
+            session.execute(
+                text("DELETE FROM calendar_event_syncs WHERE id = :id"),
+                {"id": sync_id},
+            )
+            session.commit()
+        session.rollback()
+
+
+@pytest.mark.postgres
+def test_uj59_control_review_evidence_is_immutable_and_tenant_correlated_on_postgres(
+    pg_engine,
+):
+    """UJ-59 evidence survives direct SQL and cross-tenant mutation attempts."""
+
+    from caseops_api.db.models import (
+        IpControlReviewExceptionDecision,
+        IpControlReviewSampleEvidence,
+        IpControlReviewSignature,
+        IpDocketControlReview,
+    )
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        preparer_id = _seed_membership(session, company_id, role="admin")
+        reviewer_id = _seed_membership(session, company_id, role="admin")
+        other_company_id = _seed_company(session)
+        other_membership_id = _seed_membership(session, other_company_id, role="admin")
+        review = IpDocketControlReview(
+            company_id=company_id,
+            generated_at=now,
+            filters_json={},
+            freshness_json={"stale_sources": [], "failed_queries": []},
+            completeness_status="complete",
+            incompleteness_reasons_json=[],
+            mandatory_exception_ids_json=[],
+            query_version="ip-docket-control-v1",
+            snapshot_schema_version=2,
+            report_snapshot_json={"schema_version": 2},
+            manifest_sha256="a" * 64,
+            review_policy_json={"policy_version": "daily-docket-review-v1"},
+            required_signature_count=2,
+            required_sample_size=1,
+            delta_json={},
+            version=1,
+            created_by_membership_id=preparer_id,
+        )
+        session.add(review)
+        session.flush()
+        review_id = review.id
+
+        decision = IpControlReviewExceptionDecision(
+            company_id=company_id,
+            review_id=review_id,
+            docket_id=str(uuid4()),
+            exception_kind="uncovered",
+            disposition="annotated",
+            annotation="Controlled follow-up recorded.",
+            evidence_reference="postgres:decision-evidence",
+            decided_by_membership_id=preparer_id,
+            decided_at=now,
+        )
+        sample = IpControlReviewSampleEvidence(
+            company_id=company_id,
+            review_id=review_id,
+            docket_id=str(uuid4()),
+            reviewer_membership_id=reviewer_id,
+            source_evidence_reference="postgres:source",
+            calculation_evidence_reference="postgres:calculation",
+            coverage_evidence_reference="postgres:coverage",
+            sampled_at=now,
+        )
+        signature = IpControlReviewSignature(
+            company_id=company_id,
+            review_id=review_id,
+            signer_membership_id=preparer_id,
+            signer_role="preparer",
+            signer_label_snapshot="Postgres Preparer",
+            attestation="Prepared and checked the daily docket.",
+            manifest_sha256=review.manifest_sha256,
+            sequence=1,
+            signed_at=now,
+        )
+        session.add_all([decision, sample, signature])
+        session.commit()
+        decision_id = decision.id
+        sample_id = sample.id
+        signature_id = signature.id
+
+    mutation_attempts = [
+        (
+            "UPDATE ip_docket_control_reviews SET manifest_sha256 = :value WHERE id = :id",
+            {"value": "b" * 64, "id": review_id},
+        ),
+        (
+            "UPDATE ip_control_review_exception_decisions SET annotation = :value WHERE id = :id",
+            {"value": "rewritten", "id": decision_id},
+        ),
+        (
+            "DELETE FROM ip_control_review_sample_evidence WHERE id = :id",
+            {"id": sample_id},
+        ),
+        (
+            "UPDATE ip_control_review_signatures SET attestation = :value WHERE id = :id",
+            {"value": "rewritten", "id": signature_id},
+        ),
+    ]
+    for statement, parameters in mutation_attempts:
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError, match="append-only"):
+                session.execute(text(statement), parameters)
+                session.commit()
+            session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.add(
+                IpControlReviewSignature(
+                    company_id=company_id,
+                    review_id=review_id,
+                    signer_membership_id=other_membership_id,
+                    signer_role="reviewer",
+                    signer_label_snapshot="Wrong Tenant Reviewer",
+                    attestation="This actor belongs to another tenant.",
+                    manifest_sha256="a" * 64,
+                    sequence=2,
+                    signed_at=now,
+                )
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError) as manifest_mismatch:
+            session.add(
+                IpControlReviewSignature(
+                    company_id=company_id,
+                    review_id=review_id,
+                    signer_membership_id=reviewer_id,
+                    signer_role="reviewer",
+                    signer_label_snapshot="Postgres Reviewer",
+                    attestation="The signature must bind to the frozen manifest.",
+                    manifest_sha256="f" * 64,
+                    sequence=2,
+                    signed_at=now,
+                )
+            )
+            session.commit()
+        assert "fk_ip_control_signature_manifest" in str(manifest_mismatch.value)
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.execute(
+                text(
+                    "UPDATE ip_docket_control_reviews "
+                    "SET required_signature_count = 3 WHERE id = :id"
+                ),
+                {"id": review_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.execute(
+                text("DELETE FROM ip_docket_control_reviews WHERE id = :id"),
+                {"id": review_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.get(IpDocketControlReview, review_id) is not None
+        assert session.get(IpControlReviewExceptionDecision, decision_id) is not None
+        assert session.get(IpControlReviewSampleEvidence, sample_id) is not None
+        assert session.get(IpControlReviewSignature, signature_id) is not None
+
+
+@pytest.mark.postgres
+def test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on_postgres(
+    pg_engine,
+):
+    from caseops_api.db.models import (
+        IpDeadlineIncident,
+        IpDeadlineIncidentImpact,
+    )
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        fixture = _seed_ip_coverage_lifecycle_fixture(session)
+        other_company_id = _seed_company(session)
+        other_actor_id = _seed_membership(session, other_company_id)
+        incident = IpDeadlineIncident(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            matter_deadline_id=fixture["deadline_id"],
+            severity="critical",
+            summary="PostgreSQL immutable incident evidence",
+            impact_json={"affected_rights": ["opaque-right"]},
+            evidence_snapshot_json={"rule_version_refs": ["rule:v7"]},
+            preservation_manifest_sha256="a" * 64,
+            defect_scope="shared_rule",
+            defect_fingerprint_sha256="b" * 64,
+            status="open",
+            created_by_membership_id=fixture["owner_id"],
+            created_at=now,
+        )
+        session.add(incident)
+        session.flush()
+        impact = IpDeadlineIncidentImpact(
+            company_id=fixture["company_id"],
+            incident_id=incident.id,
+            record_type="trademark_application",
+            record_reference_sha256="c" * 64,
+            relationship="same defective rule",
+            assessment="affected",
+            scan_method="fingerprint scan",
+            evidence_reference="postgres:impact:1",
+            assessed_by_membership_id=fixture["owner_id"],
+            assessed_at=now,
+        )
+        session.add(impact)
+        session.commit()
+        incident_id = incident.id
+        impact_id = impact.id
+
+    attempts = [
+        (
+            "UPDATE ip_deadline_incidents SET summary = 'rewritten' WHERE id = :id",
+            {"id": incident_id},
+            "discovery evidence is immutable",
+        ),
+        (
+            "DELETE FROM ip_deadline_incidents WHERE id = :id",
+            {"id": incident_id},
+            "evidence is retained",
+        ),
+        (
+            "UPDATE ip_deadline_incident_impacts SET assessment = 'not_affected' "
+            "WHERE id = :id",
+            {"id": impact_id},
+            "append-only",
+        ),
+    ]
+    for statement, parameters, message in attempts:
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError, match=message):
+                session.execute(text(statement), parameters)
+                session.commit()
+            session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.add(
+                IpDeadlineIncidentImpact(
+                    company_id=fixture["company_id"],
+                    incident_id=incident_id,
+                    record_type="trademark_application",
+                    record_reference_sha256="d" * 64,
+                    relationship="cross-tenant actor attempt",
+                    assessment="pending",
+                    scan_method="invalid actor test",
+                    evidence_reference="postgres:impact:cross-tenant",
+                    assessed_by_membership_id=other_actor_id,
+                    assessed_at=now,
+                )
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.get(IpDeadlineIncident, incident_id) is not None
+        assert session.get(IpDeadlineIncidentImpact, impact_id) is not None

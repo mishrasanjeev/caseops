@@ -13,9 +13,9 @@ import type { IpControlReview } from "@/lib/api/endpoints";
  * appear. The `manifest_sha256` is printed so a filed copy can be checked back
  * against the server's record.
  *
- * The document deliberately carries **no record titles or mark names** — only
- * identifiers, counts and kinds — so a printout left on a desk does not
- * disclose privileged content.
+ * Record names remain omitted. Decision notes and evidence references are
+ * included because they are required review evidence, so the finished file is
+ * explicitly treated as confidential firm material.
  */
 
 const EXCEPTION_KIND: Record<string, string> = {
@@ -67,8 +67,20 @@ export function buildControlReviewManifest(review: IpControlReview): string {
     ["Ready", String(review.report.ready_count)],
     ["Uncovered deadlines", String(review.report.uncovered_deadline_count)],
     ["Open incidents", String(review.report.open_incident_count)],
-    ["Not projected to calendar", String(review.report.unprojected_calendar_count)],
+    [
+      "Not projected to calendar",
+      String(review.report.unprojected_calendar_count),
+    ],
     ["Inactive coverage", String(review.report.inactive_coverage_count)],
+    ["Review policy", review.review_policy.policy_version],
+    [
+      "Required signatures",
+      String(review.review_policy.required_signature_count),
+    ],
+    [
+      "Required reviewer sample",
+      String(review.review_policy.required_sample_size),
+    ],
     ["Manifest SHA-256", review.manifest_sha256],
   ];
 
@@ -103,6 +115,60 @@ export function buildControlReviewManifest(review: IpControlReview): string {
         .join("")}</ul></section>`
     : "<section><h2>Included records</h2><p>None visible at generation.</p></section>";
 
+  const decisions = review.exception_decisions.length
+    ? `<section><h2>Exception decisions (${review.exception_decisions.length})</h2><ul>${review.exception_decisions
+        .map(
+          (decision) =>
+            `<li>record ${escapeHtml(decision.docket_id)} · ${escapeHtml(
+              EXCEPTION_KIND[decision.exception_kind] ??
+                decision.exception_kind,
+            )} · ${escapeHtml(decision.disposition)} · ${escapeHtml(
+              decision.annotation,
+            )} · evidence ${escapeHtml(decision.evidence_reference)} · ${escapeHtml(
+              decision.decided_at,
+            )}</li>`,
+        )
+        .join("")}</ul></section>`
+    : "<section><h2>Exception decisions</h2><p>None recorded.</p></section>";
+
+  const samples = review.reviewer_samples.length
+    ? `<section><h2>Independent reviewer samples (${review.reviewer_samples.length})</h2><ul>${review.reviewer_samples
+        .map(
+          (sample) =>
+            `<li>record ${escapeHtml(sample.docket_id)} · source ${escapeHtml(
+              sample.source_evidence_reference,
+            )} · calculation ${escapeHtml(
+              sample.calculation_evidence_reference,
+            )} · coverage ${escapeHtml(sample.coverage_evidence_reference)} · ${escapeHtml(
+              sample.sampled_at,
+            )}</li>`,
+        )
+        .join("")}</ul></section>`
+    : "<section><h2>Independent reviewer samples</h2><p>None recorded.</p></section>";
+
+  const signatures = review.signatures.length
+    ? `<section><h2>Signatures (${review.signatures.length}/${review.review_policy.required_signature_count})</h2><ol>${review.signatures
+        .map(
+          (signature) =>
+            `<li>${escapeHtml(signature.signer_label_snapshot)} · ${escapeHtml(
+              signature.signer_role,
+            )} · ${escapeHtml(signature.signed_at)} · attestation ${escapeHtml(
+              signature.attestation,
+            )}</li>`,
+        )
+        .join("")}</ol></section>`
+    : `<section><h2>Signatures (0/${review.review_policy.required_signature_count})</h2><p>None recorded.</p></section>`;
+
+  const delta = review.predecessor_review_id
+    ? `<section><h2>Changes since preceding signed review</h2><p>Predecessor ${escapeHtml(
+        review.predecessor_review_id,
+      )}; ${review.delta.added_docket_ids.length} added, ${
+        review.delta.removed_docket_ids.length
+      } removed, ${review.delta.changed_docket_ids.length} changed; ${
+        review.delta.added_exception_keys.length
+      } exceptions added and ${review.delta.removed_exception_keys.length} removed.</p></section>`
+    : "<section><h2>Changes since preceding signed review</h2><p>No comparable signed predecessor.</p></section>";
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -127,16 +193,23 @@ export function buildControlReviewManifest(review: IpControlReview): string {
 <p class="sub">Review ${escapeHtml(review.id)}</p>
 <table>
 ${rows
-  .map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`)
+  .map(
+    ([label, value]) =>
+      `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`,
+  )
   .join("\n")}
 </table>
 ${incompleteness}
 ${exceptions}
 ${includedRecords}
+${decisions}
+${samples}
+${signatures}
+${delta}
 <footer>
-This manifest lists identifiers and counts only. It carries no record titles or
-other privileged content. Check the SHA-256 above against the stored review to
-confirm this copy is the one that was produced.
+Confidential firm material. Record titles are omitted, but review notes and
+evidence references may be sensitive. Check the SHA-256 above against the stored
+review to confirm this copy is tied to the frozen report.
 </footer>
 </body>
 </html>`;
