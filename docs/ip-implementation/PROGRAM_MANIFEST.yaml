@@ -21,27 +21,34 @@
       "base_revision": "9e8d41c0",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-039C",
-        "branch": "codex/iplf-039c-calendar-reconcile-20260820",
-        "status": "repository_implemented_local_verified",
-        "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
-        "scope": "Complete IPLF-039C repository behavior: UJ-62-EXC-03 immutable external-provider reconciliation and UJ-59 immutable daily-docket exception decisions, independent reviewer samples, two-role signatures, accessible history, and signed-report deltas; retain fail-closed provider gates.",
+        "slice_id": "IPLF-039D",
+        "branch": "codex/iplf-039d-deadline-incidents-20260821",
+        "status": "in_progress",
+        "implementation_revision": null,
+        "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
         "owned_components": [
-          "IP calendar drift/reconciliation and daily docket control-review services with their dedicated schema/API contracts",
-          "IP calendar projection and drift tests, including UJ-62-EXC-03",
-          "IPLF-039C status, test, and evidence references"
+          "IP deadline-incident lifecycle, evidence, impact, action, communication-decision and kill-switch schema/API/UI contracts",
+          "IP deadline-incident tests for all UJ-58 normal and exception paths",
+          "IPLF-039D status, test, and evidence references"
         ],
         "merge_constraints": [
-          "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
-          "PR #272 is merged; calendar PostgreSQL coverage may be added to apps/api/tests/test_postgres_validation.py without modifying Claude's invoice cases.",
-          "Do not alter data-governance policy fields or Claude's governed-operation inventory; generator output may add only the calendar-candidate table inventory."
+          "This is stacked from PR #282 exact head cf424e4c; do not amend the IPLF-039C 20260821_0001 or 20260821_0002 migrations.",
+          "Use additive migration identifier 20260821_0003 or later and keep incident data company-correlated, append-only where evidence is frozen, and fail closed.",
+          "Reuse the existing legal-hold resolver and capability/rollout catalog; do not alter Claude's data-governance policy workflow or cost-item models."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
-          "IP incident lifecycle",
           "IP cost/billing models and migrations",
+          "IP calendar reconciliation and daily docket control-review implementation",
           "IPLF-027B irreversible A0 retirement"
-        ]
+        ],
+        "prior_lane": {
+          "slice_id": "IPLF-039C",
+          "branch": "codex/iplf-039c-calendar-reconcile-20260820",
+          "pull_request": 282,
+          "status": "repository_implemented_local_verified_exact_ci_running",
+          "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731"
+        }
       },
       "claude": {
         "lanes": [
@@ -87,10 +94,6 @@
         {
           "slice_id": "IPLF-027B",
           "reason": "Blocked on consolidated authorized A0-retirement approval, resealed deletion packet, second drain, and scheduled full-history security evidence; no parallel destructive work is authorized."
-        },
-        {
-          "slice_id": "IPLF-039D",
-          "reason": "Keep queued until a separate owner is assigned; it must not share the calendar lane's model/migration work."
         },
         {
           "slice_id": "IPLF-029A",
