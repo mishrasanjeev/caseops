@@ -17,38 +17,37 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-21T08:52:00+05:30",
-      "base_revision": "9e8d41c0",
+      "recorded_at": "2026-08-21T09:44:19+05:30",
+      "base_revision": "de5d330f",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-039D",
-        "branch": "codex/iplf-039d-deadline-incidents-20260821",
-        "status": "repository_implemented_local_verified_pr_open",
-        "pull_request": 285,
-        "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
-        "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
+        "slice_id": "IPLF-030B",
+        "branch": "codex/iplf-030b-portfolio-workflow-20260821",
+        "status": "in_progress",
+        "scope": "Complete the portfolio user workflow and exception paths over the existing IPLF-030A read-only projection: permission-scoped listing, composed filters, saved views, stable columns, bounded export, responsive UI, and exact API/UI/PostgreSQL/E2E evidence.",
         "owned_components": [
-          "IP deadline-incident lifecycle, evidence, impact, action, communication-decision and kill-switch schema/API/UI contracts",
-          "IP deadline-incident tests for all UJ-58 normal and exception paths",
-          "IPLF-039D status, test, and evidence references"
+          "IP portfolio read-only projection extensions, saved-view preferences, export contract, and portfolio UI",
+          "IPLF-030B tests for UJ-04 normal and exception paths, including access filtering and narrow-mobile behavior",
+          "IPLF-030B status, test, and evidence references"
         ],
         "merge_constraints": [
-          "This is stacked from PR #282 exact head cf424e4c; do not amend the IPLF-039C 20260821_0001 or 20260821_0002 migrations.",
-          "Use additive migration identifier 20260821_0003 or later and keep incident data company-correlated, append-only where evidence is frozen, and fail closed.",
-          "Reuse the existing legal-hold resolver and capability/rollout catalog; do not alter Claude's data-governance policy workflow or cost-item models."
+          "Extend the existing IPLF-030A read-only portfolio route and canonical visible_ip_dockets_filter policy; do not introduce a second portfolio, deadline, or access-policy owner.",
+          "Keep exports permission-filtered and bounded, and persist only user-scoped presentation preferences if required.",
+          "Reuse established web table, saved-view, export, capability, and rollout patterns and preserve fail-closed behavior."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
           "IP cost/billing models and migrations",
-          "IP calendar reconciliation and daily docket control-review implementation",
+          "IPLF-039G integration until IPLF-039F is merged",
           "IPLF-027B irreversible A0 retirement"
         ],
         "prior_lane": {
-          "slice_id": "IPLF-039C",
-          "branch": "codex/iplf-039c-calendar-reconcile-20260820",
-          "pull_request": 282,
+          "slice_id": "IPLF-039D",
+          "branch": "codex/iplf-039d-deadline-incidents-20260821",
+          "pull_request": 285,
           "status": "merged",
-          "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731"
+          "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
+          "merge_revision": "de5d330f96b28f11469ac0dcd26a0155c0119eeb"
         }
       },
       "claude": {
