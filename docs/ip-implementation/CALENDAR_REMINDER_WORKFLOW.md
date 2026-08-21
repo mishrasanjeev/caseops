@@ -1,4 +1,4 @@
-# IP hearing, reminder, and calendar workflow (IPLF-025B)
+# IP hearing, reminder, and calendar workflow (IPLF-025B / IPLF-035B)
 
 IPLF-025B turns the shared-work foundation into the user-facing UJ-10 and
 UJ-62 workflow. It continues to use `matter_hearings`, `hearing_reminders`,
@@ -26,6 +26,16 @@ outcomes. A permission or lifecycle change is revalidated before dispatch.
 Rescheduling cancels queued schedules and intents before creating replacements;
 cancellation removes previously selected provider copies.
 
+IPLF-035B makes uncertainty and replacement evidence explicit in the shared
+response and user workflow. An unpublished time carries
+`time_confirmation_required=true`; the workspace keeps date-based reminders
+active and offers an empty, user-entered published-time control rather than a
+default time. Confirming the time uses the existing hearing update writer,
+cancels the prior reminder generation, and schedules a replacement. Every
+cancelled row identifies its `replacement_generation`, while
+`current_schedule_generation` identifies the live plan. A cancellation with no
+replacement is not mislabelled as supersession.
+
 ## External calendar boundary
 
 Outlook and Google Calendar use the existing connection and
@@ -51,10 +61,13 @@ CaseOps hearing, task, or deadline.
 - `tests/test_shared_work_foundation.py` proves unpublished-time behavior,
   logistics, four inspectable channel schedules, six durable intents including
   critical fallbacks, IP target lineage, and reschedule supersession.
+- `tests/test_ip_hearing_notification_workflow.py` proves the unpublished-time
+  prompt contract and immutable reminder replacement chain.
 - `tests/test_google_calendar_sync.py` proves minimal redaction, stable provider
   IDs, repeat-sync deduplication, reschedule upsert, and cancellation delete.
 - `apps/web/app/app/ip/page.test.tsx` proves every grouped action remains visible
-  at 360 px and the reminder preview precedes confirmation.
+  at 360 px, the reminder preview precedes confirmation, and a published time
+  can be confirmed without an invented default.
 - `tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts` executes the dated
   API/UI/persistence journey against the current build.
 

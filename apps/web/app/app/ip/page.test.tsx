@@ -24,6 +24,7 @@ const {
   confirmIpLegalDeadlineMock,
   proposeIpLegalDeadlineMock,
   createIpSharedHearingMock,
+  updateIpSharedHearingMock,
   createManualTrademarkApplicationMock,
   correctIpIdentifierMock,
   fetchIpAccessPanelMock,
@@ -64,6 +65,7 @@ const {
   confirmIpLegalDeadlineMock: vi.fn(),
   proposeIpLegalDeadlineMock: vi.fn(),
   createIpSharedHearingMock: vi.fn(),
+  updateIpSharedHearingMock: vi.fn(),
   createManualTrademarkApplicationMock: vi.fn(),
   correctIpIdentifierMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
@@ -116,7 +118,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   resolveIpDeadlineIncident: resolveIpDeadlineIncidentMock,
   releaseIpIncidentKillSwitch: releaseIpIncidentKillSwitchMock,
   createIpSharedHearing: createIpSharedHearingMock,
-  updateIpSharedHearing: vi.fn(),
+  updateIpSharedHearing: updateIpSharedHearingMock,
   listCalendarConnections: listCalendarConnectionsMock,
   syncHearingToOutlook: vi.fn(),
   syncHearingToGoogleCalendar: vi.fn(),
@@ -210,6 +212,66 @@ function prosecutionEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function unknownTimeHearing() {
+  const reminder = (
+    id: string,
+    generation: number,
+    status: "queued" | "cancelled",
+    replacementGeneration: number | null,
+  ) => ({
+    id,
+    recipient_membership_id: "membership-1",
+    channel: "in_app" as const,
+    scheduled_for: generation === 1
+      ? "2026-12-13T12:30:00Z"
+      : "2026-12-14T09:00:00Z",
+    schedule_generation: generation,
+    is_superseded: replacementGeneration !== null,
+    replacement_generation: replacementGeneration,
+    status,
+    provider: null,
+    provider_message_id: null,
+    last_error: null,
+    attempts: 0,
+    sent_at: null,
+    delivered_at: null,
+    created_at: "2026-08-22T00:00:00Z",
+  });
+  return {
+    id: "hearing-1",
+    company_id: "company-1",
+    target_type: "ip_docket" as const,
+    target_id: "ip-1",
+    ip_docket_id: "ip-1",
+    hearing_on: "2026-12-15",
+    time_status: "time_not_published" as const,
+    hearing_time: null,
+    session_label: null,
+    timezone: "Asia/Kolkata",
+    hearing_mode: "unknown" as const,
+    location_text: null,
+    meeting_url: null,
+    attendee_membership_ids: ["membership-1"],
+    source: "registry_notice",
+    source_ref_type: "document",
+    source_ref_id: "document-1",
+    responsible_membership_id: "membership-1",
+    forum_name: "Trade Marks Registry",
+    judge_name: null,
+    purpose: "Opposition hearing",
+    status: "scheduled" as const,
+    outcome_note: null,
+    reminder_policy: { offsets_hours: [48], channels: ["in_app" as const] },
+    time_confirmation_required: true,
+    current_schedule_generation: 2,
+    reminders: [
+      reminder("reminder-1", 1, "cancelled", 2),
+      reminder("reminder-2", 2, "queued", null),
+    ],
+    created_at: "2026-08-22T00:00:00Z",
+  };
+}
+
 describe("IpDocketPage", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/app/ip");
@@ -230,6 +292,7 @@ describe("IpDocketPage", () => {
     confirmIpLegalDeadlineMock.mockReset();
     proposeIpLegalDeadlineMock.mockReset();
     createIpSharedHearingMock.mockReset();
+    updateIpSharedHearingMock.mockReset();
     createManualTrademarkApplicationMock.mockReset();
     correctIpIdentifierMock.mockReset();
     fetchIpAccessPanelMock.mockReset();
@@ -415,6 +478,45 @@ describe("IpDocketPage", () => {
         filingPhase: "pre_filing",
         applicationNumber: null,
         sourcePendingIdentifierAllocation: false,
+      }),
+    );
+  });
+
+  it("confirms an unpublished hearing time and shows the reminder replacement chain", async () => {
+    const hearing = unknownTimeHearing();
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    updateIpSharedHearingMock.mockResolvedValue({
+      ...hearing,
+      time_status: "exact",
+      hearing_time: "14:30:00",
+      time_confirmation_required: false,
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    const workflow = await screen.findByTestId("ip-hearing-workflow");
+    expect(await within(workflow).findByText(/Time confirmation pending/)).toBeVisible();
+    expect(within(workflow).getByText("Superseded by generation 2")).toBeVisible();
+    expect(within(workflow).getByText("Current schedule")).toBeVisible();
+
+    const confirm = within(workflow).getByRole("button", {
+      name: "Confirm published time",
+    });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(within(workflow).getByLabelText("Published time for Opposition hearing"), {
+      target: { value: "14:30" },
+    });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(updateIpSharedHearingMock).toHaveBeenCalledWith({
+        docketId: "ip-1",
+        hearingId: "hearing-1",
+        timeStatus: "exact",
+        hearingTime: "14:30",
+        sessionLabel: null,
       }),
     );
   });

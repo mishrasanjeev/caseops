@@ -97,6 +97,11 @@ const hearingFlow = [
 
 const platformMoves = [
   {
+    icon: Gavel,
+    title: "IP hearing docket",
+    body: "Record exact, session-based or unpublished hearing times without hidden defaults; inspect recipient/channel outcomes and the reminder generation replaced by every reschedule or later time confirmation.",
+  },
+  {
     icon: Clock3,
     title: "Governed IP deadlines",
     body: "Calculate against versioned rules and working calendars, confirm with named coverage, inspect source-linked provenance, supersede rather than overwrite, and distinguish filing dates from internal targets and renewals.",
