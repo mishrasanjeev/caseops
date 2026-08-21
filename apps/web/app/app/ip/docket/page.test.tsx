@@ -7,12 +7,15 @@ const {
   fetchIpDailyDocketMock,
   fetchIpAssignedCoverageMock,
   fetchIpDocketQueuesMock,
+  fetchIpControlReviewsMock,
   bulkAcknowledgeIpCoverageMock,
   saveIpDocketQueueMock,
   deleteIpDocketQueueMock,
   createIpControlReviewMock,
+  decideIpControlReviewExceptionMock,
   signOffIpControlReviewMock,
   recordIpControlReviewExportMock,
+  recordIpControlReviewSampleMock,
   downloadControlReviewManifestMock,
   checkIpCalendarDriftMock,
   fetchIpCalendarReconciliationCandidatesMock,
@@ -22,12 +25,15 @@ const {
   fetchIpDailyDocketMock: vi.fn(),
   fetchIpAssignedCoverageMock: vi.fn(),
   fetchIpDocketQueuesMock: vi.fn(),
+  fetchIpControlReviewsMock: vi.fn(),
   bulkAcknowledgeIpCoverageMock: vi.fn(),
   saveIpDocketQueueMock: vi.fn(),
   deleteIpDocketQueueMock: vi.fn(),
   createIpControlReviewMock: vi.fn(),
+  decideIpControlReviewExceptionMock: vi.fn(),
   signOffIpControlReviewMock: vi.fn(),
   recordIpControlReviewExportMock: vi.fn(),
+  recordIpControlReviewSampleMock: vi.fn(),
   downloadControlReviewManifestMock: vi.fn(),
   checkIpCalendarDriftMock: vi.fn(),
   fetchIpCalendarReconciliationCandidatesMock: vi.fn(),
@@ -39,15 +45,20 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDailyDocket: fetchIpDailyDocketMock,
   fetchIpAssignedCoverage: fetchIpAssignedCoverageMock,
   fetchIpDocketQueues: fetchIpDocketQueuesMock,
+  fetchIpControlReviews: fetchIpControlReviewsMock,
   bulkAcknowledgeIpCoverage: bulkAcknowledgeIpCoverageMock,
   saveIpDocketQueue: saveIpDocketQueueMock,
   deleteIpDocketQueue: deleteIpDocketQueueMock,
   createIpControlReview: createIpControlReviewMock,
+  decideIpControlReviewException: decideIpControlReviewExceptionMock,
   signOffIpControlReview: signOffIpControlReviewMock,
   recordIpControlReviewExport: recordIpControlReviewExportMock,
+  recordIpControlReviewSample: recordIpControlReviewSampleMock,
   checkIpCalendarDrift: checkIpCalendarDriftMock,
-  fetchIpCalendarReconciliationCandidates: fetchIpCalendarReconciliationCandidatesMock,
-  decideIpCalendarReconciliationCandidate: decideIpCalendarReconciliationCandidateMock,
+  fetchIpCalendarReconciliationCandidates:
+    fetchIpCalendarReconciliationCandidatesMock,
+  decideIpCalendarReconciliationCandidate:
+    decideIpCalendarReconciliationCandidateMock,
 }));
 
 vi.mock("@/lib/ip/control-review-manifest", () => ({
@@ -104,12 +115,62 @@ const REVIEW = {
   freshness: {},
   completeness_status: "complete",
   incompleteness_reasons: [] as string[],
-  mandatory_exceptions: [] as { docket_id: string; kind: string; critical: boolean }[],
+  mandatory_exceptions: [] as {
+    docket_id: string;
+    kind: string;
+    critical: boolean;
+  }[],
   manifest_sha256: "a".repeat(64),
   export_status: "not_requested",
   export_error_redacted: null,
   signer_label_snapshot: null,
   signed_off_at: null,
+  review_policy: {
+    policy_version: "daily-docket-review-v1",
+    required_signature_count: 2 as const,
+    required_sample_size: 1,
+    distinct_preparer_and_reviewer: true,
+  },
+  predecessor_review_id: null,
+  delta: {
+    predecessor_review_id: null,
+    predecessor_manifest_sha256: null,
+    added_docket_ids: [] as string[],
+    removed_docket_ids: [] as string[],
+    changed_docket_ids: [] as string[],
+    added_exception_keys: [] as string[],
+    removed_exception_keys: [] as string[],
+  },
+  exception_decisions: [] as Array<{
+    docket_id: string;
+    exception_kind: string;
+    disposition: "resolved" | "annotated";
+    annotation: string;
+    evidence_reference: string;
+    decided_by_membership_id: string;
+    decided_at: string;
+  }>,
+  reviewer_samples: [] as Array<{
+    docket_id: string;
+    reviewer_membership_id: string;
+    source_evidence_reference: string;
+    calculation_evidence_reference: string;
+    coverage_evidence_reference: string;
+    notes: string | null;
+    sampled_at: string;
+  }>,
+  signatures: [] as Array<{
+    signer_membership_id: string;
+    signer_role: "preparer" | "reviewer";
+    signer_label_snapshot: string;
+    attestation: string;
+    manifest_sha256: string;
+    sequence: 1 | 2;
+    signed_at: string;
+  }>,
+  pending_exception_count: 0,
+  annotated_exception_count: 0,
+  signoff_status: "draft" as const,
   version: 1,
   report: {
     generated_at: "2026-08-15T06:31:00Z",
@@ -121,6 +182,32 @@ const REVIEW = {
     inactive_coverage_count: 1,
     total_cost_minor_by_currency: {},
   },
+  snapshot: {
+    schema_version: 2 as const,
+    query_version: "ip-docket-control-v1",
+    generated_at: "2026-08-15T06:31:00Z",
+    timezone: "Asia/Calcutta",
+    filters: {},
+    freshness: {},
+    hidden_restricted_count_policy: "omit_without_count" as const,
+    included_records: [
+      { docket_id: "ip-1", current_version: 1, sha256: "b".repeat(64) },
+    ],
+    report: {
+      generated_at: "2026-08-15T06:31:00Z",
+      docket_count: 18,
+      ready_count: 15,
+      uncovered_deadline_count: 1,
+      open_incident_count: 0,
+      unprojected_calendar_count: 2,
+      inactive_coverage_count: 1,
+      total_cost_minor_by_currency: {},
+    },
+    mandatory_exceptions: [],
+    incompleteness_reasons: [],
+    review_policy: null,
+    delta: null,
+  },
 };
 
 describe("IpDailyDocketPage", () => {
@@ -129,12 +216,15 @@ describe("IpDailyDocketPage", () => {
     fetchIpDailyDocketMock.mockReset();
     fetchIpAssignedCoverageMock.mockReset();
     fetchIpDocketQueuesMock.mockReset();
+    fetchIpControlReviewsMock.mockReset();
     bulkAcknowledgeIpCoverageMock.mockReset();
     saveIpDocketQueueMock.mockReset();
     deleteIpDocketQueueMock.mockReset();
     createIpControlReviewMock.mockReset();
+    decideIpControlReviewExceptionMock.mockReset();
     signOffIpControlReviewMock.mockReset();
     recordIpControlReviewExportMock.mockReset();
+    recordIpControlReviewSampleMock.mockReset();
     downloadControlReviewManifestMock.mockReset();
     checkIpCalendarDriftMock.mockReset();
     fetchIpCalendarReconciliationCandidatesMock.mockReset();
@@ -149,6 +239,7 @@ describe("IpDailyDocketPage", () => {
     fetchIpDailyDocketMock.mockResolvedValue(FRESH_DOCKET);
     fetchIpAssignedCoverageMock.mockResolvedValue({ coverages: [] });
     fetchIpDocketQueuesMock.mockResolvedValue({ queues: [] });
+    fetchIpControlReviewsMock.mockResolvedValue({ reviews: [] });
   });
 
   it("fails closed when the role cannot read IP records", () => {
@@ -680,42 +771,248 @@ describe("IpDailyDocketPage", () => {
     render(withClient(<IpDailyDocketPage />));
 
     const card = await screen.findByTestId("ip-docket-control-review");
-    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Generate control review" }),
+    );
 
-    const sign = await within(card).findByRole("button", { name: "Sign off" });
+    const sign = await within(card).findByRole("button", {
+      name: "Add preparer signature",
+    });
     // The attestation is the substance of a sign-off, not paperwork round it.
     expect(sign).toBeDisabled();
-    fireEvent.change(within(card).getByLabelText("What are you attesting to?"), {
-      target: { value: "Reviewed every exception on today's docket." },
-    });
+    fireEvent.change(
+      within(card).getByLabelText("What are you attesting to?"),
+      {
+        target: { value: "Reviewed every exception on today's docket." },
+      },
+    );
     expect(sign).toBeEnabled();
     fireEvent.click(sign);
 
-    await waitFor(() => expect(signOffIpControlReviewMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(signOffIpControlReviewMock).toHaveBeenCalledTimes(1),
+    );
     expect(signOffIpControlReviewMock).toHaveBeenCalledWith("review-1", {
       expectedVersion: 1,
       attestation: "Reviewed every exception on today's docket.",
     });
-    expect(await within(card).findByTestId("ip-docket-review-signed")).toHaveTextContent(
-      "Priya Raghavan",
-    );
+    expect(
+      await within(card).findByTestId("ip-docket-review-signed"),
+    ).toHaveTextContent("Priya Raghavan");
   });
 
-  it("refuses sign-off while a complete review still has mandatory exceptions", async () => {
-    createIpControlReviewMock.mockResolvedValue({
-      ...REVIEW,
-      mandatory_exceptions: [{ docket_id: "ip-9", kind: "uncovered", critical: true }],
+  it("loads the latest accessible retained review for a fresh reviewer session", async () => {
+    fetchIpControlReviewsMock.mockResolvedValue({
+      reviews: [
+        {
+          ...REVIEW,
+          version: 2,
+          signoff_status: "awaiting_second_signature",
+          signatures: [
+            {
+              signer_membership_id: "member-1",
+              signer_role: "preparer",
+              signer_label_snapshot: "Priya Raghavan",
+              attestation: "Prepared and checked the daily docket.",
+              manifest_sha256: REVIEW.manifest_sha256,
+              sequence: 1,
+              signed_at: "2026-08-15T06:45:00Z",
+            },
+          ],
+        },
+      ],
     });
 
     render(withClient(<IpDailyDocketPage />));
 
     const card = await screen.findByTestId("ip-docket-control-review");
-    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+    expect(await within(card).findByTestId("ip-docket-review-sample")).toBeVisible();
+    expect(within(card).getByText(/Priya Raghavan \(preparer\)/)).toBeVisible();
+    expect(within(card).queryByRole("button", { name: "Generate control review" })).toBeNull();
+  });
 
-    expect(await within(card).findByTestId("ip-docket-review-blocked")).toHaveTextContent(
-      "Resolve every mandatory exception and generate a clean review before signing.",
+  it("refuses sign-off while a complete review still has mandatory exceptions", async () => {
+    createIpControlReviewMock.mockResolvedValue({
+      ...REVIEW,
+      mandatory_exceptions: [
+        { docket_id: "ip-9", kind: "uncovered", critical: true },
+      ],
+      pending_exception_count: 1,
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Generate control review" }),
     );
-    expect(within(card).queryByRole("button", { name: "Sign off" })).toBeNull();
+
+    expect(
+      await within(card).findByTestId("ip-docket-review-blocked"),
+    ).toHaveTextContent(
+      "Record a decision for all 1 pending exception before signing.",
+    );
+    expect(
+      within(card).queryByRole("button", { name: "Add preparer signature" }),
+    ).toBeNull();
+  });
+
+  it("records an immutable decision for each mandatory exception", async () => {
+    const exception = {
+      docket_id: "ip-9",
+      kind: "uncovered",
+      critical: true,
+    } as const;
+    createIpControlReviewMock.mockResolvedValue({
+      ...REVIEW,
+      mandatory_exceptions: [exception],
+      pending_exception_count: 1,
+    });
+    decideIpControlReviewExceptionMock.mockResolvedValue({
+      ...REVIEW,
+      version: 2,
+      mandatory_exceptions: [exception],
+      pending_exception_count: 0,
+      exception_decisions: [
+        {
+          docket_id: "ip-9",
+          exception_kind: "uncovered",
+          disposition: "annotated",
+          annotation: "The manager recorded a controlled follow-up decision.",
+          evidence_reference: "Matter note TM-42",
+          decided_by_membership_id: "member-1",
+          decided_at: "2026-08-15T06:45:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<IpDailyDocketPage />));
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Generate control review" }),
+    );
+    fireEvent.click(
+      await within(card).findByRole("button", { name: "Record decision" }),
+    );
+    fireEvent.change(within(card).getByLabelText("Decision"), {
+      target: { value: "annotated" },
+    });
+    fireEvent.change(within(card).getByLabelText("Decision note"), {
+      target: {
+        value: "The manager recorded a controlled follow-up decision.",
+      },
+    });
+    fireEvent.change(within(card).getByLabelText("Evidence reference"), {
+      target: { value: "Matter note TM-42" },
+    });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Save immutable decision" }),
+    );
+
+    await waitFor(() =>
+      expect(decideIpControlReviewExceptionMock).toHaveBeenCalledTimes(1),
+    );
+    expect(decideIpControlReviewExceptionMock).toHaveBeenCalledWith(
+      "review-1",
+      "ip-9",
+      "uncovered",
+      {
+        expectedVersion: 1,
+        disposition: "annotated",
+        annotation: "The manager recorded a controlled follow-up decision.",
+        evidenceReference: "Matter note TM-42",
+      },
+    );
+    expect(await within(card).findByText("Recorded")).toBeVisible();
+    expect(
+      within(card).getByRole("button", { name: "Add preparer signature" }),
+    ).toBeVisible();
+  });
+
+  it("requires and records a reviewer sample before offering the second signature", async () => {
+    const prepared = {
+      ...REVIEW,
+      version: 2,
+      signoff_status: "awaiting_second_signature" as const,
+      signatures: [
+        {
+          signer_membership_id: "member-1",
+          signer_role: "preparer" as const,
+          signer_label_snapshot: "Priya Raghavan",
+          attestation: "Prepared and checked the daily docket.",
+          manifest_sha256: REVIEW.manifest_sha256,
+          sequence: 1 as const,
+          signed_at: "2026-08-15T06:45:00Z",
+        },
+      ],
+    };
+    const sampled = {
+      ...prepared,
+      version: 3,
+      reviewer_samples: [
+        {
+          docket_id: "ip-1",
+          reviewer_membership_id: "member-2",
+          source_evidence_reference: "Registry snapshot 42",
+          calculation_evidence_reference: "Deadline worksheet 42",
+          coverage_evidence_reference: "Coverage roster 42",
+          notes: "All sampled fields agree.",
+          sampled_at: "2026-08-15T06:50:00Z",
+        },
+      ],
+    };
+    createIpControlReviewMock.mockResolvedValue(prepared);
+    recordIpControlReviewSampleMock.mockResolvedValue(sampled);
+
+    render(withClient(<IpDailyDocketPage />));
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Generate control review" }),
+    );
+
+    await within(card).findByTestId("ip-docket-review-sample");
+    expect(
+      within(card).queryByRole("button", { name: "Add reviewer signature" }),
+    ).toBeNull();
+    fireEvent.change(within(card).getByLabelText("Source evidence reference"), {
+      target: { value: "Registry snapshot 42" },
+    });
+    fireEvent.change(
+      within(card).getByLabelText("Calculation evidence reference"),
+      {
+        target: { value: "Deadline worksheet 42" },
+      },
+    );
+    fireEvent.change(
+      within(card).getByLabelText("Coverage evidence reference"),
+      {
+        target: { value: "Coverage roster 42" },
+      },
+    );
+    fireEvent.change(within(card).getByLabelText("Reviewer sample notes"), {
+      target: { value: "All sampled fields agree." },
+    });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Record sample" }),
+    );
+
+    await waitFor(() =>
+      expect(recordIpControlReviewSampleMock).toHaveBeenCalledTimes(1),
+    );
+    expect(recordIpControlReviewSampleMock).toHaveBeenCalledWith("review-1", {
+      expectedVersion: 2,
+      docketId: "ip-1",
+      sourceEvidenceReference: "Registry snapshot 42",
+      calculationEvidenceReference: "Deadline worksheet 42",
+      coverageEvidenceReference: "Coverage roster 42",
+      notes: "All sampled fields agree.",
+    });
+    expect(
+      await within(card).findByRole("button", {
+        name: "Add reviewer signature",
+      }),
+    ).toBeVisible();
+    expect(within(card).queryByTestId("ip-docket-review-export")).toBeNull();
   });
 
   it("saves the current filters as a reusable queue", async () => {
@@ -848,12 +1145,21 @@ describe("IpDailyDocketPage", () => {
     render(withClient(<IpDailyDocketPage />));
 
     const card = await screen.findByTestId("ip-docket-control-review");
-    fireEvent.click(within(card).getByRole("button", { name: "Generate control review" }));
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Generate control review" }),
+    );
 
     // The API refuses re-export of a signed review, so the control is absent
     // rather than present and failing.
-    expect(await within(card).findByTestId("ip-docket-review-signed")).toBeVisible();
+    expect(
+      await within(card).findByTestId("ip-docket-review-signed"),
+    ).toBeVisible();
     expect(within(card).queryByTestId("ip-docket-review-export")).toBeNull();
+    fireEvent.click(
+      within(card).getByTestId("ip-docket-review-download-signed"),
+    );
+    expect(downloadControlReviewManifestMock).toHaveBeenCalledTimes(1);
+    expect(recordIpControlReviewExportMock).not.toHaveBeenCalled();
   });
 
   it("reports a drifted calendar copy, and never rewrites it silently", async () => {

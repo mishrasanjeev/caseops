@@ -16677,7 +16677,26 @@ class IpDocketControlReview(Base):
             "signed_off_at IS NULL OR signed_off_by_membership_id IS NOT NULL",
             name="ck_ip_control_review_signoff_has_signer",
         ),
+        CheckConstraint(
+            "required_signature_count IN (1, 2) AND required_sample_size BETWEEN 0 AND 20",
+            name="ck_ip_control_review_policy_bounds",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_control_review_id_company"),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "manifest_sha256",
+            name="uq_ip_control_review_id_company_manifest",
+        ),
+        ForeignKeyConstraint(
+            ["predecessor_review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_review_predecessor_company",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         Index("ix_ip_docket_control_reviews_company_generated", "company_id", "generated_at"),
+        Index("ix_ip_control_review_predecessor", "predecessor_review_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -16696,6 +16715,11 @@ class IpDocketControlReview(Base):
     snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     report_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    required_signature_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    required_sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    predecessor_review_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    delta_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     export_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="not_requested"
     )
@@ -16716,6 +16740,148 @@ class IpDocketControlReview(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpControlReviewExceptionDecision(Base):
+    """Append-only resolution or annotation for one frozen report exception."""
+
+    __tablename__ = "ip_control_review_exception_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_exception_decision_review_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["decided_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_exception_decision_actor_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "disposition IN ('resolved', 'annotated')",
+            name="ck_ip_control_exception_decision_disposition",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "docket_id",
+            "exception_kind",
+            name="uq_ip_control_exception_decision",
+        ),
+        Index("ix_ip_control_exception_decision_review", "review_id", "decided_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    exception_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(16), nullable=False)
+    annotation: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    decided_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpControlReviewSampleEvidence(Base):
+    """Append-only second-reviewer sample against one included docket."""
+
+    __tablename__ = "ip_control_review_sample_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_sample_review_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewer_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_sample_reviewer_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "docket_id",
+            "reviewer_membership_id",
+            name="uq_ip_control_sample_reviewer_docket",
+        ),
+        Index("ix_ip_control_sample_review", "review_id", "sampled_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reviewer_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    source_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    calculation_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    coverage_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sampled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpControlReviewSignature(Base):
+    """One immutable signature bound to the exact report manifest."""
+
+    __tablename__ = "ip_control_review_signatures"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_signature_review_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["review_id", "company_id", "manifest_sha256"],
+            [
+                "ip_docket_control_reviews.id",
+                "ip_docket_control_reviews.company_id",
+                "ip_docket_control_reviews.manifest_sha256",
+            ],
+            name="fk_ip_control_signature_manifest",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["signer_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_signature_signer_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(signer_role = 'preparer' AND sequence = 1) OR "
+            "(signer_role = 'reviewer' AND sequence = 2)",
+            name="ck_ip_control_signature_role_sequence",
+        ),
+        UniqueConstraint("review_id", "signer_membership_id", name="uq_ip_control_signature_actor"),
+        UniqueConstraint("review_id", "sequence", name="uq_ip_control_signature_sequence"),
+        UniqueConstraint("review_id", "signer_role", name="uq_ip_control_signature_role"),
+        Index("ix_ip_control_signature_review", "review_id", "sequence"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    signer_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    signer_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    signer_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    attestation: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    signed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 

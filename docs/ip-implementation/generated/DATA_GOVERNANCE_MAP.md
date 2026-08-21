@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `e0698ac778968e34f73de4529fc2287f3400de8b61ee2e58abb525857127b976`
-- SQL tables: `261`
-- SQL columns: `4040`
-- ORM indexes: `1157`
-- Alembic/raw index declarations: `509`
+- Canonical map SHA-256: `9ad58c5d0bb8b24f8237bc16d847fbca6a79dbb9362ae164f8c31a4670cf6465`
+- SQL tables: `264`
+- SQL columns: `4075`
+- ORM indexes: `1167`
+- Alembic/raw index declarations: `518`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -126,11 +126,14 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `inbound_email_aliases` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `inbound_email_events` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `ip_assets` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
+| `ip_control_review_exception_decisions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_control_review_sample_evidence` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_control_review_signatures` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_cost_items` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_deadline_coverages` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_deadline_incidents` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `ip_deadlines` | `tenant_restricted_legal_content` | 39 | `registry_fail_closed` |
-| `ip_docket_control_reviews` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `ip_docket_control_reviews` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
 | `ip_docket_events` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_docket_queues` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_docket_records` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |

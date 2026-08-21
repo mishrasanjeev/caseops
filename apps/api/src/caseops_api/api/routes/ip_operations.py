@@ -99,8 +99,11 @@ from caseops_api.schemas.ip_operations import (
     IpCalendarReconciliationCandidateRecord,
     IpCalendarReconciliationDecisionRequest,
     IpControlReviewCreateRequest,
+    IpControlReviewExceptionDecisionRequest,
     IpControlReviewExportRequest,
+    IpControlReviewListResponse,
     IpControlReviewRecord,
+    IpControlReviewSampleRequest,
     IpControlReviewSignOffRequest,
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
@@ -251,6 +254,7 @@ from caseops_api.services.ip_operations import (
     complete_ip_related_right_obligation,
     create_ip_control_review,
     create_ip_docket,
+    decide_ip_control_review_exception,
     decide_ip_coverage_replacement,
     delete_ip_docket_queue,
     discover_ip_evidence_candidates,
@@ -259,6 +263,7 @@ from caseops_api.services.ip_operations import (
     ip_daily_docket,
     ip_docket_control_report,
     list_ip_assigned_coverage,
+    list_ip_control_reviews,
     list_ip_coverage_transfers_awaiting,
     list_ip_docket_queues,
     list_ip_dockets,
@@ -267,6 +272,7 @@ from caseops_api.services.ip_operations import (
     reassign_ip_deadline_coverage,
     reconcile_ip_cost_items,
     record_ip_control_review_export,
+    record_ip_control_review_sample,
     review_ip_evidence_candidate,
     save_ip_docket_queue,
     sign_off_ip_control_review,
@@ -477,9 +483,7 @@ async def patch_ip_shared_task(
     context: IpWriter,
     session: DbSession,
 ) -> IpSharedTaskRecord:
-    return update_ip_shared_task(
-        session, context=context, task_id=task_id, payload=payload
-    )
+    return update_ip_shared_task(session, context=context, task_id=task_id, payload=payload)
 
 
 @router.get("/hearings", response_model=IpSharedHearingListResponse)
@@ -1267,9 +1271,7 @@ async def get_ip_portfolio_families(
         filing_phase=filing_phase or [],
         include_inactive=include_inactive,
     )
-    return list_ip_portfolio_families(
-        session, context=context, grouping=grouping, filters=filters
-    )
+    return list_ip_portfolio_families(session, context=context, grouping=grouping, filters=filters)
 
 
 @router.post("/docket-queues", response_model=IpDocketQueueRecord, status_code=201)
@@ -1515,6 +1517,14 @@ async def post_ip_control_review(
     return create_ip_control_review(session, context=context, payload=payload)
 
 
+@router.get("/control-reviews", response_model=IpControlReviewListResponse)
+async def get_ip_control_reviews(
+    context: IpViewer,
+    session: DbSession,
+) -> IpControlReviewListResponse:
+    return list_ip_control_reviews(session, context=context)
+
+
 @router.get("/control-reviews/{review_id}", response_model=IpControlReviewRecord)
 async def get_ip_control_review_detail(
     review_id: str,
@@ -1533,6 +1543,46 @@ async def post_ip_control_review_export(
 ) -> IpControlReviewRecord:
     return record_ip_control_review_export(
         session, context=context, review_id=review_id, payload=payload
+    )
+
+
+@router.post(
+    "/control-reviews/{review_id}/exceptions/{docket_id}/{exception_kind}/decision",
+    response_model=IpControlReviewRecord,
+)
+async def post_ip_control_review_exception_decision(
+    review_id: str,
+    docket_id: str,
+    exception_kind: str,
+    payload: IpControlReviewExceptionDecisionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return decide_ip_control_review_exception(
+        session,
+        context=context,
+        review_id=review_id,
+        docket_id=docket_id,
+        exception_kind=exception_kind,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/control-reviews/{review_id}/samples",
+    response_model=IpControlReviewRecord,
+)
+async def post_ip_control_review_sample(
+    review_id: str,
+    payload: IpControlReviewSampleRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpControlReviewRecord:
+    return record_ip_control_review_sample(
+        session,
+        context=context,
+        review_id=review_id,
+        payload=payload,
     )
 
 

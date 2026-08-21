@@ -7601,3 +7601,174 @@ def test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres(pg_e
             )
             session.commit()
         session.rollback()
+
+
+@pytest.mark.postgres
+def test_uj59_control_review_evidence_is_immutable_and_tenant_correlated_on_postgres(
+    pg_engine,
+):
+    """UJ-59 evidence survives direct SQL and cross-tenant mutation attempts."""
+
+    from caseops_api.db.models import (
+        IpControlReviewExceptionDecision,
+        IpControlReviewSampleEvidence,
+        IpControlReviewSignature,
+        IpDocketControlReview,
+    )
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        preparer_id = _seed_membership(session, company_id, role="admin")
+        reviewer_id = _seed_membership(session, company_id, role="admin")
+        other_company_id = _seed_company(session)
+        other_membership_id = _seed_membership(session, other_company_id, role="admin")
+        review = IpDocketControlReview(
+            company_id=company_id,
+            generated_at=now,
+            filters_json={},
+            freshness_json={"stale_sources": [], "failed_queries": []},
+            completeness_status="complete",
+            incompleteness_reasons_json=[],
+            mandatory_exception_ids_json=[],
+            query_version="ip-docket-control-v1",
+            snapshot_schema_version=2,
+            report_snapshot_json={"schema_version": 2},
+            manifest_sha256="a" * 64,
+            review_policy_json={"policy_version": "daily-docket-review-v1"},
+            required_signature_count=2,
+            required_sample_size=1,
+            delta_json={},
+            version=1,
+            created_by_membership_id=preparer_id,
+        )
+        session.add(review)
+        session.flush()
+        review_id = review.id
+
+        decision = IpControlReviewExceptionDecision(
+            company_id=company_id,
+            review_id=review_id,
+            docket_id=str(uuid4()),
+            exception_kind="uncovered",
+            disposition="annotated",
+            annotation="Controlled follow-up recorded.",
+            evidence_reference="postgres:decision-evidence",
+            decided_by_membership_id=preparer_id,
+            decided_at=now,
+        )
+        sample = IpControlReviewSampleEvidence(
+            company_id=company_id,
+            review_id=review_id,
+            docket_id=str(uuid4()),
+            reviewer_membership_id=reviewer_id,
+            source_evidence_reference="postgres:source",
+            calculation_evidence_reference="postgres:calculation",
+            coverage_evidence_reference="postgres:coverage",
+            sampled_at=now,
+        )
+        signature = IpControlReviewSignature(
+            company_id=company_id,
+            review_id=review_id,
+            signer_membership_id=preparer_id,
+            signer_role="preparer",
+            signer_label_snapshot="Postgres Preparer",
+            attestation="Prepared and checked the daily docket.",
+            manifest_sha256=review.manifest_sha256,
+            sequence=1,
+            signed_at=now,
+        )
+        session.add_all([decision, sample, signature])
+        session.commit()
+        decision_id = decision.id
+        sample_id = sample.id
+        signature_id = signature.id
+
+    mutation_attempts = [
+        (
+            "UPDATE ip_docket_control_reviews SET manifest_sha256 = :value WHERE id = :id",
+            {"value": "b" * 64, "id": review_id},
+        ),
+        (
+            "UPDATE ip_control_review_exception_decisions SET annotation = :value WHERE id = :id",
+            {"value": "rewritten", "id": decision_id},
+        ),
+        (
+            "DELETE FROM ip_control_review_sample_evidence WHERE id = :id",
+            {"id": sample_id},
+        ),
+        (
+            "UPDATE ip_control_review_signatures SET attestation = :value WHERE id = :id",
+            {"value": "rewritten", "id": signature_id},
+        ),
+    ]
+    for statement, parameters in mutation_attempts:
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError, match="append-only"):
+                session.execute(text(statement), parameters)
+                session.commit()
+            session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.add(
+                IpControlReviewSignature(
+                    company_id=company_id,
+                    review_id=review_id,
+                    signer_membership_id=other_membership_id,
+                    signer_role="reviewer",
+                    signer_label_snapshot="Wrong Tenant Reviewer",
+                    attestation="This actor belongs to another tenant.",
+                    manifest_sha256="a" * 64,
+                    sequence=2,
+                    signed_at=now,
+                )
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError) as manifest_mismatch:
+            session.add(
+                IpControlReviewSignature(
+                    company_id=company_id,
+                    review_id=review_id,
+                    signer_membership_id=reviewer_id,
+                    signer_role="reviewer",
+                    signer_label_snapshot="Postgres Reviewer",
+                    attestation="The signature must bind to the frozen manifest.",
+                    manifest_sha256="f" * 64,
+                    sequence=2,
+                    signed_at=now,
+                )
+            )
+            session.commit()
+        assert "fk_ip_control_signature_manifest" in str(manifest_mismatch.value)
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.execute(
+                text(
+                    "UPDATE ip_docket_control_reviews "
+                    "SET required_signature_count = 3 WHERE id = :id"
+                ),
+                {"id": review_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        with pytest.raises(IntegrityError):
+            session.execute(
+                text("DELETE FROM ip_docket_control_reviews WHERE id = :id"),
+                {"id": review_id},
+            )
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.get(IpDocketControlReview, review_id) is not None
+        assert session.get(IpControlReviewExceptionDecision, decision_id) is not None
+        assert session.get(IpControlReviewSampleEvidence, sample_id) is not None
+        assert session.get(IpControlReviewSignature, signature_id) is not None

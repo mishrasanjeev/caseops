@@ -19,13 +19,16 @@ import {
   bulkAcknowledgeIpCoverage,
   checkIpCalendarDrift,
   createIpControlReview,
+  decideIpControlReviewException,
   decideIpCalendarReconciliationCandidate,
   deleteIpDocketQueue,
   fetchIpAssignedCoverage,
   fetchIpCalendarReconciliationCandidates,
+  fetchIpControlReviews,
   fetchIpDailyDocket,
   fetchIpDocketQueues,
   recordIpControlReviewExport,
+  recordIpControlReviewSample,
   saveIpDocketQueue,
   signOffIpControlReview,
   type IpAssignedCoverage,
@@ -81,7 +84,6 @@ function Count({ value }: { value: number | null }) {
   }
   return <span className="tabular-nums">{value}</span>;
 }
-
 function dueLabel(row: IpAssignedCoverage) {
   if (!row.due_on) return "No due date recorded";
   const on = DUE.format(new Date(`${row.due_on}T00:00:00`));
@@ -90,7 +92,6 @@ function dueLabel(row: IpAssignedCoverage) {
   if (row.days_until_due === 0) return `Due ${on} · today`;
   return `Due ${on} · in ${row.days_until_due} ${row.days_until_due === 1 ? "day" : "days"}`;
 }
-
 function acknowledgementLabel(row: IpAssignedCoverage) {
   const docket = row.docket_identifier
     ? `${row.docket_title} (${row.docket_identifier})`
@@ -1104,14 +1105,86 @@ function ControlReviewCard({
 }) {
   const [review, setReview] = useState<IpControlReview | null>(null);
   const [attestation, setAttestation] = useState("");
+  const [decisionKey, setDecisionKey] = useState("");
+  const [decisionDisposition, setDecisionDisposition] = useState<
+    "resolved" | "annotated"
+  >("resolved");
+  const [decisionAnnotation, setDecisionAnnotation] = useState("");
+  const [decisionEvidence, setDecisionEvidence] = useState("");
+  const [sampleDocketId, setSampleDocketId] = useState("");
+  const [sampleSource, setSampleSource] = useState("");
+  const [sampleCalculation, setSampleCalculation] = useState("");
+  const [sampleCoverage, setSampleCoverage] = useState("");
+  const [sampleNotes, setSampleNotes] = useState("");
+
+  const history = useQuery({
+    queryKey: ["ip-control-reviews"],
+    queryFn: fetchIpControlReviews,
+  });
+
+  useEffect(() => {
+    if (!review && history.data?.reviews[0]) {
+      const latest = history.data.reviews[0];
+      setReview(latest);
+      setSampleDocketId(latest.snapshot.included_records[0]?.docket_id ?? "");
+    }
+  }, [history.data, review]);
 
   const generate = useMutation({
     mutationFn: () => createIpControlReview({ filters }),
     onSuccess: (result) => {
       setReview(result);
+      setDecisionKey("");
+      setSampleDocketId(result.snapshot.included_records[0]?.docket_id ?? "");
+      void history.refetch();
       toast.success("Control review generated.");
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not generate the review.")),
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not generate the review.")),
+  });
+
+  const decideException = useMutation({
+    mutationFn: () => {
+      const [docketId, kind] = decisionKey.split(":");
+      return decideIpControlReviewException(review!.id, docketId, kind, {
+        expectedVersion: review!.version,
+        disposition: decisionDisposition,
+        annotation: decisionAnnotation.trim(),
+        evidenceReference: decisionEvidence.trim(),
+      });
+    },
+    onSuccess: (result) => {
+      setReview(result);
+      setDecisionKey("");
+      setDecisionDisposition("resolved");
+      setDecisionAnnotation("");
+      setDecisionEvidence("");
+      toast.success("Exception decision recorded.");
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not record the decision.")),
+  });
+
+  const recordSample = useMutation({
+    mutationFn: () =>
+      recordIpControlReviewSample(review!.id, {
+        expectedVersion: review!.version,
+        docketId: sampleDocketId,
+        sourceEvidenceReference: sampleSource.trim(),
+        calculationEvidenceReference: sampleCalculation.trim(),
+        coverageEvidenceReference: sampleCoverage.trim(),
+        notes: sampleNotes.trim() || null,
+      }),
+    onSuccess: (result) => {
+      setReview(result);
+      setSampleSource("");
+      setSampleCalculation("");
+      setSampleCoverage("");
+      setSampleNotes("");
+      toast.success("Independent sample recorded.");
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not record the sample.")),
   });
 
   /**
@@ -1146,10 +1219,13 @@ function ControlReviewCard({
       if (result.produced) {
         toast.success("Manifest exported. It is ready to print or file.");
       } else {
-        toast.error("The manifest could not be produced, so the export is recorded as failed.");
+        toast.error(
+          "The manifest could not be produced, so the export is recorded as failed.",
+        );
       }
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not record the export.")),
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not record the export.")),
   });
 
   const sign = useMutation({
@@ -1161,20 +1237,38 @@ function ControlReviewCard({
     onSuccess: (result) => {
       setReview(result);
       setAttestation("");
-      toast.success("Control review signed off.");
+      toast.success(
+        result.signoff_status === "signed"
+          ? "Control review signed off."
+          : "Preparer signature recorded. Independent review is still required.",
+      );
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not sign off this review.")),
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not sign off this review.")),
   });
 
   const blockedBy = !review
     ? null
     : review.completeness_status !== "complete"
       ? "This review is incomplete, so it cannot be signed."
-      : review.mandatory_exceptions.length > 0
-        ? "Resolve every mandatory exception and generate a clean review before signing."
-      : review.export_status === "failed"
-        ? "The last export failed, so this review cannot be signed. Export it again."
-        : null;
+      : review.pending_exception_count > 0
+        ? `Record a decision for all ${review.pending_exception_count} pending exception${review.pending_exception_count === 1 ? "" : "s"} before signing.`
+        : review.export_status === "failed"
+          ? "The last export failed, so this review cannot be signed. Export it again."
+          : null;
+
+  const selectedException = review?.mandatory_exceptions.find(
+    (exception) => `${exception.docket_id}:${exception.kind}` === decisionKey,
+  );
+  const sampleComplete =
+    sampleDocketId.length > 0 &&
+    sampleSource.trim().length >= 3 &&
+    sampleCalculation.trim().length >= 3 &&
+    sampleCoverage.trim().length >= 3;
+  const reviewerSampleRequirementMet =
+    !review ||
+    review.signoff_status !== "awaiting_second_signature" ||
+    review.reviewer_samples.length >= review.review_policy.required_sample_size;
 
   return (
     <Card className="min-w-0" data-testid="ip-docket-control-review">
@@ -1185,24 +1279,57 @@ function ControlReviewCard({
         {!review ? (
           <>
             <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
-              A control review is the signed record that the docket was checked on a given day. It
-              captures the generation time, the filters used, and which sources were stale, so what
-              is signed is exactly what was produced.
+              A control review is the signed record that the docket was checked
+              on a given day. It captures the generation time, the filters used,
+              and which sources were stale, so what is signed is exactly what
+              was produced.
             </p>
             {canWrite ? (
               <div>
-                <Button size="sm" disabled={generate.isPending} onClick={() => generate.mutate()}>
+                <Button
+                  size="sm"
+                  disabled={generate.isPending}
+                  onClick={() => generate.mutate()}
+                >
                   Generate control review
                 </Button>
               </div>
             ) : (
               <p className="text-sm text-[var(--color-mute)]">
-                Your role can view the docket but cannot create a control-review record.
+                Your role can view the docket but cannot create a control-review
+                record.
               </p>
             )}
           </>
         ) : (
           <>
+            {history.data && history.data.reviews.length > 1 ? (
+              <div className="max-w-md">
+                <Label htmlFor="control-review-history">Recent control review</Label>
+                <select
+                  id="control-review-history"
+                  className="mt-1 h-9 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-sm"
+                  value={review.id}
+                  onChange={(event) => {
+                    const selected = history.data.reviews.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    if (selected) {
+                      setReview(selected);
+                      setSampleDocketId(
+                        selected.snapshot.included_records[0]?.docket_id ?? "",
+                      );
+                    }
+                  }}
+                >
+                  {history.data.reviews.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {STAMP.format(new Date(item.generated_at))} · {item.signoff_status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <dl className="grid min-w-0 gap-x-4 gap-y-2 sm:grid-cols-2">
               <div>
                 <dt className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
@@ -1216,7 +1343,9 @@ function ControlReviewCard({
                 <dt className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
                   Records reviewed
                 </dt>
-                <dd className="text-sm tabular-nums">{review.report.docket_count}</dd>
+                <dd className="text-sm tabular-nums">
+                  {review.report.docket_count}
+                </dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
@@ -1242,20 +1371,142 @@ function ControlReviewCard({
             {review.mandatory_exceptions.length ? (
               <div data-testid="ip-docket-review-exceptions">
                 <p className="text-sm font-medium">
-                  Exceptions ({review.mandatory_exceptions.length})
+                  Exceptions ({review.pending_exception_count} pending of{" "}
+                  {review.mandatory_exceptions.length})
                 </p>
-                <ul className="mt-1 flex flex-col gap-1 text-sm text-[var(--color-mute)]">
+                <ul className="mt-2 flex flex-col gap-2 text-sm text-[var(--color-mute)]">
                   {review.mandatory_exceptions.map((exception, index) => (
-                    <li key={`${exception.docket_id}-${exception.kind}-${index}`}>
-                      {EXCEPTION_KIND[exception.kind] ?? exception.kind}
+                    <li
+                      className="flex min-w-0 items-center justify-between gap-2 border-b border-[var(--color-border)] pb-2"
+                      key={`${exception.docket_id}-${exception.kind}-${index}`}
+                    >
+                      <span>
+                        {EXCEPTION_KIND[exception.kind] ?? exception.kind}
+                      </span>
+                      {review.exception_decisions.some(
+                        (decision) =>
+                          decision.docket_id === exception.docket_id &&
+                          decision.exception_kind === exception.kind,
+                      ) ? (
+                        <Badge tone="success">Recorded</Badge>
+                      ) : canWrite && review.signatures.length === 0 ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            setDecisionKey(
+                              `${exception.docket_id}:${exception.kind}`,
+                            )
+                          }
+                        >
+                          Record decision
+                        </Button>
+                      ) : (
+                        <Badge tone="warning">Pending</Badge>
+                      )}
                     </li>
                   ))}
                 </ul>
-                <p className="mt-1 max-w-[70ch] text-sm text-[var(--color-mute)]">
-                  Exceptions are recorded at generation and cannot be filtered away. Resolve them,
-                  then generate a clean review before signing.
+                {selectedException ? (
+                  <div className="mt-3 grid gap-3 border-l-2 border-[var(--color-line)] pl-3">
+                    <div>
+                      <Label htmlFor="control-review-disposition">
+                        Decision
+                      </Label>
+                      <select
+                        id="control-review-disposition"
+                        className="mt-1 h-9 w-full max-w-xs rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-sm"
+                        value={decisionDisposition}
+                        onChange={(event) =>
+                          setDecisionDisposition(
+                            event.target.value as "resolved" | "annotated",
+                          )
+                        }
+                      >
+                        <option value="resolved">Resolved</option>
+                        <option value="annotated">
+                          Annotated for follow-up
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="control-review-decision-note">
+                        Decision note
+                      </Label>
+                      <Textarea
+                        id="control-review-decision-note"
+                        value={decisionAnnotation}
+                        onChange={(event) =>
+                          setDecisionAnnotation(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="control-review-decision-evidence">
+                        Evidence reference
+                      </Label>
+                      <Input
+                        id="control-review-decision-evidence"
+                        value={decisionEvidence}
+                        onChange={(event) =>
+                          setDecisionEvidence(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={
+                          decisionAnnotation.trim().length < 5 ||
+                          decisionEvidence.trim().length < 3 ||
+                          decideException.isPending
+                        }
+                        onClick={() => decideException.mutate()}
+                      >
+                        Save immutable decision
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDecisionKey("")}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {review.predecessor_review_id ? (
+              <div className="text-sm" data-testid="ip-docket-review-delta">
+                <p className="font-medium">
+                  Changes since the last signed review
+                </p>
+                <p className="text-[var(--color-mute)]">
+                  {review.delta.added_docket_ids.length} added,{" "}
+                  {review.delta.removed_docket_ids.length} removed,{" "}
+                  {review.delta.changed_docket_ids.length} changed;{" "}
+                  {review.delta.added_exception_keys.length} new exceptions and{" "}
+                  {review.delta.removed_exception_keys.length} cleared.
                 </p>
               </div>
+            ) : null}
+
+            {review.signatures.length ? (
+              <ol
+                className="flex flex-col gap-1 text-sm"
+                data-testid="ip-docket-review-signatures"
+              >
+                {review.signatures.map((signature) => (
+                  <li
+                    key={`${signature.sequence}-${signature.signer_membership_id}`}
+                  >
+                    {signature.sequence}. {signature.signer_label_snapshot} (
+                    {signature.signer_role})
+                  </li>
+                ))}
+              </ol>
             ) : null}
 
             {review.signed_off_at ? (
@@ -1271,32 +1522,118 @@ function ControlReviewCard({
                 Your role cannot sign off a control review.
               </p>
             ) : blockedBy ? (
-              <p className="text-sm text-[var(--color-mute)]" data-testid="ip-docket-review-blocked">
+              <p
+                className="text-sm text-[var(--color-mute)]"
+                data-testid="ip-docket-review-blocked"
+              >
                 {blockedBy}
               </p>
             ) : (
-              <div className="flex min-w-0 flex-col gap-2">
-                <Label htmlFor="attestation">What are you attesting to?</Label>
-                <Textarea
-                  id="attestation"
-                  value={attestation}
-                  onChange={(event) => setAttestation(event.target.value)}
-                  placeholder="Recorded against your name on this review."
-                />
-                <div>
-                  <Button
-                    size="sm"
-                    disabled={attestation.trim().length < 5 || sign.isPending}
-                    onClick={() => sign.mutate()}
+              <div className="flex min-w-0 flex-col gap-4">
+                {review.signoff_status === "awaiting_second_signature" &&
+                !reviewerSampleRequirementMet ? (
+                  <div
+                    className="grid gap-3"
+                    data-testid="ip-docket-review-sample"
                   >
-                    Sign off
-                  </Button>
-                </div>
+                    <p className="text-sm font-medium">
+                      Independent reviewer sample
+                    </p>
+                    <div>
+                      <Label htmlFor="control-review-sample-record">
+                        Included record
+                      </Label>
+                      <select
+                        id="control-review-sample-record"
+                        className="mt-1 h-9 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-sm"
+                        value={sampleDocketId}
+                        onChange={(event) =>
+                          setSampleDocketId(event.target.value)
+                        }
+                      >
+                        {review.snapshot.included_records.map((record) => (
+                          <option
+                            key={record.docket_id}
+                            value={record.docket_id}
+                          >
+                            {record.docket_id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Input
+                      aria-label="Source evidence reference"
+                      placeholder="Source evidence reference"
+                      value={sampleSource}
+                      onChange={(event) => setSampleSource(event.target.value)}
+                    />
+                    <Input
+                      aria-label="Calculation evidence reference"
+                      placeholder="Calculation evidence reference"
+                      value={sampleCalculation}
+                      onChange={(event) =>
+                        setSampleCalculation(event.target.value)
+                      }
+                    />
+                    <Input
+                      aria-label="Coverage evidence reference"
+                      placeholder="Coverage evidence reference"
+                      value={sampleCoverage}
+                      onChange={(event) =>
+                        setSampleCoverage(event.target.value)
+                      }
+                    />
+                    <Textarea
+                      aria-label="Reviewer sample notes"
+                      placeholder="Optional reviewer notes"
+                      value={sampleNotes}
+                      onChange={(event) => setSampleNotes(event.target.value)}
+                    />
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!sampleComplete || recordSample.isPending}
+                        onClick={() => recordSample.mutate()}
+                      >
+                        Record sample
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                {reviewerSampleRequirementMet ? (
+                  <>
+                    <Label htmlFor="attestation">
+                      What are you attesting to?
+                    </Label>
+                    <Textarea
+                      id="attestation"
+                      value={attestation}
+                      onChange={(event) => setAttestation(event.target.value)}
+                      placeholder="Recorded against your name on this review."
+                    />
+                    <div>
+                      <Button
+                        size="sm"
+                        disabled={
+                          attestation.trim().length < 5 || sign.isPending
+                        }
+                        onClick={() => sign.mutate()}
+                      >
+                        {review.signoff_status === "draft"
+                          ? "Add preparer signature"
+                          : "Add reviewer signature"}
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
 
             <div className="flex flex-wrap gap-2">
-              {canWrite && !review.signed_off_at ? (
+              {canWrite &&
+              !review.signed_off_at &&
+              review.signatures.length === 0 ? (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -1305,6 +1642,16 @@ function ControlReviewCard({
                   data-testid="ip-docket-review-export"
                 >
                   Export manifest
+                </Button>
+              ) : null}
+              {review.signed_off_at ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => downloadControlReviewManifest(review)}
+                  data-testid="ip-docket-review-download-signed"
+                >
+                  Download signed manifest
                 </Button>
               ) : null}
               <Button

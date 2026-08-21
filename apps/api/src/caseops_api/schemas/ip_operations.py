@@ -457,10 +457,27 @@ class IpControlReviewIncludedRecord(BaseModel):
     sha256: str = Field(min_length=64, max_length=64)
 
 
+class IpControlReviewPolicy(BaseModel):
+    policy_version: str
+    required_signature_count: Literal[1, 2]
+    required_sample_size: int = Field(ge=0, le=20)
+    distinct_preparer_and_reviewer: bool
+
+
+class IpControlReviewDelta(BaseModel):
+    predecessor_review_id: str | None = None
+    predecessor_manifest_sha256: str | None = None
+    added_docket_ids: list[str] = Field(default_factory=list)
+    removed_docket_ids: list[str] = Field(default_factory=list)
+    changed_docket_ids: list[str] = Field(default_factory=list)
+    added_exception_keys: list[str] = Field(default_factory=list)
+    removed_exception_keys: list[str] = Field(default_factory=list)
+
+
 class IpControlReviewSnapshot(BaseModel):
     """Canonical, hash-bound input and output of one control-report query."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
     query_version: str
     generated_at: datetime
     timezone: str
@@ -471,6 +488,8 @@ class IpControlReviewSnapshot(BaseModel):
     report: IpDocketControlReport
     mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
     incompleteness_reasons: list[str] = Field(default_factory=list)
+    review_policy: IpControlReviewPolicy | None = None
+    delta: IpControlReviewDelta | None = None
 
 
 class IpControlReviewFilters(BaseModel):
@@ -514,6 +533,56 @@ class IpControlReviewSignOffRequest(BaseModel):
     attestation: str = Field(min_length=5, max_length=2000)
 
 
+class IpControlReviewExceptionDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    disposition: Literal["resolved", "annotated"]
+    annotation: str = Field(min_length=5, max_length=4000)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpControlReviewSampleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    docket_id: str = Field(min_length=1, max_length=36)
+    source_evidence_reference: str = Field(min_length=3, max_length=500)
+    calculation_evidence_reference: str = Field(min_length=3, max_length=500)
+    coverage_evidence_reference: str = Field(min_length=3, max_length=500)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class IpControlReviewExceptionDecisionRecord(BaseModel):
+    docket_id: str
+    exception_kind: str
+    disposition: Literal["resolved", "annotated"]
+    annotation: str
+    evidence_reference: str
+    decided_by_membership_id: str
+    decided_at: datetime
+
+
+class IpControlReviewSampleRecord(BaseModel):
+    docket_id: str
+    reviewer_membership_id: str
+    source_evidence_reference: str
+    calculation_evidence_reference: str
+    coverage_evidence_reference: str
+    notes: str | None = None
+    sampled_at: datetime
+
+
+class IpControlReviewSignatureRecord(BaseModel):
+    signer_membership_id: str
+    signer_role: Literal["preparer", "reviewer"]
+    signer_label_snapshot: str
+    attestation: str
+    manifest_sha256: str
+    sequence: Literal[1, 2]
+    signed_at: datetime
+
+
 class IpControlReviewRecord(BaseModel):
     id: str
     generated_at: datetime
@@ -528,9 +597,22 @@ class IpControlReviewRecord(BaseModel):
     export_error_redacted: str | None = None
     signer_label_snapshot: str | None = None
     signed_off_at: datetime | None = None
+    review_policy: IpControlReviewPolicy
+    predecessor_review_id: str | None = None
+    delta: IpControlReviewDelta
+    exception_decisions: list[IpControlReviewExceptionDecisionRecord] = Field(default_factory=list)
+    reviewer_samples: list[IpControlReviewSampleRecord] = Field(default_factory=list)
+    signatures: list[IpControlReviewSignatureRecord] = Field(default_factory=list)
+    pending_exception_count: int = Field(ge=0)
+    annotated_exception_count: int = Field(ge=0)
+    signoff_status: Literal["draft", "awaiting_second_signature", "signed"]
     version: int
     report: IpDocketControlReport
     snapshot: IpControlReviewSnapshot
+
+
+class IpControlReviewListResponse(BaseModel):
+    reviews: list[IpControlReviewRecord] = Field(default_factory=list)
 
 
 class IpDailyDocketQueue(BaseModel):
@@ -755,9 +837,7 @@ class IpCoverageReassignPreviewResponse(BaseModel):
     to_membership_id: str
     preview_token: str
     affected_coverage_ids: list[str] = Field(default_factory=list)
-    affected_roles: dict[str, list[Literal["responsible", "backup"]]] = Field(
-        default_factory=dict
-    )
+    affected_roles: dict[str, list[Literal["responsible", "backup"]]] = Field(default_factory=dict)
     affected_docket_ids: list[str] = Field(default_factory=list)
     blocked_docket_ids: list[str] = Field(default_factory=list)
     transfer_allowed: bool
