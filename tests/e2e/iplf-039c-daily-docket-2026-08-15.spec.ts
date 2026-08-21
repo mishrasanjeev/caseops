@@ -9,8 +9,10 @@
  *    and its bytes are read back and checked.
  *  * acknowledging in the UI actually moves the manager's count, across two
  *    independent API reads rather than one component's local state.
- *  * a mandatory exception blocks sign-off, while an independently generated
- *    clean review can be signed and carries its signature.
+ *  * mandatory exceptions require immutable manager decisions before the
+ *    preparer can sign.
+ *  * a retained review crosses sessions for an independent sample and second
+ *    signature, then downloads with the complete evidence chain.
  *
  * Stable manifest test IDs:
  *
@@ -144,7 +146,26 @@ async function signIn(page: Page, slug: string, email: string): Promise<void> {
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
-test("IPLF-039C acknowledges and exports, but cannot sign an exception-bearing docket", async ({
+async function createReviewer(
+  api: APIRequestContext,
+  ownerHeaders: { Authorization: string },
+  slug: string,
+): Promise<{ email: string; membershipId: string }> {
+  const email = `reviewer-${slug}@example.com`;
+  const created = await api.post(`${apiBaseUrl}/api/companies/current/users`, {
+    headers: ownerHeaders,
+    data: {
+      full_name: "Independent Docket Reviewer",
+      email,
+      password: PASSWORD,
+      role: "admin",
+    },
+  });
+  expect(created.status(), await created.text()).toBe(200);
+  return { email, membershipId: (await created.json()).membership_id as string };
+}
+
+test("IPLF-039C acknowledges, exports and records every docket exception", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -298,11 +319,21 @@ test("IPLF-039C acknowledges and exports, but cannot sign an exception-bearing d
   await expect(review.getByTestId("ip-docket-review-exceptions")).toContainText(
     "Open incident",
   );
-  await expect(review.getByTestId("ip-docket-review-blocked")).toHaveText(
-    "Resolve every mandatory exception and generate a clean review before signing.",
+  await expect(review.getByTestId("ip-docket-review-blocked")).toContainText(
+    "Record a decision for all",
   );
   await expect(review.getByLabel("What are you attesting to?")).toHaveCount(0);
-  await expect(review.getByRole("button", { name: "Sign off" })).toHaveCount(0);
+  await expect(review.getByRole("button", { name: "Add preparer signature" })).toHaveCount(0);
+
+  while (await review.getByRole("button", { name: "Record decision" }).count()) {
+    const before = await review.getByRole("button", { name: "Record decision" }).count();
+    await review.getByRole("button", { name: "Record decision" }).first().click();
+    await review.getByLabel("Decision note").fill("Manager reviewed and controlled this exception.");
+    await review.getByLabel("Evidence reference").fill(`e2e:control-decision-${before}`);
+    await review.getByRole("button", { name: "Save immutable decision" }).click();
+    await expect(review.getByRole("button", { name: "Record decision" })).toHaveCount(before - 1);
+  }
+  await expect(review.getByRole("button", { name: "Add preparer signature" })).toBeVisible();
 });
 
 test("IPLF-039C signs off an independently generated clean daily docket review", async ({
@@ -312,7 +343,19 @@ test("IPLF-039C signs off an independently generated clean daily docket review",
   await page.setViewportSize({ width: 375, height: 812 });
   const api = await request.newContext();
   const tenant = await bootstrap(api);
-  await enableIpWorkspace(api, tenant);
+  const ownerHeaders = await enableIpWorkspace(api, tenant);
+  const reviewer = await createReviewer(api, ownerHeaders, tenant.slug as string);
+
+  const docket = await api.post(`${apiBaseUrl}/api/ip/dockets`, {
+    headers: ownerHeaders,
+    data: {
+      title: "CLEANREVIEW",
+      matter_id: null,
+      particulars: particulars("CLEANREVIEW"),
+    },
+  });
+  expect(docket.status(), await docket.text()).toBe(201);
+  const docketId = (await docket.json()).id as string;
 
   await signIn(page, tenant.slug as string, tenant.email as string);
   await page.goto("/app/ip/docket");
@@ -323,12 +366,51 @@ test("IPLF-039C signs off an independently generated clean daily docket review",
   await expect(review.getByTestId("ip-docket-review-exceptions")).toHaveCount(0);
   await expect(review.getByTestId("ip-docket-review-blocked")).toHaveCount(0);
 
-  // IPLF-CAL-OPS-13-E2E-01 — the clean review is signed and carries its signature.
+  // IPLF-CAL-OPS-13-E2E-01 — the preparer signs first, but the report is not
+  // represented as complete until an independent reviewer signs.
   await review
     .getByLabel("What are you attesting to?")
-    .fill("Reviewed today's clean daily docket.");
-  await review.getByRole("button", { name: "Sign off" }).click();
-  await expect(review.getByTestId("ip-docket-review-signed")).toContainText("Daily Docket Owner");
-  // A signed review cannot be re-exported, so the control is gone.
+    .fill("Prepared and checked today's clean daily docket.");
+  await review.getByRole("button", { name: "Add preparer signature" }).click();
+  await expect(review.getByTestId("ip-docket-review-signatures")).toContainText(
+    "Daily Docket Owner (preparer)",
+  );
+  await expect(review.getByTestId("ip-docket-review-signed")).toHaveCount(0);
   await expect(review.getByTestId("ip-docket-review-export")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open user menu" }).click();
+  await page.getByTestId("sign-out").click();
+  await page.waitForURL(/\/sign-in(?:\?|$)/);
+  await signIn(page, tenant.slug as string, reviewer.email);
+  await page.goto("/app/ip/docket");
+
+  const retained = page.getByTestId("ip-docket-control-review");
+  await expect(retained.getByTestId("ip-docket-review-sample")).toBeVisible();
+  await expect(retained.getByLabel("Included record")).toHaveValue(docketId);
+  await retained.getByLabel("Source evidence reference").fill("e2e:registry-snapshot");
+  await retained
+    .getByLabel("Calculation evidence reference")
+    .fill("e2e:deadline-calculation");
+  await retained.getByLabel("Coverage evidence reference").fill("e2e:coverage-check");
+  await retained.getByLabel("Reviewer sample notes").fill("All sampled evidence agrees.");
+  await retained.getByRole("button", { name: "Record sample" }).click();
+
+  await retained
+    .getByLabel("What are you attesting to?")
+    .fill("Independently sampled source, calculation and coverage evidence.");
+  await retained.getByRole("button", { name: "Add reviewer signature" }).click();
+  await expect(retained.getByTestId("ip-docket-review-signed")).toContainText(
+    "Independent Docket Reviewer",
+  );
+
+  const signedDownload = page.waitForEvent("download");
+  await retained.getByTestId("ip-docket-review-download-signed").click();
+  const signedFile = await signedDownload;
+  const signedStream = await signedFile.createReadStream();
+  const signedChunks: Buffer[] = [];
+  for await (const chunk of signedStream) signedChunks.push(Buffer.from(chunk));
+  const signedManifest = Buffer.concat(signedChunks).toString("utf8");
+  expect(signedManifest).toContain("Signatures (2/2)");
+  expect(signedManifest).toContain("Independent Docket Reviewer");
+  expect(signedManifest).toContain("e2e:registry-snapshot");
 });

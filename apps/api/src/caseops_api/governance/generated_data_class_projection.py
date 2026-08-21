@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "d7118f0b819afdbd2ccd93282f50ff11db7dd7a5abed1f7c465278c8ba344b42"
-MAP_SCHEMA_FINGERPRINT = "9f727452163522920abe8bb04910212c5c522eac62963dbcd3b5d849d618b6e4"
+MAP_DOCUMENT_FINGERPRINT = "5e9269fb8c93bb2883d9a0a8aa8a6bdf965696a527100734867d4d770d32d9af"
+MAP_SCHEMA_FINGERPRINT = "db6fab96e6c0ad4c62948ec4877a715a1a03e45e91f4cc0b24e0a46d0db638f6"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "0d2067c01105288c682c66828fef7d193a71f438ed6b78cf65327413bc7e355b"
+ORM_SCHEMA_FINGERPRINT = "dfb04120d652645c77105fe8431b910a96fc23e8d94a58d662255ee270ce093e"
 
-PROJECTION_ID = "540ba09d7516eba083685e31ad2d9ef789a3636493c62ac09aad2d053967de93"
+PROJECTION_ID = "f936b04777cd2acc7bd88556b2d9310ef55c2b3090b10724021caf26c02e7ccd"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -92,6 +92,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "bulk_import_jobs",
         "calendar_event_candidates",
         "calendar_event_syncs",
+        "calendar_projection_reconciliation_candidates",
         "case_tracking_support_matrix",
         "cause_list_exports",
         "clients",
@@ -144,6 +145,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "inbound_email_aliases",
         "inbound_email_events",
         "ip_assets",
+        "ip_control_review_exception_decisions",
+        "ip_control_review_sample_evidence",
+        "ip_control_review_signatures",
         "ip_cost_items",
         "ip_deadline_coverages",
         "ip_deadline_incidents",

@@ -162,13 +162,33 @@ resolves it properly — the default is "work it out", never "assume an answer".
   for this slice, which is why `verification_status` stays `not_run` and
   `release_status` stays `blocked` in the manifest.
 
-## Migration note for the integrator
+## Migration note for the integrator — resolved 2026-08-21
 
-`20260821_0002` chains from `20260820_0002` (the merged invoice-immutability
-migration). The Codex calendar lane reserved `20260821_0001` and chains from
-the same parent, so if both land there will be **two alembic heads** and the
-integration needs a merge revision. This is a known cost of the two-lane split
-recorded in `parallel_work_allocation`, not an error in either migration.
+This migration is now `20260821_0003`, chained from `20260821_0002`. It was
+originally `20260821_0002` from `20260820_0002`, and both parts of that had to
+change when the Codex calendar lane merged as `c3dd77ec`:
+
+- **Two heads.** The calendar lane chained `20260821_0001` from the same
+  `20260820_0002`, so the two lanes were siblings and `alembic upgrade head`
+  would have been ambiguous. Predicted before the merge; resolved by re-chaining
+  rather than by adding a merge revision, since the two migrations touch
+  unrelated tables and a linear chain is simpler to reason about.
+- **A duplicate revision id, which was not predicted.** PR #282 carried *two*
+  migrations, not one: the calendar lane also landed `20260821_0002`
+  (`ip_control_review_evidence`). That collided with this migration's original
+  id. Alembic reports a duplicate id as a warning and then resolves it silently,
+  so the second copy would simply have become unreachable.
+
+Verified after the change: `ScriptDirectory.get_heads()` returns exactly
+`['20260821_0003']`, and all nine contract validators plus the slice tests pass
+on the merged tree.
+
+Both defects are the ones `scripts/migration_preflight.py` now detects on the
+pull-request merge commit — `MIGRATION-MULTIPLE-HEADS` and
+`MIGRATION-DUPLICATE-REVISION`, added in PR #284 and recorded as `EH-DEPLOY-01`.
+That gate was written from the predicted collision; the duplicate id it also
+catches turned out to be a real second defect in the same merge rather than a
+hypothetical one.
 
 The generated data-class projection changed only its fingerprints — no data
 class was added or removed. The Codex calendar lane will change the same
