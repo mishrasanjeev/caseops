@@ -1302,3 +1302,46 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   exist. Keep the enum members for forward compatibility.
 - **Severity:** stop-ship for the hearing-reminder workflow (F-03): it is the
   product inviting a failure it cannot fulfil.
+
+## 2026-08-20 Parallel-lane deploy control gap
+
+### EH-DEPLOY-01 - A split alembic revision graph reaches the trunk unchecked
+
+- **Status:** Partially implemented — control written and unit-proven in
+  `fix/alembic-single-head-gate-20260820` (PR #284), **not yet merged**. It is
+  not `Implemented` until it is on `main` and has demonstrably failed a real
+  offending pull request.
+- **Gap found:** two lanes each added a migration whose `down_revision` was
+  `20260820_0002` — `20260821_0001` (calendar reconciliation, PR #282) and
+  `20260821_0002` (IP cost items, PR #283). That is two alembic heads, and
+  `alembic upgrade head` refuses to run with more than one, so the deploy fails
+  at the migration step.
+- **Why nothing caught it:** `scripts/migration_preflight.py` checked lock risk
+  (UJ-67-EXC-01) and destructive downgrades (UJ-67-EXC-06) but never the shape
+  of the revision graph. The `postgres-validation` job does run `alembic upgrade
+  head`, yet **neither pull request's branch contains both migrations** — each
+  holds only its own file — so neither branch can fail. The collision first
+  appears on the trunk, after both have merged.
+- **Why this is a fail-open control, not bad luck:** nothing about the two lanes
+  was irregular. Any two parallel branches adding a migration from the same
+  parent produce this, and the repository runs many concurrent lanes by design.
+  The default outcome of ordinary work was a broken trunk.
+- **Control required:** evaluate the revision graph over every migration present
+  rather than only the changed one, so the pull-request merge commit — which is
+  what CI builds — sees both files and fails before merge. Report the heads and
+  their paths, and name the resolution (re-chain, or an explicit merge revision);
+  a gate that only refuses gets deleted rather than satisfied.
+- **Severity:** stop-ship for any release train carrying two concurrent
+  migration lanes. Not stop-ship for a single-lane release.
+- **Residual risk after PR #284:** the gate fires on the *second* lane's CI run
+  after the first merges. It does not resolve an existing collision — #282 and
+  #283 still need a re-chain or merge revision, whichever lands second. It also
+  cannot see a migration that exists only in an unmerged sibling branch, which
+  is correct: that is not yet a property of the trunk.
+- **Verification:** with both lanes' real migration files present,
+  `python scripts/migration_preflight.py validate` exits 1 and names both heads;
+  with either alone, and on current `main`, it exits 0 reporting
+  `single head 20260820_0002`. Unit coverage in
+  `apps/api/tests/test_uj67_migration_preflight.py::TestRevisionGraphShape`
+  (linear chain, the exact collision shape, merge-revision resolution, duplicate
+  revision ids, and an assertion that the committed graph has one head).
