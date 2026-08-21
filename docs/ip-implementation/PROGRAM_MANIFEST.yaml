@@ -1700,8 +1700,8 @@
         "IPLF-035A",
         "IPLF-035B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [],
@@ -9601,33 +9601,60 @@
       "dependencies": [
         "IPLF-035A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/shared_work.py",
+        "apps/api/src/caseops_api/services/shared_work.py",
+        "apps/api/src/caseops_api/services/hearing_reminders.py",
+        "apps/api/src/caseops_api/services/notification_delivery.py",
+        "apps/api/src/caseops_api/services/calendar_sync.py",
+        "apps/api/src/caseops_api/services/ip_calendar_projection.py",
+        "apps/api/src/caseops_api/services/ip_calendar_reconciliation.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_hearing_notification_workflow.py::test_uj10_unknown_time_confirmation_supersedes_reminders#IPLF-UJ-10-EXC-01#IPLF-UJ-10-EXC-02",
+        "apps/api/tests/test_ip_deadline_notifications.py#IPLF-UJ-10-NORMAL#IPLF-UJ-10-EXC-03",
+        "apps/api/tests/test_ip_calendar_projection.py#IPLF-UJ-62-NORMAL#IPLF-UJ-62-EXC-01#IPLF-UJ-62-EXC-02#IPLF-UJ-62-EXC-04#IPLF-UJ-62-EXC-05",
+        "apps/api/tests/test_ip_calendar_drift.py#IPLF-UJ-62-EXC-03",
+        "apps/api/tests/test_calendar_provider_sandbox_verification.py#IPLF-UJ-62-EXC-03",
+        "apps/web/app/app/ip/page.test.tsx",
+        "apps/web/app/app/ip/docket/page.test.tsx",
+        "tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts#IPLF-UJ-10-EXC-01#IPLF-UJ-10-EXC-02"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md",
+          "revision": "1d1f60858aa5ceae15e5b2a492a8e0d7ed968fcd",
+          "environment": "Windows 11 local exact implementation revision; SQLite API fixtures; Next.js 16 production build; Chromium through playwright.app.config.ts at 360x820",
+          "fixtures": "Synthetic law-firm tenant, entitled trademark docket, active responsible membership, unpublished-time opposition hearing, date-based reminder policy, two reminder channels, reschedule and exact-time confirmation",
+          "assertions": "No invented hearing time, visible time-confirmation obligation, canonical shared hearing/reminder/intent ownership, immutable immediate reminder replacement chain, cancellation without false current/superseded state, recipient/channel outcome visibility, 360px no-overflow workflow, and existing UJ-62 projection/reconciliation exception proofs",
+          "result": "passed",
+          "recorded_at": "2026-08-22T04:16:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge only after exact-head CI, security, PostgreSQL, OpenAPI-diff and full Playwright gates pass.",
+        "Deploy and record exact runtime identity separately; external calendar/provider activation and human legal/UAT acceptance are not inferred from local proof."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change or new writer. Derived response fields expose uncertainty and the immutable generation chain already present in matter_hearings and hearing_reminders; updates continue through the shared hearing, notification-intent and calendar-sync owners."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/CALENDAR_REMINDER_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
+      ],
+      "allocation_review": "Brutally re-audited against current main. IPLF-007C already owns durable dispatch, suppression/fallback, webhook outcomes and admin recovery; IPLF-023B/025B already own legal dates, shared hearings, reminders and calendar projections; IPLF-034B owns governed deadline UX; IPLF-039C owns external-calendar drift review. IPLF-035B therefore adds no table, dispatcher, provider adapter, suggestion history or parallel calendar. Its bounded delta is the missing UJ-10 unpublished-time confirmation and user-visible immediate reminder replacement chain, plus reciprocal evidence for the already implemented UJ-62 paths.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -17747,28 +17774,18 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-01",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL",
-        "apps/api/tests/test_ip_deadline_notifications.py"
+        "apps/api/tests/test_ip_deadline_notifications.py#IPLF-REQ-NOTIF-01",
+        "apps/api/tests/test_ip_hearing_notification_workflow.py#IPLF-REQ-NOTIF-01",
+        "apps/api/tests/test_notification_convergence_20260804.py#IPLF-REQ-NOTIF-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -17797,25 +17814,16 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-02",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_ip_hearing_notification_workflow.py#IPLF-REQ-NOTIF-02",
+        "apps/api/tests/test_notification_convergence_20260804.py#IPLF-REQ-NOTIF-02"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -17868,7 +17876,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -17921,7 +17929,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -17974,7 +17982,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18027,7 +18035,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18082,7 +18090,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18112,25 +18120,17 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-08",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_notification_convergence_20260804.py#IPLF-REQ-NOTIF-08",
+        "apps/api/tests/test_email_suppression.py#IPLF-REQ-NOTIF-08",
+        "apps/web/app/app/admin/notifications/page.test.tsx#IPLF-REQ-NOTIF-08"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18183,7 +18183,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18238,7 +18238,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18268,25 +18268,17 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-11",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_ip_hearing_notification_workflow.py#IPLF-REQ-NOTIF-11",
+        "apps/api/tests/test_shared_work_foundation.py#IPLF-REQ-NOTIF-11",
+        "apps/api/tests/test_ip_deadline_workflow.py#IPLF-REQ-NOTIF-11"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18314,25 +18306,16 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-12",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_hearing_reminders.py#IPLF-REQ-NOTIF-12",
+        "apps/api/tests/test_ip_deadline_terminal_state.py#IPLF-REQ-NOTIF-12"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18383,7 +18366,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18413,25 +18396,16 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-14",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_notification_convergence_20260804.py#IPLF-REQ-NOTIF-14",
+        "apps/web/app/app/admin/notifications/page.test.tsx#IPLF-REQ-NOTIF-14"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18484,7 +18458,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18514,25 +18488,17 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-16",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_notification_convergence_20260804.py#IPLF-REQ-NOTIF-16",
+        "apps/api/tests/test_ip_calendar_projection.py#IPLF-REQ-NOTIF-16",
+        "apps/api/tests/test_hearing_reminders.py#IPLF-REQ-NOTIF-16"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18583,7 +18549,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18636,7 +18602,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18689,7 +18655,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18744,7 +18710,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18774,25 +18740,16 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-NOTIF-21",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02",
-        "planned:IPLF-UJ-10-EXC-03",
-        "planned:IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-11-EXC-01",
-        "planned:IPLF-UJ-11-EXC-02",
-        "planned:IPLF-UJ-11-NORMAL",
-        "planned:IPLF-UJ-62-EXC-01",
-        "planned:IPLF-UJ-62-EXC-02",
-        "planned:IPLF-UJ-62-EXC-03",
-        "planned:IPLF-UJ-62-EXC-04",
-        "planned:IPLF-UJ-62-EXC-05",
-        "planned:IPLF-UJ-62-NORMAL"
+        "apps/api/tests/test_notification_convergence_20260804.py#IPLF-REQ-NOTIF-21",
+        "apps/api/tests/test_postgres_validation.py#IPLF-REQ-NOTIF-21"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m1/IPLF-007C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -18843,7 +18800,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18896,7 +18853,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -18951,7 +18908,7 @@
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -43677,14 +43634,17 @@
       "test_refs": [
         "apps/api/tests/test_ip_deadline_notifications.py::test_uj10_exc03_unacknowledged_owner_is_withheld_in_the_plan#IPLF-UJ-10-EXC-03",
         "apps/api/tests/test_ip_deadline_notifications.py::test_uj10_normal_preview_then_confirm_matches_the_plan#IPLF-UJ-10-NORMAL",
-        "planned:IPLF-UJ-10-EXC-01",
-        "planned:IPLF-UJ-10-EXC-02"
+        "apps/api/tests/test_ip_hearing_notification_workflow.py::test_uj10_unknown_time_confirmation_supersedes_reminders#IPLF-UJ-10-EXC-01",
+        "apps/api/tests/test_ip_hearing_notification_workflow.py::test_uj10_unknown_time_confirmation_supersedes_reminders#IPLF-UJ-10-EXC-02",
+        "tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts#IPLF-UJ-10-EXC-01",
+        "tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts#IPLF-UJ-10-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-035A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49810,11 +49770,14 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-10-EXC-01"
+        "apps/api/tests/test_ip_hearing_notification_workflow.py::test_uj10_unknown_time_confirmation_supersedes_reminders#IPLF-UJ-10-EXC-01",
+        "tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts#IPLF-UJ-10-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49878,11 +49841,14 @@
         "NOTIF-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-10-EXC-02"
+        "apps/api/tests/test_ip_hearing_notification_workflow.py::test_uj10_unknown_time_confirmation_supersedes_reminders#IPLF-UJ-10-EXC-02",
+        "tests/e2e/iplf-025b-calendar-workflow-2026-08-10.spec.ts#IPLF-UJ-10-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-035B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
