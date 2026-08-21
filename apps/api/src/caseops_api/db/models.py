@@ -14096,6 +14096,111 @@ class IpWorkflowVersion(Base):
     )
 
 
+class IpPortfolioSavedView(Base):
+    __tablename__ = "ip_portfolio_saved_views"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_portfolio_view_membership_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_portfolio_view_id_company"),
+        ForeignKeyConstraint(
+            ["team_id", "company_id"],
+            ["teams.id", "teams.company_id"],
+            name="fk_ip_portfolio_view_team_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            "name",
+            name="uq_ip_portfolio_view_member_name",
+        ),
+        Index(
+            "ix_ip_portfolio_views_company_member",
+            "company_id",
+            "membership_id",
+        ),
+        Index("ix_ip_portfolio_views_membership", "membership_id"),
+        Index("ix_ip_portfolio_views_team", "team_id"),
+        CheckConstraint(
+            "(scope = 'personal' AND team_id IS NULL) OR "
+            "(scope = 'team' AND team_id IS NOT NULL)",
+            name="ck_ip_portfolio_view_scope_owner",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False, default="personal")
+    team_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    filters_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    columns_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpPortfolioExportJob(Base):
+    __tablename__ = "ip_portfolio_export_jobs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["requested_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_portfolio_export_requester_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_portfolio_export_id_company"),
+        Index(
+            "ix_ip_portfolio_exports_company_requester_created",
+            "company_id",
+            "requested_by_membership_id",
+            "created_at",
+        ),
+        Index("ix_ip_portfolio_exports_requester", "requested_by_membership_id"),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed')",
+            name="ck_ip_portfolio_export_status",
+        ),
+        CheckConstraint("format IN ('csv')", name="ck_ip_portfolio_export_format"),
+        CheckConstraint(
+            "row_limit > 0 AND row_limit <= 50000",
+            name="ck_ip_portfolio_export_row_limit",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    format: Mapped[str] = mapped_column(String(12), nullable=False, default="csv")
+    filters_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    columns_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    row_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=10000)
+    storage_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class IpDocketRecord(Base):
     __tablename__ = "ip_docket_records"
     __table_args__ = (
@@ -16943,6 +17048,12 @@ class IpImportRow(Base):
             deferrable=True,
             initially="DEFERRED",
         ),
+        ForeignKeyConstraint(
+            ["reconciled_target_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_import_row_reconciled_docket_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("job_id", "row_number", name="uq_ip_import_row_number"),
         CheckConstraint("row_number > 0", name="ck_ip_import_row_number_positive"),
         CheckConstraint(
@@ -16953,7 +17064,16 @@ class IpImportRow(Base):
             "commit_status IN ('pending', 'committed', 'failed', 'skipped')",
             name="ck_ip_import_row_commit_status",
         ),
+        CheckConstraint(
+            "reconciliation_decision IS NULL OR reconciliation_decision IN "
+            "('create_separate', 'link_existing', 'skip')",
+            name="ck_ip_import_row_reconciliation_decision",
+        ),
         Index("ix_ip_import_rows_job_commit", "job_id", "commit_status"),
+        Index(
+            "ix_ip_import_rows_reconciled_target",
+            "reconciled_target_docket_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -16966,6 +17086,9 @@ class IpImportRow(Base):
     normalized_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     validation_status: Mapped[str] = mapped_column(String(16), nullable=False, default="valid")
     errors_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    duplicate_candidates_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    reconciliation_decision: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    reconciled_target_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     commit_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     commit_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_docket_id: Mapped[str | None] = mapped_column(

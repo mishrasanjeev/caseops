@@ -17,38 +17,37 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-21T08:52:00+05:30",
-      "base_revision": "9e8d41c0",
+      "recorded_at": "2026-08-21T09:44:19+05:30",
+      "base_revision": "3802de0f",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-039D",
-        "branch": "codex/iplf-039d-deadline-incidents-20260821",
-        "status": "repository_implemented_local_verified_pr_open",
-        "pull_request": 285,
-        "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
-        "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
+        "slice_id": "IPLF-030B",
+        "branch": "codex/iplf-030b-portfolio-workflow-20260821",
+        "status": "implementation_complete_pr_open",
+        "scope": "Complete the portfolio user workflow and exception paths over the existing IPLF-030A read-only projection: permission-scoped listing, composed filters, saved views, stable columns, bounded export, responsive UI, and exact API/UI/PostgreSQL/E2E evidence.",
         "owned_components": [
-          "IP deadline-incident lifecycle, evidence, impact, action, communication-decision and kill-switch schema/API/UI contracts",
-          "IP deadline-incident tests for all UJ-58 normal and exception paths",
-          "IPLF-039D status, test, and evidence references"
+          "IP portfolio read-only projection extensions, saved-view preferences, export contract, and portfolio UI",
+          "IPLF-030B tests for UJ-04 normal and exception paths, including access filtering and narrow-mobile behavior",
+          "IPLF-030B status, test, and evidence references"
         ],
         "merge_constraints": [
-          "This is stacked from PR #282 exact head cf424e4c; do not amend the IPLF-039C 20260821_0001 or 20260821_0002 migrations.",
-          "Use additive migration identifier 20260821_0003 or later and keep incident data company-correlated, append-only where evidence is frozen, and fail closed.",
-          "Reuse the existing legal-hold resolver and capability/rollout catalog; do not alter Claude's data-governance policy workflow or cost-item models."
+          "Extend the existing IPLF-030A read-only portfolio route and canonical visible_ip_dockets_filter policy; do not introduce a second portfolio, deadline, or access-policy owner.",
+          "Keep exports permission-filtered and bounded, and persist only user-scoped presentation preferences if required.",
+          "Reuse established web table, saved-view, export, capability, and rollout patterns and preserve fail-closed behavior."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
           "IP cost/billing models and migrations",
-          "IP calendar reconciliation and daily docket control-review implementation",
+          "IPLF-039G integration until IPLF-039F is merged",
           "IPLF-027B irreversible A0 retirement"
         ],
         "prior_lane": {
-          "slice_id": "IPLF-039C",
-          "branch": "codex/iplf-039c-calendar-reconcile-20260820",
-          "pull_request": 282,
+          "slice_id": "IPLF-039D",
+          "branch": "codex/iplf-039d-deadline-incidents-20260821",
+          "pull_request": 285,
           "status": "merged",
-          "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731"
+          "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
+          "merge_revision": "de5d330f96b28f11469ac0dcd26a0155c0119eeb"
         }
       },
       "claude": {
@@ -62,8 +61,8 @@
           {
             "slice_id": "IPLF-039F",
             "branch": "feat/iplf039f-cost-items-20260820",
-            "status": "assigned_not_started",
-            "scope": "Implement the independently owned IP cost-item and billing workflow after the merged invoice-immutability dependency."
+            "status": "merged",
+            "scope": "Claude-owned IP cost-item and billing workflow merged through PR #283 at 3802de0f; IPLF-030B chains its migration after Claude's 20260821_0004."
           }
         ],
         "owned_components": [
@@ -1477,11 +1476,14 @@
         "IPLF-030A",
         "IPLF-030B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -8481,6 +8483,7 @@
         "COMP-07",
         "COMP-08",
         "IP-PORT-01",
+        "IP-PORT-02",
         "IP-PORT-03",
         "IP-PORT-04",
         "IP-PORT-06",
@@ -8506,27 +8509,68 @@
       "dependencies": [
         "IPLF-030A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio_workflow.py",
+        "apps/api/src/caseops_api/services/ip_imports.py",
+        "apps/api/src/caseops_api/services/ip_import_files.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/alembic/versions/20260821_0005_ip_portfolio_views_exports.py",
+        "apps/web/app/app/ip/portfolio/page.tsx",
+        "apps/web/app/app/ip/portfolio/imports/page.tsx",
+        "apps/web/lib/api/endpoints.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_workflow.py",
+        "apps/api/tests/test_ip_portfolio_import_files.py",
+        "apps/api/tests/test_ip_bulk_import.py",
+        "apps/api/tests/test_20260821_ip_portfolio_views_exports_migration.py",
+        "apps/web/app/app/ip/portfolio/page.test.tsx",
+        "apps/web/app/app/ip/portfolio/imports/page.test.tsx",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md",
+          "revision": "afffae92dd8516a56e432917b7f6c132cfaf7dc2",
+          "environment": "Windows 11, CPython 3.13, Node 24, Next.js 16.3, locked dependencies, isolated SQLite/API fixtures and local Chromium; exact-head PostgreSQL CI and deployment remain required",
+          "fixtures": "Synthetic entitled law-firm tenant, trademark particulars, application/opposition identifiers, stale registry event, saved views, export jobs, CSV/XLSX rows and duplicate candidates; no real client or registry data",
+          "assertions": "Portfolio classification/search/filter/counts, stale/unavailable truth, personal/team views, preview-bound audited export/retry, CSV/XLSX validation/history/error report/reconciliation/idempotent commit, representation categories, responsive UI and exact imported-identifier search",
+          "result": "passed",
+          "recorded_at": "2026-08-21T11:10:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass exact-head CI, including PostgreSQL migration validation and the complete Playwright app suite, before merge or release claims.",
+        "Deploy an immutable merged candidate and record dated production acceptance before changing release_status from blocked.",
+        "Activate IP-PORT-10 provider-failure population only when IPLF-043B/M5 supplies real registry telemetry; continue returning unavailable rather than a fabricated zero before then."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "20260821_0005 extends neutral ip_import_rows with duplicate-reconciliation state and adds tenant-scoped saved-view/export-job owners; imported portfolio records are written only through canonical docket, asset, application and identifier writers.",
+        "Export artifacts reuse the existing document-storage boundary; portfolio listing remains a read projection over canonical records, access policy, deadlines and confirmed registry-sync events."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Delivered scope, requirement/path accounting, local gates, migration/data boundary and explicit release caveats"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Concrete implementation, test and evidence references with release status kept blocked"
+        }
+      ],
+      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25. | IPLF-030B 2026-08-21: implemented the application-level list/grid projection, full filters and counts, personal/team saved views, preview-bound audited background exports, controlled CSV/XLSX import and explicit duplicate reconciliation while reusing canonical access, docket, asset, application, identifier, deadline and storage owners. IP-PORT-10's portfolio contract distinguishes unavailable telemetry from zero; operational provider-failure population remains IPLF-043B/M5 activation work. Local API/web/build/Playwright/governance/migration proof passed, but exact-head CI, deployment and dated acceptance remain outstanding.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -19451,18 +19495,22 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-01",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_portfolio_workflow.py",
+        "apps/web/app/app/ip/portfolio/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_workflow.py",
+        "apps/web/app/app/ip/portfolio/page.test.tsx",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19489,13 +19537,17 @@
         "apps/api/src/caseops_api/schemas/ip_portfolio.py",
         "apps/api/src/caseops_api/services/ip_portfolio.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/app/app/ip/portfolio/page.tsx",
         "apps/web/lib/api/openapi-types.ts"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_portfolio_listing.py::test_ip_port_02_filters_are_server_owned"
+        "apps/api/tests/test_ip_portfolio_listing.py::test_ip_port_02_filters_are_server_owned",
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_portfolio_filters_and_stale_registry_state_use_canonical_owners",
+        "apps/web/app/app/ip/portfolio/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -19503,9 +19555,10 @@
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
-        "IPLF-030A"
+        "IPLF-030A",
+        "IPLF-030B"
       ],
-      "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030.",
+      "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030. | IPLF-030A delivered the server-owned base filters. IPLF-030B completed the missing client, proprietor, Nice class, responsible lawyer, team, deadline, opposition and registry-freshness filters plus the operator UI; no second query owner was introduced.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -19522,18 +19575,22 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-03",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_portfolio_workflow.py",
+        "apps/api/alembic/versions/20260821_0005_ip_portfolio_views_exports.py",
+        "apps/web/app/app/ip/portfolio/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_saved_views_are_personal_versioned_and_audited",
+        "apps/web/app/app/ip/portfolio/page.test.tsx",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19556,18 +19613,24 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-04",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_portfolio_workflow.py",
+        "apps/api/src/caseops_api/services/ip_imports.py",
+        "apps/web/app/app/ip/portfolio/page.tsx",
+        "apps/web/app/app/ip/portfolio/imports/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_exc03_export_is_background_access_scoped_and_audited",
+        "apps/api/tests/test_ip_portfolio_import_files.py::test_ip_port_08_duplicate_requires_audited_reconciliation",
+        "apps/api/tests/test_ip_bulk_import.py",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19627,18 +19690,22 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-06",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_imports.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_039a_filing_particulars.py::test_ip_port_06_label_and_colour_marks_retain_non_text_categories",
+        "apps/api/tests/test_ip_portfolio_import_files.py::test_ip_port_06_import_normalizes_supported_representation_categories",
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_normal_exact_identifier_lookup_and_register_depth"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19661,18 +19728,21 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-07",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_imports.py"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_normal_exact_identifier_lookup_and_register_depth",
+        "apps/api/tests/test_ip_portfolio_import_files.py::test_ip_port_08_csv_upload_materializes_searchable_portfolio"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19695,18 +19765,24 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-08",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_import_files.py",
+        "apps/api/src/caseops_api/services/ip_imports.py",
+        "apps/api/alembic/versions/20260821_0005_ip_portfolio_views_exports.py",
+        "apps/web/app/app/ip/portfolio/imports/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_import_files.py",
+        "apps/api/tests/test_ip_bulk_import.py",
+        "apps/web/app/app/ip/portfolio/imports/page.test.tsx",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19729,18 +19805,20 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-09",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_portfolio_workflow.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_exc03_export_is_background_access_scoped_and_audited",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -19763,27 +19841,29 @@
       "journey_ids": [
         "UJ-04"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/web/app/app/ip/portfolio/page.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-PORT-10",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_portfolio_counts_cover_filter_scope_not_only_current_page",
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_portfolio_filters_and_stale_registry_state_use_canonical_owners",
+        "apps/web/app/app/ip/portfolio/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-030B",
         "IPLF-030A"
       ],
-      "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030. | IPLF-030A 2026-08-14: complete/incomplete/unconfirmed/overdue counts are delivered, but sync-failure counts require M5 registry synchronisation, so this requirement stays open.",
+      "allocation_rationale": "IP-PORT allocation reviewed against PRD requirement family and parent epic scope: IPLF-030. | IPLF-030A 2026-08-14 delivered complete/incomplete/unconfirmed/overdue counts. | IPLF-030B 2026-08-21 makes counts full-filter-scope, adds stale/current/unavailable/failed contract states, exposes sync_failure_records as nullable so unavailable telemetry is never represented as zero, and verifies the available count paths. The requirement implementation is complete at the portfolio boundary; operational population of provider failure telemetry remains an IPLF-043B/M5 activation dependency and is not falsely claimed by this status.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -25936,7 +26016,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25982,7 +26062,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -26028,7 +26108,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -26074,7 +26154,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -26120,7 +26200,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -26166,7 +26246,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -26212,7 +26292,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -26258,7 +26338,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -43103,16 +43183,20 @@
         "IP-PORT-10"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_portfolio_import_files.py::test_ip_port_08_csv_upload_materializes_searchable_portfolio#IPLF-UJ-04-NORMAL",
         "apps/api/tests/test_ip_portfolio_listing.py::test_uj04_exc02_restricted_records_are_omitted_not_teased#IPLF-UJ-04-EXC-02",
-        "planned:IPLF-UJ-04-EXC-01",
-        "planned:IPLF-UJ-04-EXC-03",
-        "planned:IPLF-UJ-04-NORMAL"
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_portfolio_filters_and_stale_registry_state_use_canonical_owners#IPLF-UJ-04-EXC-01",
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_exc03_export_is_background_access_scoped_and_audited#IPLF-UJ-04-EXC-03",
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_normal_exact_identifier_lookup_and_register_depth#IPLF-UJ-04-NORMAL",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts#IPLF-UJ-04-EXC-03",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts#IPLF-UJ-04-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-030A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -48525,11 +48609,15 @@
         "IP-PORT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-04-NORMAL"
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_normal_exact_identifier_lookup_and_register_depth#IPLF-UJ-04-NORMAL",
+        "apps/api/tests/test_ip_portfolio_import_files.py::test_ip_port_08_csv_upload_materializes_searchable_portfolio#IPLF-UJ-04-NORMAL",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts#IPLF-UJ-04-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -48572,11 +48660,13 @@
         "IP-PORT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-04-EXC-01"
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_portfolio_filters_and_stale_registry_state_use_canonical_owners#IPLF-UJ-04-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -48668,11 +48758,14 @@
         "IP-PORT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-04-EXC-03"
+        "apps/api/tests/test_ip_portfolio_workflow.py::test_uj04_exc03_export_is_background_access_scoped_and_audited#IPLF-UJ-04-EXC-03",
+        "tests/e2e/iplf-030b-portfolio-workflow-2026-08-21.spec.ts#IPLF-UJ-04-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-030B/local-2026-08-21.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [

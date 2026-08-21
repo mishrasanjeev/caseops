@@ -13,10 +13,12 @@ rather than inserting docket rows directly.
 
 from __future__ import annotations
 
+import csv
+import io
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from secrets import token_hex
 from threading import Lock
@@ -24,21 +26,40 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import AuditEvent, BulkImportJob, IpDocketRecord, IpImportRow, Matter
+from caseops_api.db.models import (
+    AuditEvent,
+    BulkImportJob,
+    IpAsset,
+    IpDocketRecord,
+    IpIdentifier,
+    IpImportRow,
+    Matter,
+    TrademarkApplication,
+)
 from caseops_api.schemas.ip_imports import (
     IpImportCommitRequest,
     IpImportCommitResponse,
     IpImportJobCreateRequest,
     IpImportJobRecord,
     IpImportPreviewResponse,
+    IpImportReconciliationRequest,
     IpImportRowRecord,
 )
 from caseops_api.schemas.ip_operations import IpDocketCreateRequest
+from caseops_api.schemas.ip_records import (
+    IpApplicationNumberCreate,
+    IpAssetCreateRequest,
+    TrademarkApplicationCreateRequest,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.csv_security import csv_safe_mapping
+from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_operations import create_ip_docket
+from caseops_api.services.ip_records import create_ip_asset, create_trademark_application
+from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 
 DOMAIN = "ip_trademark"
@@ -46,6 +67,17 @@ PREVIEW_TTL = timedelta(minutes=30)
 REQUIRED_FIELDS = ("title", "mark_text", "class_number", "applicant_name")
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 IMPORT_MATERIALIZATION_ACTION = "ip_docket.source_materialized"
+REPRESENTATION_KIND_ALIASES = {"logo": "device", "color": "colour"}
+REPRESENTATION_KINDS = {
+    "word",
+    "device",
+    "composite",
+    "label",
+    "colour",
+    "shape",
+    "sound",
+    "other",
+}
 
 
 @dataclass
@@ -167,6 +199,25 @@ def _validate_row(
             else:
                 normalized["class_number"] = parsed
 
+    for field, default in (("jurisdiction", "IN"), ("office", "IP India")):
+        raw = values.get(field)
+        normalized[field] = (
+            _neutralize(raw.strip()) if isinstance(raw, str) and raw.strip() else default
+        )
+    for field in ("specification", "application_number", "agent_name"):
+        raw = values.get(field)
+        if isinstance(raw, str) and raw.strip():
+            normalized[field] = _neutralize(raw.strip())
+
+    representation_kind = values.get("representation_kind")
+    if isinstance(representation_kind, str) and representation_kind.strip():
+        parsed_kind = representation_kind.strip().casefold()
+        parsed_kind = REPRESENTATION_KIND_ALIASES.get(parsed_kind, parsed_kind)
+        if parsed_kind not in REPRESENTATION_KINDS:
+            errors.append({"field": "representation_kind", "code": "unsupported"})
+        else:
+            normalized["representation_kind"] = parsed_kind
+
     matter_id = values.get("matter_id")
     if matter_id:
         matter = session.scalar(
@@ -184,6 +235,99 @@ def _validate_row(
             normalized["matter_id"] = matter.id
 
     return normalized, errors
+
+
+def _duplicate_candidates(
+    session: Session,
+    *,
+    context: SessionContext,
+    normalized: dict[str, Any],
+) -> list[dict[str, Any]]:
+    application_number = normalized.get("application_number")
+    exact_identifier_dockets: set[str] = set()
+    if isinstance(application_number, str):
+        exact_identifier_dockets = set(
+            session.scalars(
+                select(IpIdentifier.docket_id).where(
+                    IpIdentifier.company_id == context.company.id,
+                    IpIdentifier.identifier_kind == "application",
+                    IpIdentifier.normalized_value == normalize_ip_identifier(application_number),
+                    IpIdentifier.effective_until.is_(None),
+                )
+            ).all()
+        )
+    title = str(normalized.get("mark_text") or normalized.get("title") or "").strip()
+    statement = (
+        select(IpDocketRecord, IpAsset)
+        .outerjoin(
+            IpAsset,
+            (IpAsset.docket_id == IpDocketRecord.id)
+            & (IpAsset.company_id == IpDocketRecord.company_id),
+        )
+        .where(
+            IpDocketRecord.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+            IpDocketRecord.is_active.is_(True),
+            or_(
+                IpDocketRecord.id.in_(exact_identifier_dockets),
+                func.lower(IpDocketRecord.title) == title.casefold(),
+                func.lower(func.coalesce(IpAsset.title, "")) == title.casefold(),
+            ),
+        )
+        .order_by(IpDocketRecord.updated_at.desc())
+        .limit(10)
+    )
+    candidates = []
+    for docket, asset in session.execute(statement):
+        reasons = []
+        if docket.id in exact_identifier_dockets:
+            reasons.append("exact_application_number")
+        if title and (docket.title.casefold() == title.casefold()):
+            reasons.append("exact_mark")
+        if title and asset and asset.title.casefold() == title.casefold():
+            reasons.append("exact_mark")
+        candidates.append(
+            {
+                "docket_id": docket.id,
+                "title": asset.title if asset else docket.title,
+                "match_reasons": sorted(set(reasons)),
+            }
+        )
+    return candidates
+
+
+def _staged_duplicate_candidates(rows: list[IpImportRow]) -> dict[str, list[dict[str, Any]]]:
+    groups: dict[tuple[str, object], list[IpImportRow]] = {}
+    for row in rows:
+        normalized = row.normalized_json or {}
+        application_number = normalized.get("application_number")
+        if isinstance(application_number, str):
+            key = ("application_number", normalize_ip_identifier(application_number))
+        else:
+            key = (
+                "mark_class",
+                (
+                    str(normalized.get("mark_text", "")).casefold(),
+                    normalized.get("class_number"),
+                ),
+            )
+        groups.setdefault(key, []).append(row)
+    result: dict[str, list[dict[str, Any]]] = {}
+    for grouped in groups.values():
+        if len(grouped) < 2:
+            continue
+        for row in grouped:
+            result[row.id] = [
+                {
+                    "staged_row_id": other.id,
+                    "row_number": other.row_number,
+                    "title": (other.normalized_json or {}).get("title"),
+                    "match_reasons": ["same_import"],
+                }
+                for other in grouped
+                if other.id != row.id
+            ]
+    return result
 
 
 def _job_record(job: BulkImportJob) -> IpImportJobRecord:
@@ -217,6 +361,9 @@ def _row_record(row: IpImportRow) -> IpImportRowRecord:
         commit_error_code=row.commit_error_code,
         created_docket_id=row.created_docket_id,
         normalized=dict(row.normalized_json or {}),
+        duplicate_candidates=list(row.duplicate_candidates_json or []),
+        reconciliation_decision=row.reconciliation_decision,
+        reconciled_target_docket_id=row.reconciled_target_docket_id,
     )
 
 
@@ -283,23 +430,35 @@ def create_ip_import_job(
     session.flush()
 
     valid = invalid = 0
+    staged_rows: list[IpImportRow] = []
     for item in payload.rows:
         normalized, errors = _validate_row(session, context=context, values=item.values)
         if errors:
             invalid += 1
         else:
             valid += 1
-        session.add(
-            IpImportRow(
-                company_id=context.company.id,
-                job_id=job.id,
-                row_number=item.row_number,
-                raw_json=item.values,
-                normalized_json=normalized,
-                validation_status="invalid" if errors else "valid",
-                errors_json=errors,
-                commit_status="pending",
-            )
+        row = IpImportRow(
+            company_id=context.company.id,
+            job_id=job.id,
+            row_number=item.row_number,
+            raw_json=item.values,
+            normalized_json=normalized,
+            validation_status="invalid" if errors else "valid",
+            errors_json=errors,
+            duplicate_candidates_json=(
+                _duplicate_candidates(session, context=context, normalized=normalized)
+                if not errors
+                else []
+            ),
+            commit_status="pending",
+        )
+        session.add(row)
+        staged_rows.append(row)
+    session.flush()
+    staged_duplicates = _staged_duplicate_candidates(staged_rows)
+    for row in staged_rows:
+        row.duplicate_candidates_json = list(row.duplicate_candidates_json or []) + list(
+            staged_duplicates.get(row.id, [])
         )
     job.valid_rows = valid
     job.invalid_rows = invalid
@@ -385,15 +544,28 @@ def _revalidate_ip_import_job_locked(
             },
         )
     valid = invalid = 0
-    for row in _rows(session, job):
+    rows = _rows(session, job)
+    for row in rows:
         normalized, errors = _validate_row(session, context=context, values=row.raw_json)
         row.normalized_json = normalized
         row.errors_json = errors
         row.validation_status = "invalid" if errors else "valid"
+        row.duplicate_candidates_json = (
+            _duplicate_candidates(session, context=context, normalized=normalized)
+            if not errors
+            else []
+        )
+        row.reconciliation_decision = None
+        row.reconciled_target_docket_id = None
         if errors:
             invalid += 1
         else:
             valid += 1
+    staged_duplicates = _staged_duplicate_candidates(rows)
+    for row in rows:
+        row.duplicate_candidates_json = list(row.duplicate_candidates_json or []) + list(
+            staged_duplicates.get(row.id, [])
+        )
     job.valid_rows = valid
     job.invalid_rows = invalid
     job.status = "preview_ready"
@@ -418,11 +590,161 @@ def _revalidate_ip_import_job_locked(
     )
 
 
+def reconcile_ip_import_job(
+    session: Session,
+    *,
+    context: SessionContext,
+    job_id: str,
+    payload: IpImportReconciliationRequest,
+) -> IpImportPreviewResponse:
+    job = _job_or_404(session, context=context, job_id=job_id, for_update=True)
+    if job.status != "preview_ready":
+        raise HTTPException(
+            status_code=409,
+            detail="Only a preview-ready import can be reconciled.",
+        )
+    if job.version != payload.expected_job_version:
+        raise HTTPException(status_code=409, detail="The import preview changed; reload it.")
+    decision_ids = [decision.row_id for decision in payload.decisions]
+    if len(decision_ids) != len(set(decision_ids)):
+        raise HTTPException(status_code=422, detail="Each import row may be decided once.")
+    rows = {row.id: row for row in _rows(session, job)}
+    for decision in payload.decisions:
+        row = rows.get(decision.row_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Import row not found.")
+        if not row.duplicate_candidates_json:
+            raise HTTPException(status_code=409, detail="This row has no duplicate candidates.")
+        if decision.decision == "link_existing":
+            allowed_targets = {
+                candidate.get("docket_id")
+                for candidate in row.duplicate_candidates_json
+                if candidate.get("docket_id")
+            }
+            if decision.target_docket_id not in allowed_targets:
+                raise HTTPException(
+                    status_code=409,
+                    detail="The selected target is not an accessible duplicate candidate.",
+                )
+            target = session.scalar(
+                select(IpDocketRecord).where(
+                    IpDocketRecord.id == decision.target_docket_id,
+                    IpDocketRecord.company_id == context.company.id,
+                    visible_ip_dockets_filter(session, context=context),
+                )
+            )
+            if target is None:
+                raise HTTPException(status_code=404, detail="Duplicate target not found.")
+            row.reconciled_target_docket_id = target.id
+        elif decision.target_docket_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Only link_existing accepts a target docket.",
+            )
+        else:
+            row.reconciled_target_docket_id = None
+        row.reconciliation_decision = decision.decision
+    job.preview_token = token_hex(16)
+    job.preview_expires_at = _now() + PREVIEW_TTL
+    job.version += 1
+    record_from_context(
+        session,
+        context,
+        action="ip.import.duplicates_reconciled",
+        target_type="bulk_import_job",
+        target_id=job.id,
+        metadata={
+            "decision_count": len(payload.decisions),
+            "job_version": job.version,
+        },
+    )
+    session.commit()
+    session.refresh(job)
+    return IpImportPreviewResponse(
+        job=_job_record(job),
+        rows=[_row_record(row) for row in _rows(session, job)],
+        preview_expired=False,
+    )
+
+
+def list_ip_import_jobs(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int = 50,
+) -> list[IpImportJobRecord]:
+    jobs = session.scalars(
+        select(BulkImportJob)
+        .where(
+            BulkImportJob.company_id == context.company.id,
+            BulkImportJob.domain == DOMAIN,
+            BulkImportJob.created_by_membership_id == context.membership.id,
+        )
+        .order_by(BulkImportJob.created_at.desc())
+        .limit(max(1, min(limit, 100)))
+    ).all()
+    return [_job_record(job) for job in jobs]
+
+
+def ip_import_error_report(
+    session: Session,
+    *,
+    context: SessionContext,
+    job_id: str,
+) -> bytes:
+    job = _job_or_404(session, context=context, job_id=job_id)
+    if job.created_by_membership_id != context.membership.id:
+        raise HTTPException(status_code=404, detail="Import job not found.")
+    output = io.StringIO(newline="")
+    fieldnames = [
+        "row_number",
+        "validation_status",
+        "validation_errors",
+        "duplicate_candidates",
+        "reconciliation_decision",
+        "commit_status",
+        "commit_error_code",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in _rows(session, job):
+        writer.writerow(
+            csv_safe_mapping(
+                {
+                    "row_number": row.row_number,
+                    "validation_status": row.validation_status,
+                    "validation_errors": "; ".join(
+                        f"{error.get('field')}:{error.get('code')}"
+                        for error in row.errors_json or []
+                    ),
+                    "duplicate_candidates": "; ".join(
+                        str(candidate.get("docket_id") or candidate.get("staged_row_id"))
+                        for candidate in row.duplicate_candidates_json or []
+                    ),
+                    "reconciliation_decision": row.reconciliation_decision or "",
+                    "commit_status": row.commit_status,
+                    "commit_error_code": row.commit_error_code or "",
+                }
+            )
+        )
+    record_from_context(
+        session,
+        context,
+        action="ip.import.error_report_downloaded",
+        target_type="bulk_import_job",
+        target_id=job.id,
+        metadata={"total_rows": job.total_rows},
+    )
+    session.commit()
+    return output.getvalue().encode("utf-8-sig")
+
+
 def _particulars_for(normalized: dict[str, Any]) -> dict[str, Any]:
+    mark_kind = str(normalized.get("representation_kind") or "word")
     return {
         "form_key": "TM-A",
         "form_version": "2026.1",
-        "mark_kind": "word",
+        "mark_kind": mark_kind,
         "representation": {
             "text": normalized["mark_text"],
             "evidence_reference": f"import:{normalized['mark_text']}",
@@ -435,7 +757,19 @@ def _particulars_for(normalized: dict[str, Any]) -> dict[str, Any]:
         ],
         "use_priority": None,
         "parties": [{"role": "applicant", "name": normalized["applicant_name"]}],
-        "agent": None,
+        "agent": (
+            {"name": normalized["agent_name"]}
+            if normalized.get("agent_name")
+            else None
+        ),
+        "filing_manifest": [
+            {
+                "key": "representation",
+                "label": "Imported mark representation",
+                "required": True,
+                "evidence_reference": f"import:{normalized['mark_text']}",
+            }
+        ],
     }
 
 
@@ -502,6 +836,82 @@ def _recover_materialized_docket(
                 "code": "ip_import_materialization_provenance_missing",
                 "message": "A reserved docket exists without matching import provenance.",
             },
+        )
+    return docket
+
+
+def _materialize_import_row(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+    normalized: dict[str, Any],
+) -> IpDocketRecord:
+    docket = _recover_materialized_docket(
+        session,
+        context=context,
+        row_id=row_id,
+    )
+    if docket is None:
+        created = create_ip_docket(
+            session,
+            context=context,
+            payload=IpDocketCreateRequest(
+                title=normalized["title"],
+                matter_id=normalized.get("matter_id"),
+                primary_identifier=normalized.get("application_number"),
+                restricted=False,
+                particulars=_particulars_for(normalized),
+            ),
+            docket_id=_import_docket_id(row_id),
+            source_provenance=("ip_import_row", row_id),
+        )
+        docket = session.get(IpDocketRecord, created.id)
+        assert docket is not None
+    asset = session.scalar(
+        select(IpAsset).where(
+            IpAsset.company_id == context.company.id,
+            IpAsset.docket_id == docket.id,
+        )
+    )
+    if asset is None:
+        asset = create_ip_asset(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=IpAssetCreateRequest(
+                jurisdiction=normalized["jurisdiction"],
+                title=normalized["mark_text"],
+            ),
+        )
+    application_number = normalized.get("application_number")
+    application = session.scalar(
+        select(TrademarkApplication).where(
+            TrademarkApplication.company_id == context.company.id,
+            TrademarkApplication.docket_id == docket.id,
+            TrademarkApplication.asset_id == asset.id,
+        )
+    )
+    if application is None:
+        create_trademark_application(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=TrademarkApplicationCreateRequest(
+                asset_id=asset.id,
+                office=normalized["office"],
+                jurisdiction=normalized["jurisdiction"],
+                filing_phase="filed" if application_number else "draft",
+                application_number=(
+                    IpApplicationNumberCreate(
+                        raw_value=application_number,
+                        source="portfolio_import",
+                        effective_from=date.today(),
+                    )
+                    if application_number
+                    else None
+                ),
+            ),
         )
     return docket
 
@@ -600,6 +1010,23 @@ def _commit_ip_import_job_locked(
                 },
             )
 
+        unresolved_duplicates = [
+            row.row_number
+            for row in _rows(session, job)
+            if row.validation_status == "valid"
+            and row.duplicate_candidates_json
+            and row.reconciliation_decision is None
+        ]
+        if unresolved_duplicates:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_import_duplicate_decision_required",
+                    "message": "Resolve every duplicate suggestion before committing.",
+                    "row_numbers": unresolved_duplicates,
+                },
+            )
+
         # Persist the ownership claim before the canonical row writer starts
         # committing. If the worker exits between rows, the same key can resume
         # rows whose outcomes are still pending; a different key cannot.
@@ -614,40 +1041,46 @@ def _commit_ip_import_job_locked(
     # persisted immediately. UJ-02-EXC-02: a later row that fails and rolls back
     # its own partial write cannot discard an already-recorded sibling result.
     plan = [
-        (row.id, row.validation_status, row.commit_status, dict(row.normalized_json or {}))
+        (
+            row.id,
+            row.validation_status,
+            row.commit_status,
+            dict(row.normalized_json or {}),
+            row.reconciliation_decision,
+            row.reconciled_target_docket_id,
+        )
         for row in _rows(session, job)
     ]
-    for row_id, validation_status, commit_status, normalized in plan:
+    for (
+        row_id,
+        validation_status,
+        commit_status,
+        normalized,
+        reconciliation_decision,
+        _reconciled_target_docket_id,
+    ) in plan:
         if commit_status in {"committed", "failed", "skipped"}:
             continue
         if validation_status != "valid":
             _set_row_outcome(session, row_id=row_id, commit_status="skipped")
             continue
-        recovered = _recover_materialized_docket(
-            session,
-            context=context,
-            row_id=row_id,
-        )
-        if recovered is not None:
+        if reconciliation_decision == "skip":
+            _set_row_outcome(session, row_id=row_id, commit_status="skipped")
+            continue
+        if reconciliation_decision == "link_existing":
             _set_row_outcome(
                 session,
                 row_id=row_id,
                 commit_status="committed",
-                docket_id=recovered.id,
+                docket_id=None,
             )
             continue
         try:
-            docket = create_ip_docket(
+            docket = _materialize_import_row(
                 session,
                 context=context,
-                payload=IpDocketCreateRequest(
-                    title=normalized["title"],
-                    matter_id=normalized.get("matter_id"),
-                    restricted=False,
-                    particulars=_particulars_for(normalized),
-                ),
-                docket_id=_import_docket_id(row_id),
-                source_provenance=("ip_import_row", row_id),
+                row_id=row_id,
+                normalized=normalized,
             )
         except HTTPException as exc:
             # Discard any partial write the rejected call had flushed.
@@ -704,6 +1137,9 @@ def _commit_ip_import_job_locked(
 __all__ = [
     "commit_ip_import_job",
     "create_ip_import_job",
+    "ip_import_error_report",
+    "list_ip_import_jobs",
     "preview_ip_import_job",
+    "reconcile_ip_import_job",
     "revalidate_ip_import_job",
 ]

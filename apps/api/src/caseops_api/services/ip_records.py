@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
@@ -14,8 +15,12 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     IpAsset,
     IpIdentifier,
+    IpPartyAndRole,
     IpProceeding,
+    IpTrademarkParticularVersion,
     TrademarkApplication,
+    TrademarkApplicationScope,
+    TrademarkRepresentation,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
@@ -30,6 +35,88 @@ if TYPE_CHECKING:
         TrademarkApplicationCreateRequest,
         TrademarkApplicationPhaseUpdateRequest,
     )
+
+
+def _project_current_particulars(
+    session: Session,
+    *,
+    application: TrademarkApplication,
+    docket,
+) -> None:
+    particulars = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == application.company_id,
+            IpTrademarkParticularVersion.docket_id == docket.id,
+            IpTrademarkParticularVersion.version == docket.current_version,
+        )
+    )
+    if particulars is None:
+        return
+    effective_from = date.today()
+    source = f"docket_particulars:v{particulars.version}"
+    for scope in particulars.classes_json or []:
+        class_number = scope.get("class_number")
+        specification = scope.get("specification")
+        if not isinstance(class_number, int) or not isinstance(specification, str):
+            continue
+        session.add(
+            TrademarkApplicationScope(
+                company_id=application.company_id,
+                application_id=application.id,
+                class_number=class_number,
+                specification=specification,
+                effective_from=effective_from,
+                source=source,
+            )
+        )
+    representation_payload = json.dumps(
+        particulars.representation_json,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    session.add(
+        TrademarkRepresentation(
+            company_id=application.company_id,
+            application_id=application.id,
+            version=particulars.version,
+            representation_kind=particulars.mark_kind,
+            display_text=(particulars.representation_json or {}).get("text"),
+            document_reference=(particulars.representation_json or {}).get(
+                "document_reference"
+            ),
+            content_sha256=sha256(representation_payload.encode()).hexdigest(),
+            metadata_json={"source": source},
+        )
+    )
+    current_parties = {
+        (row.role_kind.casefold(), row.party_name.casefold())
+        for row in session.scalars(
+            select(IpPartyAndRole).where(
+                IpPartyAndRole.company_id == application.company_id,
+                IpPartyAndRole.docket_id == docket.id,
+                IpPartyAndRole.effective_until.is_(None),
+            )
+        )
+    }
+    parties = list(particulars.parties_json or [])
+    if particulars.agent_json:
+        parties.append({"role": "agent", "name": particulars.agent_json.get("name")})
+    for party in parties:
+        role = str(party.get("role", "")).strip().casefold()
+        name = str(party.get("name", "")).strip()
+        if not role or not name or (role, name.casefold()) in current_parties:
+            continue
+        session.add(
+            IpPartyAndRole(
+                company_id=application.company_id,
+                docket_id=docket.id,
+                party_name=name,
+                role_kind=role,
+                effective_from=effective_from,
+                source=source,
+            )
+        )
+        current_parties.add((role, name.casefold()))
 
 def assert_application_can_enter_filed_phase(
     application: TrademarkApplication,
@@ -208,6 +295,11 @@ def create_trademark_application(
             [identifier] if identifier is not None else [],
         )
     row.filing_phase = payload.filing_phase
+    _project_current_particulars(
+        session,
+        application=row,
+        docket=docket,
+    )
     record_from_context(
         session,
         context,

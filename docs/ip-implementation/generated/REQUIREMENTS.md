@@ -80,16 +80,16 @@ Generated; do not edit.
 | TRACK-12 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
 | TRACK-13 | TRACK | IPLF-001C, IPLF-002B, IPLF-008B | 13 | 0 | implemented | passed | deployment_verified | false |
 | TRACK-14 | TRACK | IPLF-001B, IPLF-001C, IPLF-002B, IPLF-008B | 18 | 2 | implemented | not_run | blocked | false |
-| IP-PORT-01 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-02 | IP-PORT | IPLF-030A | 1 | 1 | implemented | passed | blocked | false |
-| IP-PORT-03 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-04 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
+| IP-PORT-01 | IP-PORT | IPLF-030B | 3 | 1 | implemented | passed | blocked | false |
+| IP-PORT-02 | IP-PORT | IPLF-030A, IPLF-030B | 3 | 2 | implemented | passed | blocked | false |
+| IP-PORT-03 | IP-PORT | IPLF-030B | 3 | 1 | implemented | passed | blocked | false |
+| IP-PORT-04 | IP-PORT | IPLF-030B | 4 | 1 | implemented | passed | blocked | false |
 | IP-PORT-05 | IP-PORT | IPLF-030A | 1 | 1 | implemented | passed | blocked | false |
-| IP-PORT-06 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-07 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-08 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-09 | IP-PORT | IPLF-030B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-PORT-10 | IP-PORT | IPLF-030B, IPLF-030A | 5 | 1 | in_progress | not_run | blocked | false |
+| IP-PORT-06 | IP-PORT | IPLF-030B | 3 | 1 | implemented | passed | blocked | false |
+| IP-PORT-07 | IP-PORT | IPLF-030B | 2 | 1 | implemented | passed | blocked | false |
+| IP-PORT-08 | IP-PORT | IPLF-030B | 4 | 1 | implemented | passed | blocked | false |
+| IP-PORT-09 | IP-PORT | IPLF-030B | 2 | 1 | implemented | passed | blocked | false |
+| IP-PORT-10 | IP-PORT | IPLF-030B, IPLF-030A | 3 | 2 | implemented | passed | blocked | false |
 | IP-ID-01 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-02 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
 | IP-ID-03 | IP-ID | IPLF-021B, IPLF-031B | 11 | 1 | in_progress | not_run | blocked | false |
@@ -230,14 +230,14 @@ Generated; do not edit.
 | SICLD-01 | SICLD | IPLF-091B | 11 | 0 | not_started | not_run | blocked | false |
 | TS-01 | TS | IPLF-091B | 11 | 0 | not_started | not_run | blocked | false |
 | CUSTOMS-01 | CUSTOMS | IPLF-091B | 11 | 0 | not_started | not_run | blocked | false |
-| COMP-01 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-02 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-03 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-04 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-05 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-06 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-07 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
-| COMP-08 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | not_started | not_run | blocked | false |
+| COMP-01 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-02 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-03 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-04 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-05 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-06 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-07 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
+| COMP-08 | COMP | IPLF-030B, IPLF-038B, IPLF-070B | 13 | 0 | in_progress | not_run | blocked | false |
 | IP-CLR-01 | IP-CLR | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-CLR-02 | IP-CLR | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-CLR-03 | IP-CLR | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |

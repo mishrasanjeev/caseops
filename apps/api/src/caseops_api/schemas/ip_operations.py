@@ -67,7 +67,16 @@ class FilingManifestItem(BaseModel):
 class TrademarkParticularPayload(BaseModel):
     form_key: str = Field(default="TM-A", min_length=2, max_length=80)
     form_version: str = Field(default="2026.1", min_length=1, max_length=40)
-    mark_kind: Literal["word", "device", "composite", "shape", "sound", "other"]
+    mark_kind: Literal[
+        "word",
+        "device",
+        "composite",
+        "label",
+        "colour",
+        "shape",
+        "sound",
+        "other",
+    ]
     representation: dict = Field(default_factory=dict)
     classes: list[TrademarkClassScope] = Field(min_length=1, max_length=45)
     use_priority: dict | None = None
