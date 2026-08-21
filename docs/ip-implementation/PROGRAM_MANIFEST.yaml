@@ -17,13 +17,14 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-21T08:46:45+05:30",
+      "recorded_at": "2026-08-21T08:52:00+05:30",
       "base_revision": "9e8d41c0",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
         "slice_id": "IPLF-039D",
         "branch": "codex/iplf-039d-deadline-incidents-20260821",
-        "status": "repository_implemented_local_verified",
+        "status": "repository_implemented_local_verified_pr_open",
+        "pull_request": 285,
         "implementation_revision": "7bcce7d63c71ec53ec92c17dfc951b7c8f303122",
         "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
         "owned_components": [
@@ -46,7 +47,7 @@
           "slice_id": "IPLF-039C",
           "branch": "codex/iplf-039c-calendar-reconcile-20260820",
           "pull_request": 282,
-          "status": "repository_implemented_local_verified_exact_ci_passed",
+          "status": "merged",
           "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731"
         }
       },
