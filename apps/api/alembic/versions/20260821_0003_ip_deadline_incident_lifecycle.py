@@ -3,6 +3,18 @@
 Revision ID: 20260821_0003
 Revises: 20260821_0002
 Create Date: 2026-08-21
+
+The child evidence tables and every index created here begin empty. Existing
+incident rows receive bounded constant defaults; no existing legal-content
+column is rewritten or scanned by application code during the migration.
+
+MIGRATION-LOCK-RISK: acknowledged. New-table indexes are built while those
+tables are empty, and the four parent indexes cover newly added null/default
+columns on the bounded restricted-incident table.
+
+MIGRATION-ROLLBACK: restore-forward. Downgrade is permitted only before any
+new incident evidence or child record exists; otherwise it refuses rather than
+discarding frozen evidence. A shipped populated revision must roll forward.
 """
 
 from __future__ import annotations
@@ -365,8 +377,9 @@ def upgrade() -> None:
                        NEW.matter_deadline_id IS DISTINCT FROM OLD.matter_deadline_id OR
                        NEW.severity IS DISTINCT FROM OLD.severity OR
                        NEW.summary IS DISTINCT FROM OLD.summary OR
-                       NEW.impact_json IS DISTINCT FROM OLD.impact_json OR
-                       NEW.evidence_snapshot_json IS DISTINCT FROM OLD.evidence_snapshot_json OR
+                       NEW.impact_json::text IS DISTINCT FROM OLD.impact_json::text OR
+                       NEW.evidence_snapshot_json::text IS DISTINCT FROM
+                           OLD.evidence_snapshot_json::text OR
                        NEW.preservation_manifest_sha256 IS DISTINCT FROM
                            OLD.preservation_manifest_sha256 OR
                        NEW.defect_scope IS DISTINCT FROM OLD.defect_scope OR
@@ -392,6 +405,16 @@ def downgrade() -> None:
     evidence_count = sum(
         int(bind.execute(sa.text(f"SELECT COUNT(*) FROM {table}")).scalar_one())
         for table in (IMPACT_TABLE, ACTION_TABLE, NOTICE_TABLE, KILL_SWITCH_TABLE)
+    )
+    evidence_count += int(
+        bind.execute(
+            sa.text(
+                f"SELECT COUNT(*) FROM {INCIDENT_TABLE} "
+                "WHERE created_by_membership_id IS NOT NULL OR "
+                "preservation_manifest_sha256 <> "
+                "'0000000000000000000000000000000000000000000000000000000000000000'"
+            )
+        ).scalar_one()
     )
     if evidence_count:
         raise RuntimeError("Refusing to discard persisted UJ-58 incident evidence.")
