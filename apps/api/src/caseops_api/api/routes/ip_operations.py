@@ -119,7 +119,10 @@ from caseops_api.schemas.ip_operations import (
     IpDailyDocketResponse,
     IpDeadlineCoverageCreateRequest,
     IpDeadlineCoverageReassignRequest,
+    IpDeadlineIncidentActionRequest,
     IpDeadlineIncidentCreateRequest,
+    IpDeadlineIncidentImpactScanRequest,
+    IpDeadlineIncidentNotificationDecisionRequest,
     IpDeadlineIncidentVerifyRequest,
     IpDocketControlReport,
     IpDocketCreateRequest,
@@ -131,6 +134,7 @@ from caseops_api.schemas.ip_operations import (
     IpDocketVersionCreateRequest,
     IpEvidenceCandidateReviewRequest,
     IpEvidenceDiscoveryResponse,
+    IpIncidentKillSwitchReleaseRequest,
     IpNoticeLinkCreateRequest,
     IpRelatedRightObligationCompleteRequest,
     IpRelatedRightObligationCreateRequest,
@@ -242,6 +246,7 @@ from caseops_api.services.ip_lifecycle import (
     transition_ip_docket_lifecycle,
 )
 from caseops_api.services.ip_operations import (
+    active_ip_incident_kill_switches,
     add_ip_cost_item,
     add_ip_deadline_coverage,
     add_ip_deadline_incident,
@@ -256,6 +261,7 @@ from caseops_api.services.ip_operations import (
     create_ip_docket,
     decide_ip_control_review_exception,
     decide_ip_coverage_replacement,
+    decide_ip_deadline_incident_notification,
     delete_ip_docket_queue,
     discover_ip_evidence_candidates,
     get_ip_control_review,
@@ -273,6 +279,10 @@ from caseops_api.services.ip_operations import (
     reconcile_ip_cost_items,
     record_ip_control_review_export,
     record_ip_control_review_sample,
+    record_ip_deadline_incident_action,
+    record_ip_deadline_incident_impact_scan,
+    release_ip_incident_kill_switch,
+    retain_ip_deadline_incident,
     review_ip_evidence_candidate,
     save_ip_docket_queue,
     sign_off_ip_control_review,
@@ -1098,10 +1108,17 @@ async def get_ip_workspace_readiness(
     )
     configuration_status = get_ip_workspace_configuration_status(session, context=context)
     configuration = configuration_status.configuration
+    incident_kill_switches = active_ip_incident_kill_switches(
+        session, company_id=context.company.id
+    )
     features: list[dict[str, object]] = []
     for decision in decisions:
         available = decision.available
         reason = decision.reason
+        blocked_by_incident_id = incident_kill_switches.get(decision.feature_id)
+        if blocked_by_incident_id is not None:
+            available = False
+            reason = "incident_kill_switch"
         if available:
             if configuration is None:
                 available = False
@@ -1137,6 +1154,7 @@ async def get_ip_workspace_readiness(
                 "rollout_enabled": decision.rollout_enabled,
                 "rollout_expires_at": decision.rollout_expires_at,
                 "manual_fallback_feature_id": decision.manual_fallback_feature_id,
+                "blocked_by_incident_id": blocked_by_incident_id,
             }
         )
     by_id = {feature["feature_id"]: feature for feature in features}
@@ -2099,6 +2117,66 @@ async def post_ip_deadline_incident(
 
 
 @router.post(
+    "/dockets/{docket_id}/deadline-incidents/{incident_id}/impact-scan",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_deadline_incident_impact_scan(
+    docket_id: str,
+    incident_id: str,
+    payload: IpDeadlineIncidentImpactScanRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return record_ip_deadline_incident_impact_scan(
+        session,
+        context=context,
+        docket_id=docket_id,
+        incident_id=incident_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/deadline-incidents/{incident_id}/actions",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_deadline_incident_action(
+    docket_id: str,
+    incident_id: str,
+    payload: IpDeadlineIncidentActionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return record_ip_deadline_incident_action(
+        session,
+        context=context,
+        docket_id=docket_id,
+        incident_id=incident_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/deadline-incidents/{incident_id}/notification-decisions",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_deadline_incident_notification_decision(
+    docket_id: str,
+    incident_id: str,
+    payload: IpDeadlineIncidentNotificationDecisionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return decide_ip_deadline_incident_notification(
+        session,
+        context=context,
+        docket_id=docket_id,
+        incident_id=incident_id,
+        payload=payload,
+    )
+
+
+@router.post(
     "/dockets/{docket_id}/deadline-incidents/{incident_id}/verify",
     response_model=IpDocketRecordResponse,
 )
@@ -2115,6 +2193,43 @@ async def post_ip_deadline_incident_verification(
         docket_id=docket_id,
         incident_id=incident_id,
         payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/deadline-incidents/{incident_id}/kill-switches/{feature_id}/release",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_deadline_incident_kill_switch_release(
+    docket_id: str,
+    incident_id: str,
+    feature_id: str,
+    payload: IpIncidentKillSwitchReleaseRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return release_ip_incident_kill_switch(
+        session,
+        context=context,
+        docket_id=docket_id,
+        incident_id=incident_id,
+        feature_id=feature_id,
+        payload=payload,
+    )
+
+
+@router.delete("/dockets/{docket_id}/deadline-incidents/{incident_id}")
+async def delete_ip_deadline_incident(
+    docket_id: str,
+    incident_id: str,
+    context: IpReviewer,
+    session: DbSession,
+) -> None:
+    retain_ip_deadline_incident(
+        session,
+        context=context,
+        docket_id=docket_id,
+        incident_id=incident_id,
     )
 
 
