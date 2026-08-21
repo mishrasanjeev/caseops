@@ -623,6 +623,60 @@ def test_uj52_exc06_a_broken_billing_link_surfaces_instead_of_matching(
     assert second["checksum_sha256"] == report["checksum_sha256"]
 
 
+def test_uj52_exc05_a_withheld_amount_does_not_break_the_docket_control_report(
+    client: TestClient,
+) -> None:
+    """A withheld rate must not crash, and must not silently vanish, in a total.
+
+    Making ``amount_minor`` nullable for UJ-52-EXC-05 gave every consumer of it
+    a value it had never seen. ``/reports/docket-control`` is gated on
+    ``ip:read``, which every authenticated member holds, so a confidential cost
+    made the report a 500 for everyone below owner/admin.
+
+    Excluding the withheld amount from the total is only half the fix. A total
+    that quietly drops costs is the same defect as rendering a withheld rate as
+    zero: the reader cannot tell an incomplete total from a complete one. The
+    report therefore also reports how many amounts it could not include.
+    """
+
+    headers, docket, _matter = _setup(client)
+    partner_headers = _invite_partner(client, headers)
+
+    assert _cost(
+        client,
+        headers,
+        docket["id"],
+        description="Ordinary official fee, visible to everyone.",
+        amount_minor=900000,
+    ).status_code == 200
+    assert _cost(
+        client,
+        headers,
+        docket["id"],
+        category="associate_fee",
+        description="Confidential negotiated rate.",
+        amount_minor=475000,
+        rate_confidential=True,
+        evidence_reference="attachment:confidential-fee-2026",
+    ).status_code == 200
+
+    # The owner sees a complete total and nothing withheld.
+    owner_report = client.get("/api/ip/reports/docket-control", headers=headers)
+    assert owner_report.status_code == 200, owner_report.text
+    owner_body = owner_report.json()
+    assert owner_body["total_cost_minor_by_currency"]["INR"] == 1375000
+    assert owner_body["withheld_cost_item_count"] == 0
+
+    # The partner holds ip:read but not ip:fees_manage.
+    partner_report = client.get("/api/ip/reports/docket-control", headers=partner_headers)
+    assert partner_report.status_code == 200, partner_report.text
+    partner_body = partner_report.json()
+    # The total covers only what this reader may see...
+    assert partner_body["total_cost_minor_by_currency"]["INR"] == 900000
+    # ...and says so, so an incomplete total cannot be read as a complete one.
+    assert partner_body["withheld_cost_item_count"] == 1
+
+
 def test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model(
     client: TestClient,
 ) -> None:

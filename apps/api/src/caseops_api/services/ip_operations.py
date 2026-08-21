@@ -2923,8 +2923,22 @@ def _ip_docket_control_report_from_listing(
     generated_at: datetime,
 ) -> IpDocketControlReport:
     totals: dict[str, int] = {}
+    withheld = 0
     for docket in listing.dockets:
         for item in docket.cost_items:
+            # UJ-52-EXC-05: this listing is already scoped to one reader, and a
+            # confidential rate they may not see arrives as None. Summing it
+            # raised a TypeError, and since this report is gated on ip:read -
+            # which every member holds - a single confidential cost made the
+            # report a 500 for everyone below owner/admin.
+            #
+            # Excluding the amount is only half the answer. A total that
+            # quietly drops costs is the same defect as rendering a withheld
+            # rate as zero: the reader cannot distinguish an incomplete total
+            # from a complete one. So the count travels with it.
+            if item.amount_minor is None:
+                withheld += 1
+                continue
             totals[item.currency] = totals.get(item.currency, 0) + item.amount_minor
     membership_active = {
         row.id: row.is_active
@@ -2955,6 +2969,7 @@ def _ip_docket_control_report_from_listing(
             for coverage in row.deadline_coverages
         ),
         total_cost_minor_by_currency=totals,
+        withheld_cost_item_count=withheld,
     )
 
 

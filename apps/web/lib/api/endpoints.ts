@@ -9887,7 +9887,11 @@ export type IpDocketControlReport = {
   open_incident_count: number;
   unprojected_calendar_count: number;
   inactive_coverage_count: number;
+  /** Covers only the costs this reader may see; a confidential rate is
+   * excluded rather than counted as zero. Read `withheld_cost_item_count`
+   * before presenting this as a complete total. */
   total_cost_minor_by_currency: Record<string, number>;
+  withheld_cost_item_count: number;
 };
 
 export type IpControlReviewSnapshot = {

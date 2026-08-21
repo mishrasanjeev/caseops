@@ -19912,6 +19912,11 @@ export interface components {
             uncovered_deadline_count: number;
             /** Unprojected Calendar Count */
             unprojected_calendar_count: number;
+            /**
+             * Withheld Cost Item Count
+             * @default 0
+             */
+            withheld_cost_item_count: number;
         };
         /** IpDocketCreateRequest */
         IpDocketCreateRequest: {

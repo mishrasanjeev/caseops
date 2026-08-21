@@ -86,6 +86,44 @@ not the secret. The audit entry records the classification and never the
 amount, so what is withheld from the read path is not recoverable from the
 audit trail every reviewer can read.
 
+## A defect this change introduced, found in review
+
+Making `amount_minor` nullable for UJ-52-EXC-05 handed every consumer of it a
+value it had never seen, and one consumer summed it:
+
+```
+TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'
+  services/ip_operations.py, _ip_docket_control_report_from_listing
+```
+
+`GET /reports/docket-control` is gated on `ip:read`, which every authenticated
+member holds. So one confidential cost anywhere in a tenant's visible dockets
+made the docket control report a 500 for **every member below owner/admin**,
+and took the control-review signoff path with it, since both build the report
+from the same function. Reproduced exactly: the owner's request returns 200 with
+a complete total, the partner's raises.
+
+Raised by automated review on commit `683ec9b8`, and correct.
+
+The null guard alone would have been the wrong fix. Excluding withheld amounts
+from a total silently under-reports it, which is the same defect as rendering a
+withheld rate as zero — the reader cannot tell an incomplete total from a
+complete one — and it collides with the UJ-59 rule that a control report cannot
+state all clear while something is hidden. So `withheld_cost_item_count` travels
+with the total, and the owner and the partner get different, individually honest
+answers: 1,375,000 with nothing withheld, and 900,000 with one withheld.
+
+Adjacent-path audit: every `.amount_minor` consumer in the API was inspected.
+Exactly one was affected. The others belong to invoices, notices,
+outside-counsel spend and rate cards, which have their own non-nullable columns.
+The web read path was already guarded by the `amount_withheld` branch.
+
+Adding a required field to `IpDocketControlReport` broke two fixtures in
+`apps/web/lib/ip/control-review-manifest.test.ts`, a file belonging to the other
+lane. TypeScript caught it. The fixtures gained the field and nothing else:
+leaving a shared type's consumers broken would be worse than touching adjacent
+test data.
+
 ## Enforced twice, on purpose
 
 Each rule is a Pydantic validator **and** a database CHECK constraint. The
@@ -116,6 +154,10 @@ Working tree: `feat/iplf039f-cost-items-20260820`, based on `origin/main` at
 | `scripts/verify-backend.sh tests/test_data_class_projection.py tests/test_ip_data_class_projection_gate.py tests/test_ip_data_governance_map.py` | **36 passed** |
 | `scripts/verify-backend.sh -k "ip_ or ip_operations or capability_fences or postgres_validation or data_class or governance_map"` | **530 passed, 97 skipped**, 11 failed — every failure an artefact, see caveat |
 | `scripts/verify-backend.sh tests/test_ip_record_workflow.py tests/test_ip_record_access_foundation.py tests/test_ip_record_access_workflow.py tests/test_ip_039f_cost_linkage.py tests/test_core_locked_capability_fences.py tests/test_ip_prd_slices.py` | ruff clean; **50 passed** — the `_serialize_docket` callers, re-run after the N+1 fix |
+| `scripts/verify-backend.sh tests/test_ip_039f_cost_linkage.py tests/test_ip_control_review_signoff.py` (after the control-report fix) | **24 passed** |
+| `scripts/verify-backend.sh -k "ip_ or capability_fences or data_class or governance_map"` (on the merged tree, after the control-report fix) | **553 passed, 28 skipped, 0 failed** — an uninterrupted run, nothing edited while it executed |
+| all nine CI contract validators | all `OK` |
+| `npx vitest run lib/ip/control-review-manifest.test.ts app/app/ip/page.test.tsx` | **24 passed** |
 | `python scripts/ip_data_governance_map.py validate` | `data-governance map valid` |
 | `python scripts/ip_data_class_projection.py validate` | `data-class projection valid` |
 | `python scripts/ip_program_manifest.py validate` | clean |

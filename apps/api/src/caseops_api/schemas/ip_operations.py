@@ -502,7 +502,15 @@ class IpDocketControlReport(BaseModel):
     open_incident_count: int
     unprojected_calendar_count: int
     inactive_coverage_count: int
+    #: Covers only the costs this reader may see. A confidential rate is
+    #: excluded rather than added as a zero, so the total is honest for the
+    #: reader but not necessarily complete.
     total_cost_minor_by_currency: dict[str, int]
+    #: How many cost amounts the total could not include, so an incomplete
+    #: total can never be mistaken for a complete one (UJ-52-EXC-05, and the
+    #: UJ-59 rule that a control report cannot claim all clear while something
+    #: is hidden).
+    withheld_cost_item_count: int = 0
 
 
 __all__ = [
