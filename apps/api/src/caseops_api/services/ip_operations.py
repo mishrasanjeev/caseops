@@ -122,6 +122,7 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.data_governance import resolve_hold_for_target
 from caseops_api.services.ip_capability_catalog import IP_FEATURE_BY_ID
 from caseops_api.services.ip_coverage_projection import (
@@ -496,7 +497,26 @@ def _serialize_deadline_incident(
     )
 
 
-def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecordResponse:
+def _serialize_docket(
+    session: Session,
+    docket: IpDocketRecord,
+    *,
+    context: SessionContext,
+    may_read_rates: bool | None = None,
+) -> IpDocketRecordResponse:
+    """Serialize a docket for one specific reader.
+
+    ``context`` is a required keyword rather than an optional one because the
+    cost rows below are permissioned (UJ-52-EXC-05). An optional parameter
+    would let a future call site omit it and silently pick whichever default
+    was chosen here; a required one makes the omission a TypeError.
+
+    ``may_read_rates`` is a cache, not a second source of truth: the capability
+    depends only on the reader, so a caller serializing many dockets for one
+    reader resolves it once instead of per docket. Leaving it ``None`` resolves
+    it properly rather than assuming either answer.
+    """
+
     particulars = _current_particulars(session, docket)
     notice_links = list(
         session.scalars(
@@ -550,6 +570,8 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
             .order_by(IpCostItem.created_at)
         ).all()
     )
+    if may_read_rates is None:
+        may_read_rates = _may_read_confidential_rates(session, context=context)
     return IpDocketRecordResponse(
         id=docket.id,
         company_id=docket.company_id,
@@ -580,7 +602,9 @@ def _serialize_docket(session: Session, docket: IpDocketRecord) -> IpDocketRecor
         related_right_obligations=[
             IpRelatedRightObligationRecord.model_validate(row) for row in obligations
         ],
-        cost_items=[IpCostItemRecord.model_validate(row) for row in costs],
+        cost_items=[
+            _serialize_cost_item(row, may_read_rates=may_read_rates) for row in costs
+        ],
         created_at=docket.created_at,
         updated_at=docket.updated_at,
     )
@@ -765,7 +789,7 @@ def create_ip_docket(
         )
     session.commit()
     session.refresh(docket)
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _new_version(
@@ -845,7 +869,7 @@ def append_ip_docket_version(
     )
     session.commit()
     session.refresh(docket)
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketListResponse:
@@ -859,6 +883,8 @@ def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketLis
             .order_by(IpDocketRecord.updated_at.desc())
         ).all()
     )
+    # One reader, one capability resolution - not one per docket in the list.
+    may_read_rates = _may_read_confidential_rates(session, context=context)
     visible: list[IpDocketRecordResponse] = []
     for row in rows:
         if row.archived_by_matter_disposal or not row.is_active:
@@ -871,7 +897,14 @@ def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketLis
                 assert_operational_matter(session, matter=matter)
             except MatterNotOperationalError:
                 continue
-        visible.append(_serialize_docket(session, row))
+        visible.append(
+            _serialize_docket(
+                session,
+                row,
+                context=context,
+                may_read_rates=may_read_rates,
+            )
+        )
     return IpDocketListResponse(dockets=visible, count=len(visible))
 
 
@@ -881,6 +914,7 @@ def get_ip_docket(
     return _serialize_docket(
         session,
         _docket_or_404(session, context=context, docket_id=docket_id),
+        context=context,
     )
 
 
@@ -986,7 +1020,7 @@ def add_ip_notice_link(
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(status_code=409, detail="Notice is already linked.") from exc
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _fingerprint(*parts: object) -> str:
@@ -1346,7 +1380,7 @@ def review_ip_evidence_candidate(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _deadline_for_docket(
@@ -1662,7 +1696,7 @@ def add_ip_deadline_coverage(
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(status_code=409, detail="Deadline coverage already exists.") from exc
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _resolve_escalation(
@@ -2039,7 +2073,7 @@ def reassign_ip_deadline_coverage(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _membership_can_cover_docket(
@@ -2470,7 +2504,7 @@ def add_ip_deadline_incident(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _deadline_incident_or_404(
@@ -2595,7 +2629,7 @@ def record_ip_deadline_incident_impact_scan(
         metadata={"item_count": len(payload.items), "complete": payload.complete},
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def record_ip_deadline_incident_action(
@@ -2650,7 +2684,7 @@ def record_ip_deadline_incident_action(
         metadata={"action_type": payload.action_type, "action_status": payload.action_status},
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def decide_ip_deadline_incident_notification(
@@ -2716,7 +2750,7 @@ def decide_ip_deadline_incident_notification(
         metadata={"recipient_type": payload.recipient_type, "decision": payload.decision},
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def _latest_incident_notification_decisions(
@@ -2840,7 +2874,7 @@ def verify_ip_deadline_incident(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def release_ip_incident_kill_switch(
@@ -2910,7 +2944,7 @@ def release_ip_incident_kill_switch(
         metadata={"feature_id": feature_id, "version": kill_switch.version},
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def retain_ip_deadline_incident(
@@ -3073,7 +3107,7 @@ def add_ip_title_interest(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def add_ip_related_right_obligation(
@@ -3159,7 +3193,7 @@ def add_ip_related_right_obligation(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def complete_ip_related_right_obligation(
@@ -3205,7 +3239,70 @@ def complete_ip_related_right_obligation(
         metadata={"obligation_type": row.obligation_type},
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
+
+
+#: Every terminal answer reconciliation can give a cost. ``estimate`` and
+#: ``nonbillable`` are outcomes, not stages: neither can become ``matched``.
+_COST_RECONCILIATION_STATUSES = (
+    "matched",
+    "mismatch",
+    "missing",
+    "unlinked",
+    "estimate",
+    "nonbillable",
+)
+
+#: UJ-52-EXC-05. Confidential rates are readable only by the capability that
+#: manages fees, not by every reader of the docket. ``ip:fees_view`` is
+#: deliberately not enough: it is held by all staff.
+_CONFIDENTIAL_RATE_CAPABILITY = "ip:fees_manage"
+
+
+def _may_read_confidential_rates(session: Session, *, context: SessionContext) -> bool:
+    return membership_has_capability(
+        session,
+        context.membership,
+        _CONFIDENTIAL_RATE_CAPABILITY,
+    )
+
+
+def _serialize_cost_item(cost: IpCostItem, *, may_read_rates: bool) -> IpCostItemRecord:
+    """Serialize one cost, withholding a confidential rate where required.
+
+    Withholding replaces the monetary fields with ``None`` and sets
+    ``amount_withheld``. It never substitutes a zero: a reader who cannot see
+    the rate must be able to tell that a cost exists and that its amount was
+    withheld, which is a different fact from a cost of nothing.
+    """
+
+    record = IpCostItemRecord.model_validate(cost)
+    if not cost.rate_confidential or may_read_rates:
+        return record
+    return record.model_copy(
+        update={
+            "amount_minor": None,
+            "fx_rate": None,
+            "base_amount_minor": None,
+            "canonical_amount_minor": None,
+            "reconciliation_difference_minor": None,
+            "amount_withheld": True,
+        }
+    )
+
+
+def _cost_comparison_value(cost: IpCostItem) -> tuple[int, str]:
+    """The amount the Matter ledger could actually match.
+
+    ``amount_minor``/``currency`` always hold the cost as originally incurred
+    (UJ-52-EXC-02). When a conversion was preserved, the ledger was billed in
+    the converted currency, so that is the figure reconciliation must compare -
+    comparing the original would report every converted cost as a mismatch.
+    """
+
+    if cost.base_amount_minor is not None and cost.base_currency is not None:
+        return cost.base_amount_minor, cost.base_currency
+    return cost.amount_minor, cost.currency
 
 
 def _canonical_billing_value(
@@ -3213,6 +3310,14 @@ def _canonical_billing_value(
     *,
     cost: IpCostItem,
 ) -> tuple[int | None, str | None, str]:
+    # UJ-52-EXC-04: a provider's estimate is not an expense, so it has no
+    # counterpart in the ledger and must never be reported as reconciled.
+    if cost.cost_nature == "estimate":
+        return None, None, "estimate"
+    # UJ-52-EXC-01: a nonbillable cost is deliberately outside client billing.
+    # It is a distinct answer from "not linked yet", which still expects a link.
+    if not cost.billable:
+        return None, None, "nonbillable"
     if not cost.billing_link_type or not cost.billing_link_id:
         return None, None, "unlinked"
     amount: int | None = None
@@ -3251,7 +3356,8 @@ def _canonical_billing_value(
             amount, currency = row.total_amount_minor, row.rate_currency
     if amount is None:
         return None, None, "missing"
-    if currency != cost.currency or amount != cost.amount_minor:
+    comparison_amount, comparison_currency = _cost_comparison_value(cost)
+    if currency != comparison_currency or amount != comparison_amount:
         return amount, currency, "mismatch"
     return amount, currency, "matched"
 
@@ -3266,10 +3372,14 @@ def _apply_cost_reconciliation(
         session,
         cost=cost,
     )
+    comparison_amount, comparison_currency = _cost_comparison_value(cost)
     cost.reconciliation_status = status_value
     cost.canonical_amount_minor = canonical_amount
+    # The difference is against the figure that was compared, not against the
+    # original amount: for a converted cost those are different numbers and
+    # only the former describes the ledger gap.
     cost.reconciliation_difference_minor = (
-        canonical_amount - cost.amount_minor if canonical_amount is not None else None
+        canonical_amount - comparison_amount if canonical_amount is not None else None
     )
     cost.reconciled_at = _now()
     cost.reconciled_by_membership_id = context.membership.id
@@ -3281,6 +3391,8 @@ def _apply_cost_reconciliation(
         canonical_amount_minor=canonical_amount,
         difference_minor=cost.reconciliation_difference_minor,
         currency=cost.currency,
+        comparison_amount_minor=comparison_amount,
+        comparison_currency=comparison_currency,
         status=status_value,
     )
 
@@ -3304,8 +3416,29 @@ def add_ip_cost_item(
         for_update=True,
         required_capability="ip:fees_manage",
     )
+    # UJ-52-EXC-01. The absence of a billing Matter blocks billable capture,
+    # never the capture of the cost itself: an official fee paid to the
+    # registry is incurred whether or not a billing profile exists, and
+    # refusing it here loses the evidence instead of deferring the billing
+    # decision. The caller must state the decision; it is never inferred.
     if not docket.matter_id:
-        raise HTTPException(status_code=409, detail="IP costs require a Matter billing owner.")
+        if payload.billable:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This IP docket has no Matter billing owner, so a billable cost "
+                    "cannot be recorded against it. Record the cost as nonbillable "
+                    "to preserve the evidence, or link the docket to a Matter first."
+                ),
+            )
+        if payload.billing_link_type is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This IP docket has no Matter billing owner, so there is no "
+                    "billing record to link the cost to."
+                ),
+            )
     cost = IpCostItem(
         company_id=context.company.id,
         docket_id=docket.id,
@@ -3314,6 +3447,18 @@ def add_ip_cost_item(
         description=payload.description.strip(),
         amount_minor=payload.amount_minor,
         currency=payload.currency.upper(),
+        billable=payload.billable,
+        cost_nature=payload.cost_nature,
+        rate_confidential=payload.rate_confidential,
+        fx_rate=payload.fx_rate,
+        fx_rate_source=(
+            payload.fx_rate_source.strip() if payload.fx_rate_source is not None else None
+        ),
+        fx_converted_at=payload.fx_converted_at,
+        base_amount_minor=payload.base_amount_minor,
+        base_currency=(
+            payload.base_currency.upper() if payload.base_currency is not None else None
+        ),
         evidence_reference=payload.evidence_reference.strip(),
         billing_link_type=payload.billing_link_type,
         billing_link_id=payload.billing_link_id,
@@ -3330,10 +3475,20 @@ def add_ip_cost_item(
         target_id=cost.id,
         matter_id=docket.matter_id,
         ip_docket_id=docket.id,
-        metadata={"category": payload.category, "currency": payload.currency.upper()},
+        # The audit records the classification but never the amount: a
+        # confidential rate withheld from the docket read path must not be
+        # recoverable from the audit trail that every reviewer can read.
+        metadata={
+            "category": payload.category,
+            "currency": payload.currency.upper(),
+            "billable": payload.billable,
+            "cost_nature": payload.cost_nature,
+            "rate_confidential": payload.rate_confidential,
+            "converted": payload.fx_rate is not None,
+        },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
 
 
 def reconcile_ip_cost_items(
@@ -3379,7 +3534,7 @@ def reconcile_ip_cost_items(
             "checksum_sha256": checksum,
             "status_counts": {
                 status_value: sum(row.status == status_value for row in rows)
-                for status_value in ("matched", "mismatch", "missing", "unlinked")
+                for status_value in _COST_RECONCILIATION_STATUSES
             },
         },
     )
@@ -3392,6 +3547,8 @@ def reconcile_ip_cost_items(
         mismatch_count=sum(row.status == "mismatch" for row in rows),
         missing_count=sum(row.status == "missing" for row in rows),
         unlinked_count=sum(row.status == "unlinked" for row in rows),
+        estimate_count=sum(row.status == "estimate" for row in rows),
+        nonbillable_count=sum(row.status == "nonbillable" for row in rows),
         checksum_sha256=checksum,
     )
 
@@ -3404,8 +3561,22 @@ def _ip_docket_control_report_from_listing(
     generated_at: datetime,
 ) -> IpDocketControlReport:
     totals: dict[str, int] = {}
+    withheld = 0
     for docket in listing.dockets:
         for item in docket.cost_items:
+            # UJ-52-EXC-05: this listing is already scoped to one reader, and a
+            # confidential rate they may not see arrives as None. Summing it
+            # raised a TypeError, and since this report is gated on ip:read -
+            # which every member holds - a single confidential cost made the
+            # report a 500 for everyone below owner/admin.
+            #
+            # Excluding the amount is only half the answer. A total that
+            # quietly drops costs is the same defect as rendering a withheld
+            # rate as zero: the reader cannot distinguish an incomplete total
+            # from a complete one. So the count travels with it.
+            if item.amount_minor is None:
+                withheld += 1
+                continue
             totals[item.currency] = totals.get(item.currency, 0) + item.amount_minor
     membership_active = {
         row.id: row.is_active
@@ -3436,6 +3607,7 @@ def _ip_docket_control_report_from_listing(
             for coverage in row.deadline_coverages
         ),
         total_cost_minor_by_currency=totals,
+        withheld_cost_item_count=withheld,
     )
 
 
@@ -6217,4 +6389,4 @@ def decide_ip_coverage_replacement(
         },
     )
     session.commit()
-    return _serialize_docket(session, docket)
+    return _serialize_docket(session, docket, context=context)
