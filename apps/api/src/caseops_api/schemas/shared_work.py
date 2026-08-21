@@ -212,6 +212,8 @@ class IpHearingReminderRecord(BaseModel):
     channel: str
     scheduled_for: datetime
     schedule_generation: int
+    is_superseded: bool
+    replacement_generation: int | None
     status: str
     provider: str | None
     provider_message_id: str | None
@@ -247,6 +249,8 @@ class IpSharedHearingRecord(BaseModel):
     status: str
     outcome_note: str | None
     reminder_policy: dict | None
+    time_confirmation_required: bool
+    current_schedule_generation: int | None
     reminders: list[IpHearingReminderRecord] = Field(default_factory=list)
     created_at: datetime
 

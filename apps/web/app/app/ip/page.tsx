@@ -1332,6 +1332,7 @@ function HearingWorkflowCard({
   const [inAppReminder, setInAppReminder] = useState(true);
   const [previewing, setPreviewing] = useState(false);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const [confirmationTimes, setConfirmationTimes] = useState<Record<string, string>>({});
   const offsetValues = offsets
     .split(",")
     .map((value) => Number(value.trim()))
@@ -1376,9 +1377,17 @@ function HearingWorkflowCard({
     mutationFn: (input: {
       hearingId: string;
       hearingOn?: string;
+      timeStatus?: "exact" | "session" | "time_not_published";
+      hearingTime?: string | null;
+      sessionLabel?: string | null;
       status?: "scheduled" | "completed" | "adjourned" | "cancelled";
     }) => updateIpSharedHearing({ docketId: docket.id, ...input }),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
+      setConfirmationTimes((current) => {
+        const next = { ...current };
+        delete next[variables.hearingId];
+        return next;
+      });
       toast.success("Hearing updated; dependent reminders were superseded.");
       await refresh();
     },
@@ -1468,25 +1477,80 @@ function HearingWorkflowCard({
         {hearings.isError ? <p className="break-words text-sm text-red-700">{apiErrorMessage(hearings.error, "Hearings could not be loaded.")}</p> : null}
         <div className="flex min-w-0 flex-col gap-3">
           {(hearings.data?.hearings ?? []).map((hearing: IpSharedHearing) => {
-            const activeReminders = hearing.reminders.filter((row) => row.status !== "cancelled");
+            const reminderGenerations = [...new Set(
+              hearing.reminders.map((row) => row.schedule_generation),
+            )].sort((left, right) => right - left);
             return (
-              <article key={hearing.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3">
+              <article key={hearing.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <h4 className="break-words font-semibold">{hearing.purpose}</h4>
                     <p className="break-words text-xs text-[var(--color-mute)]">{hearing.hearing_on} · {hearing.time_status === "exact" ? hearing.hearing_time : hearing.session_label ?? "Time not published"} · {hearing.timezone} · {hearing.forum_name} · {hearing.hearing_mode}</p>
+                    {hearing.time_confirmation_required ? (
+                      <p className="mt-1 text-xs font-semibold text-amber-800">Time confirmation pending. Date-based reminders remain active.</p>
+                    ) : null}
                   </div>
                   <span className="text-sm font-semibold">{hearing.status}</span>
                 </div>
-                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label={`Reminder delivery for ${hearing.purpose}`}>
-                  {activeReminders.map((reminder) => (
-                    <div key={reminder.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-2 text-xs">
-                      <strong>{reminder.channel}</strong> · {reminder.status}
-                      <div className="break-words text-[var(--color-mute)]">{new Date(reminder.scheduled_for).toLocaleString()} · attempts {reminder.attempts}{reminder.last_error ? ` · ${reminder.last_error}` : ""}</div>
-                    </div>
-                  ))}
+                <div className="mt-3 min-w-0 space-y-3" aria-label={`Reminder delivery for ${hearing.purpose}`}>
+                  {reminderGenerations.map((generation) => {
+                    const generationRows = hearing.reminders.filter(
+                      (row) => row.schedule_generation === generation,
+                    );
+                    const replacementGeneration = generationRows.find(
+                      (row) => row.replacement_generation !== null,
+                    )?.replacement_generation;
+                    return (
+                      <section key={generation} aria-label={`Reminder generation ${generation}`}>
+                        <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2 text-xs font-semibold">
+                          <span>Reminder generation {generation}</span>
+                          {replacementGeneration ? (
+                            <span className="text-[var(--color-mute)]">Superseded by generation {replacementGeneration}</span>
+                          ) : generation === hearing.current_schedule_generation ? (
+                            <span className="text-emerald-700">Current schedule</span>
+                          ) : null}
+                        </div>
+                        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          {generationRows.map((reminder) => (
+                            <div key={reminder.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-2 text-xs">
+                              <strong>{reminder.channel}</strong> · {reminder.status}
+                              <div className="break-words text-[var(--color-mute)]">{new Date(reminder.scheduled_for).toLocaleString()} · attempts {reminder.attempts}{reminder.last_error ? ` · ${reminder.last_error}` : ""}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
                 </div>
                 <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  {hearing.time_confirmation_required ? (
+                    <>
+                      <Input
+                        aria-label={`Published time for ${hearing.purpose}`}
+                        className="w-full sm:w-auto"
+                        type="time"
+                        value={confirmationTimes[hearing.id] ?? ""}
+                        onChange={(event) => setConfirmationTimes((current) => ({
+                          ...current,
+                          [hearing.id]: event.target.value,
+                        }))}
+                      />
+                      <Button
+                        className="w-full sm:w-auto"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!confirmationTimes[hearing.id] || update.isPending}
+                        onClick={() => update.mutate({
+                          hearingId: hearing.id,
+                          timeStatus: "exact",
+                          hearingTime: confirmationTimes[hearing.id],
+                          sessionLabel: null,
+                        })}
+                      >
+                        Confirm published time
+                      </Button>
+                    </>
+                  ) : null}
                   <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full sm:w-auto" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, hearingOn: rescheduleDates[hearing.id] ?? hearing.hearing_on })}>Reschedule</Button>
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, status: "cancelled" })}>Cancel hearing</Button>

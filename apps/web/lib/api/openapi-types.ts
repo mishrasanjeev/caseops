@@ -21664,6 +21664,8 @@ export interface components {
             delivered_at: string | null;
             /** Id */
             id: string;
+            /** Is Superseded */
+            is_superseded: boolean;
             /** Last Error */
             last_error: string | null;
             /** Provider */
@@ -21672,6 +21674,8 @@ export interface components {
             provider_message_id: string | null;
             /** Recipient Membership Id */
             recipient_membership_id: string | null;
+            /** Replacement Generation */
+            replacement_generation: number | null;
             /** Schedule Generation */
             schedule_generation: number;
             /**
@@ -23256,6 +23260,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Current Schedule Generation */
+            current_schedule_generation: number | null;
             /** Forum Name */
             forum_name: string;
             /** Hearing Mode */
@@ -23307,6 +23313,8 @@ export interface components {
              * @constant
              */
             target_type: "ip_docket";
+            /** Time Confirmation Required */
+            time_confirmation_required: boolean;
             /** Time Status */
             time_status: string;
             /** Timezone */

@@ -894,6 +894,14 @@ export default function GuidePage() {
                     press <strong>Compile pack</strong>. CaseOps stitches a pack in under a
                     minute, from the matter record and the authority corpus:
                   </p>
+                  <p className="mt-3">
+                    In an IP docket, record an exact time, a named session, or
+                    <strong> time not published</strong>. CaseOps keeps date-based reminders
+                    active for an unpublished time and asks for the published time later;
+                    it never inserts a default hearing time. Rescheduling or confirming the
+                    time preserves the cancelled reminder generation and labels the current
+                    replacement, so the team can inspect what changed before relying on it.
+                  </p>
                   <ul className="mt-3 list-disc space-y-2 pl-6 text-[15px]">
                     <li>
                       A <strong>chronology</strong> built from the matter's documents and

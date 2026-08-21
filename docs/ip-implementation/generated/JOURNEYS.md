@@ -13,7 +13,7 @@ Generated; do not edit.
 | UJ-07 | Reconcile registry update | 4 | IPLF-051B | 4 | 0 | not_started | not_run | false |
 | UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 4 | 2 | implemented | passed | false |
 | UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034A, IPLF-034B | 4 | 3 | implemented | passed | false |
-| UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035A, IPLF-035B | 4 | 1 | in_progress | not_run | false |
+| UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035A, IPLF-035B | 6 | 2 | implemented | passed | false |
 | UJ-11 | Recover failed or suppressed notification | 3 | IPLF-007A, IPLF-007B, IPLF-007C | 3 | 3 | implemented | not_run | false |
 | UJ-12 | Docket opposition as applicant | 4 | IPLF-040B, IPLF-041B | 4 | 0 | not_started | not_run | false |
 | UJ-13 | Docket opposition as opponent | 4 | IPLF-040B, IPLF-042B | 4 | 0 | not_started | not_run | false |

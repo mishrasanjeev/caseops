@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, joinedload
 from caseops_api.db.models import (
     CompanyMembership,
     HearingReminder,
+    HearingReminderStatus,
     IpDeadline,
     IpDeadlineCoverage,
     IpDocketRecord,
@@ -472,7 +473,7 @@ def update_ip_shared_task(
 
 def _hearing_record(session: Session, hearing: MatterHearing) -> IpSharedHearingRecord:
     assert hearing.company_id is not None and hearing.ip_docket_id is not None
-    reminders = session.scalars(
+    reminders = list(session.scalars(
         select(HearingReminder)
         .where(
             HearingReminder.company_id == hearing.company_id,
@@ -480,7 +481,25 @@ def _hearing_record(session: Session, hearing: MatterHearing) -> IpSharedHearing
             HearingReminder.hearing_id == hearing.id,
         )
         .order_by(HearingReminder.scheduled_for, HearingReminder.id)
+    ))
+    schedule_generations = sorted({
+        reminder.schedule_generation for reminder in reminders
+    })
+    current_schedule_generation = max(
+        (
+            reminder.schedule_generation
+            for reminder in reminders
+            if reminder.status != HearingReminderStatus.CANCELLED
+        ),
+        default=None,
     )
+    replacement_generations = {
+        generation: next(
+            (candidate for candidate in schedule_generations if candidate > generation),
+            None,
+        )
+        for generation in schedule_generations
+    }
     return IpSharedHearingRecord(
         id=hearing.id,
         company_id=hearing.company_id,
@@ -505,6 +524,8 @@ def _hearing_record(session: Session, hearing: MatterHearing) -> IpSharedHearing
         status=hearing.status,
         outcome_note=hearing.outcome_note,
         reminder_policy=hearing.reminder_policy_json,
+        time_confirmation_required=hearing.time_status == "time_not_published",
+        current_schedule_generation=current_schedule_generation,
         reminders=[
             IpHearingReminderRecord(
                 id=reminder.id,
@@ -512,6 +533,15 @@ def _hearing_record(session: Session, hearing: MatterHearing) -> IpSharedHearing
                 channel=reminder.channel,
                 scheduled_for=reminder.scheduled_for,
                 schedule_generation=reminder.schedule_generation,
+                is_superseded=(
+                    reminder.status == HearingReminderStatus.CANCELLED
+                    and replacement_generations[reminder.schedule_generation] is not None
+                ),
+                replacement_generation=(
+                    replacement_generations[reminder.schedule_generation]
+                    if reminder.status == HearingReminderStatus.CANCELLED
+                    else None
+                ),
                 status=reminder.status,
                 provider=reminder.provider,
                 provider_message_id=reminder.provider_message_id,

@@ -8408,6 +8408,8 @@ export type IpHearingReminder = {
   channel: "in_app" | "email" | "sms" | "whatsapp";
   scheduled_for: string;
   schedule_generation: number;
+  is_superseded: boolean;
+  replacement_generation: number | null;
   status: "queued" | "sent" | "delivered" | "failed" | "cancelled";
   provider: string | null;
   provider_message_id: string | null;
@@ -8450,6 +8452,8 @@ export type IpSharedHearing = {
     date_reminder_local_time?: string;
     critical?: boolean;
   } | null;
+  time_confirmation_required: boolean;
+  current_schedule_generation: number | null;
   reminders: IpHearingReminder[];
   created_at: string;
 };
@@ -9684,6 +9688,9 @@ export async function updateIpSharedHearing(input: {
   docketId: string;
   hearingId: string;
   hearingOn?: string;
+  timeStatus?: "exact" | "session" | "time_not_published";
+  hearingTime?: string | null;
+  sessionLabel?: string | null;
   status?: "scheduled" | "completed" | "adjourned" | "cancelled";
 }): Promise<IpSharedHearing> {
   return apiRequest(`/api/ip/hearings/${encodeURIComponent(input.hearingId)}`, {
@@ -9691,6 +9698,9 @@ export async function updateIpSharedHearing(input: {
     body: {
       docket_id: input.docketId,
       ...(input.hearingOn ? { hearing_on: input.hearingOn } : {}),
+      ...(input.timeStatus ? { time_status: input.timeStatus } : {}),
+      ...(input.hearingTime !== undefined ? { hearing_time: input.hearingTime } : {}),
+      ...(input.sessionLabel !== undefined ? { session_label: input.sessionLabel } : {}),
       ...(input.status ? { status: input.status } : {}),
     },
   });
