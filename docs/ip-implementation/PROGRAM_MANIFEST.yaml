@@ -1738,8 +1738,8 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [],
@@ -9804,28 +9804,61 @@
       "dependencies": [
         "IPLF-036A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_document_workflow.py",
+        "apps/api/src/caseops_api/routers/ip_documents.py",
+        "apps/api/src/caseops_api/schemas/ip_documents.py",
+        "apps/web/components/ip/IpDocumentWorkspace.tsx",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_document_foundation.py",
+        "apps/api/tests/test_ip_document_workflow.py",
+        "apps/web/components/ip/IpDocumentWorkspace.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-NORMAL#IPLF-UJ-14-EXC-01#IPLF-UJ-14-EXC-02#IPLF-UJ-14-EXC-03#IPLF-UJ-14-EXC-04"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md",
+          "revision": "98e359cda169f9d2774b5c3cec69568219450ce2",
+          "recorded_at": "2026-08-22T04:58:00+05:30",
+          "environment": "Windows 11 local exact main revision; SQLite API fixtures; Next.js 16 production build; Chromium through playwright.app.config.ts at 360x900",
+          "fixtures": "Synthetic law-firm tenant, two entitled trademark dockets, seeded taxonomy, reviewed synthetic alias, original and duplicate text documents, lifecycle transitions, OCR quality and privileged-content policy",
+          "assertions": "Immutable original bytes/name, controlled naming and conflict preview, tenant taxonomy and aliases, content-based duplicate reuse across docket links, locked lifecycle evidence, low-OCR and privilege fail-closed policy, responsive action reachability and no horizontal overflow",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-036B-PILOT-ALIASES-AND-DEPLOYMENT",
+          "summary": "The product accepts reviewed document-name aliases, but the pilot firm's actual list has not been supplied/imported and this local run does not prove a deployed runtime.",
+          "owner": "Pilot law firm for the name list; Engineering for deployment proof",
+          "evidence_needed": "Reviewed pilot alias import result plus exact deployed revision, production storage/worker checks and pilot acceptance.",
+          "safe_fallback": "Keep the seeded taxonomy and reviewed manual alias-import workflow; do not claim pilot acceptance or production verification.",
+          "milestone_impact": "Repository implementation is complete; release remains blocked.",
+          "next_independent_slice": "IPLF-037A"
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge only after exact-head CI, PostgreSQL, OpenAPI, security and full Playwright gates pass.",
+        "Import and review the pilot firm's actual document-name list when supplied.",
+        "Record exact deployed runtime identity, production storage/worker evidence and pilot acceptance separately."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema or data-owner change. Existing IPLF-024 document, taxonomy, version, object-storage and processing owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
+      "allocation_review": "Re-audited against current main. IPLF-024A/024B already own and implement taxonomy, aliases, naming, immutable versions, storage, processing, duplicate reuse, typed links, lifecycle locks and privilege policy; the responsive IpDocumentWorkspace and API/browser E2E flows are also present. IPLF-036B therefore adds no duplicate table, writer, worker, route or UI and closes only fresh release proof and reciprocal manifest projections.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -22631,17 +22664,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-01",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_foundation.py::test_taxonomy_seed_upsert_aliases_audit_and_tenant_isolation",
+        "apps/api/tests/test_ip_document_workflow.py::test_law_firm_alias_import_and_tenant_isolation"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22667,17 +22698,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-02",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22703,17 +22732,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-03",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_foundation.py::test_document_foundation_contract_and_naming_preview",
+        "apps/api/tests/test_ip_document_workflow.py::test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22739,17 +22766,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-04",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_foundation.py::test_taxonomy_schema_and_naming_edge_contracts",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22775,17 +22800,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-05",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix",
+        "apps/web/components/ip/IpDocumentWorkspace.test.tsx"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22811,17 +22834,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-06",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22847,17 +22868,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-07",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22883,17 +22902,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-08",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock",
+        "apps/web/components/ip/IpDocumentWorkspace.test.tsx"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22919,17 +22936,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-09",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22955,17 +22970,15 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-10",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr",
+        "apps/web/components/ip/IpDocumentWorkspace.test.tsx"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22991,20 +23004,16 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-11",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL",
-        "apps/api/tests/test_ip_document_workflow.py"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -23031,17 +23040,16 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-IP-DOC-12",
-        "planned:IPLF-UJ-14-EXC-01",
-        "planned:IPLF-UJ-14-EXC-02",
-        "planned:IPLF-UJ-14-EXC-03",
-        "planned:IPLF-UJ-14-EXC-04",
-        "planned:IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_law_firm_alias_import_and_tenant_isolation",
+        "apps/web/components/ip/IpDocumentWorkspace.test.tsx",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -43882,13 +43890,19 @@
         "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links#IPLF-UJ-14-EXC-02",
         "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock#IPLF-UJ-14-NORMAL",
         "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-01",
-        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-04"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-04",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-01",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-02",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-03",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-04",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50561,13 +50575,15 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock#IPLF-UJ-14-NORMAL"
+        "apps/api/tests/test_ip_document_workflow.py::test_ip_document_end_to_end_version_processing_and_approval_lock#IPLF-UJ-14-NORMAL",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50575,7 +50591,7 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress. | IPLF-036B 2026-08-22 freshly proves the existing API and responsive browser workflow; implementation and verification close while pilot aliases and deployment remain release-only gates.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -50606,13 +50622,15 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-01"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-01",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50620,7 +50638,7 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress. | IPLF-036B 2026-08-22 freshly proves the existing API and responsive browser workflow; implementation and verification close while pilot aliases and deployment remain release-only gates.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -50651,13 +50669,15 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links#IPLF-UJ-14-EXC-02"
+        "apps/api/tests/test_ip_document_workflow.py::test_duplicate_detection_uses_content_and_reuses_one_document_across_links#IPLF-UJ-14-EXC-02",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50665,7 +50685,7 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress. | IPLF-036B 2026-08-22 freshly proves the existing API and responsive browser workflow; implementation and verification close while pilot aliases and deployment remain release-only gates.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -50696,13 +50716,15 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_document_workflow.py::test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix#IPLF-UJ-14-EXC-03"
+        "apps/api/tests/test_ip_document_workflow.py::test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix#IPLF-UJ-14-EXC-03",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50710,7 +50732,7 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress. | IPLF-036B 2026-08-22 freshly proves the existing API and responsive browser workflow; implementation and verification close while pilot aliases and deployment remain release-only gates.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -50741,13 +50763,15 @@
         "IP-DOC-12"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-04"
+        "apps/api/tests/test_ip_document_workflow.py::test_policy_fails_closed_for_privilege_confidentiality_and_low_ocr#IPLF-UJ-14-EXC-04",
+        "tests/e2e/iplf-024b-document-workflow-2026-08-09.spec.ts#IPLF-UJ-14-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-036A/local-2026-08-14.md",
+        "docs/ip-implementation/evidence/m3/IPLF-036B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -50755,7 +50779,7 @@
         "IPLF-036A",
         "IPLF-036B"
       ],
-      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress.",
+      "allocation_rationale": "UJ-14 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-024, IPLF-036. | IPLF-036A 2026-08-14 maps the existing IPLF-024 backend test that proves this path; IPLF-036B retains the remaining UI and end-to-end facets, so the path stays in_progress. | IPLF-036B 2026-08-22 freshly proves the existing API and responsive browser workflow; implementation and verification close while pilot aliases and deployment remain release-only gates.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
