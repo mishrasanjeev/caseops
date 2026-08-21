@@ -3948,7 +3948,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ip/control-reviews": {
+    "/api/ip/calendar-projections/reconciliation-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Calendar Reconciliation Candidates */
+        get: operations["get_ip_calendar_reconciliation_candidates_api_ip_calendar_projections_reconciliation_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/calendar-projections/reconciliation-candidates/{candidate_id}/decision": {
         parameters: {
             query?: never;
             header?: never;
@@ -3956,6 +3973,24 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        put?: never;
+        /** Post Ip Calendar Reconciliation Decision */
+        post: operations["post_ip_calendar_reconciliation_decision_api_ip_calendar_projections_reconciliation_candidates__candidate_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Control Reviews */
+        get: operations["get_ip_control_reviews_api_ip_control_reviews_get"];
         put?: never;
         /** Post Ip Control Review */
         post: operations["post_ip_control_review_api_ip_control_reviews_post"];
@@ -3982,6 +4017,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/control-reviews/{review_id}/exceptions/{docket_id}/{exception_kind}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review Exception Decision */
+        post: operations["post_ip_control_review_exception_decision_api_ip_control_reviews__review_id__exceptions__docket_id___exception_kind__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/control-reviews/{review_id}/export": {
         parameters: {
             query?: never;
@@ -3993,6 +4045,23 @@ export interface paths {
         put?: never;
         /** Post Ip Control Review Export */
         post: operations["post_ip_control_review_export_api_ip_control_reviews__review_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/control-reviews/{review_id}/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Control Review Sample */
+        post: operations["post_ip_control_review_sample_api_ip_control_reviews__review_id__samples_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4624,6 +4693,91 @@ export interface paths {
         put?: never;
         /** Post Ip Deadline Incident */
         post: operations["post_ip_deadline_incident_api_ip_dockets__docket_id__deadline_incidents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Ip Deadline Incident */
+        delete: operations["delete_ip_deadline_incident_api_ip_dockets__docket_id__deadline_incidents__incident_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Incident Action */
+        post: operations["post_ip_deadline_incident_action_api_ip_dockets__docket_id__deadline_incidents__incident_id__actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}/impact-scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Incident Impact Scan */
+        post: operations["post_ip_deadline_incident_impact_scan_api_ip_dockets__docket_id__deadline_incidents__incident_id__impact_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}/kill-switches/{feature_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Incident Kill Switch Release */
+        post: operations["post_ip_deadline_incident_kill_switch_release_api_ip_dockets__docket_id__deadline_incidents__incident_id__kill_switches__feature_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}/notification-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Deadline Incident Notification Decision */
+        post: operations["post_ip_deadline_incident_notification_decision_api_ip_dockets__docket_id__deadline_incidents__incident_id__notification_decisions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -18416,6 +18570,8 @@ export interface components {
             ip_docket_id?: string | null;
             /** Membership Id */
             membership_id?: string | null;
+            /** Reconciliation Candidate Id */
+            reconciliation_candidate_id?: string | null;
             /** Source Id */
             source_id: string;
             /** Source Type */
@@ -18432,6 +18588,73 @@ export interface components {
             checked_at: string;
             /** Findings */
             findings?: components["schemas"]["IpCalendarDriftRecord"][];
+        };
+        /** IpCalendarReconciliationCandidateListResponse */
+        IpCalendarReconciliationCandidateListResponse: {
+            /** Candidates */
+            candidates?: components["schemas"]["IpCalendarReconciliationCandidateRecord"][];
+        };
+        /** IpCalendarReconciliationCandidateRecord */
+        IpCalendarReconciliationCandidateRecord: {
+            /** Calendar Connection Id */
+            calendar_connection_id: string;
+            /** Calendar Event Sync Id */
+            calendar_event_sync_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By Membership Id */
+            decided_by_membership_id: string | null;
+            /** Decision Evidence Reference */
+            decision_evidence_reference: string | null;
+            /** Detected By Membership Id */
+            detected_by_membership_id: string | null;
+            /**
+             * Drift Status
+             * @enum {string}
+             */
+            drift_status: "moved" | "missing" | "unknown";
+            /** Expected Snapshot */
+            expected_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string | null;
+            /** Observed Snapshot */
+            observed_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Snapshot Schema Version */
+            snapshot_schema_version: number;
+            /** Snapshot Sha256 */
+            snapshot_sha256: string;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected" | "superseded";
+        };
+        /** IpCalendarReconciliationDecisionRequest */
+        IpCalendarReconciliationDecisionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "accept" | "reject";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Snapshot Sha256 */
+            expected_snapshot_sha256: string;
         };
         /** IpChecklistItem */
         IpChecklistItem: {
@@ -18539,6 +18762,60 @@ export interface components {
             /** Stale Sources */
             stale_sources?: string[];
         };
+        /** IpControlReviewDelta */
+        IpControlReviewDelta: {
+            /** Added Docket Ids */
+            added_docket_ids?: string[];
+            /** Added Exception Keys */
+            added_exception_keys?: string[];
+            /** Changed Docket Ids */
+            changed_docket_ids?: string[];
+            /** Predecessor Manifest Sha256 */
+            predecessor_manifest_sha256?: string | null;
+            /** Predecessor Review Id */
+            predecessor_review_id?: string | null;
+            /** Removed Docket Ids */
+            removed_docket_ids?: string[];
+            /** Removed Exception Keys */
+            removed_exception_keys?: string[];
+        };
+        /** IpControlReviewExceptionDecisionRecord */
+        IpControlReviewExceptionDecisionRecord: {
+            /** Annotation */
+            annotation: string;
+            /**
+             * Decided At
+             * Format: date-time
+             */
+            decided_at: string;
+            /** Decided By Membership Id */
+            decided_by_membership_id: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "resolved" | "annotated";
+            /** Docket Id */
+            docket_id: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Exception Kind */
+            exception_kind: string;
+        };
+        /** IpControlReviewExceptionDecisionRequest */
+        IpControlReviewExceptionDecisionRequest: {
+            /** Annotation */
+            annotation: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "resolved" | "annotated";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Version */
+            expected_version: number;
+        };
         /** IpControlReviewExportRequest */
         IpControlReviewExportRequest: {
             /** Error Redacted */
@@ -18571,10 +18848,34 @@ export interface components {
             /** Sha256 */
             sha256: string;
         };
+        /** IpControlReviewListResponse */
+        IpControlReviewListResponse: {
+            /** Reviews */
+            reviews?: components["schemas"]["IpControlReviewRecord"][];
+        };
+        /** IpControlReviewPolicy */
+        IpControlReviewPolicy: {
+            /** Distinct Preparer And Reviewer */
+            distinct_preparer_and_reviewer: boolean;
+            /** Policy Version */
+            policy_version: string;
+            /** Required Sample Size */
+            required_sample_size: number;
+            /**
+             * Required Signature Count
+             * @enum {integer}
+             */
+            required_signature_count: 1 | 2;
+        };
         /** IpControlReviewRecord */
         IpControlReviewRecord: {
+            /** Annotated Exception Count */
+            annotated_exception_count: number;
             /** Completeness Status */
             completeness_status: string;
+            delta: components["schemas"]["IpControlReviewDelta"];
+            /** Exception Decisions */
+            exception_decisions?: components["schemas"]["IpControlReviewExceptionDecisionRecord"][];
             /** Export Error Redacted */
             export_error_redacted?: string | null;
             /** Export Status */
@@ -18600,16 +18901,91 @@ export interface components {
             mandatory_exceptions?: components["schemas"]["IpControlExceptionRecord"][];
             /** Manifest Sha256 */
             manifest_sha256: string;
+            /** Pending Exception Count */
+            pending_exception_count: number;
+            /** Predecessor Review Id */
+            predecessor_review_id?: string | null;
             /** Query Version */
             query_version: string;
             report: components["schemas"]["IpDocketControlReport"];
+            review_policy: components["schemas"]["IpControlReviewPolicy"];
+            /** Reviewer Samples */
+            reviewer_samples?: components["schemas"]["IpControlReviewSampleRecord"][];
+            /** Signatures */
+            signatures?: components["schemas"]["IpControlReviewSignatureRecord"][];
             /** Signed Off At */
             signed_off_at?: string | null;
             /** Signer Label Snapshot */
             signer_label_snapshot?: string | null;
+            /**
+             * Signoff Status
+             * @enum {string}
+             */
+            signoff_status: "draft" | "awaiting_second_signature" | "signed";
             snapshot: components["schemas"]["IpControlReviewSnapshot"];
             /** Version */
             version: number;
+        };
+        /** IpControlReviewSampleRecord */
+        IpControlReviewSampleRecord: {
+            /** Calculation Evidence Reference */
+            calculation_evidence_reference: string;
+            /** Coverage Evidence Reference */
+            coverage_evidence_reference: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Notes */
+            notes?: string | null;
+            /** Reviewer Membership Id */
+            reviewer_membership_id: string;
+            /**
+             * Sampled At
+             * Format: date-time
+             */
+            sampled_at: string;
+            /** Source Evidence Reference */
+            source_evidence_reference: string;
+        };
+        /** IpControlReviewSampleRequest */
+        IpControlReviewSampleRequest: {
+            /** Calculation Evidence Reference */
+            calculation_evidence_reference: string;
+            /** Coverage Evidence Reference */
+            coverage_evidence_reference: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Notes */
+            notes?: string | null;
+            /** Source Evidence Reference */
+            source_evidence_reference: string;
+        };
+        /** IpControlReviewSignatureRecord */
+        IpControlReviewSignatureRecord: {
+            /** Attestation */
+            attestation: string;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /**
+             * Sequence
+             * @enum {integer}
+             */
+            sequence: 1 | 2;
+            /**
+             * Signed At
+             * Format: date-time
+             */
+            signed_at: string;
+            /** Signer Label Snapshot */
+            signer_label_snapshot: string;
+            /** Signer Membership Id */
+            signer_membership_id: string;
+            /**
+             * Signer Role
+             * @enum {string}
+             */
+            signer_role: "preparer" | "reviewer";
         };
         /** IpControlReviewSignOffRequest */
         IpControlReviewSignOffRequest: {
@@ -18623,6 +18999,7 @@ export interface components {
          * @description Canonical, hash-bound input and output of one control-report query.
          */
         IpControlReviewSnapshot: {
+            delta?: components["schemas"]["IpControlReviewDelta"] | null;
             /** Filters */
             filters: {
                 [key: string]: unknown;
@@ -18650,12 +19027,13 @@ export interface components {
             /** Query Version */
             query_version: string;
             report: components["schemas"]["IpDocketControlReport"];
+            review_policy?: components["schemas"]["IpControlReviewPolicy"] | null;
             /**
              * Schema Version
              * @default 1
-             * @constant
+             * @enum {integer}
              */
-            schema_version: 1;
+            schema_version: 1 | 2;
             /** Timezone */
             timezone: string;
         };
@@ -19296,16 +19674,70 @@ export interface components {
              */
             unrelated_work_preserved: boolean;
         };
+        /** IpDeadlineIncidentActionRecord */
+        IpDeadlineIncidentActionRecord: {
+            /** Action Reference */
+            action_reference: string;
+            /** Action Status */
+            action_status: string;
+            /** Action Type */
+            action_type: string;
+            /** Details */
+            details: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Recorded By Membership Id */
+            recorded_by_membership_id: string;
+        };
+        /** IpDeadlineIncidentActionRequest */
+        IpDeadlineIncidentActionRequest: {
+            /** Action Reference */
+            action_reference: string;
+            /**
+             * Action Status
+             * @enum {string}
+             */
+            action_status: "planned" | "completed" | "not_available";
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "containment" | "corrective_task" | "filing" | "external_advice" | "prevention";
+            /** Details */
+            details: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+        };
         /** IpDeadlineIncidentCreateRequest */
         IpDeadlineIncidentCreateRequest: {
             /** Containment */
             containment?: string | null;
             /** Correction Deadline Id */
             correction_deadline_id?: string | null;
+            /** Defect Fingerprint */
+            defect_fingerprint?: string | null;
+            /**
+             * Defect Scope
+             * @default record_specific
+             * @enum {string}
+             */
+            defect_scope: "record_specific" | "shared_rule" | "shared_source" | "platform_wide";
+            evidence_snapshot?: components["schemas"]["IpIncidentEvidenceSnapshot"];
             /** Impact */
             impact?: {
                 [key: string]: unknown;
             };
+            /** Kill Switch Evidence Reference */
+            kill_switch_evidence_reference?: string | null;
+            /** Kill Switch Features */
+            kill_switch_features?: string[];
             /** Matter Deadline Id */
             matter_deadline_id?: string | null;
             /**
@@ -19316,8 +19748,109 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** IpDeadlineIncidentImpactItem */
+        IpDeadlineIncidentImpactItem: {
+            /**
+             * Assessment
+             * @enum {string}
+             */
+            assessment: "affected" | "not_affected" | "pending";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Record Reference */
+            record_reference: string;
+            /** Record Type */
+            record_type: string;
+            /** Relationship */
+            relationship: string;
+            /** Scan Method */
+            scan_method: string;
+        };
+        /** IpDeadlineIncidentImpactRecord */
+        IpDeadlineIncidentImpactRecord: {
+            /**
+             * Assessed At
+             * Format: date-time
+             */
+            assessed_at: string;
+            /** Assessed By Membership Id */
+            assessed_by_membership_id: string;
+            /** Assessment */
+            assessment: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
+            /** Record Reference Sha256 */
+            record_reference_sha256: string;
+            /** Record Type */
+            record_type: string;
+            /** Relationship */
+            relationship: string;
+            /** Scan Method */
+            scan_method: string;
+        };
+        /** IpDeadlineIncidentImpactScanRequest */
+        IpDeadlineIncidentImpactScanRequest: {
+            /**
+             * Complete
+             * @default false
+             */
+            complete: boolean;
+            /** Items */
+            items: components["schemas"]["IpDeadlineIncidentImpactItem"][];
+        };
+        /** IpDeadlineIncidentNotificationDecisionRecord */
+        IpDeadlineIncidentNotificationDecisionRecord: {
+            /** Approval Evidence Reference */
+            approval_evidence_reference: string;
+            /** Communication Reference */
+            communication_reference: string | null;
+            /**
+             * Decided At
+             * Format: date-time
+             */
+            decided_at: string;
+            /** Decided By Membership Id */
+            decided_by_membership_id: string;
+            /** Decision */
+            decision: string;
+            /** Decision Version */
+            decision_version: number;
+            /** Id */
+            id: string;
+            /** Rationale */
+            rationale: string;
+            /** Recipient Reference Sha256 */
+            recipient_reference_sha256: string;
+            /** Recipient Type */
+            recipient_type: string;
+        };
+        /** IpDeadlineIncidentNotificationDecisionRequest */
+        IpDeadlineIncidentNotificationDecisionRequest: {
+            /** Approval Evidence Reference */
+            approval_evidence_reference: string;
+            /** Communication Reference */
+            communication_reference?: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "pending" | "notify" | "do_not_notify" | "not_applicable";
+            /** Rationale */
+            rationale: string;
+            /** Recipient Reference */
+            recipient_reference: string;
+            /**
+             * Recipient Type
+             * @enum {string}
+             */
+            recipient_type: "client" | "insurer" | "regulator" | "court" | "external_counsel";
+        };
         /** IpDeadlineIncidentRecord */
         IpDeadlineIncidentRecord: {
+            /** Actions */
+            actions?: components["schemas"]["IpDeadlineIncidentActionRecord"][];
             /** Containment */
             containment: string | null;
             /** Correction Deadline Id */
@@ -19329,14 +19862,42 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Defect Fingerprint Sha256 */
+            defect_fingerprint_sha256: string | null;
+            /** Defect Scope */
+            defect_scope: string;
+            /** Evidence Snapshot Json */
+            evidence_snapshot_json: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Impact Json */
             impact_json: {
                 [key: string]: unknown;
             };
+            /** Impact Scan Completed At */
+            impact_scan_completed_at: string | null;
+            /** Impacts */
+            impacts?: components["schemas"]["IpDeadlineIncidentImpactRecord"][];
+            /** Kill Switches */
+            kill_switches?: components["schemas"]["IpIncidentKillSwitchRecord"][];
             /** Matter Deadline Id */
             matter_deadline_id: string | null;
+            /** Notification Decisions */
+            notification_decisions?: components["schemas"]["IpDeadlineIncidentNotificationDecisionRecord"][];
+            /** Preservation Manifest Sha256 */
+            preservation_manifest_sha256: string;
+            /** Prevention Verified At */
+            prevention_verified_at: string | null;
+            /** Preventive Action */
+            preventive_action: string | null;
+            /** Resolution Evidence Reference */
+            resolution_evidence_reference: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Root Cause */
+            root_cause: string | null;
             /** Severity */
             severity: string;
             /** Status */
@@ -19345,11 +19906,25 @@ export interface components {
             summary: string;
             /** Verified At */
             verified_at: string | null;
+            /** Version */
+            version: number;
         };
         /** IpDeadlineIncidentVerifyRequest */
         IpDeadlineIncidentVerifyRequest: {
             /** Corrective Action */
             corrective_action: string;
+            /**
+             * Outcome
+             * @default verified
+             * @enum {string}
+             */
+            outcome: "verified" | "disproved";
+            /** Preventive Action */
+            preventive_action: string;
+            /** Resolution Evidence Reference */
+            resolution_evidence_reference: string;
+            /** Root Cause */
+            root_cause: string;
         };
         /** IpDeadlineOverrideRequest */
         IpDeadlineOverrideRequest: {
@@ -20541,6 +21116,8 @@ export interface components {
         IpFeatureReadinessRecord: {
             /** Available */
             available: boolean;
+            /** Blocked By Incident Id */
+            blocked_by_incident_id?: string | null;
             /** Entitled */
             entitled: boolean;
             /** Entitlement Key */
@@ -20557,7 +21134,7 @@ export interface components {
              * Reason
              * @enum {string}
              */
-            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed";
+            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch";
             /** Required Capabilities */
             required_capabilities: string[];
             /** Rollout Enabled */
@@ -20851,6 +21428,62 @@ export interface components {
             row_number: number;
             /** Validation Status */
             validation_status: string;
+        };
+        /** IpIncidentEvidenceSnapshot */
+        IpIncidentEvidenceSnapshot: {
+            /** Audit Refs */
+            audit_refs?: string[];
+            /** Calculation Version Refs */
+            calculation_version_refs?: string[];
+            /** Calendar Version Refs */
+            calendar_version_refs?: string[];
+            /** Message Refs */
+            message_refs?: string[];
+            /** Provider Event Refs */
+            provider_event_refs?: string[];
+            /** Rule Version Refs */
+            rule_version_refs?: string[];
+            /** Source Refs */
+            source_refs?: string[];
+        };
+        /** IpIncidentKillSwitchRecord */
+        IpIncidentKillSwitchRecord: {
+            /**
+             * Activated At
+             * Format: date-time
+             */
+            activated_at: string;
+            /** Activated By Membership Id */
+            activated_by_membership_id: string;
+            /** Activation Evidence Reference */
+            activation_evidence_reference: string;
+            /** Feature Id */
+            feature_id: string;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            /** Release Evidence Reference */
+            release_evidence_reference: string | null;
+            /** Release Reason */
+            release_reason: string | null;
+            /** Released At */
+            released_at: string | null;
+            /** Released By Membership Id */
+            released_by_membership_id: string | null;
+            /** Status */
+            status: string;
+            /** Version */
+            version: number;
+        };
+        /** IpIncidentKillSwitchReleaseRequest */
+        IpIncidentKillSwitchReleaseRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Release Evidence Reference */
+            release_evidence_reference: string;
+            /** Release Reason */
+            release_reason: string;
         };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
@@ -40690,6 +41323,93 @@ export interface operations {
             };
         };
     };
+    get_ip_calendar_reconciliation_candidates_api_ip_calendar_projections_reconciliation_candidates_get: {
+        parameters: {
+            query?: {
+                include_resolved?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCalendarReconciliationCandidateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_calendar_reconciliation_decision_api_ip_calendar_projections_reconciliation_candidates__candidate_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCalendarReconciliationDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpCalendarReconciliationCandidateRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_control_reviews_api_ip_control_reviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewListResponse"];
+                };
+            };
+        };
+    };
     post_ip_control_review_api_ip_control_reviews_post: {
         parameters: {
             query?: never;
@@ -40754,6 +41474,43 @@ export interface operations {
             };
         };
     };
+    post_ip_control_review_exception_decision_api_ip_control_reviews__review_id__exceptions__docket_id___exception_kind__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                exception_kind: string;
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewExceptionDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_control_review_export_api_ip_control_reviews__review_id__export_post: {
         parameters: {
             query?: never;
@@ -40766,6 +41523,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["IpControlReviewExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpControlReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_control_review_sample_api_ip_control_reviews__review_id__samples_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpControlReviewSampleRequest"];
             };
         };
         responses: {
@@ -42027,6 +42819,183 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["IpDeadlineIncidentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ip_deadline_incident_api_ip_dockets__docket_id__deadline_incidents__incident_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_incident_action_api_ip_dockets__docket_id__deadline_incidents__incident_id__actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineIncidentActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_incident_impact_scan_api_ip_dockets__docket_id__deadline_incidents__incident_id__impact_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineIncidentImpactScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_incident_kill_switch_release_api_ip_dockets__docket_id__deadline_incidents__incident_id__kill_switches__feature_id__release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                feature_id: string;
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpIncidentKillSwitchReleaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_deadline_incident_notification_decision_api_ip_dockets__docket_id__deadline_incidents__incident_id__notification_decisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDeadlineIncidentNotificationDecisionRequest"];
             };
         };
         responses: {

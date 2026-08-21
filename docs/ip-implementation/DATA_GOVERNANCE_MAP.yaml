@@ -4725,6 +4725,21 @@
           "sql_type": "VARCHAR(255)",
           "nullable": true
         },
+        "reconciliation_candidate_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "reconciliation_provider_revision": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "reconciliation_snapshot_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
         "source_id": {
           "category_id": "external_or_provider_identifier",
           "sql_type": "VARCHAR(36)",
@@ -4743,6 +4758,105 @@
         "updated_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "calendar_projection_reconciliation_candidates",
+      "table_name": "calendar_projection_reconciliation_candidates",
+      "purpose": "Repository SQL persistence class `calendar_projection_reconciliation_candidates`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "calendar_connection_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "calendar_event_sync_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "decided_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "decided_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "decision_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "detected_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "drift_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "expected_snapshot_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "ip_docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "observed_snapshot_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "snapshot_schema_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "snapshot_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "source_id": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "source_type": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
           "nullable": false
         }
       }
@@ -9096,6 +9210,183 @@
       }
     },
     {
+      "id": "ip_control_review_exception_decisions",
+      "table_name": "ip_control_review_exception_decisions",
+      "purpose": "Repository SQL persistence class `ip_control_review_exception_decisions`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "annotation": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "decided_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "decided_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "disposition": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "exception_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "review_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_control_review_sample_evidence",
+      "table_name": "ip_control_review_sample_evidence",
+      "purpose": "Repository SQL persistence class `ip_control_review_sample_evidence`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "calculation_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "coverage_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "notes": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "review_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reviewer_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "sampled_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "source_evidence_reference": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_control_review_signatures",
+      "table_name": "ip_control_review_signatures",
+      "purpose": "Repository SQL persistence class `ip_control_review_signatures`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "attestation": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "manifest_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "review_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "sequence": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "signed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "signer_label_snapshot": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "signer_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "signer_role": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_cost_items",
       "table_name": "ip_cost_items",
       "purpose": "Repository SQL persistence class `ip_cost_items`; its exact column inventory is intentionally versioned below.",
@@ -9294,6 +9585,198 @@
       }
     },
     {
+      "id": "ip_deadline_incident_actions",
+      "table_name": "ip_deadline_incident_actions",
+      "purpose": "Repository SQL persistence class `ip_deadline_incident_actions`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "action_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "action_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(20)",
+          "nullable": false
+        },
+        "action_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "details": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "incident_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "recorded_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "recorded_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_deadline_incident_impacts",
+      "table_name": "ip_deadline_incident_impacts",
+      "purpose": "Repository SQL persistence class `ip_deadline_incident_impacts`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "assessed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "assessed_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "assessment": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(20)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "incident_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "record_reference_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "record_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "relationship": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "scan_method": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_deadline_incident_notification_decisions",
+      "table_name": "ip_deadline_incident_notification_decisions",
+      "purpose": "Repository SQL persistence class `ip_deadline_incident_notification_decisions`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "approval_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "communication_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "decided_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "decided_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "decision": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(20)",
+          "nullable": false
+        },
+        "decision_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "incident_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "rationale": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "recipient_reference_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "recipient_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_deadline_incidents",
       "table_name": "ip_deadline_incidents",
       "purpose": "Repository SQL persistence class `ip_deadline_incidents`; its exact column inventory is intentionally versioned below.",
@@ -9325,9 +9808,29 @@
           "sql_type": "DATETIME",
           "nullable": false
         },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "defect_fingerprint_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "defect_scope": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
         "docket_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "evidence_snapshot_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
           "nullable": false
         },
         "id": {
@@ -9340,9 +9843,54 @@
           "sql_type": "JSON",
           "nullable": false
         },
+        "impact_scan_completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "impact_scan_completed_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "matter_deadline_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "preservation_manifest_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "prevention_verified_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "preventive_action": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "resolution_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "resolved_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "resolved_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "root_cause": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
           "nullable": true
         },
         "severity": {
@@ -9369,6 +9917,11 @@
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
           "nullable": true
+        },
+        "version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
         }
       }
     },
@@ -9603,6 +10156,11 @@
           "sql_type": "VARCHAR(36)",
           "nullable": true
         },
+        "delta_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
         "export_error_redacted": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(500)",
@@ -9648,6 +10206,11 @@
           "sql_type": "VARCHAR(64)",
           "nullable": false
         },
+        "predecessor_review_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "query_version": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "VARCHAR(64)",
@@ -9655,6 +10218,21 @@
         },
         "report_snapshot_json": {
           "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "required_sample_size": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "required_signature_count": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "review_policy_json": {
+          "category_id": "configuration_or_state_metadata",
           "sql_type": "JSON",
           "nullable": false
         },
@@ -10655,6 +11233,85 @@
         "validation_status": {
           "category_id": "configuration_or_state_metadata",
           "sql_type": "VARCHAR(16)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_incident_kill_switches",
+      "table_name": "ip_incident_kill_switches",
+      "purpose": "Repository SQL persistence class `ip_incident_kill_switches`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "activated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "activated_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "activation_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "feature_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "incident_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "release_evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "release_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "released_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "released_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
           "nullable": false
         }
       }
@@ -15947,7 +16604,7 @@
     {
       "id": "matter_invoices",
       "table_name": "matter_invoices",
-      "purpose": "Repository SQL persistence class `matter_invoices`; its exact column inventory is intentionally versioned below. EH-SGR-04 (2026-08-20): `invoice_number` is immutable at the database. Migration 20260820_0002 adds a BEFORE UPDATE trigger (`matter_invoices_invoice_number_immutable`, PostgreSQL) that rejects any change to the column, and a non-blank CHECK (`ck_matter_invoice_number_not_blank`) on every dialect. Under Indian GST a tax invoice number is fixed at issue and corrections are made by credit or debit note, so a retention or correction procedure for this table must not assume the number can be rewritten in place.",
+      "purpose": "Repository SQL persistence class `matter_invoices`; its exact column inventory is intentionally versioned below.",
       "policy_profile_id": "billing_provider_evidence",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -22830,12 +23487,12 @@
       }
     }
   ],
-  "schema_fingerprint": "73af85a148238d22833532433707a7fa2782c70d30a56a5e4fa46a1e39ac8f95",
+  "schema_fingerprint": "7d08d9e48fb36ed7184a22017aca94e76f6edf68eae828a4a0d19b0c329f78b7",
   "index_inventory": {
-    "orm_index_count": 1147,
-    "orm_index_fingerprint": "a83ceeade72cbac48d88c832aa3d55e25fecdbb7f2515560e8ecfb49afea5435",
-    "migration_index_count": 507,
-    "migration_index_fingerprint": "53a9b3a26b99689c5ff82ddc1c1099594e9c9c1dcff7ef97b6fd051699da129c",
+    "orm_index_count": 1186,
+    "orm_index_fingerprint": "fb94a01e950503ec97e27bc4f00387415c624af6c4c320cba92a6e7713196e11",
+    "migration_index_count": 537,
+    "migration_index_fingerprint": "520703022d3d4bb630956aeed2ef194a65f5cd085a33c558566ea56689654e74",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

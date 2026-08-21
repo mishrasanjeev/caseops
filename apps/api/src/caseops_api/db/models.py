@@ -2912,6 +2912,15 @@ class CalendarEventSync(Base):
             name="ck_calendar_event_sync_drift_status",
         ),
         CheckConstraint(
+            "(reconciliation_candidate_id IS NULL AND "
+            "reconciliation_snapshot_sha256 IS NULL AND "
+            "reconciliation_provider_revision IS NULL) OR "
+            "(reconciliation_candidate_id IS NOT NULL AND "
+            "reconciliation_snapshot_sha256 IS NOT NULL AND "
+            "reconciliation_provider_revision IS NOT NULL)",
+            name="ck_calendar_event_sync_reconciliation_claim_complete",
+        ),
+        CheckConstraint(
             "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
             "neutralized_ip_docket_id IS NULL) OR "
             "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
@@ -2924,6 +2933,10 @@ class CalendarEventSync(Base):
             "company_id",
             "neutralized_ip_docket_id",
             "neutralized_by_ip_lifecycle_version",
+        ),
+        Index(
+            "ix_calendar_event_syncs_reconciliation_candidate_id",
+            "reconciliation_candidate_id",
         ),
     )
 
@@ -2964,6 +2977,21 @@ class CalendarEventSync(Base):
     )
     # Content-free: a reason, never a title or a date from the record.
     drift_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reconciliation_candidate_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "calendar_projection_reconciliation_candidates.id",
+            ondelete="RESTRICT",
+            use_alter=True,
+            name="fk_calendar_event_sync_reconciliation_candidate",
+        ),
+        nullable=True,
+    )
+    reconciliation_snapshot_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    reconciliation_provider_revision: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -2993,6 +3021,95 @@ class CalendarEventSync(Base):
 
     company: Mapped[Company] = relationship()
     connection: Mapped[UserCalendarConnection] = relationship(back_populates="event_syncs")
+
+
+class CalendarProjectionReconciliationCandidate(Base):
+    """Immutable, content-minimised evidence for one external calendar drift.
+
+    CaseOps remains authoritative for the underlying deadline/hearing/task.
+    This row records only the projected event identity, its expected date and
+    the provider's observable state; it never stores the provider event title,
+    body, attendees or location.  A later human decision is therefore tied to
+    exactly what the checker observed, rather than a mutable sync-row detail.
+    """
+
+    __tablename__ = "calendar_projection_reconciliation_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "calendar_event_sync_id",
+            "snapshot_sha256",
+            name="uq_calendar_projection_reconciliation_snapshot",
+        ),
+        CheckConstraint(
+            "drift_status IN ('moved', 'missing', 'unknown')",
+            name="ck_calendar_projection_reconciliation_drift_status",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'superseded')",
+            name="ck_calendar_projection_reconciliation_status",
+        ),
+        CheckConstraint(
+            "snapshot_schema_version > 0 AND length(snapshot_sha256) = 64",
+            name="ck_calendar_projection_reconciliation_snapshot_identity",
+        ),
+        CheckConstraint(
+            "(status IN ('pending', 'superseded') AND decided_at IS NULL "
+            "AND decided_by_membership_id IS NULL AND decision_evidence_reference IS NULL) OR "
+            "(status IN ('accepted', 'rejected') AND decided_at IS NOT NULL "
+            "AND decided_by_membership_id IS NOT NULL AND decision_evidence_reference IS NOT NULL)",
+            name="ck_calendar_projection_reconciliation_decision_evidence",
+        ),
+        Index(
+            "ix_calendar_projection_reconciliation_company_status",
+            "company_id",
+            "status",
+        ),
+        Index(
+            "ix_calendar_projection_reconciliation_sync",
+            "calendar_event_sync_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    calendar_event_sync_id: Mapped[str] = mapped_column(
+        ForeignKey("calendar_event_syncs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    calendar_connection_id: Mapped[str] = mapped_column(
+        ForeignKey("user_calendar_connections.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    drift_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    expected_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    observed_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    detected_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    decided_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    decision_evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    calendar_event_sync: Mapped[CalendarEventSync] = relationship(
+        foreign_keys=[calendar_event_sync_id]
+    )
 
 
 class UserMailboxConnection(Base):
@@ -15240,9 +15357,55 @@ class IpDeadlineIncident(Base):
             ["docket_id", "company_id"],
             ["ip_docket_records.id", "ip_docket_records.company_id"],
             name="fk_ip_deadline_incident_docket_company",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["impact_scan_completed_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_impact_actor_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["resolved_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_resolver_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["verified_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_verifier_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'contained', 'impact_assessed', 'disproved', 'verified')",
+            name="ck_ip_deadline_incident_status",
+        ),
+        CheckConstraint(
+            "defect_scope IN ('record_specific', 'shared_rule', 'shared_source', 'platform_wide')",
+            name="ck_ip_deadline_incident_defect_scope",
+        ),
+        CheckConstraint(
+            "status NOT IN ('disproved', 'verified') OR "
+            "(resolved_by_membership_id IS NOT NULL AND resolved_at IS NOT NULL "
+            "AND resolution_evidence_reference IS NOT NULL)",
+            name="ck_ip_deadline_incident_terminal_evidence",
         ),
         Index("ix_ip_deadline_incidents_company_status", "company_id", "status"),
+        Index("ix_ip_deadline_incident_creator", "created_by_membership_id"),
+        Index(
+            "ix_ip_deadline_incident_impact_completed_actor",
+            "impact_scan_completed_by_membership_id",
+        ),
+        Index("ix_ip_deadline_incident_resolver", "resolved_by_membership_id"),
+        Index("ix_ip_deadline_incident_verifier", "verified_by_membership_id"),
+        UniqueConstraint("id", "company_id", name="uq_ip_deadline_incident_id_company"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -15256,6 +15419,17 @@ class IpDeadlineIncident(Base):
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
     impact_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    evidence_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    preservation_manifest_sha256: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="0000000000000000000000000000000000000000000000000000000000000000",
+        server_default="0000000000000000000000000000000000000000000000000000000000000000",
+    )
+    defect_scope: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="record_specific"
+    )
+    defect_fingerprint_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     containment: Mapped[str | None] = mapped_column(Text, nullable=True)
     correction_deadline_id: Mapped[str | None] = mapped_column(
         ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
@@ -15263,12 +15437,238 @@ class IpDeadlineIncident(Base):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    impact_scan_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    impact_scan_completed_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
     corrective_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preventive_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prevention_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolution_evidence_reference: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Nullable only for rows created before UJ-58 actor evidence existed. The
+    # command service always sets this for new incidents.
+    created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class IpDeadlineIncidentImpact(Base):
+    """Append-only affected-record result from an incident impact scan."""
+
+    __tablename__ = "ip_deadline_incident_impacts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["incident_id", "company_id"],
+            ["ip_deadline_incidents.id", "ip_deadline_incidents.company_id"],
+            name="fk_ip_deadline_incident_impact_incident_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["assessed_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_impact_actor_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "assessment IN ('affected', 'not_affected', 'pending')",
+            name="ck_ip_deadline_incident_impact_assessment",
+        ),
+        UniqueConstraint(
+            "incident_id",
+            "record_type",
+            "record_reference_sha256",
+            name="uq_ip_deadline_incident_impact_record",
+        ),
+        Index("ix_ip_deadline_incident_impact_incident", "incident_id", "assessed_at"),
+        Index("ix_ip_deadline_incident_impact_actor", "assessed_by_membership_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    incident_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    record_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    record_reference_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    relationship: Mapped[str] = mapped_column(String(120), nullable=False)
+    assessment: Mapped[str] = mapped_column(String(20), nullable=False)
+    scan_method: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    assessed_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    assessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDeadlineIncidentAction(Base):
+    """Append-only containment, correction, advice, or prevention action."""
+
+    __tablename__ = "ip_deadline_incident_actions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["incident_id", "company_id"],
+            ["ip_deadline_incidents.id", "ip_deadline_incidents.company_id"],
+            name="fk_ip_deadline_incident_action_incident_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["recorded_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_action_actor_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "action_status IN ('planned', 'completed', 'not_available')",
+            name="ck_ip_deadline_incident_action_status",
+        ),
+        Index("ix_ip_deadline_incident_action_incident", "incident_id", "recorded_at"),
+        Index("ix_ip_deadline_incident_action_actor", "recorded_by_membership_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    incident_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    action_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    action_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    recorded_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpDeadlineIncidentNotificationDecision(Base):
+    """Append-only recipient-specific communication decision history."""
+
+    __tablename__ = "ip_deadline_incident_notification_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["incident_id", "company_id"],
+            ["ip_deadline_incidents.id", "ip_deadline_incidents.company_id"],
+            name="fk_ip_deadline_incident_notice_incident_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["decided_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_deadline_incident_notice_actor_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "recipient_type IN ('client', 'insurer', 'regulator', 'court', 'external_counsel')",
+            name="ck_ip_deadline_incident_notice_recipient_type",
+        ),
+        CheckConstraint(
+            "decision IN ('pending', 'notify', 'do_not_notify', 'not_applicable')",
+            name="ck_ip_deadline_incident_notice_decision",
+        ),
+        UniqueConstraint(
+            "incident_id",
+            "recipient_type",
+            "recipient_reference_sha256",
+            "decision_version",
+            name="uq_ip_deadline_incident_notice_version",
+        ),
+        Index("ix_ip_deadline_incident_notice_incident", "incident_id", "decided_at"),
+        Index("ix_ip_deadline_incident_notice_actor", "decided_by_membership_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    incident_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    recipient_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    recipient_reference_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    decision_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    communication_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    decided_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpIncidentKillSwitch(Base):
+    """Tenant-level automated-feature stop linked to a platform-wide incident."""
+
+    __tablename__ = "ip_incident_kill_switches"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["incident_id", "company_id"],
+            ["ip_deadline_incidents.id", "ip_deadline_incidents.company_id"],
+            name="fk_ip_incident_kill_switch_incident_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["activated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_incident_kill_switch_activator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["released_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_incident_kill_switch_releaser_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'released')",
+            name="ck_ip_incident_kill_switch_status",
+        ),
+        UniqueConstraint(
+            "incident_id", "feature_id", name="uq_ip_incident_kill_switch_incident_feature"
+        ),
+        Index(
+            "uq_ip_incident_kill_switch_active_feature",
+            "company_id",
+            "feature_id",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+        Index("ix_ip_incident_kill_switch_incident", "incident_id"),
+        Index("ix_ip_incident_kill_switch_activator", "activated_by_membership_id"),
+        Index("ix_ip_incident_kill_switch_releaser", "released_by_membership_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    incident_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    feature_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    activation_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    activated_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    release_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    release_evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    released_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class IpTitleInterest(Base):
@@ -16560,7 +16960,26 @@ class IpDocketControlReview(Base):
             "signed_off_at IS NULL OR signed_off_by_membership_id IS NOT NULL",
             name="ck_ip_control_review_signoff_has_signer",
         ),
+        CheckConstraint(
+            "required_signature_count IN (1, 2) AND required_sample_size BETWEEN 0 AND 20",
+            name="ck_ip_control_review_policy_bounds",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_control_review_id_company"),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "manifest_sha256",
+            name="uq_ip_control_review_id_company_manifest",
+        ),
+        ForeignKeyConstraint(
+            ["predecessor_review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_review_predecessor_company",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         Index("ix_ip_docket_control_reviews_company_generated", "company_id", "generated_at"),
+        Index("ix_ip_control_review_predecessor", "predecessor_review_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -16579,6 +16998,11 @@ class IpDocketControlReview(Base):
     snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     report_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    required_signature_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    required_sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    predecessor_review_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    delta_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     export_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="not_requested"
     )
@@ -16599,6 +17023,149 @@ class IpDocketControlReview(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpControlReviewExceptionDecision(Base):
+    """Append-only resolution or annotation for one frozen report exception."""
+
+    __tablename__ = "ip_control_review_exception_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_exception_decision_review_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["decided_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_exception_decision_actor_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "disposition IN ('resolved', 'annotated')",
+            name="ck_ip_control_exception_decision_disposition",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "docket_id",
+            "exception_kind",
+            name="uq_ip_control_exception_decision",
+        ),
+        Index("ix_ip_control_exception_decision_review", "review_id", "decided_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    exception_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(16), nullable=False)
+    annotation: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    decided_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpControlReviewSampleEvidence(Base):
+    """Append-only second-reviewer sample against one included docket."""
+
+    __tablename__ = "ip_control_review_sample_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_sample_review_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewer_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_sample_reviewer_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "docket_id",
+            "reviewer_membership_id",
+            name="uq_ip_control_sample_reviewer_docket",
+        ),
+        Index("ix_ip_control_sample_review", "review_id", "sampled_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reviewer_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    source_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    calculation_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    coverage_evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sampled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpControlReviewSignature(Base):
+    """One immutable signature bound to the exact report manifest."""
+
+    __tablename__ = "ip_control_review_signatures"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_id", "company_id"],
+            ["ip_docket_control_reviews.id", "ip_docket_control_reviews.company_id"],
+            name="fk_ip_control_signature_review_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["review_id", "company_id", "manifest_sha256"],
+            [
+                "ip_docket_control_reviews.id",
+                "ip_docket_control_reviews.company_id",
+                "ip_docket_control_reviews.manifest_sha256",
+            ],
+            name="fk_ip_control_signature_manifest",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["signer_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_control_signature_signer_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(signer_role = 'preparer' AND sequence = 1) OR "
+            "(signer_role = 'reviewer' AND sequence = 2)",
+            name="ck_ip_control_signature_role_sequence",
+        ),
+        UniqueConstraint("review_id", "signer_membership_id", name="uq_ip_control_signature_actor"),
+        UniqueConstraint("review_id", "sequence", name="uq_ip_control_signature_sequence"),
+        UniqueConstraint("review_id", "signer_role", name="uq_ip_control_signature_role"),
+        Index("ix_ip_control_signature_review", "review_id", "sequence"),
+        Index("ix_ip_control_signature_manifest_sha256", "manifest_sha256"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    signer_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    signer_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    signer_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    attestation: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    signed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 

@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "25dc653e9d88f93a33dbc519f786c73bf863a5c09f0cee284641f40393d766da"
-MAP_SCHEMA_FINGERPRINT = "73af85a148238d22833532433707a7fa2782c70d30a56a5e4fa46a1e39ac8f95"
+MAP_DOCUMENT_FINGERPRINT = "0db1e90a6f953a737d5de5b9d9c61b2a58388d882e7654f1eaf6b695f7907a00"
+MAP_SCHEMA_FINGERPRINT = "7d08d9e48fb36ed7184a22017aca94e76f6edf68eae828a4a0d19b0c329f78b7"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "2142da3f6dd7bf97c1e2a8c49365835c1fcd27d2e22708171ead39b213c87463"
+ORM_SCHEMA_FINGERPRINT = "a3a396fa3f71906f0667d355bf12eef1028273ec4f6307b446eb6f81a2ca0b0a"
 
-PROJECTION_ID = "583ce2aa56d72313a79580f3f9f1a656c6ff99cfeecfdb8a15bb8d094a4319bd"
+PROJECTION_ID = "c41139aea06fb4b621e6f254405cb922770763ef56d2644fb277b0755edf1fec"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -92,6 +92,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "bulk_import_jobs",
         "calendar_event_candidates",
         "calendar_event_syncs",
+        "calendar_projection_reconciliation_candidates",
         "case_tracking_support_matrix",
         "cause_list_exports",
         "clients",
@@ -144,8 +145,14 @@ INVENTORIED_SQL_TABLES = frozenset(
         "inbound_email_aliases",
         "inbound_email_events",
         "ip_assets",
+        "ip_control_review_exception_decisions",
+        "ip_control_review_sample_evidence",
+        "ip_control_review_signatures",
         "ip_cost_items",
         "ip_deadline_coverages",
+        "ip_deadline_incident_actions",
+        "ip_deadline_incident_impacts",
+        "ip_deadline_incident_notification_decisions",
         "ip_deadline_incidents",
         "ip_deadlines",
         "ip_docket_control_reviews",
@@ -160,6 +167,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_evidence_candidates",
         "ip_identifiers",
         "ip_import_rows",
+        "ip_incident_kill_switches",
         "ip_parties_and_roles",
         "ip_proceedings",
         "ip_related_right_obligations",

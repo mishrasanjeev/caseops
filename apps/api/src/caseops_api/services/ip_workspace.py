@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     CompanyMembership,
+    IpIncidentKillSwitch,
     IpWorkspaceConfiguration,
     IpWorkspaceTestResult,
 )
@@ -452,6 +453,19 @@ def enable_ip_workspace(
         raise HTTPException(status_code=409, detail="Workspace configuration changed; reload.")
     tests = _tests_for_current_version(session, row)
     blockers = _enablement_blockers(row, tests, payload.enabled_automations)
+    incident_blocked_features = set(
+        session.scalars(
+            select(IpIncidentKillSwitch.feature_id).where(
+                IpIncidentKillSwitch.company_id == context.company.id,
+                IpIncidentKillSwitch.status == "active",
+                IpIncidentKillSwitch.feature_id.in_(payload.enabled_automations),
+            )
+        ).all()
+    )
+    blockers.extend(
+        f"incident_kill_switch:{feature_id}"
+        for feature_id in sorted(incident_blocked_features)
+    )
     if blockers:
         raise HTTPException(
             status_code=409,

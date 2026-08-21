@@ -759,7 +759,7 @@ def _lifecycle_impacts(
         select(IpDeadlineIncident).where(
             IpDeadlineIncident.company_id == docket.company_id,
             IpDeadlineIncident.docket_id == docket.id,
-            IpDeadlineIncident.status == "open",
+            IpDeadlineIncident.status.notin_(("disproved", "verified")),
         )
     ):
         impacts.append(

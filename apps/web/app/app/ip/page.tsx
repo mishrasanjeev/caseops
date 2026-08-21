@@ -37,8 +37,10 @@ import {
   completeIpRelatedRightObligation,
   confirmIpLegalDeadline,
   createIpDocket,
+  createIpDeadlineIncident,
   createIpSharedHearing,
   decideIpCoverageTransfer,
+  decideIpDeadlineIncidentNotification,
   discoverIpEvidence,
   enableIpWorkspace,
   fetchIpCoreRecords,
@@ -57,8 +59,12 @@ import {
   proposeIpLegalDeadline,
   proposeIpWorkingCalendar,
   recalculateIpLegalDeadline,
+  recordIpDeadlineIncidentAction,
+  recordIpDeadlineIncidentImpact,
   reconcileIpCosts,
   reviewIpEvidenceCandidate,
+  releaseIpIncidentKillSwitch,
+  resolveIpDeadlineIncident,
   runIpWorkspaceTest,
   saveIpWorkspaceConfiguration,
   syncHearingToGoogleCalendar,
@@ -67,6 +73,7 @@ import {
   transitionIpDeadlineRule,
   overrideIpLegalDeadline,
   type IpDocket,
+  type IpDeadlineIncident,
   type IpLegalDeadline,
   type IpSharedHearing,
   type IpResponsibilityAssignmentInput,
@@ -272,6 +279,7 @@ const READINESS_REASON: Record<IpFeatureReadiness["reason"], string> = {
   workspace_not_configured: "Tenant setup has not been saved",
   tenant_disabled: "Tenant enablement has not passed",
   readiness_test_failed: "The latest required readiness test has not passed",
+  incident_kill_switch: "A risk incident has stopped this automation",
 };
 
 const DUE_FORMAT = new Intl.DateTimeFormat("en-IN", {
@@ -973,6 +981,7 @@ function DocketWorkspace({
         <LifecycleCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <EvidenceCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <CoverageCard docket={docket} enabled={canReview} onChanged={onChanged} />
+        <IncidentCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <TitleCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <ObligationCard docket={docket} enabled={canReview} onChanged={onChanged} />
         <CostCard docket={docket} enabled={canFinance} onChanged={onChanged} />
@@ -2181,6 +2190,189 @@ function CoverageCard({ docket, enabled, onChanged }: { docket: IpDocket; enable
             <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!fromMembershipId || !toMembershipId || reason.length < 5 || mutation.isPending}>Offer covered deadlines</Button>
           </form>
         ) : <p className="text-xs text-[var(--color-mute)]">No covered deadlines are attached to this docket.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+type IncidentPanel = "actions" | "impact" | "notifications" | "resolution";
+
+function IncidentCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
+  const [selectedId, setSelectedId] = useState("");
+  const [showCreateIncident, setShowCreateIncident] = useState(false);
+  const [panel, setPanel] = useState<IncidentPanel>("actions");
+  const [severity, setSeverity] = useState<IpDeadlineIncident["severity"]>("high");
+  const [scope, setScope] = useState<IpDeadlineIncident["defect_scope"]>("record_specific");
+  const [summary, setSummary] = useState("");
+  const [fingerprint, setFingerprint] = useState("");
+  const [sourceReference, setSourceReference] = useState("");
+  const [killFeatures, setKillFeatures] = useState<string[]>([]);
+  const [killEvidence, setKillEvidence] = useState("");
+  const [actionType, setActionType] = useState<"containment" | "corrective_task" | "filing" | "external_advice" | "prevention">("containment");
+  const [actionStatus, setActionStatus] = useState<"planned" | "completed" | "not_available">("completed");
+  const [actionReference, setActionReference] = useState("");
+  const [actionDetails, setActionDetails] = useState("");
+  const [actionEvidence, setActionEvidence] = useState("");
+  const [recordType, setRecordType] = useState("trademark_application");
+  const [recordReference, setRecordReference] = useState("");
+  const [relationship, setRelationship] = useState("");
+  const [assessment, setAssessment] = useState<"affected" | "not_affected" | "pending">("pending");
+  const [scanMethod, setScanMethod] = useState("");
+  const [scanEvidence, setScanEvidence] = useState("");
+  const [scanComplete, setScanComplete] = useState(false);
+  const [recipientType, setRecipientType] = useState<"client" | "insurer" | "regulator" | "court" | "external_counsel">("client");
+  const [recipientReference, setRecipientReference] = useState("");
+  const [decision, setDecision] = useState<"pending" | "notify" | "do_not_notify" | "not_applicable">("pending");
+  const [rationale, setRationale] = useState("");
+  const [approvalEvidence, setApprovalEvidence] = useState("");
+  const [communicationReference, setCommunicationReference] = useState("");
+  const [outcome, setOutcome] = useState<"verified" | "disproved">("verified");
+  const [correctiveAction, setCorrectiveAction] = useState("");
+  const [rootCause, setRootCause] = useState("");
+  const [preventiveAction, setPreventiveAction] = useState("");
+  const [resolutionEvidence, setResolutionEvidence] = useState("");
+  const [releaseReason, setReleaseReason] = useState("");
+  const [releaseEvidence, setReleaseEvidence] = useState("");
+  const selected = showCreateIncident ? null : (
+    docket.deadline_incidents.find((row) => row.id === selectedId)
+      ?? docket.deadline_incidents.find((row) => !["verified", "disproved"].includes(row.status))
+      ?? docket.deadline_incidents[0]
+      ?? null
+  );
+  const terminal = selected ? ["verified", "disproved"].includes(selected.status) : false;
+  const refresh = async () => { await onChanged(); };
+
+  const create = useMutation({
+    mutationFn: () => createIpDeadlineIncident({
+      docketId: docket.id,
+      severity,
+      summary,
+      defectScope: scope,
+      defectFingerprint: fingerprint,
+      sourceReference,
+      killSwitchFeatures: scope === "platform_wide" ? killFeatures : [],
+      killSwitchEvidenceReference: scope === "platform_wide" ? killEvidence : null,
+    }),
+    onSuccess: async (updated) => {
+      const created = updated.deadline_incidents[0];
+      setSelectedId(created?.id ?? "");
+      setShowCreateIncident(false);
+      setSummary(""); setFingerprint(""); setSourceReference(""); setKillEvidence("");
+      toast.success("Deadline incident opened with preserved evidence.");
+      await refresh();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not open deadline incident.")),
+  });
+  const action = useMutation({
+    mutationFn: () => recordIpDeadlineIncidentAction({
+      docketId: docket.id, incidentId: selected!.id, actionType, actionStatus,
+      actionReference, details: actionDetails, evidenceReference: actionEvidence,
+    }),
+    onSuccess: async () => { setActionReference(""); setActionDetails(""); setActionEvidence(""); toast.success("Incident action recorded."); await refresh(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record incident action.")),
+  });
+  const scan = useMutation({
+    mutationFn: () => recordIpDeadlineIncidentImpact({
+      docketId: docket.id, incidentId: selected!.id, recordType, recordReference,
+      relationship, assessment, scanMethod, evidenceReference: scanEvidence, complete: scanComplete,
+    }),
+    onSuccess: async () => { setRecordReference(""); setRelationship(""); setScanMethod(""); setScanEvidence(""); toast.success("Impact evidence recorded."); await refresh(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record impact scan.")),
+  });
+  const notify = useMutation({
+    mutationFn: () => decideIpDeadlineIncidentNotification({
+      docketId: docket.id, incidentId: selected!.id, recipientType, recipientReference,
+      decision, rationale, approvalEvidenceReference: approvalEvidence,
+      communicationReference: communicationReference || null,
+    }),
+    onSuccess: async () => { setRecipientReference(""); setRationale(""); setApprovalEvidence(""); setCommunicationReference(""); toast.success("Recipient decision recorded."); await refresh(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record recipient decision.")),
+  });
+  const resolve = useMutation({
+    mutationFn: () => resolveIpDeadlineIncident({
+      docketId: docket.id, incidentId: selected!.id, outcome, correctiveAction,
+      rootCause, preventiveAction, resolutionEvidenceReference: resolutionEvidence,
+    }),
+    onSuccess: async () => { toast.success(`Incident ${outcome}.`); await refresh(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not resolve incident.")),
+  });
+  const release = useMutation({
+    mutationFn: (row: IpDeadlineIncident["kill_switches"][number]) => releaseIpIncidentKillSwitch({
+      docketId: docket.id, incidentId: selected!.id, featureId: row.feature_id,
+      expectedVersion: row.version, releaseReason, releaseEvidenceReference: releaseEvidence,
+    }),
+    onSuccess: async () => { setReleaseReason(""); setReleaseEvidence(""); toast.success("Automation stop released."); await refresh(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not release automation stop.")),
+  });
+
+  const selectClass = "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
+  return (
+    <Card className="min-w-0 xl:col-span-2" data-testid="ip-incident-workspace">
+      <CardHeader><CardTitle as="h3">Deadline incident review</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
+        {docket.deadline_incidents.length ? (
+          <Field label="Incident" htmlFor="incident-select">
+            <select id="incident-select" className={selectClass} value={selected?.id ?? ""} onChange={(event) => { setShowCreateIncident(false); setSelectedId(event.target.value); }}>
+              {docket.deadline_incidents.map((row) => <option key={row.id} value={row.id}>{row.severity.toUpperCase()} · {row.status.replaceAll("_", " ")} · {row.summary}</option>)}
+            </select>
+          </Field>
+        ) : null}
+
+        {selected ? (
+          <div className="grid min-w-0 gap-3 border-y border-[var(--color-line)] py-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Status" value={selected.status.replaceAll("_", " ")} icon={AlertTriangle} />
+            <Metric label="Affected records" value={String(selected.impacts.length)} icon={FileCheck2} />
+            <Metric label="Recipient decisions" value={String(selected.notification_decisions.length)} icon={FileCheck2} />
+            <Metric label="Automation stops" value={String(selected.kill_switches.filter((row) => row.status === "active").length)} icon={AlertTriangle} />
+          </div>
+        ) : null}
+
+        {enabled && !selected ? (
+          <form className="grid min-w-0 gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); create.mutate(); }}>
+            <Field label="Severity"><select className={selectClass} value={severity} onChange={(event) => setSeverity(event.target.value as typeof severity)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></Field>
+            <Field label="Defect scope"><select className={selectClass} value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="record_specific">Record specific</option><option value="shared_rule">Shared rule</option><option value="shared_source">Shared source</option><option value="platform_wide">Platform wide</option></select></Field>
+            <Field label="Incident summary"><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} /></Field>
+            <Field label="Defect fingerprint"><Input value={fingerprint} onChange={(event) => setFingerprint(event.target.value)} /></Field>
+            <Field label="Source evidence reference"><Input value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} /></Field>
+            {scope === "platform_wide" ? <div className="grid min-w-0 gap-2"><Label>Automation stops</Label>{["registry_sync", "deadline_automation", "notification_automation", "watch_operations"].map((feature) => <label key={feature} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={killFeatures.includes(feature)} onChange={(event) => setKillFeatures((current) => event.target.checked ? [...current, feature] : current.filter((row) => row !== feature))} />{feature.replaceAll("_", " ")}</label>)}<Input aria-label="Automation stop evidence" value={killEvidence} onChange={(event) => setKillEvidence(event.target.value)} /></div> : null}
+            <div className="md:col-span-2"><Button type="submit" disabled={summary.length < 5 || fingerprint.length < 3 || sourceReference.length < 3 || (scope === "platform_wide" && (!killFeatures.length || killEvidence.length < 3)) || create.isPending}>Open incident</Button></div>
+          </form>
+        ) : null}
+
+        {enabled && selected && !terminal ? (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="tablist" aria-label="Incident review stages">
+              {(["actions", "impact", "notifications", "resolution"] as IncidentPanel[]).map((item) => <Button key={item} type="button" size="sm" variant={panel === item ? "primary" : "secondary"} onClick={() => setPanel(item)}>{item === "notifications" ? "Recipients" : item[0].toUpperCase() + item.slice(1)}</Button>)}
+            </div>
+            {panel === "actions" ? <form className="grid min-w-0 gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); action.mutate(); }}>
+              <Field label="Action"><select className={selectClass} value={actionType} onChange={(event) => setActionType(event.target.value as typeof actionType)}><option value="containment">Containment</option><option value="corrective_task">Corrective task</option><option value="filing">Filing</option><option value="external_advice">External advice</option><option value="prevention">Prevention</option></select></Field>
+              <Field label="Action status"><select className={selectClass} value={actionStatus} onChange={(event) => setActionStatus(event.target.value as typeof actionStatus)}><option value="planned">Planned</option><option value="completed">Completed</option><option value="not_available">Not available</option></select></Field>
+              <Field label="Action reference"><Input value={actionReference} onChange={(event) => setActionReference(event.target.value)} /></Field><Field label="Evidence reference"><Input value={actionEvidence} onChange={(event) => setActionEvidence(event.target.value)} /></Field>
+              <Field label="Action details"><Textarea value={actionDetails} onChange={(event) => setActionDetails(event.target.value)} /></Field><div className="flex items-end"><Button type="submit" disabled={actionReference.length < 3 || actionDetails.length < 5 || actionEvidence.length < 3 || action.isPending}>Record action</Button></div>
+            </form> : null}
+            {panel === "impact" ? <form className="grid min-w-0 gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); scan.mutate(); }}>
+              <Field label="Record type"><Input value={recordType} onChange={(event) => setRecordType(event.target.value)} /></Field><Field label="Record reference"><Input value={recordReference} onChange={(event) => setRecordReference(event.target.value)} /></Field>
+              <Field label="Relationship"><Input value={relationship} onChange={(event) => setRelationship(event.target.value)} /></Field><Field label="Assessment"><select className={selectClass} value={assessment} onChange={(event) => setAssessment(event.target.value as typeof assessment)}><option value="pending">Pending</option><option value="affected">Affected</option><option value="not_affected">Not affected</option></select></Field>
+              <Field label="Scan method"><Input value={scanMethod} onChange={(event) => setScanMethod(event.target.value)} /></Field><Field label="Scan evidence"><Input value={scanEvidence} onChange={(event) => setScanEvidence(event.target.value)} /></Field>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scanComplete} onChange={(event) => setScanComplete(event.target.checked)} />Complete impact scan</label><div className="flex items-end"><Button type="submit" disabled={recordReference.length < 1 || relationship.length < 2 || scanMethod.length < 2 || scanEvidence.length < 3 || (scanComplete && assessment === "pending") || scan.isPending}>Record impact</Button></div>
+            </form> : null}
+            {panel === "notifications" ? <form className="grid min-w-0 gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); notify.mutate(); }}>
+              <Field label="Recipient"><select className={selectClass} value={recipientType} onChange={(event) => setRecipientType(event.target.value as typeof recipientType)}><option value="client">Client</option><option value="insurer">Insurer</option><option value="regulator">Regulator</option><option value="court">Court</option><option value="external_counsel">External counsel</option></select></Field><Field label="Private recipient reference"><Input value={recipientReference} onChange={(event) => setRecipientReference(event.target.value)} /></Field>
+              <Field label="Decision"><select className={selectClass} value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)}><option value="pending">Pending</option><option value="notify">Notify</option><option value="do_not_notify">Do not notify</option><option value="not_applicable">Not applicable</option></select></Field><Field label="Approval evidence"><Input value={approvalEvidence} onChange={(event) => setApprovalEvidence(event.target.value)} /></Field>
+              <Field label="Decision rationale"><Textarea value={rationale} onChange={(event) => setRationale(event.target.value)} /></Field><Field label="Communication reference"><Input value={communicationReference} onChange={(event) => setCommunicationReference(event.target.value)} /></Field>
+              <div className="md:col-span-2"><Button type="submit" disabled={recipientReference.length < 1 || rationale.length < 5 || approvalEvidence.length < 3 || (decision === "notify" && communicationReference.length < 3) || notify.isPending}>Record recipient decision</Button></div>
+            </form> : null}
+            {panel === "resolution" ? <form className="grid min-w-0 gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); resolve.mutate(); }}>
+              <Field label="Outcome"><select className={selectClass} value={outcome} onChange={(event) => setOutcome(event.target.value as typeof outcome)}><option value="verified">Verified defect</option><option value="disproved">Disproved suspicion</option></select></Field><Field label="Resolution evidence"><Input value={resolutionEvidence} onChange={(event) => setResolutionEvidence(event.target.value)} /></Field>
+              <Field label="Corrective action"><Textarea value={correctiveAction} onChange={(event) => setCorrectiveAction(event.target.value)} /></Field><Field label="Root cause"><Textarea value={rootCause} onChange={(event) => setRootCause(event.target.value)} /></Field>
+              <Field label="Preventive action"><Textarea value={preventiveAction} onChange={(event) => setPreventiveAction(event.target.value)} /></Field><div className="flex items-end"><Button type="submit" disabled={correctiveAction.length < 5 || rootCause.length < 5 || preventiveAction.length < 5 || resolutionEvidence.length < 3 || resolve.isPending}>Resolve incident</Button></div>
+            </form> : null}
+          </>
+        ) : null}
+
+        {enabled && selected?.kill_switches.some((row) => row.status === "active") ? <div className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-3 md:grid-cols-2"><Field label="Release reason"><Textarea value={releaseReason} onChange={(event) => setReleaseReason(event.target.value)} /></Field><Field label="Release evidence"><Input value={releaseEvidence} onChange={(event) => setReleaseEvidence(event.target.value)} /></Field>{selected.kill_switches.filter((row) => row.status === "active").map((row) => <Button key={row.id} size="sm" variant="secondary" disabled={!terminal || releaseReason.length < 5 || releaseEvidence.length < 3 || release.isPending} onClick={() => release.mutate(row)}>Release {row.feature_id.replaceAll("_", " ")}</Button>)}</div> : null}
+
+        {enabled && selected ? <Button size="sm" variant="secondary" onClick={() => setShowCreateIncident(true)}>Open another incident</Button> : null}
       </CardContent>
     </Card>
   );

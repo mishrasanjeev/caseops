@@ -30,6 +30,12 @@ const {
   applyIpAccessChangeMock,
   fetchIpCoverageTransfersAwaitingMeMock,
   decideIpCoverageTransferMock,
+  createIpDeadlineIncidentMock,
+  recordIpDeadlineIncidentActionMock,
+  recordIpDeadlineIncidentImpactMock,
+  decideIpDeadlineIncidentNotificationMock,
+  resolveIpDeadlineIncidentMock,
+  releaseIpIncidentKillSwitchMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
@@ -58,6 +64,12 @@ const {
   applyIpAccessChangeMock: vi.fn(),
   fetchIpCoverageTransfersAwaitingMeMock: vi.fn(),
   decideIpCoverageTransferMock: vi.fn(),
+  createIpDeadlineIncidentMock: vi.fn(),
+  recordIpDeadlineIncidentActionMock: vi.fn(),
+  recordIpDeadlineIncidentImpactMock: vi.fn(),
+  decideIpDeadlineIncidentNotificationMock: vi.fn(),
+  resolveIpDeadlineIncidentMock: vi.fn(),
+  releaseIpIncidentKillSwitchMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -83,6 +95,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   runIpWorkspaceTest: runIpWorkspaceTestMock,
   saveIpWorkspaceConfiguration: saveIpWorkspaceConfigurationMock,
   createIpDocket: vi.fn(),
+  createIpDeadlineIncident: createIpDeadlineIncidentMock,
+  recordIpDeadlineIncidentAction: recordIpDeadlineIncidentActionMock,
+  recordIpDeadlineIncidentImpact: recordIpDeadlineIncidentImpactMock,
+  decideIpDeadlineIncidentNotification: decideIpDeadlineIncidentNotificationMock,
+  resolveIpDeadlineIncident: resolveIpDeadlineIncidentMock,
+  releaseIpIncidentKillSwitch: releaseIpIncidentKillSwitchMock,
   createIpSharedHearing: createIpSharedHearingMock,
   updateIpSharedHearing: vi.fn(),
   listCalendarConnections: listCalendarConnectionsMock,
@@ -168,6 +186,12 @@ describe("IpDocketPage", () => {
     applyIpAccessChangeMock.mockReset();
     fetchIpCoverageTransfersAwaitingMeMock.mockReset();
     decideIpCoverageTransferMock.mockReset();
+    createIpDeadlineIncidentMock.mockReset();
+    recordIpDeadlineIncidentActionMock.mockReset();
+    recordIpDeadlineIncidentImpactMock.mockReset();
+    decideIpDeadlineIncidentNotificationMock.mockReset();
+    resolveIpDeadlineIncidentMock.mockReset();
+    releaseIpIncidentKillSwitchMock.mockReset();
     fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [] });
     decideIpCoverageTransferMock.mockResolvedValue({});
     enableIpWorkspaceMock.mockReset();
@@ -514,6 +538,7 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Offer covered deadlines" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Add recordal obligation" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reconcile with Matter billing" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open incident" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Preview prosecution event" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Record prosecution event" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Preview lifecycle impact" })).toBeVisible();
@@ -645,6 +670,65 @@ describe("IpDocketPage", () => {
     expect(apply).toBeEnabled();
     fireEvent.click(apply);
     await waitFor(() => expect(transitionIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("maps the complete restricted incident review journey", async () => {
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [{
+        id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
+        title: "CASEOPS", primary_identifier: "TM-1", status: "active", restricted: true,
+        is_active: true, lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null,
+        lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
+        lifecycle_evidence_ref: null, successor_docket_id: null, current_version: 1,
+        created_at: "2026-08-01T00:00:00Z", updated_at: "2026-08-01T00:00:00Z",
+        current_particulars: { form_key: "TM-A", form_version: "2026.1", readiness_status: "ready", classes_json: [] },
+        notice_links: [], title_interests: [], cost_items: [], related_right_obligations: [],
+        evidence_candidates: [], deadline_coverages: [],
+        deadline_incidents: [{
+          id: "incident-1", matter_deadline_id: null, severity: "critical",
+          summary: "Shared deadline rule may be defective", impact_json: {},
+          evidence_snapshot_json: { rule_version_refs: ["rule:v7"] },
+          preservation_manifest_sha256: "a".repeat(64), defect_scope: "platform_wide",
+          defect_fingerprint_sha256: "b".repeat(64), containment: "Automation paused",
+          correction_deadline_id: null, status: "impact_assessed",
+          impact_scan_completed_at: "2026-08-21T00:00:00Z", corrective_action: null,
+          root_cause: null, preventive_action: null, prevention_verified_at: null,
+          resolution_evidence_reference: null, resolved_at: null, verified_at: null,
+          version: 3, created_at: "2026-08-21T00:00:00Z",
+          impacts: [{ id: "impact-1", record_type: "trademark_application", record_reference_sha256: "c".repeat(64), relationship: "same rule", assessment: "affected", scan_method: "fingerprint", evidence_reference: "scan:1", assessed_by_membership_id: "membership-1", assessed_at: "2026-08-21T00:00:00Z" }],
+          actions: [{ id: "action-1", action_type: "containment", action_status: "completed", action_reference: "task:1", details: "Automation paused", evidence_reference: "action:1", recorded_by_membership_id: "membership-1", recorded_at: "2026-08-21T00:00:00Z" }],
+          notification_decisions: [{ id: "decision-1", recipient_type: "client", recipient_reference_sha256: "d".repeat(64), decision: "pending", decision_version: 1, rationale: "Partner review pending", approval_evidence_reference: "approval:1", communication_reference: null, decided_by_membership_id: "membership-1", decided_at: "2026-08-21T00:00:00Z" }],
+          kill_switches: [{ id: "switch-1", feature_id: "deadline_automation", status: "active", reason: "Shared defect", activation_evidence_reference: "stop:1", release_reason: null, release_evidence_reference: null, version: 1 }],
+        }],
+      }],
+      count: 1,
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    const workspace = await screen.findByTestId("ip-incident-workspace");
+    expect(within(workspace).getByRole("option", { name: /Shared deadline rule may be defective/ })).toBeInTheDocument();
+    expect(within(workspace).getByText("Affected records")).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Actions" })).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Impact" })).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Recipients" })).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Resolution" })).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Record action" })).toBeDisabled();
+
+    fireEvent.click(within(workspace).getByRole("button", { name: "Impact" }));
+    expect(within(workspace).getByLabelText("Record reference")).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Record impact" })).toBeDisabled();
+    fireEvent.click(within(workspace).getByRole("button", { name: "Recipients" }));
+    expect(within(workspace).getByLabelText("Private recipient reference")).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Record recipient decision" })).toBeDisabled();
+    fireEvent.click(within(workspace).getByRole("button", { name: "Resolution" }));
+    expect(within(workspace).getByLabelText("Root cause")).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Resolve incident" })).toBeDisabled();
+    expect(within(workspace).getByRole("button", { name: "Release deadline automation" })).toBeDisabled();
+
+    fireEvent.click(within(workspace).getByRole("button", { name: "Open another incident" }));
+    expect(within(workspace).getByLabelText("Defect scope")).toBeVisible();
+    expect(within(workspace).getByRole("button", { name: "Open incident" })).toBeDisabled();
   });
 
   const AWAITING_DOCKET = {
