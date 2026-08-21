@@ -19,6 +19,7 @@ import {
   ListTodo,
   Mail,
   RefreshCw,
+  Target,
   Timer,
 } from "lucide-react";
 import Link from "next/link";
@@ -45,7 +46,7 @@ import {
   syncOutlookVisibleRange,
 } from "@/lib/api/endpoints";
 import type {
-  CalendarEventKind,
+  CalendarEventDisplayType,
   CalendarEventRecord,
 } from "@/lib/api/schemas";
 import type { EmailInvitationCandidateRecord } from "@/lib/api/endpoints";
@@ -55,17 +56,26 @@ import { cn } from "@/lib/cn";
 
 type ViewMode = "month" | "week" | "day";
 
-const KIND_ICON: Record<CalendarEventKind, typeof Gavel> = {
-  hearing: Gavel,
-  task: ListTodo,
-  deadline: Timer,
+const DISPLAY_META: Record<
+  CalendarEventDisplayType,
+  { label: string; shortLabel: string; icon: typeof Gavel; dot: string }
+> = {
+  hearing: { label: "Hearing or listing", shortLabel: "Hearing", icon: Gavel, dot: "bg-[var(--color-accent)]" },
+  task_date: { label: "Task date", shortLabel: "Task", icon: ListTodo, dot: "bg-[var(--color-info-500)]" },
+  filing_deadline: { label: "Legal filing deadline", shortLabel: "Filing", icon: Timer, dot: "bg-red-600" },
+  internal_target: { label: "Internal target", shortLabel: "Target", icon: Target, dot: "bg-amber-500" },
+  renewal: { label: "Renewal date", shortLabel: "Renewal", icon: RefreshCw, dot: "bg-emerald-600" },
+  client_instruction: { label: "Client-instruction date", shortLabel: "Client", icon: Inbox, dot: "bg-cyan-700" },
+  reminder: { label: "Reminder time", shortLabel: "Reminder", icon: Mail, dot: "bg-violet-600" },
+  deadline: { label: "Other deadline", shortLabel: "Deadline", icon: CalendarCheck, dot: "bg-[var(--color-warning-500)]" },
 };
 
-const KIND_DOT: Record<CalendarEventKind, string> = {
-  hearing: "bg-[var(--color-accent)]",
-  task: "bg-[var(--color-info-500)]",
-  deadline: "bg-[var(--color-warning-500)]",
-};
+function displayTypeForEvent(event: CalendarEventRecord): CalendarEventDisplayType {
+  if (event.display_type) return event.display_type;
+  if (event.kind === "hearing") return "hearing";
+  if (event.kind === "task") return "task_date";
+  return "deadline";
+}
 
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -505,14 +515,15 @@ export default function CalendarPage() {
       </header>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-[var(--color-mute)]">
-        {(["hearing", "task", "deadline"] as const).map((kind) => {
-          const Icon = KIND_ICON[kind];
+      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[var(--color-mute)]">
+        {(["filing_deadline", "internal_target", "hearing", "renewal", "task_date"] as const).map((displayType) => {
+          const meta = DISPLAY_META[displayType];
+          const Icon = meta.icon;
           return (
-            <span key={kind} className="inline-flex items-center gap-1.5">
-              <span className={cn("h-2 w-2 rounded-full", KIND_DOT[kind])} />
+            <span key={displayType} className="inline-flex items-center gap-1.5">
+              <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
               <Icon className="h-3.5 w-3.5" aria-hidden />
-              <span className="capitalize">{kind}s</span>
+              <span>{meta.label}</span>
             </span>
           );
         })}
@@ -1248,7 +1259,8 @@ function DayView({
       ) : (
         <ul className="flex flex-col gap-2">
           {events.map((event) => {
-            const Icon = KIND_ICON[event.kind];
+            const meta = DISPLAY_META[displayTypeForEvent(event)];
+            const Icon = meta.icon;
             return (
               <li key={event.id}>
                 <Link
@@ -1259,7 +1271,7 @@ function DayView({
                   <span
                     className={cn(
                       "mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-white",
-                      KIND_DOT[event.kind],
+                      meta.dot,
                     )}
                   >
                     <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -1269,6 +1281,8 @@ function DayView({
                       {event.title}
                     </div>
                     <div className="text-xs text-[var(--color-mute)]">
+                      <span className="font-semibold text-[var(--color-ink-2)]">{meta.label}</span>
+                      {" · "}
                       <span className="font-mono">{event.matter_code}</span>
                       {" · "}
                       {event.matter_title}
@@ -1296,23 +1310,27 @@ function deepLinkForEvent(event: CalendarEventRecord): string {
     case "task":
       return `/app/matters/${event.matter_id}/tasks`;
     case "deadline":
+      if (event.ip_docket_id) {
+        return `/app/ip?docket=${encodeURIComponent(event.ip_docket_id)}`;
+      }
       return `/app/matters/${event.matter_id}/tasks`;
   }
 }
 
 function CalendarEventChip({ event }: { event: CalendarEventRecord }) {
+  const meta = DISPLAY_META[displayTypeForEvent(event)];
   return (
     <Link
       href={deepLinkForEvent(event)}
       className="group flex items-start gap-1.5 rounded-sm px-1.5 py-1 text-[11px] hover:bg-[var(--color-line-1)]"
-      title={`${event.matter_code} · ${event.matter_title} — ${event.title}`}
+      title={`${meta.label} · ${event.matter_code} · ${event.matter_title} — ${event.title}`}
       data-testid={`calendar-event-${event.id}`}
     >
       <span
-        className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", KIND_DOT[event.kind])}
+        className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)}
       />
       <span className="flex-1 truncate text-[var(--color-ink)] group-hover:underline">
-        {event.title}
+        <span className="font-semibold">{meta.shortLabel}:</span> {event.title}
       </span>
       <ExternalLink
         className="h-3 w-3 shrink-0 text-[var(--color-mute)] opacity-0 group-hover:opacity-100"

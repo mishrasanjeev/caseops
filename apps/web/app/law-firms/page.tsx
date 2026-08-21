@@ -97,6 +97,11 @@ const hearingFlow = [
 
 const platformMoves = [
   {
+    icon: Clock3,
+    title: "Governed IP deadlines",
+    body: "Calculate against versioned rules and working calendars, confirm with named coverage, inspect source-linked provenance, supersede rather than overwrite, and distinguish filing dates from internal targets and renewals.",
+  },
+  {
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
     body: "Search exact application and opposition numbers, group independent filings by mark or canonical client, and manage source-backed prosecution events, corrections and registry reconciliation from a permission-scoped workspace.",

@@ -8955,6 +8955,37 @@ export type IpDeadlineImpact = {
   unrelated_work_preserved: true;
 };
 
+export type IpDeadlineDependencyNode = {
+  kind:
+    | "trigger_event"
+    | "rule_version"
+    | "calendar_version"
+    | "predecessor_deadline"
+    | "extension"
+    | "override";
+  reference_id: string | null;
+  label: string;
+  detail: string | null;
+  available: boolean;
+};
+
+export type IpDeadlineDependencies = {
+  deadline_id: string;
+  docket_id: string;
+  state: string;
+  result_on: string | null;
+  certainty: string;
+  is_critical: boolean;
+  engine_version: string;
+  source_version: string;
+  rule_citation: string;
+  explanation: string;
+  nodes: IpDeadlineDependencyNode[];
+  calculation_trace: Array<Record<string, unknown>>;
+  unavailable_inputs: string[];
+  superseded_chain: string[];
+};
+
 export type IpDocumentState =
   | "draft"
   | "review"
@@ -9863,6 +9894,14 @@ export async function fetchIpDeadlineImpact(
   deadlineId: string,
 ): Promise<IpDeadlineImpact> {
   return apiRequest(`/api/ip/deadlines/${encodeURIComponent(deadlineId)}/impact`);
+}
+
+export async function fetchIpDeadlineDependencies(
+  deadlineId: string,
+): Promise<IpDeadlineDependencies> {
+  return apiRequest(
+    `/api/ip/deadlines/${encodeURIComponent(deadlineId)}/dependencies`,
+  );
 }
 
 export type IpResponsibilityAssignmentInput = {

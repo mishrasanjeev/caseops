@@ -1,6 +1,6 @@
 # Governed IP legal-deadline workflow
 
-**Slice:** `IPLF-023B`  
+**Slices:** `IPLF-023B`, extended by `IPLF-034A` and `IPLF-034B`
 **Implementation revision:** `e021bb1fb509448f3282be11da3cb2ae3fbb9b39`  
 **Program status:** `PROGRAM INCOMPLETE`
 
@@ -84,8 +84,16 @@ identifiers.
   next-working-day adjustment.
 - The API returns the plain-language explanation and governing source citation
   beside the result.
+- The read-only dependency graph names the stored trigger, rule version,
+  calendar version, approved extension input, override, and immutable
+  predecessor chain. Missing inputs remain visibly unavailable; the graph never
+  recomputes the legal date.
 - Unknown/conflicting triggers produce a visible provisional record with no
   fabricated due date.
+- Conflicting evidence cannot be confirmed until the approver supplies a
+  corrected date, reason, and evidence reference. A date-less provisional
+  record is resolved in place so its original uncertainty remains in the
+  calculation trace; a correction to a dated record creates a successor.
 - Confirmation of a critical deadline requires exactly one acknowledged primary
   owner and acknowledged backup or escalation coverage. Each responsible member
   must be active, in the same company, and able to access the Matter.
@@ -95,6 +103,24 @@ identifiers.
 - Reminder offsets are deterministic and idempotent. This slice does not send
   email, SMS, WhatsApp, registry messages, filings, payments, or other external
   effects.
+
+### Extension applications and orders
+
+An application for extension is evidence, not permission to move the legal
+deadline. CaseOps therefore does not maintain a second extension-date writer:
+
+1. Filing or recording an extension application leaves the confirmed legal
+   date and its reminders unchanged.
+2. An approved extension may enter the calculation only through an activated,
+   source-versioned rule/calendar combination, or through the existing override
+   command with the approved order as evidence.
+3. The replacement date supersedes the prior legal deadline; the prior result,
+   reason, evidence, impact preview, and dependent-work disposition remain
+   inspectable in the dependency graph.
+
+This is a deliberate no-schema-change decision for `IPLF-034B`. A separate
+extension/order table would duplicate the docket-event/document evidence owners
+without changing deadline authority.
 
 ## Recalculation, override, and completion
 
@@ -132,6 +158,7 @@ ordinary corrective docket-event capability and audit evidence.
 | `POST /api/ip/working-calendars/{id}/activate` | `ip:rules_activate` | independent activation/conflict review |
 | `POST /api/ip/dockets/{id}/deadlines` | `ip:approve` | deterministic or provisional proposal |
 | `GET /api/ip/deadlines/{id}/impact` | `ip:approve` | exact dependent-record preview/token |
+| `GET /api/ip/deadlines/{id}/dependencies` | `ip:read` | stored calculation provenance and superseded chain |
 | `POST /api/ip/deadlines/{id}/confirm` | `ip:approve` | atomic confirmation/projection/coverage/reminders |
 | `POST /api/ip/deadlines/{id}/override` | `ip:approve` | sourced immutable override |
 | `POST /api/ip/deadlines/{id}/recalculate` | `ip:approve` | reviewable successor calculation |
@@ -146,9 +173,17 @@ The existing `/app/ip` docket workspace now contains two additive cards:
 
 - **Legal deadline control** shows the explicit-confirmation warning, exception
   queue, active rule/calendar selectors, proposal form, coverage fields,
-  explanation/citation, and state-appropriate actions.
+  explanation, verified rule/calendar links, expandable stored provenance, and
+  state-appropriate actions. Conflicting evidence remains visible and blocks
+  confirmation until a sourced correction is supplied.
 - **Rule and calendar governance** exposes sourced candidate forms, fixture
   inputs, independent activation, and impact-aware emergency disablement.
+
+The shared calendar keeps the existing hearing/task/deadline transport kinds
+for compatibility while presenting legal filing deadlines, internal targets,
+hearings/listings, renewals, and task dates with distinct labels and colors.
+IP-backed legal dates link to their IP docket; external calendar copies remain
+non-authoritative projections.
 
 Every grouped control is `min-w-0`, full-width on narrow screens, and wraps to
 content width above the small breakpoint. Unit and Playwright acceptance assert
@@ -160,6 +195,9 @@ presence alone is not treated as responsive proof.
 Primary executable evidence:
 
 - `apps/api/tests/test_ip_deadline_workflow.py`
+- `apps/api/tests/test_ip_deadline_dependencies.py`
+- `apps/api/tests/test_ip_deadline_terminal_state.py`
+- `apps/api/tests/test_calendar.py`
 - `apps/api/tests/test_ip_deadline_foundation.py`
 - `apps/api/tests/test_20260807_ip_deadline_foundation_migration.py`
 - `apps/api/tests/test_ip_prosecution_workflow.py`
@@ -168,7 +206,8 @@ Primary executable evidence:
 - `tests/e2e/ram-2026-08-09-prod.spec.ts`
 
 The local dated Playwright journey uses a synthetic, non-billable tenant and
-proves independent governance, holiday calculation, visible exception,
+proves independent governance, holiday calculation, verified source links,
+stored provenance, distinct legal/internal calendar dates, visible exception,
 confirmation, operational-task/non-legal completion separation, evidence-based
 legal completion, and responsive action bounds. The production spec is
 read-only against the existing unentitled tester tenant and proves that no

@@ -761,6 +761,35 @@ describe("CalendarPage", () => {
     expect(deadlineLink.getAttribute("href")).toBe("/app/matters/m3/tasks");
   });
 
+  it("distinguishes legal filing dates, internal targets, renewals, hearings, and task dates", async () => {
+    const user = userEvent.setup();
+    const today = isoToday();
+    fetchCalendarEventsMock.mockResolvedValue({
+      range_from: today,
+      range_to: today,
+      events: [
+        { id: "deadline:legal", kind: "deadline", display_type: "filing_deadline", occurs_on: today, title: "File response", matter_id: "m1", matter_code: "IP-1", matter_title: "Mark", ip_docket_id: "docket-1" },
+        { id: "deadline:target", kind: "deadline", display_type: "internal_target", occurs_on: today, title: "Prepare response", matter_id: "m1", matter_code: "IP-1", matter_title: "Mark", ip_docket_id: "docket-1" },
+        { id: "deadline:renewal", kind: "deadline", display_type: "renewal", occurs_on: today, title: "Renew registration", matter_id: "m1", matter_code: "IP-1", matter_title: "Mark" },
+        { id: "hearing:h1", kind: "hearing", display_type: "hearing", occurs_on: today, title: "Opposition hearing", matter_id: "m1", matter_code: "IP-1", matter_title: "Mark" },
+        { id: "task:t1", kind: "task", display_type: "task_date", occurs_on: today, title: "Draft affidavit", matter_id: "m1", matter_code: "IP-1", matter_title: "Mark" },
+      ],
+    });
+    render(withClient(<CalendarPage />));
+
+    const legal = await screen.findByTestId("calendar-event-deadline:legal");
+    expect(legal).toHaveTextContent("Filing: File response");
+    expect(screen.getByTestId("calendar-event-deadline:target")).toHaveTextContent("Target: Prepare response");
+    expect(screen.getByTestId("calendar-event-deadline:renewal")).toHaveTextContent("Renewal: Renew registration");
+    expect(legal).toHaveAttribute(
+      "href",
+      "/app/ip?docket=docket-1",
+    );
+    await user.click(screen.getByTestId("calendar-view-day"));
+    expect(screen.getByTestId("calendar-event-hearing:h1")).toHaveTextContent("Hearing or listing · IP-1");
+    expect(screen.getByTestId("calendar-event-task:t1")).toHaveTextContent("Task date · IP-1");
+  });
+
   it("shows '+N more' when a single day has more than 3 events", async () => {
     const today = isoToday();
     const events = Array.from({ length: 5 }).map((_, i) => ({

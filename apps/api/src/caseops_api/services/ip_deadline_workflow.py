@@ -1835,6 +1835,11 @@ def confirm_deadline(
     rule = session.get(IpRuleVersion, row.rule_version_id)
     if rule is None or rule.status != "active":
         raise HTTPException(status_code=409, detail="The governing rule is not active.")
+    if row.certainty == "conflicting" and payload.corrected_result_on is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Conflicting source evidence requires a sourced correction before confirmation.",
+        )
     ancestors = _lock_deadline_ancestor_chain(session, context=context, row=row)
     live_states = {"candidate", "provisional", "confirmed", "overdue"}
     if ancestors:
@@ -1877,7 +1882,30 @@ def confirm_deadline(
             if ancestor.state in live_states:
                 ancestor.state = "superseded"
                 ancestor.version += 1
-    if payload.corrected_result_on and payload.corrected_result_on != row.result_on:
+    if payload.corrected_result_on and row.result_on is None:
+        row.result_on = payload.corrected_result_on
+        row.certainty = "certain"
+        row.override_reason = payload.correction_reason or "Sourced correction"
+        row.override_evidence_ref = payload.correction_evidence_reference or "required"
+        row.calculation_inputs_json = {
+            **row.calculation_inputs_json,
+            "confirmed_correction": payload.corrected_result_on.isoformat(),
+        }
+        row.calculation_trace_json = [
+            *row.calculation_trace_json,
+            {
+                "operation": "sourced_confirmation_correction",
+                "date": payload.corrected_result_on.isoformat(),
+                "evidence_reference": payload.correction_evidence_reference,
+            },
+        ]
+        row.explanation = (
+            f"{row.explanation} Confirmed correction to "
+            f"{payload.corrected_result_on.isoformat()} with retained evidence."
+        )
+    elif payload.corrected_result_on and (
+        payload.corrected_result_on != row.result_on or row.certainty == "conflicting"
+    ):
         corrected = _copy_deadline(
             row,
             result_on=payload.corrected_result_on,
