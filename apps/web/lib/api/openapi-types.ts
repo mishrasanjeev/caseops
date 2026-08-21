@@ -3828,6 +3828,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/imports/{domain}/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Bulk Import Summary */
+        get: operations["get_bulk_import_summary_api_imports__domain___job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{domain}/{job_id}/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Bulk Import Errors */
+        get: operations["download_bulk_import_errors_api_imports__domain___job_id__errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{domain}/{job_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Bulk Import Job Manifest */
+        get: operations["get_bulk_import_job_manifest_api_imports__domain___job_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Bulk Import History */
+        get: operations["get_bulk_import_history_api_imports_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/intake/requests": {
         parameters: {
             query?: never;
@@ -12328,6 +12396,111 @@ export interface components {
             owner_full_name: string;
             /** Owner Password */
             owner_password: string;
+        };
+        /** BulkImportHistoryResponse */
+        BulkImportHistoryResponse: {
+            /** Accessible Domains */
+            accessible_domains?: ("ip_trademark" | "matter" | "employee")[];
+            /** Jobs */
+            jobs?: components["schemas"]["BulkImportJobSummary"][];
+        };
+        /** BulkImportJobSummary */
+        BulkImportJobSummary: {
+            /**
+             * Committed Rows
+             * @default 0
+             */
+            committed_rows: number;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id?: string | null;
+            /** Creator Label */
+            creator_label?: string | null;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "ip_trademark" | "matter" | "employee";
+            /** Error Report Url */
+            error_report_url: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Failed Rows
+             * @default 0
+             */
+            failed_rows: number;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /**
+             * Invalid Rows
+             * @default 0
+             */
+            invalid_rows: number;
+            /** Manifest Url */
+            manifest_url: string;
+            /** Read Only Adapter */
+            read_only_adapter: boolean;
+            /**
+             * Source Owner
+             * @enum {string}
+             */
+            source_owner: "bulk_import_jobs" | "matter_bulk_import_jobs" | "employee_bulk_import_jobs";
+            /** Source Sha256 */
+            source_sha256?: string | null;
+            /** Source Status */
+            source_status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "staged" | "preview_ready" | "in_progress" | "committed" | "committed_with_errors" | "failed" | "cancelled" | "expired";
+            /**
+             * Total Rows
+             * @default 0
+             */
+            total_rows: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Valid Rows
+             * @default 0
+             */
+            valid_rows: number;
+        };
+        /** BulkImportManifest */
+        BulkImportManifest: {
+            /**
+             * Compatibility Mode
+             * @enum {string}
+             */
+            compatibility_mode: "canonical" | "read_only_adapter";
+            /** File Size Bytes */
+            file_size_bytes?: number | null;
+            job: components["schemas"]["BulkImportJobSummary"];
+            /** Limitations */
+            limitations?: string[];
+            /** Manifest Format */
+            manifest_format?: string | null;
+            /**
+             * Schema Version
+             * @default bulk-import-manifest-v1
+             * @constant
+             */
+            schema_version: "bulk-import-manifest-v1";
         };
         /** BulkMatterImportDocumentReference */
         BulkMatterImportDocumentReference: {
@@ -41690,6 +41863,134 @@ export interface operations {
                     "application/json": {
                         [key: string]: number | string | null;
                     };
+                };
+            };
+        };
+    };
+    get_bulk_import_summary_api_imports__domain___job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: "ip_trademark" | "matter" | "employee";
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkImportJobSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_bulk_import_errors_api_imports__domain___job_id__errors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: "ip_trademark" | "matter" | "employee";
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bulk_import_job_manifest_api_imports__domain___job_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: "ip_trademark" | "matter" | "employee";
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkImportManifest"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bulk_import_history_api_imports_history_get: {
+        parameters: {
+            query?: {
+                domain?: ("ip_trademark" | "matter" | "employee") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkImportHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
