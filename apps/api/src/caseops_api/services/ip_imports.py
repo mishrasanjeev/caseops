@@ -67,6 +67,17 @@ PREVIEW_TTL = timedelta(minutes=30)
 REQUIRED_FIELDS = ("title", "mark_text", "class_number", "applicant_name")
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 IMPORT_MATERIALIZATION_ACTION = "ip_docket.source_materialized"
+REPRESENTATION_KIND_ALIASES = {"logo": "device", "color": "colour"}
+REPRESENTATION_KINDS = {
+    "word",
+    "device",
+    "composite",
+    "label",
+    "colour",
+    "shape",
+    "sound",
+    "other",
+}
 
 
 @dataclass
@@ -193,10 +204,19 @@ def _validate_row(
         normalized[field] = (
             _neutralize(raw.strip()) if isinstance(raw, str) and raw.strip() else default
         )
-    for field in ("specification", "application_number", "representation_kind", "agent_name"):
+    for field in ("specification", "application_number", "agent_name"):
         raw = values.get(field)
         if isinstance(raw, str) and raw.strip():
             normalized[field] = _neutralize(raw.strip())
+
+    representation_kind = values.get("representation_kind")
+    if isinstance(representation_kind, str) and representation_kind.strip():
+        parsed_kind = representation_kind.strip().casefold()
+        parsed_kind = REPRESENTATION_KIND_ALIASES.get(parsed_kind, parsed_kind)
+        if parsed_kind not in REPRESENTATION_KINDS:
+            errors.append({"field": "representation_kind", "code": "unsupported"})
+        else:
+            normalized["representation_kind"] = parsed_kind
 
     matter_id = values.get("matter_id")
     if matter_id:

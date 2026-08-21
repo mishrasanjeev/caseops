@@ -106,6 +106,8 @@ def upgrade() -> None:
             name="ck_ip_portfolio_view_scope_owner",
         ),
     )
+    # MIGRATION-LOCK-RISK: acknowledged: this index is built immediately after
+    # creating the empty saved-view table, before any application writer can use it.
     op.create_index(
         "ix_ip_portfolio_views_company_member",
         "ip_portfolio_saved_views",
@@ -156,6 +158,8 @@ def upgrade() -> None:
             name="ck_ip_portfolio_export_row_limit",
         ),
     )
+    # MIGRATION-LOCK-RISK: acknowledged: this index is built immediately after
+    # creating the empty export-job table, before any application writer can use it.
     op.create_index(
         "ix_ip_portfolio_exports_company_requester_created",
         "ip_portfolio_export_jobs",
@@ -168,11 +172,15 @@ def downgrade() -> None:
         "ix_ip_portfolio_exports_company_requester_created",
         table_name="ip_portfolio_export_jobs",
     )
+    # MIGRATION-ROLLBACK: restore-forward: once this revision serves export jobs,
+    # preserve them and restore forward; table drop is pre-release rollback only.
     op.drop_table("ip_portfolio_export_jobs")
     op.drop_index(
         "ix_ip_portfolio_views_company_member",
         table_name="ip_portfolio_saved_views",
     )
+    # MIGRATION-ROLLBACK: restore-forward: once this revision serves saved views,
+    # preserve them and restore forward; table drop is pre-release rollback only.
     op.drop_table("ip_portfolio_saved_views")
     with op.batch_alter_table("ip_import_rows") as batch:
         batch.drop_constraint(

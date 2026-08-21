@@ -20725,7 +20725,7 @@ export interface components {
              * Mark Kind
              * @enum {string}
              */
-            mark_kind: "word" | "device" | "composite" | "shape" | "sound" | "other";
+            mark_kind: "word" | "device" | "composite" | "label" | "colour" | "shape" | "sound" | "other";
             /** Parties */
             parties: components["schemas"]["TrademarkParty"][];
             /** Representation */
@@ -33877,7 +33877,7 @@ export interface components {
              * Mark Kind
              * @enum {string}
              */
-            mark_kind: "word" | "device" | "composite" | "shape" | "sound" | "other";
+            mark_kind: "word" | "device" | "composite" | "label" | "colour" | "shape" | "sound" | "other";
             /** Parties */
             parties: components["schemas"]["TrademarkParty"][];
             /** Representation */

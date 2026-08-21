@@ -107,6 +107,31 @@ def test_ip_port_08_xlsx_validation_history_and_error_report(client: TestClient)
     assert "class_number:out_of_range" in report.content.decode("utf-8-sig")
 
 
+def test_ip_port_06_import_normalizes_supported_representation_categories(
+    client: TestClient,
+) -> None:
+    actor = _actor(client)
+    content = (
+        b"title,mark,class,applicant,representation type\n"
+        b"ASTER LOGO,ASTER LOGO,9,Aster Products LLP,logo\n"
+        b"ASTER COLOUR,ASTER COLOUR,9,Aster Products LLP,color\n"
+        b"ASTER HOLOGRAM,ASTER HOLOGRAM,9,Aster Products LLP,hologram\n"
+    )
+    staged = client.post(
+        "/api/ip/imports/upload",
+        headers=actor["headers"],
+        files={"file": ("representations.csv", content, "text/csv")},
+    )
+    assert staged.status_code == 201, staged.text
+    rows = staged.json()["rows"]
+    assert rows[0]["normalized"]["representation_kind"] == "device"
+    assert rows[1]["normalized"]["representation_kind"] == "colour"
+    assert rows[2]["validation_status"] == "invalid"
+    assert rows[2]["errors"] == [
+        {"field": "representation_kind", "code": "unsupported"}
+    ]
+
+
 def test_ip_port_08_duplicate_requires_audited_reconciliation(client: TestClient) -> None:
     actor = _actor(client)
     first = client.post(
