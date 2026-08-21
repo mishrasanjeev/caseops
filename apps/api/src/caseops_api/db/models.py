@@ -15420,7 +15420,12 @@ class IpDeadlineIncident(Base):
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
     impact_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     evidence_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    preservation_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    preservation_manifest_sha256: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="0000000000000000000000000000000000000000000000000000000000000000",
+        server_default="0000000000000000000000000000000000000000000000000000000000000000",
+    )
     defect_scope: Mapped[str] = mapped_column(
         String(24), nullable=False, default="record_specific"
     )

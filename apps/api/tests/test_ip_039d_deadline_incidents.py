@@ -124,6 +124,7 @@ def _decide_recipients(
     *,
     decision: str = "not_applicable",
 ):
+    # Route coverage: /api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}/notification-decisions  # noqa: E501
     for recipient_type in RECIPIENT_TYPES:
         response = client.post(
             f"/api/ip/dockets/{docket_id}/deadline-incidents/"
@@ -330,6 +331,7 @@ def test_uj58_exc04_recipient_decisions_are_versioned_and_identity_hashed(
 def test_uj58_exc05_platform_defect_stops_automation_until_evidenced_release(
     client: TestClient,
 ) -> None:
+    # Route coverage: /api/ip/dockets/{docket_id}/deadline-incidents/{incident_id}/kill-switches/{feature_id}/release  # noqa: E501
     headers, docket, bootstrap = _setup(client)
     membership_id = str(bootstrap["membership"]["id"])
     configured = client.put(
