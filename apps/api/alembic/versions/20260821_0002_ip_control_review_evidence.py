@@ -260,6 +260,11 @@ def upgrade() -> None:
         ["signer_membership_id"],
     )
     op.create_index(
+        "ix_ip_control_signature_manifest_sha256",
+        SIGNATURE_TABLE,
+        ["manifest_sha256"],
+    )
+    op.create_index(
         "ix_ip_control_signature_review",
         SIGNATURE_TABLE,
         ["review_id", "sequence"],

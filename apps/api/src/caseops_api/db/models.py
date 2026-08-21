@@ -16867,6 +16867,7 @@ class IpControlReviewSignature(Base):
         UniqueConstraint("review_id", "sequence", name="uq_ip_control_signature_sequence"),
         UniqueConstraint("review_id", "signer_role", name="uq_ip_control_signature_role"),
         Index("ix_ip_control_signature_review", "review_id", "sequence"),
+        Index("ix_ip_control_signature_manifest_sha256", "manifest_sha256"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
