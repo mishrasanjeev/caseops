@@ -118,6 +118,64 @@ def _sign_off(client, headers, review_id, version, attestation="Reviewed the dai
     )
 
 
+def _sample(client, headers, review_id, version, docket_id):
+    return client.post(
+        f"/api/ip/control-reviews/{review_id}/samples",
+        headers=headers,
+        json={
+            "expected_version": version,
+            "docket_id": docket_id,
+            "source_evidence_reference": "Registry source checked against the manifest.",
+            "calculation_evidence_reference": "Deadline calculation independently recomputed.",
+            "coverage_evidence_reference": "Responsible-member coverage independently checked.",
+            "notes": "Source, calculation and coverage agree with the frozen report.",
+        },
+    )
+
+
+def _decide_exception(client, headers, review_id, version, exception, *, disposition="resolved"):
+    # POST /api/ip/control-reviews/{review_id}/exceptions/{docket_id}/{exception_kind}/decision  # noqa: E501
+    return client.post(
+        f"/api/ip/control-reviews/{review_id}/exceptions/"
+        f"{exception['docket_id']}/{exception['kind']}/decision",
+        headers=headers,
+        json={
+            "expected_version": version,
+            "disposition": disposition,
+            "annotation": "Manager checked the exception and recorded the operating decision.",
+            "evidence_reference": "Matter note IP-CONTROL-2026-08-21",
+        },
+    )
+
+
+def _complete_sign_off(client, owner_headers, reviewer_headers, review, docket_id):
+    prepared = _sign_off(client, owner_headers, review["id"], review["version"])
+    assert prepared.status_code == 200, prepared.text
+    prepared_body = prepared.json()
+    assert prepared_body["signoff_status"] == "awaiting_second_signature"
+    assert prepared_body["signed_off_at"] is None
+
+    sampled = _sample(
+        client,
+        reviewer_headers,
+        review["id"],
+        prepared_body["version"],
+        docket_id,
+    )
+    assert sampled.status_code == 200, sampled.text
+    sampled_body = sampled.json()
+
+    signed = _sign_off(
+        client,
+        reviewer_headers,
+        review["id"],
+        sampled_body["version"],
+        "Independently sampled the source, calculation and coverage evidence.",
+    )
+    assert signed.status_code == 200, signed.text
+    return prepared_body, sampled_body, signed.json()
+
+
 def _setup(client: TestClient):
     bootstrap = bootstrap_company(client)
     owner_token = str(bootstrap["access_token"])
@@ -133,7 +191,7 @@ def _setup(client: TestClient):
 def test_uj59_normal_produce_and_sign_off_a_control_review(client: TestClient) -> None:
     """IPLF-UJ-59-NORMAL — a clean review is produced, then signed off."""
 
-    owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    owner_headers, owner_id, reviewer_headers, reviewer_id, matter = _setup(client)
     team = _team(client, owner_headers, name="Trademarks", slug="trademarks")
     matter = _assign_matter_team(client, owner_headers, matter, team["id"])
     docket = _docket(client, owner_headers, matter_id=matter["id"], title="Control Mark")
@@ -163,7 +221,7 @@ def test_uj59_normal_produce_and_sign_off_a_control_review(client: TestClient) -
     assert review["report"]["docket_count"] == 1
     snapshot = review["snapshot"]
     assert review["query_version"] == "ip-docket-control-v1"
-    assert snapshot["schema_version"] == 1
+    assert snapshot["schema_version"] == 2
     assert snapshot["query_version"] == review["query_version"]
     assert snapshot["timezone"] == "Asia/Calcutta"
     assert snapshot["hidden_restricted_count_policy"] == "omit_without_count"
@@ -171,12 +229,28 @@ def test_uj59_normal_produce_and_sign_off_a_control_review(client: TestClient) -
     assert snapshot["mandatory_exceptions"] == review["mandatory_exceptions"]
     assert [row["docket_id"] for row in snapshot["included_records"]] == [docket["id"]]
     assert all(len(row["sha256"]) == 64 for row in snapshot["included_records"])
+    assert review["review_policy"] == {
+        "policy_version": "daily-docket-review-v1",
+        "required_signature_count": 2,
+        "required_sample_size": 1,
+        "distinct_preparer_and_reviewer": True,
+    }
+    assert snapshot["review_policy"] == review["review_policy"]
+    assert review["delta"]["predecessor_review_id"] is None
+    assert review["pending_exception_count"] == 0
+    assert review["signatures"] == []
     canonical = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == review["manifest_sha256"]
 
-    signed = _sign_off(client, owner_headers, review["id"], review["version"])
-    assert signed.status_code == 200, signed.text
-    body = signed.json()
+    prepared, sampled, body = _complete_sign_off(
+        client, owner_headers, reviewer_headers, review, docket["id"]
+    )
+    assert prepared["signatures"][0]["signer_membership_id"] == owner_id
+    assert prepared["signatures"][0]["signer_role"] == "preparer"
+    assert sampled["reviewer_samples"][0]["reviewer_membership_id"] == reviewer_id
+    assert body["signatures"][1]["signer_membership_id"] == reviewer_id
+    assert body["signatures"][1]["signer_role"] == "reviewer"
+    assert body["signoff_status"] == "signed"
     assert body["signed_off_at"] is not None
     assert body["signer_label_snapshot"]
     assert body["version"] > review["version"]
@@ -196,7 +270,7 @@ def test_uj59_signed_snapshot_does_not_change_when_the_live_docket_changes(
 ) -> None:
     """Later records produce a delta/new review, never rewrite signed evidence."""
 
-    owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    owner_headers, owner_id, reviewer_headers, _rid, matter = _setup(client)
     first = _docket(
         client,
         owner_headers,
@@ -212,12 +286,9 @@ def test_uj59_signed_snapshot_does_not_change_when_the_live_docket_changes(
     )
     _mark_coverage_projected(coverage["id"])
     created = _review(client, owner_headers).json()
-    signed = _sign_off(
-        client,
-        owner_headers,
-        created["id"],
-        created["version"],
-    ).json()
+    _prepared, _sampled, signed = _complete_sign_off(
+        client, owner_headers, reviewer_headers, created, first["id"]
+    )
 
     _docket(
         client,
@@ -234,14 +305,17 @@ def test_uj59_signed_snapshot_does_not_change_when_the_live_docket_changes(
     assert reread["manifest_sha256"] == signed["manifest_sha256"]
     assert reread["snapshot"] == signed["snapshot"]
     assert reread["report"] == signed["report"]
-    assert [row["docket_id"] for row in reread["snapshot"]["included_records"]] == [
-        first["id"]
-    ]
+    assert [row["docket_id"] for row in reread["snapshot"]["included_records"]] == [first["id"]]
 
     later = _review(client, owner_headers).json()
     assert later["report"]["docket_count"] == 2
     assert later["manifest_sha256"] != signed["manifest_sha256"]
     assert len(later["snapshot"]["included_records"]) == 2
+    assert later["predecessor_review_id"] == signed["id"]
+    assert later["delta"]["predecessor_manifest_sha256"] == signed["manifest_sha256"]
+    assert later["delta"]["added_docket_ids"]
+    assert later["delta"]["removed_docket_ids"] == []
+    assert later["delta"]["changed_docket_ids"] == []
 
 
 def test_uj59_corrupt_snapshot_cannot_be_exported_or_signed(
@@ -295,7 +369,7 @@ def test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off(
 ) -> None:
     """IPLF-UJ-59-EXC-01 — an incomplete review can never be signed off."""
 
-    owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    owner_headers, owner_id, reviewer_headers, _rid, matter = _setup(client)
     _docket(client, owner_headers, matter_id=matter["id"], title="Stale Source Mark")
 
     incomplete = _review(
@@ -321,9 +395,7 @@ def test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off(
     assert "stale_source:registry_status_feed" in problem["incompleteness_reasons"]
 
     # It stays unsigned.
-    current = client.get(
-        f"/api/ip/control-reviews/{review['id']}", headers=owner_headers
-    ).json()
+    current = client.get(f"/api/ip/control-reviews/{review['id']}", headers=owner_headers).json()
     assert current["signed_off_at"] is None
 
 
@@ -332,7 +404,7 @@ def test_uj59_exc03_export_failure_does_not_mark_review_complete(
 ) -> None:
     """IPLF-UJ-59-EXC-03 — a failed export blocks sign-off until it succeeds."""
 
-    owner_headers, owner_id, _rh, _rid, matter = _setup(client)
+    owner_headers, owner_id, reviewer_headers, _rid, matter = _setup(client)
     docket = _docket(client, owner_headers, matter_id=matter["id"], title="Export Mark")
     coverage = _coverage(
         client,
@@ -369,9 +441,10 @@ def test_uj59_exc03_export_failure_does_not_mark_review_complete(
     assert regenerated["export_status"] == "generated"
     assert regenerated["export_error_redacted"] is None
 
-    signed = _sign_off(client, owner_headers, review["id"], regenerated["version"])
-    assert signed.status_code == 200, signed.text
-    assert signed.json()["signed_off_at"] is not None
+    _prepared, _sampled, signed = _complete_sign_off(
+        client, owner_headers, reviewer_headers, regenerated, docket["id"]
+    )
+    assert signed["signed_off_at"] is not None
 
 
 def test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts(
@@ -380,9 +453,7 @@ def test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts(
     """IPLF-UJ-59-EXC-02 / IPLF-UJ-50-EXC-01 — restricted records leak nothing."""
 
     owner_headers, owner_id, reviewer_headers, reviewer_id, matter = _setup(client)
-    open_docket = _docket(
-        client, owner_headers, matter_id=matter["id"], title="Open Control Mark"
-    )
+    open_docket = _docket(client, owner_headers, matter_id=matter["id"], title="Open Control Mark")
     secret = _docket(
         client,
         owner_headers,
@@ -401,15 +472,182 @@ def test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts(
     assert secret["id"] not in serialized
     assert "Secret Control Mark" not in serialized
     # And the restricted record contributes no exception either.
-    assert all(
-        item["docket_id"] != secret["id"] for item in scoped["mandatory_exceptions"]
-    )
-    assert any(
-        item["docket_id"] == open_docket["id"] for item in scoped["mandatory_exceptions"]
-    )
+    assert all(item["docket_id"] != secret["id"] for item in scoped["mandatory_exceptions"])
+    assert any(item["docket_id"] == open_docket["id"] for item in scoped["mandatory_exceptions"])
 
     # The two reviews are genuinely different artefacts.
     assert scoped["manifest_sha256"] != owner_review["manifest_sha256"]
+
+    exception_only_review = _review(
+        client,
+        owner_headers,
+        filters={"exclude_docket_ids": [secret["id"]]},
+    ).json()
+    assert secret["id"] not in {
+        item["docket_id"] for item in exception_only_review["snapshot"]["included_records"]
+    }
+    assert secret["id"] in {
+        item["docket_id"] for item in exception_only_review["mandatory_exceptions"]
+    }
+    assert (
+        client.get(
+            f"/api/ip/control-reviews/{exception_only_review['id']}",
+            headers=reviewer_headers,
+        ).status_code
+        == 404
+    )
+
+    # A report that froze a restricted record is itself inaccessible to a
+    # member who cannot open every included record. No count or identifier is
+    # returned while fetching, sampling or attempting to sign it.
+    assert (
+        client.get(
+            f"/api/ip/control-reviews/{owner_review['id']}", headers=reviewer_headers
+        ).status_code
+        == 404
+    )
+    assert (
+        _sample(
+            client,
+            reviewer_headers,
+            owner_review["id"],
+            owner_review["version"],
+            open_docket["id"],
+        ).status_code
+        == 404
+    )
+    assert (
+        _sign_off(
+            client,
+            reviewer_headers,
+            owner_review["id"],
+            owner_review["version"],
+        ).status_code
+        == 404
+    )
+
+    reviewer_archive = client.get("/api/ip/control-reviews", headers=reviewer_headers)
+    assert reviewer_archive.status_code == 200, reviewer_archive.text
+    assert [item["id"] for item in reviewer_archive.json()["reviews"]] == [scoped["id"]]
+
+    owner_archive = client.get("/api/ip/control-reviews", headers=owner_headers)
+    assert owner_archive.status_code == 200, owner_archive.text
+    assert {item["id"] for item in owner_archive.json()["reviews"]} >= {
+        owner_review["id"],
+        exception_only_review["id"],
+    }
+
+
+def test_uj59_exception_decisions_are_complete_explicit_and_immutable(
+    client: TestClient,
+) -> None:
+    """Every frozen exception needs one durable decision before signing begins."""
+
+    owner_headers, _owner_id, _rh, _rid, matter = _setup(client)
+    _docket(client, owner_headers, matter_id=matter["id"], title="Exception Evidence Mark")
+    review = _review(client, owner_headers).json()
+    assert len(review["mandatory_exceptions"]) >= 1
+    assert review["pending_exception_count"] == len(review["mandatory_exceptions"])
+
+    current = review
+    for index, exception in enumerate(review["mandatory_exceptions"]):
+        response = _decide_exception(
+            client,
+            owner_headers,
+            review["id"],
+            current["version"],
+            exception,
+            disposition="annotated" if index == 0 else "resolved",
+        )
+        assert response.status_code == 200, response.text
+        current = response.json()
+
+    assert current["pending_exception_count"] == 0
+    assert current["annotated_exception_count"] == 1
+    assert len(current["exception_decisions"]) == len(review["mandatory_exceptions"])
+
+    duplicate = _decide_exception(
+        client,
+        owner_headers,
+        review["id"],
+        current["version"],
+        review["mandatory_exceptions"][0],
+    )
+    assert duplicate.status_code == 409
+    assert "immutable evidence" in duplicate.json()["detail"]
+
+    stale = _decide_exception(
+        client,
+        owner_headers,
+        review["id"],
+        review["version"],
+        review["mandatory_exceptions"][-1],
+    )
+    assert stale.status_code == 409
+    assert "reload" in stale.json()["detail"].lower()
+
+
+def test_uj59_second_signature_requires_an_independent_reviewer_sample(
+    client: TestClient,
+) -> None:
+    """The four-eyes policy cannot be satisfied by labels or repeated clicks."""
+
+    owner_headers, owner_id, reviewer_headers, reviewer_id, matter = _setup(client)
+    docket = _docket(client, owner_headers, matter_id=matter["id"], title="Four Eyes Mark")
+    coverage = _coverage(
+        client,
+        owner_headers,
+        docket["id"],
+        matter_id=matter["id"],
+        responsible=owner_id,
+    )
+    _mark_coverage_projected(coverage["id"])
+    review = _review(client, owner_headers).json()
+
+    preparer_sample = _sample(client, owner_headers, review["id"], review["version"], docket["id"])
+    assert preparer_sample.status_code == 409
+    assert "preparer cannot" in preparer_sample.json()["detail"].lower()
+
+    wrong_first_signer = _sign_off(client, reviewer_headers, review["id"], review["version"])
+    assert wrong_first_signer.status_code == 409
+    assert "preparer must" in wrong_first_signer.json()["detail"].lower()
+
+    prepared = _sign_off(client, owner_headers, review["id"], review["version"])
+    assert prepared.status_code == 200, prepared.text
+    prepared_body = prepared.json()
+    assert prepared_body["signatures"][0]["signer_membership_id"] == owner_id
+
+    repeated = _sign_off(client, owner_headers, review["id"], prepared_body["version"])
+    assert repeated.status_code == 409
+    assert "cannot sign" in repeated.json()["detail"].lower()
+
+    no_sample = _sign_off(client, reviewer_headers, review["id"], prepared_body["version"])
+    assert no_sample.status_code == 409
+    assert no_sample.json()["code"] == "ip_control_review_sample_required"
+
+    sampled = _sample(
+        client,
+        reviewer_headers,
+        review["id"],
+        prepared_body["version"],
+        docket["id"],
+    )
+    assert sampled.status_code == 200, sampled.text
+    sampled_body = sampled.json()
+    assert sampled_body["reviewer_samples"][0]["reviewer_membership_id"] == reviewer_id
+
+    signed = _sign_off(client, reviewer_headers, review["id"], sampled_body["version"])
+    assert signed.status_code == 200, signed.text
+    assert signed.json()["signoff_status"] == "signed"
+
+    after_signing = _sample(
+        client,
+        reviewer_headers,
+        review["id"],
+        signed.json()["version"],
+        docket["id"],
+    )
+    assert after_signing.status_code == 409
 
 
 def test_cal_ops_13_exceptions_survive_filters_and_cannot_be_dismissed(
@@ -420,9 +658,7 @@ def test_cal_ops_13_exceptions_survive_filters_and_cannot_be_dismissed(
     owner_headers, _owner_id, _rh, _rid, matter = _setup(client)
     team = _team(client, owner_headers, name="Patents", slug="patents")
     matter = _assign_matter_team(client, owner_headers, matter, team["id"])
-    uncovered = _docket(
-        client, owner_headers, matter_id=matter["id"], title="Uncovered Mark"
-    )
+    uncovered = _docket(client, owner_headers, matter_id=matter["id"], title="Uncovered Mark")
     off_team = _docket(
         client,
         owner_headers,
@@ -438,9 +674,9 @@ def test_cal_ops_13_exceptions_survive_filters_and_cannot_be_dismissed(
     assert team_scoped_response.status_code == 201, team_scoped_response.text
     team_scoped = team_scoped_response.json()
     assert team_scoped["report"]["docket_count"] == 1
-    assert [
-        row["docket_id"] for row in team_scoped["snapshot"]["included_records"]
-    ] == [uncovered["id"]]
+    assert [row["docket_id"] for row in team_scoped["snapshot"]["included_records"]] == [
+        uncovered["id"]
+    ]
     assert off_team["id"] not in str(team_scoped)
 
     # A filter that plainly excludes the record still reports its exception.
@@ -454,24 +690,18 @@ def test_cal_ops_13_exceptions_survive_filters_and_cannot_be_dismissed(
     assert filtered["snapshot"]["included_records"] == []
     kinds = {item["kind"] for item in filtered["mandatory_exceptions"]}
     assert "uncovered" in kinds
-    assert any(
-        item["docket_id"] == uncovered["id"] for item in filtered["mandatory_exceptions"]
-    )
+    assert any(item["docket_id"] == uncovered["id"] for item in filtered["mandatory_exceptions"])
     assert all(item["critical"] is True for item in filtered["mandatory_exceptions"])
 
     # The exceptions are stored on the review, so re-reading cannot drop them.
-    reread = client.get(
-        f"/api/ip/control-reviews/{filtered['id']}", headers=owner_headers
-    ).json()
+    reread = client.get(f"/api/ip/control-reviews/{filtered['id']}", headers=owner_headers).json()
     assert reread["mandatory_exceptions"] == filtered["mandatory_exceptions"]
 
     # Until explicit resolution evidence exists, sign-off fails without mutation.
     blocked = _sign_off(client, owner_headers, filtered["id"], filtered["version"])
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["code"] == "ip_control_review_exceptions_unresolved"
-    assert blocked.json()["mandatory_exception_count"] == len(
-        filtered["mandatory_exceptions"]
-    )
+    assert blocked.json()["mandatory_exception_count"] == len(filtered["mandatory_exceptions"])
     after_refusal = client.get(
         f"/api/ip/control-reviews/{filtered['id']}",
         headers=owner_headers,
@@ -527,9 +757,7 @@ def test_control_reviews_are_tenant_isolated(client: TestClient) -> None:
     other_headers = auth_headers(str(other.json()["access_token"]))
 
     assert (
-        client.get(
-            f"/api/ip/control-reviews/{review['id']}", headers=other_headers
-        ).status_code
+        client.get(f"/api/ip/control-reviews/{review['id']}", headers=other_headers).status_code
         == 404
     )
     assert _sign_off(client, other_headers, review["id"], review["version"]).status_code == 404

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `25dc653e9d88f93a33dbc519f786c73bf863a5c09f0cee284641f40393d766da`
-- SQL tables: `260`
-- SQL columns: `4019`
-- ORM indexes: `1147`
-- Alembic/raw index declarations: `507`
+- Canonical map SHA-256: `7dd816357d80f7c883d57c054a2fc55db268099dd35301d3e619c0d8743cd998`
+- SQL tables: `264`
+- SQL columns: `4075`
+- ORM indexes: `1168`
+- Alembic/raw index declarations: `519`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -72,7 +72,8 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `billing_usage_rollups` | `billing_provider_evidence` | 11 | `registry_fail_closed` |
 | `bulk_import_jobs` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `calendar_event_candidates` | `tenant_operational_record` | 25 | `registry_fail_closed` |
-| `calendar_event_syncs` | `tenant_operational_record` | 23 | `registry_fail_closed` |
+| `calendar_event_syncs` | `tenant_operational_record` | 26 | `registry_fail_closed` |
+| `calendar_projection_reconciliation_candidates` | `tenant_operational_record` | 18 | `registry_fail_closed` |
 | `case_tracking_support_matrix` | `platform_operational_reference` | 20 | `registry_fail_closed` |
 | `cause_list_exports` | `tenant_operational_record` | 12 | `registry_fail_closed` |
 | `clients` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
@@ -125,11 +126,14 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `inbound_email_aliases` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `inbound_email_events` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `ip_assets` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
+| `ip_control_review_exception_decisions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_control_review_sample_evidence` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_control_review_signatures` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_cost_items` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_deadline_coverages` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_deadline_incidents` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `ip_deadlines` | `tenant_restricted_legal_content` | 39 | `registry_fail_closed` |
-| `ip_docket_control_reviews` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `ip_docket_control_reviews` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
 | `ip_docket_events` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_docket_queues` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_docket_records` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |

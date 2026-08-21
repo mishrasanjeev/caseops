@@ -275,7 +275,6 @@ export async function signIn(input: {
   });
   return authSession.parse(data);
 }
-
 export async function bootstrapCompany(input: {
   companyName: string;
   companySlug: string;
@@ -9756,6 +9755,7 @@ export type IpCalendarDriftFinding = {
   source_type: string;
   source_id: string;
   ip_docket_id: string | null;
+  reconciliation_candidate_id: string | null;
   // "unknown" is a real outcome: the provider could not be read, so the
   // projection is unverified rather than confirmed correct.
   drift_status: "moved" | "missing" | "unknown";
@@ -9769,9 +9769,62 @@ export async function checkIpCalendarDrift(): Promise<{
   return apiRequest("/api/ip/calendar-projections/drift-check", { method: "POST" });
 }
 
+export type IpCalendarReconciliationCandidate = {
+  id: string;
+  calendar_event_sync_id: string;
+  calendar_connection_id: string;
+  source_type: string;
+  source_id: string;
+  ip_docket_id: string | null;
+  drift_status: "moved" | "missing" | "unknown";
+  snapshot_schema_version: number;
+  expected_snapshot: Record<string, unknown>;
+  observed_snapshot: Record<string, unknown>;
+  snapshot_sha256: string;
+  status: "pending" | "accepted" | "rejected" | "superseded";
+  detected_by_membership_id: string | null;
+  decided_by_membership_id: string | null;
+  decision_evidence_reference: string | null;
+  decided_at: string | null;
+  created_at: string;
+};
+
+export async function fetchIpCalendarReconciliationCandidates(input?: {
+  includeResolved?: boolean;
+  limit?: number;
+}): Promise<{ candidates: IpCalendarReconciliationCandidate[] }> {
+  const params = new URLSearchParams();
+  if (input?.includeResolved) params.set("include_resolved", "true");
+  if (input?.limit) params.set("limit", String(input.limit));
+  const query = params.size ? `?${params.toString()}` : "";
+  return apiRequest(`/api/ip/calendar-projections/reconciliation-candidates${query}`);
+}
+
+export async function decideIpCalendarReconciliationCandidate(
+  candidateId: string,
+  input: {
+    action: "accept" | "reject";
+    evidenceReference: string;
+    expectedSnapshotSha256: string;
+  },
+): Promise<IpCalendarReconciliationCandidate> {
+  return apiRequest(
+    `/api/ip/calendar-projections/reconciliation-candidates/${candidateId}/decision`,
+    {
+      method: "POST",
+      body: {
+        action: input.action,
+        evidence_reference: input.evidenceReference,
+        expected_snapshot_sha256: input.expectedSnapshotSha256,
+      },
+    },
+  );
+}
+
 export type IpControlException = {
   docket_id: string;
-  kind: "uncovered" | "inactive_owner" | "unprojected_calendar" | "open_incident";
+  kind:
+    "uncovered" | "inactive_owner" | "unprojected_calendar" | "open_incident";
   critical: boolean;
 };
 
@@ -9787,7 +9840,7 @@ export type IpDocketControlReport = {
 };
 
 export type IpControlReviewSnapshot = {
-  schema_version: 1;
+  schema_version: 1 | 2;
   query_version: string;
   generated_at: string;
   timezone: string;
@@ -9802,6 +9855,55 @@ export type IpControlReviewSnapshot = {
   report: IpDocketControlReport;
   mandatory_exceptions: IpControlException[];
   incompleteness_reasons: string[];
+  review_policy: IpControlReviewPolicy | null;
+  delta: IpControlReviewDelta | null;
+};
+
+export type IpControlReviewPolicy = {
+  policy_version: string;
+  required_signature_count: 1 | 2;
+  required_sample_size: number;
+  distinct_preparer_and_reviewer: boolean;
+};
+
+export type IpControlReviewDelta = {
+  predecessor_review_id: string | null;
+  predecessor_manifest_sha256: string | null;
+  added_docket_ids: string[];
+  removed_docket_ids: string[];
+  changed_docket_ids: string[];
+  added_exception_keys: string[];
+  removed_exception_keys: string[];
+};
+
+export type IpControlReviewExceptionDecision = {
+  docket_id: string;
+  exception_kind: string;
+  disposition: "resolved" | "annotated";
+  annotation: string;
+  evidence_reference: string;
+  decided_by_membership_id: string;
+  decided_at: string;
+};
+
+export type IpControlReviewSample = {
+  docket_id: string;
+  reviewer_membership_id: string;
+  source_evidence_reference: string;
+  calculation_evidence_reference: string;
+  coverage_evidence_reference: string;
+  notes: string | null;
+  sampled_at: string;
+};
+
+export type IpControlReviewSignature = {
+  signer_membership_id: string;
+  signer_role: "preparer" | "reviewer";
+  signer_label_snapshot: string;
+  attestation: string;
+  manifest_sha256: string;
+  sequence: 1 | 2;
+  signed_at: string;
 };
 
 export type IpControlReview = {
@@ -9818,6 +9920,15 @@ export type IpControlReview = {
   export_error_redacted: string | null;
   signer_label_snapshot: string | null;
   signed_off_at: string | null;
+  review_policy: IpControlReviewPolicy;
+  predecessor_review_id: string | null;
+  delta: IpControlReviewDelta;
+  exception_decisions: IpControlReviewExceptionDecision[];
+  reviewer_samples: IpControlReviewSample[];
+  signatures: IpControlReviewSignature[];
+  pending_exception_count: number;
+  annotated_exception_count: number;
+  signoff_status: "draft" | "awaiting_second_signature" | "signed";
   version: number;
   report: IpDocketControlReport;
   snapshot: IpControlReviewSnapshot;
@@ -9838,6 +9949,59 @@ export async function createIpControlReview(input: {
   });
 }
 
+export async function fetchIpControlReviews(): Promise<{ reviews: IpControlReview[] }> {
+  return apiRequest("/api/ip/control-reviews");
+}
+
+export async function decideIpControlReviewException(
+  reviewId: string,
+  docketId: string,
+  exceptionKind: string,
+  input: {
+    expectedVersion: number;
+    disposition: "resolved" | "annotated";
+    annotation: string;
+    evidenceReference: string;
+  },
+): Promise<IpControlReview> {
+  return apiRequest(
+    `/api/ip/control-reviews/${reviewId}/exceptions/${docketId}/${exceptionKind}/decision`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        disposition: input.disposition,
+        annotation: input.annotation,
+        evidence_reference: input.evidenceReference,
+      },
+    },
+  );
+}
+
+export async function recordIpControlReviewSample(
+  reviewId: string,
+  input: {
+    expectedVersion: number;
+    docketId: string;
+    sourceEvidenceReference: string;
+    calculationEvidenceReference: string;
+    coverageEvidenceReference: string;
+    notes?: string | null;
+  },
+): Promise<IpControlReview> {
+  return apiRequest(`/api/ip/control-reviews/${reviewId}/samples`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      docket_id: input.docketId,
+      source_evidence_reference: input.sourceEvidenceReference,
+      calculation_evidence_reference: input.calculationEvidenceReference,
+      coverage_evidence_reference: input.coverageEvidenceReference,
+      notes: input.notes ?? null,
+    },
+  });
+}
+
 export async function recordIpControlReviewExport(
   reviewId: string,
   // The API records the outcome; it does not produce the artifact. Only report
@@ -9846,7 +10010,10 @@ export async function recordIpControlReviewExport(
 ): Promise<IpControlReview> {
   return apiRequest(`/api/ip/control-reviews/${reviewId}/export`, {
     method: "POST",
-    body: { outcome: input.outcome, error_redacted: input.errorRedacted ?? null },
+    body: {
+      outcome: input.outcome,
+      error_redacted: input.errorRedacted ?? null,
+    },
   });
 }
 
@@ -9858,7 +10025,10 @@ export async function signOffIpControlReview(
 ): Promise<IpControlReview> {
   return apiRequest(`/api/ip/control-reviews/${reviewId}/sign-off`, {
     method: "POST",
-    body: { expected_version: input.expectedVersion, attestation: input.attestation },
+    body: {
+      expected_version: input.expectedVersion,
+      attestation: input.attestation,
+    },
   });
 }
 
