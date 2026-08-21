@@ -146,7 +146,7 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-ink-2)]">Updated</span>{" "}
-                9 August 2026
+                22 August 2026
               </span>
             </div>
           </Container>
@@ -204,7 +204,7 @@ export default function GuidePage() {
                     documents, notices, drafting, hearings, contracts, outside counsel,
                     billing, and the audit trail that ties them together. After sign in,
                     use the left navigation to open the Home dashboard, Today queue, matters,
-                    research, or the workspace administration surfaces your role permits.
+                    import activity, research, or the workspace administration surfaces your role permits.
                   </p>
                   <Steps
                     items={[
@@ -519,6 +519,35 @@ export default function GuidePage() {
                     must be unencrypted, remain inside standard Excel A-XFD/1-1,048,576
                     coordinates, and pass bounded archive checks before parsing.
                   </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Import activity across the workspace
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/imports">Import activity</a>{" "}
+                    to review accessible trademark, matter, and employee import jobs in one
+                    status view. Filter by workflow, inspect the input manifest, download a
+                    normalized row-error report, or follow the row action back to the
+                    canonical import screen. The activity view is read-only: matter and
+                    employee history stays in its existing owner and is never copied or
+                    rewritten. Older employee jobs may show <strong>checksum not recorded</strong>{" "}
+                    because that legacy workflow did not persist one.
+                  </p>
+                  <p>
+                    Trademark files continue through{" "}
+                    <a className="underline" href="/app/ip/portfolio/imports">
+                      Trademark portfolio import
+                    </a>
+                    , matter files through{" "}
+                    <a className="underline" href="/app/matters/imports">
+                      Bulk upload matters
+                    </a>
+                    , and employee files through{" "}
+                    <a className="underline" href="/app/admin/employees">
+                      Admin → Employees
+                    </a>
+                    . Access to each history and its manifest/error report follows the same
+                    capability and tenant boundary as its canonical workflow.
+                  </p>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     The matter cockpit
                   </h3>

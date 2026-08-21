@@ -8237,6 +8237,60 @@ export type IpImportPreview = {
   preview_expired: boolean;
 };
 
+export type BulkImportDomain = "ip_trademark" | "matter" | "employee";
+
+export type BulkImportLifecycle =
+  | "staged"
+  | "preview_ready"
+  | "in_progress"
+  | "committed"
+  | "committed_with_errors"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export type BulkImportJobSummary = {
+  id: string;
+  domain: BulkImportDomain;
+  source_owner:
+    | "bulk_import_jobs"
+    | "matter_bulk_import_jobs"
+    | "employee_bulk_import_jobs";
+  read_only_adapter: boolean;
+  filename: string;
+  content_type: string | null;
+  source_sha256: string | null;
+  source_status: string;
+  status: BulkImportLifecycle;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  committed_rows: number;
+  failed_rows: number;
+  created_by_membership_id: string | null;
+  creator_label: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  completed_at: string | null;
+  manifest_url: string;
+  error_report_url: string;
+};
+
+export type BulkImportHistory = {
+  jobs: BulkImportJobSummary[];
+  accessible_domains: BulkImportDomain[];
+};
+
+export type BulkImportManifest = {
+  schema_version: "bulk-import-manifest-v1";
+  compatibility_mode: "canonical" | "read_only_adapter";
+  job: BulkImportJobSummary;
+  file_size_bytes: number | null;
+  manifest_format: string | null;
+  limitations: string[];
+};
+
 export type IpDocket = {
   id: string;
   company_id: string;
@@ -9437,6 +9491,34 @@ export async function commitIpPortfolioImport(input: {
 export async function downloadIpPortfolioImportErrors(id: string): Promise<Blob> {
   const response = await apiBlobRequest(
     `/api/ip/imports/${encodeURIComponent(id)}/errors`,
+  );
+  return response.blob();
+}
+
+export async function listBulkImportJobs(
+  domain?: BulkImportDomain,
+  limit = 50,
+): Promise<BulkImportHistory> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (domain) params.set("domain", domain);
+  return apiRequest(`/api/imports/history?${params.toString()}`);
+}
+
+export async function getBulkImportManifest(
+  domain: BulkImportDomain,
+  jobId: string,
+): Promise<BulkImportManifest> {
+  return apiRequest(
+    `/api/imports/${encodeURIComponent(domain)}/${encodeURIComponent(jobId)}/manifest`,
+  );
+}
+
+export async function downloadBulkImportErrors(
+  domain: BulkImportDomain,
+  jobId: string,
+): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/imports/${encodeURIComponent(domain)}/${encodeURIComponent(jobId)}/errors`,
   );
   return response.blob();
 }
