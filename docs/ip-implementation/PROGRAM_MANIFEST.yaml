@@ -25,7 +25,7 @@
         "branch": "codex/iplf-039d-deadline-incidents-20260821",
         "status": "repository_implemented_local_verified_pr_open",
         "pull_request": 285,
-        "implementation_revision": "7bcce7d63c71ec53ec92c17dfc951b7c8f303122",
+        "implementation_revision": "7a7f485758d0d71dbcab592c5f484415633a254a",
         "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
         "owned_components": [
           "IP deadline-incident lifecycle, evidence, impact, action, communication-decision and kill-switch schema/API/UI contracts",
@@ -10291,7 +10291,7 @@
       "blockers": [
         {
           "id": "IPLF-039D-RELEASE-EVIDENCE",
-          "summary": "All six UJ-58 paths are repository implemented and locally verified at 7bcce7d63c71ec53ec92c17dfc951b7c8f303122. The stacked exact candidate has not yet completed hosted CI, merge, deployment and dated production acceptance.",
+          "summary": "All six UJ-58 paths are repository implemented and locally verified at 7a7f485758d0d71dbcab592c5f484415633a254a. The stacked exact candidate has not yet completed hosted CI, merge, deployment and dated production acceptance.",
           "owner": "Release engineering",
           "evidence_needed": "Green hosted checks for the exact IPLF-039D PR head, merged/deployed revision identity, health proof and dated production UJ-58 acceptance evidence.",
           "safe_fallback": "Keep the slice release-blocked. Incident evidence is retained, automated remedies and communications are never invented, and active platform incident kill switches fail closed.",
@@ -10334,7 +10334,7 @@
         },
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md",
-          "revision": "7bcce7d63c71ec53ec92c17dfc951b7c8f303122",
+          "revision": "7a7f485758d0d71dbcab592c5f484415633a254a",
           "environment": "local_e2e",
           "fixtures": "fresh isolated synthetic tenant, restricted trademark docket and content-minimised incident evidence",
           "assertions": "All six UJ-58 paths, restricted tenant isolation, additive migration, retention, automation kill switch, API/UI workflow and exact browser resolution path.",
@@ -10342,7 +10342,7 @@
           "recorded_at": "2026-08-21T08:46:45+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification was reset until the paths existed. | 2026-08-21 completion review: all six UJ-58 paths, tenant isolation, append-only PostgreSQL evidence, additive migration, operational automation shutdown, dense UI workflow and exact browser journey are implemented and locally verified at 7bcce7d63c71ec53ec92c17dfc951b7c8f303122. Release remains blocked on exact hosted CI, merge/deployment identity and dated production acceptance only.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification was reset until the paths existed. | 2026-08-21 completion review: all six UJ-58 paths, tenant isolation, append-only PostgreSQL evidence, additive migration, operational automation shutdown, dense UI workflow and exact browser journey are implemented and locally verified at 7a7f485758d0d71dbcab592c5f484415633a254a. Release remains blocked on exact hosted CI, merge/deployment identity and dated production acceptance only.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
