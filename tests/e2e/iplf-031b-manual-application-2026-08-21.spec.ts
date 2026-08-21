@@ -151,29 +151,36 @@ test("IPLF-031B completes manual identity and duplicate exception paths", async 
   await signIn(page, tenant.slug, tenant.email);
   await page.goto("/app/ip");
   await page.getByRole("button", { name: "New trademark" }).click();
-  await page.getByLabel("Docket title").fill("ASTER SEPARATE FILING");
-  await page.getByLabel("Word mark").fill("ASTER");
-  await page.getByLabel("Goods / services specification").fill("Downloadable legal software");
-  await page.getByLabel("Applicant").fill("Aster Products Private Limited");
-  await page.getByLabel("Representation evidence reference").fill("e2e:aster-separate");
-  await page.getByLabel("Filing phase").selectOption("filed");
-  await expect(page.getByRole("button", { name: "Create application" })).toBeDisabled();
-  await expect(page.getByRole("checkbox", { name: /number is still pending allocation/i })).toBeVisible();
-  await page.getByLabel("Application number (optional before filing)").fill("TM / 2026 / 00421");
-  await page.getByLabel("Filing phase").selectOption("draft");
+  const creationForm = page.locator("form").filter({ has: page.getByLabel("Docket title") });
+  await creationForm.getByLabel("Docket title").fill("ASTER SEPARATE FILING");
+  await creationForm.getByLabel("Word mark").fill("ASTER");
+  await creationForm.getByLabel("Goods / services specification").fill("Downloadable legal software");
+  await creationForm.getByLabel("Applicant").fill("Aster Products Private Limited");
+  await creationForm.getByLabel("Representation evidence reference").fill("e2e:aster-separate");
+  await creationForm.getByLabel("Filing phase").selectOption("filed");
+  await expect(creationForm.getByRole("button", { name: "Create application" })).toBeDisabled();
+  await expect(
+    creationForm.getByRole("checkbox", { name: /number is still pending allocation/i }),
+  ).toBeVisible();
+  await creationForm
+    .getByLabel("Application number (optional before filing)")
+    .fill("TM / 2026 / 00421");
+  await creationForm.getByLabel("Filing phase").selectOption("draft");
 
   const createResponse = page.waitForResponse((response) =>
     response.url().includes("/api/ip/trademark-applications/manual") &&
     response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Create application" }).click();
+  await creationForm.getByRole("button", { name: "Create application" }).click();
   const createdResponse = await createResponse;
   expect(createdResponse.status()).toBe(201);
   const created = await createdResponse.json();
 
   const identity = page.getByTestId("ip-identity-workspace");
   await expect(identity.getByText("Application no.")).toBeVisible();
-  await expect(identity.getByText("TM / 2026 / 00421")).toBeVisible();
+  const repeatedApplicationNumber = identity.getByText("TM / 2026 / 00421", { exact: true });
+  await expect(repeatedApplicationNumber).toHaveCount(2);
+  await expect(repeatedApplicationNumber.first()).toBeVisible();
   await expect(identity.getByText("ASTER ORIGINAL")).toBeVisible();
   await identity.getByLabel("Decision reason").fill("Registry evidence confirms a separate application.");
   await identity.getByRole("button", { name: "Confirm separate filing" }).click();

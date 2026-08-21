@@ -53,7 +53,7 @@ Generated; do not edit.
 | IPLF-030A | derived | IPLF-030 | M3 | IP-PORT-02, IP-PORT-05, IP-PORT-10 | UJ-04-EXC-02 | implemented | passed | blocked | not_required |
 | IPLF-030B | derived | IPLF-030 | M3 | COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08, IP-PORT-01, IP-PORT-02, IP-PORT-03, IP-PORT-04, IP-PORT-06, IP-PORT-07, IP-PORT-08, IP-PORT-09, IP-PORT-10 | UJ-04-EXC-01, UJ-04-EXC-03, UJ-04-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-031A | derived | IPLF-031 | M3 | IP-ID-07 | UJ-05-NORMAL, UJ-05-EXC-01 | implemented | passed | blocked | not_required |
-| IPLF-031B | derived | IPLF-031 | M3 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-08 | UJ-03-EXC-01, UJ-03-EXC-02, UJ-03-NORMAL | not_started | not_run | blocked | not_required |
+| IPLF-031B | derived | IPLF-031 | M3 | IP-ID-01, IP-ID-02, IP-ID-03, IP-ID-04, IP-ID-05, IP-ID-06, IP-ID-08 | UJ-03-EXC-01, UJ-03-EXC-02, UJ-03-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-032A | derived | IPLF-032 | M3 | ARCH-OPS-23 | UJ-02-NORMAL, UJ-02-EXC-01, UJ-02-EXC-02, UJ-02-EXC-03, UJ-02-EXC-04 | implemented | passed | blocked | not_required |
 | IPLF-032B | derived | IPLF-032 | M3 |  |  | not_started | not_run | blocked | not_required |
 | IPLF-033A | derived | IPLF-033 | M3 | IP-PROS-11 | UJ-06-NORMAL | implemented | passed | blocked | not_required |
