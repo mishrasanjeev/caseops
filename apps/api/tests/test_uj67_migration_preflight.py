@@ -143,6 +143,98 @@ class TestDestructiveDowngrade:
         assert migration_preflight.analyze(path) == []
 
 
+def _revision(
+    tmp_path: Path,
+    revision: str,
+    down_revision: str | None,
+    name: str | None = None,
+) -> Path:
+    literal = "None" if down_revision is None else f'"{down_revision}"'
+    return _migration(
+        tmp_path,
+        f'revision = "{revision}"\ndown_revision = {literal}\n\n'
+        "def upgrade():\n    pass\n\n\ndef downgrade():\n    pass\n",
+        name=name or f"{revision}_probe.py",
+    )
+
+
+class TestRevisionGraphShape:
+    """Not a UJ-67 exception path — a defect in the graph itself.
+
+    This check exists because of a real collision: two lanes each added a
+    migration whose ``down_revision`` was ``20260820_0002``. Neither branch
+    could show the problem, because each held only its own file.
+    """
+
+    def test_a_linear_chain_has_one_head(self, tmp_path: Path) -> None:
+        paths = [
+            _revision(tmp_path, "0001", None),
+            _revision(tmp_path, "0002", "0001"),
+            _revision(tmp_path, "0003", "0002"),
+        ]
+
+        _revisions, heads, findings = migration_preflight.revision_graph(paths)
+
+        assert heads == ["0003"]
+        assert findings == []
+
+    def test_two_migrations_from_one_parent_are_flagged(self, tmp_path: Path) -> None:
+        # The exact shape of the 2026-08-20 collision.
+        paths = [
+            _revision(tmp_path, "20260820_0002", None),
+            _revision(tmp_path, "20260821_0001", "20260820_0002"),
+            _revision(tmp_path, "20260821_0002", "20260820_0002"),
+        ]
+
+        _revisions, heads, findings = migration_preflight.revision_graph(paths)
+
+        assert heads == ["20260821_0001", "20260821_0002"]
+        assert _codes(findings) == {migration_preflight.MULTIPLE_HEADS_CODE}
+        detail = findings[0].detail
+        # Both heads must be named, or the author cannot tell which two collided.
+        assert "20260821_0001" in detail and "20260821_0002" in detail
+        # And the message has to name the way out.
+        assert "merge revision" in detail
+
+    def test_an_explicit_merge_revision_resolves_the_split(self, tmp_path: Path) -> None:
+        paths = [
+            _revision(tmp_path, "20260820_0002", None),
+            _revision(tmp_path, "20260821_0001", "20260820_0002"),
+            _revision(tmp_path, "20260821_0002", "20260820_0002"),
+            _migration(
+                tmp_path,
+                'revision = "20260822_0001"\n'
+                'down_revision = ("20260821_0001", "20260821_0002")\n\n'
+                "def upgrade():\n    pass\n\n\ndef downgrade():\n    pass\n",
+                name="20260822_0001_merge.py",
+            ),
+        ]
+
+        _revisions, heads, findings = migration_preflight.revision_graph(paths)
+
+        assert heads == ["20260822_0001"]
+        assert findings == []
+
+    def test_a_duplicate_revision_id_is_flagged(self, tmp_path: Path) -> None:
+        paths = [
+            _revision(tmp_path, "0001", None),
+            _revision(tmp_path, "0002", "0001", name="0002_a.py"),
+            _revision(tmp_path, "0002", "0001", name="0002_b.py"),
+        ]
+
+        _revisions, _heads, findings = migration_preflight.revision_graph(paths)
+
+        assert migration_preflight.DUPLICATE_REVISION_CODE in _codes(findings)
+
+    def test_the_committed_graph_has_exactly_one_head(self) -> None:
+        versions = sorted(migration_preflight.VERSIONS_DIR.glob("*.py"))
+
+        _revisions, heads, findings = migration_preflight.revision_graph(versions)
+
+        assert len(heads) == 1, f"the committed migrations have {len(heads)} heads: {heads}"
+        assert findings == []
+
+
 class TestGateBehaviour:
     def test_unparseable_migration_fails_loudly(self, tmp_path: Path) -> None:
         # A migration that cannot be parsed must not be silently treated as safe.
@@ -170,4 +262,8 @@ class TestGateBehaviour:
             "expected pre-existing risks in committed migrations; if this is now "
             "empty the backlog was cleared and this test should be retired"
         )
+        # Still 0: the risk backlog stays advisory. `validate` now also fails on
+        # a broken revision graph, which is a different thing - not a judgement
+        # to record but a deploy that cannot run - and the committed graph is
+        # single-headed, so this stays green.
         assert migration_preflight.main(["validate"]) == 0

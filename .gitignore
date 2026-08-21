@@ -102,3 +102,10 @@ infra/.pulumi/
 apps/api/.coverage
 apps/api/htmlcov/
 apps/api/coverage.xml
+
+# Local git worktrees. Agents and humans both check out sibling worktrees
+# under .worktrees/ to work on several branches at once. Untracked, that
+# directory shows up as a single pending change on every `git status`, and
+# anything that stages "all uncommitted changes" would commit dozens of
+# nested checkouts of this repository into itself.
+.worktrees/
