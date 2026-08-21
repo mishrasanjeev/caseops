@@ -1340,8 +1340,31 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   is correct: that is not yet a property of the trunk.
 - **Verification:** with both lanes' real migration files present,
   `python scripts/migration_preflight.py validate` exits 1 and names both heads;
-  with either alone, and on current `main`, it exits 0 reporting
-  `single head 20260820_0002`. Unit coverage in
+  with either alone, and on current `main`, it exits 0 reporting the single
+  head. Unit coverage in
   `apps/api/tests/test_uj67_migration_preflight.py::TestRevisionGraphShape`
   (linear chain, the exact collision shape, merge-revision resolution, duplicate
   revision ids, and an assertion that the committed graph has one head).
+- **Three real occurrences in two days, none caught by anything but a manual
+  check.** The gap was recorded from a predicted collision. It has since
+  happened three times for real, and the *predicted* failure mode was the least
+  dangerous of them:
+  1. **2026-08-20, two heads.** `20260821_0001` (calendar) and the IP-cost
+     migration both chained from `20260820_0002`. Predicted; resolved by
+     re-chaining.
+  2. **2026-08-21, duplicate id.** PR #282 carried a *second* migration,
+     `20260821_0002`, colliding with the IP-cost migration's id.
+  3. **2026-08-21, duplicate id again.** PR #285 claimed `20260821_0003`,
+     colliding with the same branch a second time.
+  A duplicate id is worse than a split head and was the case nobody predicted.
+  Two heads make `alembic upgrade head` refuse to run — loud, and it stops. A
+  duplicate id makes alembic emit a warning and then resolve it silently,
+  leaving one migration unreachable: no error, no failed deploy, columns that
+  never appear.
+  Demonstrated against the real files rather than a reconstruction: restoring
+  the pre-renumber IP-cost migration beside `20260821_0003_ip_deadline_incident_lifecycle.py`
+  makes `validate` exit 1 with `MIGRATION-DUPLICATE-REVISION` naming both files;
+  removing it returns exit 0 and `single head 20260821_0003`.
+  This raises the severity: the gap is not an occasional hazard of unusual
+  scheduling, it is the ordinary outcome whenever two lanes touch migrations in
+  the same week, and it recurs every time main moves.
