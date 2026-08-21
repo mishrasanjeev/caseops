@@ -37,9 +37,10 @@ import {
   completeIpLegalDeadline,
   completeIpRelatedRightObligation,
   confirmIpLegalDeadline,
-  createIpDocket,
   createIpDeadlineIncident,
+  createManualTrademarkApplication,
   createIpSharedHearing,
+  correctIpIdentifier,
   decideIpCoverageTransfer,
   decideIpDeadlineIncidentNotification,
   discoverIpEvidence,
@@ -55,6 +56,7 @@ import {
   fetchIpWorkspaceReadiness,
   listCalendarConnections,
   previewIpDocketEvent,
+  previewIpIdentifierDuplicates,
   previewIpDocketLifecycle,
   proposeIpDeadlineRule,
   proposeIpLegalDeadline,
@@ -63,6 +65,7 @@ import {
   recordIpDeadlineIncidentAction,
   recordIpDeadlineIncidentImpact,
   reconcileIpCosts,
+  resolveIpIdentifierDuplicate,
   reviewIpEvidenceCandidate,
   releaseIpIncidentKillSwitch,
   resolveIpDeadlineIncident,
@@ -73,6 +76,7 @@ import {
   transitionIpDocketLifecycle,
   transitionIpDeadlineRule,
   overrideIpLegalDeadline,
+  type IpCoreRecords,
   type IpDocket,
   type IpDeadlineIncident,
   type IpLegalDeadline,
@@ -81,15 +85,19 @@ import {
   type IpDocketEventInput,
   type IpEvidenceCandidate,
   type IpFeatureReadiness,
+  type IpIdentifier,
   type IpWorkspaceConfigurationStatus,
   type IpWorkspaceTestResult,
   updateIpSharedHearing,
+  updateTrademarkApplicationPhase,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
+const FORM_SELECT_CLASS =
+  "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
 
 export default function IpDocketPage() {
   const searchParams = useSearchParams();
@@ -859,55 +867,321 @@ function IpAutomationReadiness({ features }: { features: IpFeatureReadiness[] })
 
 function CreateTrademarkCard({ onCreated }: { onCreated: (docket: IpDocket) => void }) {
   const [title, setTitle] = useState("");
-  const [identifier, setIdentifier] = useState("");
   const [markText, setMarkText] = useState("");
   const [classNumber, setClassNumber] = useState("9");
   const [specification, setSpecification] = useState("");
   const [applicant, setApplicant] = useState("");
   const [evidence, setEvidence] = useState("");
+  const [matterId, setMatterId] = useState("");
+  const [restricted, setRestricted] = useState(false);
+  const [jurisdiction, setJurisdiction] = useState("IN");
+  const [office, setOffice] = useState("IP India");
+  const [filingPhase, setFilingPhase] = useState<"draft" | "pre_filing" | "filed">(
+    "pre_filing",
+  );
+  const [applicationNumber, setApplicationNumber] = useState("");
+  const [numberSource, setNumberSource] = useState("manual");
+  const [numberEffectiveFrom, setNumberEffectiveFrom] = useState(TODAY);
+  const [pendingAllocation, setPendingAllocation] = useState(false);
   const mutation = useMutation({
     mutationFn: () =>
-      createIpDocket({
+      createManualTrademarkApplication({
         title,
-        primaryIdentifier: identifier || null,
+        matterId: matterId.trim() || null,
+        restricted,
+        assetTitle: markText,
+        jurisdiction,
+        office,
+        filingPhase,
+        sourcePendingIdentifierAllocation:
+          filingPhase === "filed" && !applicationNumber.trim() && pendingAllocation,
+        applicationNumber: applicationNumber.trim() || null,
+        identifierSource: numberSource,
+        identifierEffectiveFrom: numberEffectiveFrom,
         markText,
         classNumber: Number(classNumber),
         specification,
         applicantName: applicant,
         evidenceReference: evidence,
       }),
-    onSuccess: (row) => {
-      toast.success("Trademark docket created and readiness-validated.");
-      onCreated(row);
+    onSuccess: (result) => {
+      toast.success(
+        result.duplicate_candidates.length
+          ? "Draft created. Review the possible duplicate before marking it filed."
+          : "Trademark application created with its canonical identity records.",
+      );
+      onCreated(result.docket);
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not create IP docket.")),
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not create the trademark application.")),
   });
+  const filedAllocationValid =
+    filingPhase !== "filed" || Boolean(applicationNumber.trim()) || pendingAllocation;
   const valid =
     title.trim().length >= 2 &&
     markText.trim().length >= 1 &&
+    jurisdiction.trim().length >= 2 &&
+    office.trim().length >= 2 &&
     specification.trim().length >= 3 &&
     applicant.trim().length >= 2 &&
-    evidence.trim().length >= 3;
+    evidence.trim().length >= 3 &&
+    filedAllocationValid;
 
   return (
     <Card>
-      <CardHeader><CardTitle as="h2">New trademark particulars</CardTitle></CardHeader>
+      <CardHeader><CardTitle as="h2">New trademark application</CardTitle></CardHeader>
       <CardContent>
         <form
           className="grid min-w-0 gap-4 md:grid-cols-2"
           onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}
         >
           <Field label="Docket title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          <Field label="Application / client reference"><Input value={identifier} onChange={(e) => setIdentifier(e.target.value)} /></Field>
+          <Field label="Matter ID (optional)"><Input value={matterId} onChange={(e) => setMatterId(e.target.value)} /></Field>
           <Field label="Word mark"><Input value={markText} onChange={(e) => setMarkText(e.target.value)} /></Field>
           <Field label="Nice class"><Input type="number" min={1} max={45} value={classNumber} onChange={(e) => setClassNumber(e.target.value)} /></Field>
           <Field label="Goods / services specification"><Input value={specification} onChange={(e) => setSpecification(e.target.value)} /></Field>
           <Field label="Applicant"><Input value={applicant} onChange={(e) => setApplicant(e.target.value)} /></Field>
           <Field label="Representation evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="attachment:… or drive:…" /></Field>
-          <div className="flex items-end"><Button type="submit" disabled={!valid || mutation.isPending}>Validate and create</Button></div>
+          <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value.toUpperCase())} /></Field>
+          <Field label="Registry office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
+          <Field label="Filing phase">
+            <select className={FORM_SELECT_CLASS} value={filingPhase} onChange={(event) => setFilingPhase(event.target.value as typeof filingPhase)}>
+              <option value="draft">Draft</option>
+              <option value="pre_filing">Pre-filing</option>
+              <option value="filed">Filed</option>
+            </select>
+          </Field>
+          <Field label="Application number (optional before filing)"><Input value={applicationNumber} onChange={(event) => { setApplicationNumber(event.target.value); if (event.target.value) setPendingAllocation(false); }} /></Field>
+          {applicationNumber ? (
+            <>
+              <Field label="Number source"><Input value={numberSource} onChange={(event) => setNumberSource(event.target.value)} /></Field>
+              <Field label="Effective from"><Input type="date" value={numberEffectiveFrom} onChange={(event) => setNumberEffectiveFrom(event.target.value)} /></Field>
+            </>
+          ) : null}
+          {filingPhase === "filed" && !applicationNumber ? (
+            <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
+              <input type="checkbox" className="mt-1" checked={pendingAllocation} onChange={(event) => setPendingAllocation(event.target.checked)} />
+              Registry source confirms the application number is still pending allocation
+            </label>
+          ) : null}
+          <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
+            <input type="checkbox" className="mt-1" checked={restricted} onChange={(event) => setRestricted(event.target.checked)} />
+            Restrict this pre-engagement record to explicitly granted members
+          </label>
+          <div className="flex items-end md:col-span-2"><Button type="submit" disabled={!valid || mutation.isPending}>Create application</Button></div>
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+const IDENTIFIER_LABEL: Record<IpIdentifier["identifier_kind"], string> = {
+  application: "Application no.",
+  registration: "Registration no.",
+  opposition: "Opposition no.",
+  rectification: "Rectification no.",
+  appeal: "Appeal no.",
+  court: "Court reference",
+};
+
+function IdentityCard({ docket, enabled }: { docket: IpDocket; enabled: boolean }) {
+  const queryClient = useQueryClient();
+  const core = useQuery({
+    queryKey: ["ip", "core-records", docket.id],
+    queryFn: () => fetchIpCoreRecords(docket.id),
+  });
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["ip", "core-records", docket.id] });
+
+  return (
+    <Card className="min-w-0 xl:col-span-2" data-testid="ip-identity-workspace">
+      <CardHeader><CardTitle as="h3">Application identity and duplicate review</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
+        {core.isPending ? <Skeleton className="h-24 w-full" /> : null}
+        {core.isError ? <QueryErrorState error={core.error} title="Could not load application identity" onRetry={() => core.refetch()} /> : null}
+        {core.data?.applications.map((application) => (
+          <ApplicationPhaseControl
+            key={application.id}
+            application={application}
+            identifiers={core.data.identifiers}
+            enabled={enabled}
+            onChanged={refresh}
+          />
+        ))}
+        {core.data && core.data.identifiers.length === 0 ? (
+          <p className="text-sm text-[var(--color-mute)]">No registry identifier has been allocated yet.</p>
+        ) : null}
+        {core.data?.identifiers.map((identifier) => (
+          <IdentifierControl
+            key={identifier.id}
+            docket={docket}
+            identifier={identifier}
+            enabled={enabled}
+            onChanged={refresh}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ApplicationPhaseControl({ application, identifiers, enabled, onChanged }: {
+  application: IpCoreRecords["applications"][number];
+  identifiers: IpIdentifier[];
+  enabled: boolean;
+  onChanged: () => Promise<unknown>;
+}) {
+  const [phase, setPhase] = useState<"draft" | "pre_filing" | "filed">(
+    application.filing_phase as "draft" | "pre_filing" | "filed",
+  );
+  const [pendingAllocation, setPendingAllocation] = useState(
+    application.source_pending_identifier_allocation,
+  );
+  const confirmedApplicationNumber = identifiers.some(
+    (row) =>
+      row.application_id === application.id &&
+      row.identifier_kind === "application" &&
+      row.reconciliation_status === "confirmed" &&
+      row.effective_until === null,
+  );
+  const mutation = useMutation({
+    mutationFn: () => updateTrademarkApplicationPhase({
+      applicationId: application.id,
+      expectedVersion: application.version,
+      filingPhase: phase,
+      sourcePendingIdentifierAllocation: phase === "filed" && !confirmedApplicationNumber && pendingAllocation,
+    }),
+    onSuccess: async () => { toast.success("Application filing phase updated."); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not update the filing phase.")),
+  });
+  const canApply =
+    enabled &&
+    phase !== application.filing_phase &&
+    (phase !== "filed" || confirmedApplicationNumber || pendingAllocation);
+
+  return (
+    <div className="grid min-w-0 gap-3 border-b border-[var(--color-line)] pb-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+      <div className="min-w-0 text-sm">
+        <div className="font-semibold">Trademark application</div>
+        <div className="text-xs text-[var(--color-mute)]">{application.office} · {application.jurisdiction} · v{application.version}</div>
+      </div>
+      <Field label="Filing phase">
+        <select className={FORM_SELECT_CLASS} value={phase} disabled={!enabled} onChange={(event) => setPhase(event.target.value as typeof phase)}>
+          <option value="draft">Draft</option>
+          <option value="pre_filing">Pre-filing</option>
+          <option value="filed">Filed</option>
+        </select>
+      </Field>
+      <Button size="sm" disabled={!canApply || mutation.isPending} onClick={() => mutation.mutate()}>Update phase</Button>
+      {phase === "filed" && !confirmedApplicationNumber ? (
+        <label className="flex min-w-0 items-start gap-2 text-xs md:col-span-3">
+          <input type="checkbox" checked={pendingAllocation} onChange={(event) => setPendingAllocation(event.target.checked)} />
+          Registry source confirms the number is pending allocation
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function IdentifierControl({ docket, identifier, enabled, onChanged }: {
+  docket: IpDocket;
+  identifier: IpIdentifier;
+  enabled: boolean;
+  onChanged: () => Promise<unknown>;
+}) {
+  const [reason, setReason] = useState("");
+  const [candidateId, setCandidateId] = useState("");
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctedValue, setCorrectedValue] = useState(identifier.raw_value);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const preview = useQuery({
+    queryKey: ["ip", "identifier-duplicates", docket.id, identifier.id],
+    queryFn: () => previewIpIdentifierDuplicates(docket.id, identifier.id),
+    enabled: identifier.reconciliation_status === "needs_review",
+  });
+  useEffect(() => {
+    if (!candidateId && preview.data?.candidates[0]) {
+      setCandidateId(preview.data.candidates[0].identifier_id);
+    }
+  }, [candidateId, preview.data]);
+  const resolve = useMutation({
+    mutationFn: (decision: "distinct" | "supersede") => resolveIpIdentifierDuplicate({
+      docketId: docket.id,
+      identifierId: identifier.id,
+      decision,
+      decisionToken: preview.data!.decision_token,
+      reason,
+      supersededByIdentifierId: decision === "supersede" ? candidateId : null,
+    }),
+    onSuccess: async (_result, decision) => {
+      toast.success(decision === "distinct" ? "Identifier confirmed as a separate filing." : "Identifier superseded; both dockets and their evidence remain intact.");
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not resolve the duplicate.")),
+  });
+  const correct = useMutation({
+    mutationFn: () => correctIpIdentifier({
+      docketId: docket.id,
+      identifier,
+      rawValue: correctedValue,
+      reason: correctionReason,
+      effectiveFrom: TODAY,
+    }),
+    onSuccess: async (result) => {
+      toast.success(result.duplicate_candidates.length ? "Correction saved and flagged for duplicate review." : "Correction saved with the prior value retained in history.");
+      setShowCorrection(false);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not correct the identifier.")),
+  });
+
+  return (
+    <div className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-semibold">{IDENTIFIER_LABEL[identifier.identifier_kind]}</div>
+          <div className="break-all font-mono tabular-nums">{identifier.raw_value}</div>
+          <div className="mt-1 text-xs text-[var(--color-mute)]">{identifier.office} · {identifier.jurisdiction} · source {identifier.source}</div>
+        </div>
+        <Badge tone={identifier.reconciliation_status === "confirmed" ? "success" : "warning"}>{identifier.reconciliation_status.replaceAll("_", " ")}</Badge>
+      </div>
+      {identifier.effective_until ? <p className="mt-2 text-xs text-[var(--color-mute)]">Historical value through {identifier.effective_until}</p> : null}
+      {identifier.correction_reason ? <p className="mt-2 text-xs text-[var(--color-mute)]">Correction reason: {identifier.correction_reason}</p> : null}
+
+      {identifier.reconciliation_status === "needs_review" ? (
+        <div className="mt-3 flex min-w-0 flex-col gap-3 border-t border-[var(--color-line)] pt-3">
+          {preview.isPending ? <Skeleton className="h-16 w-full" /> : null}
+          {preview.isError ? <QueryErrorState error={preview.error} title="Could not preview duplicate candidates" onRetry={() => preview.refetch()} /> : null}
+          {preview.data ? (
+            <>
+              <p className="text-xs text-[var(--color-mute)]">This preview changes nothing. Superseding retires this number only; it does not merge or delete either docket.</p>
+              {preview.data.blocking_reasons.length ? <p className="text-xs text-red-700">Automatic supersession blocked: {preview.data.blocking_reasons.join(", ").replaceAll("_", " ")}</p> : null}
+              {preview.data.candidates.map((candidate) => (
+                <label key={candidate.identifier_id} className="flex min-w-0 items-start gap-2 rounded-md bg-[var(--color-bg-2)] p-2">
+                  <input type="radio" name={`candidate-${identifier.id}`} checked={candidateId === candidate.identifier_id} onChange={() => setCandidateId(candidate.identifier_id)} />
+                  <span className="min-w-0"><strong className="break-words">{candidate.docket_title}</strong><span className="block break-all font-mono text-xs">{candidate.raw_value}</span></span>
+                </label>
+              ))}
+              <Field label="Decision reason"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {preview.data.allowed_decisions.includes("distinct") ? <Button size="sm" className="w-full sm:w-auto" disabled={!enabled || reason.trim().length < 5 || resolve.isPending} onClick={() => resolve.mutate("distinct")}>Confirm separate filing</Button> : null}
+                {preview.data.allowed_decisions.includes("supersede") ? <Button size="sm" variant="secondary" className="w-full sm:w-auto" disabled={!enabled || !candidateId || reason.trim().length < 5 || resolve.isPending} onClick={() => resolve.mutate("supersede")}>Supersede this number</Button> : null}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : enabled && !identifier.effective_until ? (
+        <div className="mt-3">
+          {showCorrection ? (
+            <form className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); correct.mutate(); }}>
+              <Field label={`Corrected ${IDENTIFIER_LABEL[identifier.identifier_kind].toLowerCase()}`}><Input value={correctedValue} onChange={(event) => setCorrectedValue(event.target.value)} /></Field>
+              <Field label="Correction reason"><Textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></Field>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row md:col-span-2"><Button size="sm" type="submit" disabled={correctedValue.trim() === identifier.raw_value || correctionReason.trim().length < 5 || correct.isPending}>Save correction</Button><Button size="sm" type="button" variant="ghost" onClick={() => setShowCorrection(false)}>Cancel</Button></div>
+            </form>
+          ) : <Button size="sm" variant="ghost" onClick={() => setShowCorrection(true)}>Correct identifier</Button>}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -956,6 +1230,7 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <IdentityCard docket={docket} enabled={canWrite} />
         {canManageAccess ? (
           <IpAccessWorkspace docket={docket} onChanged={onChanged} />
         ) : null}

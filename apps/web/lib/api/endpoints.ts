@@ -8384,11 +8384,76 @@ export type TrademarkApplication = {
   updated_at: string;
 };
 
+export type IpAsset = {
+  id: string;
+  docket_id: string;
+  asset_kind: string;
+  jurisdiction: string;
+  title: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpIdentifier = {
+  id: string;
+  docket_id: string;
+  application_id: string | null;
+  proceeding_id: string | null;
+  identifier_kind:
+    | "application"
+    | "registration"
+    | "opposition"
+    | "rectification"
+    | "appeal"
+    | "court";
+  raw_value: string;
+  normalized_value: string;
+  office: string;
+  jurisdiction: string;
+  source: string;
+  effective_from: string;
+  effective_until: string | null;
+  is_primary: boolean;
+  reconciliation_status: string;
+  supersedes_identifier_id: string | null;
+  superseded_by_identifier_id: string | null;
+  correction_reason: string | null;
+  created_at: string;
+};
+
+export type IpDuplicateCandidate = {
+  identifier_id: string;
+  docket_id: string;
+  application_id: string | null;
+  proceeding_id: string | null;
+  matter_id: string | null;
+  raw_value: string;
+  normalized_value: string;
+  source: string;
+  is_primary: boolean;
+  reconciliation_status: string;
+  docket_title: string;
+  docket_status: string;
+  docket_restricted: boolean;
+  docket_is_active: boolean;
+};
+
+export type IpDuplicatePreview = {
+  identifier_id: string;
+  identifier: IpDuplicateCandidate;
+  candidates: IpDuplicateCandidate[];
+  decision_token: string;
+  automatic_merge_blocked: boolean;
+  blocking_reasons: string[];
+  allowed_decisions: Array<"distinct" | "supersede">;
+};
+
 export type IpCoreRecords = {
-  assets: Array<Record<string, unknown>>;
+  assets: IpAsset[];
   applications: TrademarkApplication[];
   proceedings: Array<Record<string, unknown>>;
-  identifiers: Array<Record<string, unknown>>;
+  identifiers: IpIdentifier[];
 };
 
 export type IpDocketEvent = {
@@ -9757,6 +9822,158 @@ export async function completeIpLegalDeadline(input: {
 
 export async function fetchIpCoreRecords(docketId: string): Promise<IpCoreRecords> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/core-records`);
+}
+
+export async function createManualTrademarkApplication(input: {
+  title: string;
+  matterId?: string | null;
+  restricted: boolean;
+  assetTitle: string;
+  jurisdiction: string;
+  office: string;
+  filingPhase: "draft" | "pre_filing" | "filed";
+  sourcePendingIdentifierAllocation: boolean;
+  applicationNumber?: string | null;
+  identifierSource: string;
+  identifierEffectiveFrom: string;
+  markText: string;
+  classNumber: number;
+  specification: string;
+  applicantName: string;
+  evidenceReference: string;
+}): Promise<{
+  docket: IpDocket;
+  asset: IpAsset;
+  application: TrademarkApplication;
+  identifier: IpIdentifier | null;
+  duplicate_candidates: IpIdentifier[];
+}> {
+  return apiRequest("/api/ip/trademark-applications/manual", {
+    method: "POST",
+    body: {
+      title: input.title,
+      matter_id: input.matterId ?? null,
+      restricted: input.restricted,
+      asset_title: input.assetTitle,
+      jurisdiction: input.jurisdiction,
+      office: input.office,
+      filing_phase: input.filingPhase,
+      source_pending_identifier_allocation: input.sourcePendingIdentifierAllocation,
+      application_number: input.applicationNumber
+        ? {
+            raw_value: input.applicationNumber,
+            source: input.identifierSource,
+            effective_from: input.identifierEffectiveFrom,
+            is_primary: true,
+          }
+        : null,
+      particulars: {
+        form_key: "TM-A",
+        form_version: "2026.1",
+        mark_kind: "word",
+        representation: {
+          text: input.markText,
+          evidence_reference: input.evidenceReference,
+        },
+        classes: [
+          { class_number: input.classNumber, specification: input.specification },
+        ],
+        use_priority: null,
+        parties: [{ role: "applicant", name: input.applicantName }],
+        agent: null,
+        filing_manifest: [
+          {
+            key: "representation",
+            label: "Mark representation",
+            required: true,
+            evidence_reference: input.evidenceReference,
+          },
+        ],
+      },
+    },
+  });
+}
+
+export async function previewIpIdentifierDuplicates(
+  docketId: string,
+  identifierId: string,
+): Promise<IpDuplicatePreview> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/identifiers/${encodeURIComponent(identifierId)}/duplicates`,
+  );
+}
+
+export async function resolveIpIdentifierDuplicate(input: {
+  docketId: string;
+  identifierId: string;
+  decision: "distinct" | "supersede";
+  decisionToken: string;
+  reason: string;
+  supersededByIdentifierId?: string | null;
+}): Promise<{
+  identifier: IpIdentifier;
+  decision: string;
+  resolved_candidate_ids: string[];
+}> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/identifiers/${encodeURIComponent(input.identifierId)}/reconcile`,
+    {
+      method: "POST",
+      body: {
+        decision: input.decision,
+        decision_token: input.decisionToken,
+        reason: input.reason,
+        superseded_by_identifier_id: input.supersededByIdentifierId ?? null,
+      },
+    },
+  );
+}
+
+export async function correctIpIdentifier(input: {
+  docketId: string;
+  identifier: IpIdentifier;
+  rawValue: string;
+  reason: string;
+  effectiveFrom: string;
+}): Promise<{ identifier: IpIdentifier; duplicate_candidates: IpIdentifier[] }> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/identifiers/${encodeURIComponent(input.identifier.id)}/corrections`,
+    {
+      method: "POST",
+      body: {
+        identifier_kind: input.identifier.identifier_kind,
+        raw_value: input.rawValue,
+        office: input.identifier.office,
+        jurisdiction: input.identifier.jurisdiction,
+        source: "manual_correction",
+        effective_from: input.effectiveFrom,
+        is_primary: input.identifier.is_primary,
+        application_id: input.identifier.application_id,
+        proceeding_id: input.identifier.proceeding_id,
+        supersedes_identifier_id: input.identifier.id,
+        correction_reason: input.reason,
+      },
+    },
+  );
+}
+
+export async function updateTrademarkApplicationPhase(input: {
+  applicationId: string;
+  expectedVersion: number;
+  filingPhase: "draft" | "pre_filing" | "filed";
+  sourcePendingIdentifierAllocation: boolean;
+}): Promise<TrademarkApplication> {
+  return apiRequest(
+    `/api/ip/applications/${encodeURIComponent(input.applicationId)}/filing-phase`,
+    {
+      method: "PATCH",
+      body: {
+        expected_version: input.expectedVersion,
+        filing_phase: input.filingPhase,
+        source_pending_identifier_allocation: input.sourcePendingIdentifierAllocation,
+      },
+    },
+  );
 }
 
 export async function fetchIpProsecutionWorkspace(

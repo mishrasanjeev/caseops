@@ -617,6 +617,7 @@ def create_ip_docket(
     payload: IpDocketCreateRequest,
     docket_id: str | None = None,
     source_provenance: tuple[str, str] | None = None,
+    commit: bool = True,
 ) -> IpDocketRecordResponse:
     linked_matter = _matter_for_docket(
         session,
@@ -787,8 +788,11 @@ def create_ip_docket(
             ip_docket_id=docket.id,
             metadata={"docket_id": docket.id},
         )
-    session.commit()
-    session.refresh(docket)
+    if commit:
+        session.commit()
+        session.refresh(docket)
+    else:
+        session.flush()
     return _serialize_docket(session, docket, context=context)
 
 

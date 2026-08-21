@@ -23,6 +23,8 @@ const {
   confirmIpLegalDeadlineMock,
   proposeIpLegalDeadlineMock,
   createIpSharedHearingMock,
+  createManualTrademarkApplicationMock,
+  correctIpIdentifierMock,
   fetchIpAccessPanelMock,
   listCompanyUsersMock,
   listTeamsMock,
@@ -36,6 +38,9 @@ const {
   decideIpDeadlineIncidentNotificationMock,
   resolveIpDeadlineIncidentMock,
   releaseIpIncidentKillSwitchMock,
+  previewIpIdentifierDuplicatesMock,
+  resolveIpIdentifierDuplicateMock,
+  updateTrademarkApplicationPhaseMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   enableIpWorkspaceMock: vi.fn(),
@@ -57,6 +62,8 @@ const {
   confirmIpLegalDeadlineMock: vi.fn(),
   proposeIpLegalDeadlineMock: vi.fn(),
   createIpSharedHearingMock: vi.fn(),
+  createManualTrademarkApplicationMock: vi.fn(),
+  correctIpIdentifierMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
   listCompanyUsersMock: vi.fn(),
   listTeamsMock: vi.fn(),
@@ -70,6 +77,9 @@ const {
   decideIpDeadlineIncidentNotificationMock: vi.fn(),
   resolveIpDeadlineIncidentMock: vi.fn(),
   releaseIpIncidentKillSwitchMock: vi.fn(),
+  previewIpIdentifierDuplicatesMock: vi.fn(),
+  resolveIpIdentifierDuplicateMock: vi.fn(),
+  updateTrademarkApplicationPhaseMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -94,7 +104,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   enableIpWorkspace: enableIpWorkspaceMock,
   runIpWorkspaceTest: runIpWorkspaceTestMock,
   saveIpWorkspaceConfiguration: saveIpWorkspaceConfigurationMock,
-  createIpDocket: vi.fn(),
+  createManualTrademarkApplication: createManualTrademarkApplicationMock,
+  correctIpIdentifier: correctIpIdentifierMock,
   createIpDeadlineIncident: createIpDeadlineIncidentMock,
   recordIpDeadlineIncidentAction: recordIpDeadlineIncidentActionMock,
   recordIpDeadlineIncidentImpact: recordIpDeadlineIncidentImpactMock,
@@ -117,6 +128,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   previewIpDocketEvent: previewIpDocketEventMock,
   appendIpDocketEvent: appendIpDocketEventMock,
   previewIpDocketLifecycle: previewIpDocketLifecycleMock,
+  previewIpIdentifierDuplicates: previewIpIdentifierDuplicatesMock,
+  resolveIpIdentifierDuplicate: resolveIpIdentifierDuplicateMock,
   transitionIpDocketLifecycle: transitionIpDocketLifecycleMock,
   proposeIpLegalDeadline: proposeIpLegalDeadlineMock,
   confirmIpLegalDeadline: confirmIpLegalDeadlineMock,
@@ -135,6 +148,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   listTeams: listTeamsMock,
   previewIpAccessChange: previewIpAccessChangeMock,
   applyIpAccessChange: applyIpAccessChangeMock,
+  updateTrademarkApplicationPhase: updateTrademarkApplicationPhaseMock,
   fetchIpCoverageTransfersAwaitingMe: fetchIpCoverageTransfersAwaitingMeMock,
   decideIpCoverageTransfer: decideIpCoverageTransferMock,
 }));
@@ -179,6 +193,8 @@ describe("IpDocketPage", () => {
     confirmIpLegalDeadlineMock.mockReset();
     proposeIpLegalDeadlineMock.mockReset();
     createIpSharedHearingMock.mockReset();
+    createManualTrademarkApplicationMock.mockReset();
+    correctIpIdentifierMock.mockReset();
     fetchIpAccessPanelMock.mockReset();
     listCompanyUsersMock.mockReset();
     listTeamsMock.mockReset();
@@ -192,6 +208,9 @@ describe("IpDocketPage", () => {
     decideIpDeadlineIncidentNotificationMock.mockReset();
     resolveIpDeadlineIncidentMock.mockReset();
     releaseIpIncidentKillSwitchMock.mockReset();
+    previewIpIdentifierDuplicatesMock.mockReset();
+    resolveIpIdentifierDuplicateMock.mockReset();
+    updateTrademarkApplicationPhaseMock.mockReset();
     fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [] });
     decideIpCoverageTransferMock.mockResolvedValue({});
     enableIpWorkspaceMock.mockReset();
@@ -293,6 +312,7 @@ describe("IpDocketPage", () => {
     transitionIpDocketLifecycleMock.mockResolvedValue({ status: "closed" });
     proposeIpLegalDeadlineMock.mockResolvedValue({ id: "deadline-proposal-1" });
     confirmIpLegalDeadlineMock.mockResolvedValue({ id: "deadline-confirmed-1" });
+    updateTrademarkApplicationPhaseMock.mockResolvedValue({});
   });
 
   it("renders the authorized empty state and working create form", async () => {
@@ -302,9 +322,144 @@ describe("IpDocketPage", () => {
     const create = screen.getByRole("button", { name: "New trademark" });
     expect(create).toBeVisible();
     fireEvent.click(create);
-    expect(screen.getByRole("heading", { name: "New trademark particulars" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "New trademark application" })).toBeVisible();
     expect(screen.getByLabelText("Word mark")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Validate and create" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
+  });
+
+  it("creates a pre-filing application through one canonical command", async () => {
+    createManualTrademarkApplicationMock.mockResolvedValue({
+      docket: { id: "ip-created" },
+      asset: { id: "asset-created" },
+      application: { id: "application-created" },
+      identifier: null,
+      duplicate_candidates: [],
+    });
+    render(withClient(<IpDocketPage />));
+
+    fireEvent.click(await screen.findByRole("button", { name: "New trademark" }));
+    fireEvent.change(screen.getByLabelText("Docket title"), {
+      target: { value: "Aster filing" },
+    });
+    fireEvent.change(screen.getByLabelText("Word mark"), {
+      target: { value: "ASTER" },
+    });
+    fireEvent.change(screen.getByLabelText("Goods / services specification"), {
+      target: { value: "Downloadable software" },
+    });
+    fireEvent.change(screen.getByLabelText("Applicant"), {
+      target: { value: "Aster Applicant LLP" },
+    });
+    fireEvent.change(screen.getByLabelText("Representation evidence reference"), {
+      target: { value: "attachment:aster" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create application" }));
+
+    await waitFor(() =>
+      expect(createManualTrademarkApplicationMock).toHaveBeenCalledTimes(1),
+    );
+    expect(createManualTrademarkApplicationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Aster filing",
+        assetTitle: "ASTER",
+        filingPhase: "pre_filing",
+        applicationNumber: null,
+        sourcePendingIdentifierAllocation: false,
+      }),
+    );
+  });
+
+  it("keeps typed numbers separate and resolves duplicates on narrow mobile", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [{
+        id: "ip-1", company_id: "company-1", matter_id: "matter-1",
+        record_type: "trademark", title: "ASTER", primary_identifier: null,
+        status: "ready", restricted: false, is_active: true, lifecycle_version: 0,
+        access_policy_version: 0, lifecycle_effective_at: null, lifecycle_reason: null,
+        lifecycle_outcome: null, lifecycle_source: null, lifecycle_evidence_ref: null,
+        successor_docket_id: null, current_version: 1,
+        created_at: "2026-08-21T00:00:00Z", updated_at: "2026-08-21T00:00:00Z",
+        current_particulars: {
+          form_key: "TM-A", form_version: "2026.1", readiness_status: "ready",
+          classes_json: [{ class_number: 9, specification: "Software" }],
+        },
+        notice_links: [], evidence_candidates: [], deadline_coverages: [],
+        deadline_incidents: [], title_interests: [], related_right_obligations: [],
+        cost_items: [],
+      }],
+      count: 1,
+    });
+    const application = {
+      id: "application-1", docket_id: "ip-1", asset_id: "asset-1",
+      office: "IP India", jurisdiction: "IN", filing_phase: "draft", is_active: true,
+      lifecycle_version: 0, source_pending_identifier_allocation: false, version: 1,
+      created_at: "2026-08-21T00:00:00Z", updated_at: "2026-08-21T00:00:00Z",
+    };
+    const baseIdentifier = {
+      docket_id: "ip-1", office: "IP India", jurisdiction: "IN", source: "manual",
+      normalized_value: "tm202600421", effective_from: "2026-08-21",
+      effective_until: null, is_primary: true, supersedes_identifier_id: null,
+      superseded_by_identifier_id: null, correction_reason: null,
+      created_at: "2026-08-21T00:00:00Z",
+    };
+    fetchIpCoreRecordsMock.mockResolvedValue({
+      assets: [], applications: [application], proceedings: [],
+      identifiers: [
+        {
+          ...baseIdentifier, id: "identifier-1", application_id: "application-1",
+          proceeding_id: null, identifier_kind: "application", raw_value: "TM / 2026 / 00421",
+          reconciliation_status: "needs_review",
+        },
+        {
+          ...baseIdentifier, id: "identifier-2", application_id: null,
+          proceeding_id: "opposition-1", identifier_kind: "opposition", raw_value: "OPP 17/2026",
+          normalized_value: "opp172026", reconciliation_status: "confirmed",
+        },
+      ],
+    });
+    previewIpIdentifierDuplicatesMock.mockResolvedValue({
+      identifier_id: "identifier-1",
+      identifier: {
+        identifier_id: "identifier-1", docket_id: "ip-1", application_id: "application-1",
+        proceeding_id: null, matter_id: "matter-1", raw_value: "TM / 2026 / 00421",
+        normalized_value: "tm202600421", source: "manual", is_primary: true,
+        reconciliation_status: "needs_review", docket_title: "ASTER", docket_status: "ready",
+        docket_restricted: false, docket_is_active: true,
+      },
+      candidates: [{
+        identifier_id: "identifier-existing", docket_id: "ip-existing",
+        application_id: "application-existing", proceeding_id: null, matter_id: "matter-1",
+        raw_value: "TM-2026-00421", normalized_value: "tm202600421", source: "registry",
+        is_primary: true, reconciliation_status: "confirmed", docket_title: "ASTER EXISTING",
+        docket_status: "ready", docket_restricted: false, docket_is_active: true,
+      }],
+      decision_token: "current-preview-token", automatic_merge_blocked: false,
+      blocking_reasons: [], allowed_decisions: ["distinct", "supersede"],
+    });
+    resolveIpIdentifierDuplicateMock.mockResolvedValue({
+      identifier: { id: "identifier-1", reconciliation_status: "confirmed" },
+      decision: "distinct", resolved_candidate_ids: ["identifier-existing"],
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    const identity = await screen.findByTestId("ip-identity-workspace");
+    expect(await within(identity).findByText("Application no.")).toBeVisible();
+    expect(within(identity).getByText("TM / 2026 / 00421")).toBeVisible();
+    expect(within(identity).getByText("Opposition no.")).toBeVisible();
+    expect(within(identity).getByText("OPP 17/2026")).toBeVisible();
+    expect(await within(identity).findByText("ASTER EXISTING")).toBeVisible();
+    fireEvent.change(within(identity).getByLabelText("Decision reason"), {
+      target: { value: "Registry evidence confirms a separate filing." },
+    });
+    fireEvent.click(within(identity).getByRole("button", { name: "Confirm separate filing" }));
+    await waitFor(() => expect(resolveIpIdentifierDuplicateMock).toHaveBeenCalledWith({
+      docketId: "ip-1", identifierId: "identifier-1", decision: "distinct",
+      decisionToken: "current-preview-token",
+      reason: "Registry evidence confirms a separate filing.",
+      supersededByIdentifierId: null,
+    }));
   });
 
   it("fails closed when the role cannot view IP records", () => {

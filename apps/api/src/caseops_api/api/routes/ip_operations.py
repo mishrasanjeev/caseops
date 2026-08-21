@@ -142,6 +142,8 @@ from caseops_api.schemas.ip_operations import (
     IpRelatedRightObligationCreateRequest,
     IpTitleInterestCreateRequest,
     IpWorkspaceReadinessResponse,
+    ManualTrademarkApplicationCreateRequest,
+    ManualTrademarkApplicationCreateResponse,
 )
 from caseops_api.schemas.ip_portfolio import (
     IpPortfolioExportCreate,
@@ -325,6 +327,7 @@ from caseops_api.services.ip_records import (
     create_ip_asset,
     create_ip_identifier,
     create_ip_proceeding,
+    create_manual_trademark_application,
     create_trademark_application,
     list_ip_core_records,
     preview_ip_identifier_duplicates,
@@ -1904,6 +1907,36 @@ async def post_ip_docket(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return create_ip_docket(session, context=context, payload=payload)
+
+
+@router.post(
+    "/trademark-applications/manual",
+    response_model=ManualTrademarkApplicationCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_manual_trademark_application(
+    payload: ManualTrademarkApplicationCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> ManualTrademarkApplicationCreateResponse:
+    docket_id, asset, application, identifier, duplicates = (
+        create_manual_trademark_application(
+            session,
+            context=context,
+            payload=payload,
+        )
+    )
+    return ManualTrademarkApplicationCreateResponse(
+        docket=get_ip_docket(session, context=context, docket_id=docket_id),
+        asset=IpAssetResponse.model_validate(asset),
+        application=TrademarkApplicationResponse.model_validate(application),
+        identifier=(
+            IpIdentifierResponse.model_validate(identifier) if identifier is not None else None
+        ),
+        duplicate_candidates=[
+            IpIdentifierResponse.model_validate(row) for row in duplicates
+        ],
+    )
 
 
 @router.get("/dockets/{docket_id}", response_model=IpDocketRecordResponse)

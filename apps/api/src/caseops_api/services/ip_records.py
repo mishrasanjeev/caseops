@@ -27,6 +27,7 @@ from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.session_context import SessionContext
 
 if TYPE_CHECKING:
+    from caseops_api.schemas.ip_operations import ManualTrademarkApplicationCreateRequest
     from caseops_api.schemas.ip_records import (
         IpAssetCreateRequest,
         IpIdentifierCorrectionCreate,
@@ -197,6 +198,7 @@ def create_ip_asset(
     context: SessionContext,
     docket_id: str,
     payload: IpAssetCreateRequest,
+    commit: bool = True,
 ) -> IpAsset:
     docket = _docket(session, context, docket_id)
     existing = session.scalar(
@@ -226,8 +228,11 @@ def create_ip_asset(
         ip_docket_id=docket.id,
         metadata={"docket_id": docket.id, "asset_kind": row.asset_kind},
     )
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    else:
+        session.flush()
     return row
 
 
@@ -237,6 +242,7 @@ def create_trademark_application(
     context: SessionContext,
     docket_id: str,
     payload: TrademarkApplicationCreateRequest,
+    commit: bool = True,
 ) -> tuple[TrademarkApplication, IpIdentifier | None, list[IpIdentifier]]:
     docket = _docket(session, context, docket_id)
     asset = session.scalar(
@@ -316,11 +322,86 @@ def create_trademark_application(
             "duplicate_candidate_ids": [candidate.id for candidate in duplicates],
         },
     )
-    session.commit()
-    session.refresh(row)
-    if identifier is not None:
-        session.refresh(identifier)
+    if commit:
+        session.commit()
+        session.refresh(row)
+        if identifier is not None:
+            session.refresh(identifier)
+    else:
+        session.flush()
     return row, identifier, duplicates
+
+
+def create_manual_trademark_application(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: ManualTrademarkApplicationCreateRequest,
+) -> tuple[
+    str,
+    IpAsset,
+    TrademarkApplication,
+    IpIdentifier | None,
+    list[IpIdentifier],
+]:
+    """Materialize the complete manual record through the canonical writers."""
+
+    from caseops_api.schemas.ip_operations import IpDocketCreateRequest
+    from caseops_api.schemas.ip_records import (
+        IpAssetCreateRequest,
+        TrademarkApplicationCreateRequest,
+    )
+    from caseops_api.services.ip_operations import create_ip_docket
+
+    try:
+        docket = create_ip_docket(
+            session,
+            context=context,
+            payload=IpDocketCreateRequest(
+                title=payload.title,
+                matter_id=payload.matter_id,
+                primary_identifier=None,
+                restricted=payload.restricted,
+                particulars=payload.particulars,
+            ),
+            commit=False,
+        )
+        asset = create_ip_asset(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=IpAssetCreateRequest(
+                asset_kind="trademark",
+                jurisdiction=payload.jurisdiction,
+                title=payload.asset_title,
+            ),
+            commit=False,
+        )
+        application, identifier, duplicates = create_trademark_application(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=TrademarkApplicationCreateRequest(
+                asset_id=asset.id,
+                office=payload.office,
+                jurisdiction=payload.jurisdiction,
+                filing_phase=payload.filing_phase,
+                source_pending_identifier_allocation=(
+                    payload.source_pending_identifier_allocation
+                ),
+                application_number=payload.application_number,
+            ),
+            commit=False,
+        )
+        session.commit()
+        session.refresh(asset)
+        session.refresh(application)
+        if identifier is not None:
+            session.refresh(identifier)
+        return docket.id, asset, application, identifier, duplicates
+    except Exception:
+        session.rollback()
+        raise
 
 
 def create_ip_proceeding(

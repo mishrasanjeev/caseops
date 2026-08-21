@@ -7,7 +7,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from caseops_api.schemas.ip_records import IpWorkspaceConfigurationStatusResponse
+from caseops_api.schemas.ip_records import (
+    IpApplicationNumberCreate,
+    IpAssetResponse,
+    IpIdentifierResponse,
+    IpWorkspaceConfigurationStatusResponse,
+    TrademarkApplicationResponse,
+)
 
 
 class IpFeatureReadinessRecord(BaseModel):
@@ -98,6 +104,29 @@ class IpDocketCreateRequest(BaseModel):
     primary_identifier: str | None = Field(default=None, max_length=120)
     restricted: bool = False
     particulars: TrademarkParticularPayload
+
+
+class ManualTrademarkApplicationCreateRequest(BaseModel):
+    """One manual command for the canonical docket, asset, application and number."""
+
+    title: str = Field(min_length=2, max_length=255)
+    matter_id: str | None = None
+    restricted: bool = False
+    asset_title: str = Field(min_length=2, max_length=255)
+    jurisdiction: str = Field(min_length=2, max_length=40)
+    office: str = Field(min_length=2, max_length=80)
+    filing_phase: Literal["draft", "pre_filing", "filed"] = "draft"
+    source_pending_identifier_allocation: bool = False
+    application_number: IpApplicationNumberCreate | None = None
+    particulars: TrademarkParticularPayload
+
+    @model_validator(mode="after")
+    def validate_identifier_allocation(self) -> ManualTrademarkApplicationCreateRequest:
+        if self.application_number is not None and self.source_pending_identifier_allocation:
+            raise ValueError(
+                "application_number and source_pending_identifier_allocation are mutually exclusive"
+            )
+        return self
 
 
 class IpDocketVersionCreateRequest(TrademarkParticularPayload):
@@ -673,6 +702,14 @@ class IpDocketRecordResponse(BaseModel):
     cost_items: list[IpCostItemRecord] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+class ManualTrademarkApplicationCreateResponse(BaseModel):
+    docket: IpDocketRecordResponse
+    asset: IpAssetResponse
+    application: TrademarkApplicationResponse
+    identifier: IpIdentifierResponse | None
+    duplicate_candidates: list[IpIdentifierResponse] = Field(default_factory=list)
 
 
 class IpDocketListResponse(BaseModel):
