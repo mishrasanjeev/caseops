@@ -1635,8 +1635,8 @@
         "IPLF-034A",
         "IPLF-034B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [],
@@ -9312,7 +9312,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-034",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "No schema change, migration, backfill, data copy, alias, dual write, or new legal-date owner.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [
         "CAL-OPS-01",
@@ -9352,41 +9352,77 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-034 canonical scope: On the M2 target-aware owners, ship legal deadline calculation/confirmation/override/completion UX plus task, Today and calendar behavior; do not add another schema owner.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "IPLF-023A/023B remain the sole rule, calendar, calculation, confirmation, override, completion and reminder owners; IPLF-025B remains the shared calendar owner; IPLF-034A remains the stored dependency-graph API owner.",
+          "compatibility_path": "The calendar response adds semantic display_type and optional ip_docket_id fields while preserving hearing/task/deadline transport kinds. The web schema accepts mixed revisions where the additive fields are absent.",
+          "retirement_gate": "Nothing is retired. Exact-head CI, mixed-revision contract checks, canonical merge, deployment identity and dated production acceptance remain release gates."
         }
       ],
       "dependencies": [
         "IPLF-034A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/lib/api/schemas.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md",
+          "revision": "3434865fa6ba6a5a4981e5f9207dea55abd2209f",
+          "recorded_at": "2026-08-22T03:29:51+05:30",
+          "environment": "Windows 11, CPython 3.13 locked API environment, Node/npm workspace lockfile, migrated isolated SQLite fixtures, production Next.js 16.3 build, and local Playwright Chromium. Exact-head CI, real PostgreSQL, canonical merge, deployment and production acceptance remain pending.",
+          "fixtures": "Synthetic law-firm tenants, lawyers, Matters, trademark dockets, active and conflicting rule sources, verified working calendars and holidays, legal filing dates, internal targets, responsibilities, reminders, correction evidence and completion evidence; no real client, mark or registry data.",
+          "assertions": "Stored provenance and verified source links; fail-closed conflicting-source correction; business-day and holiday calculation; explicit confirmation; critical backup coverage; reminders; legal/internal semantic calendar display and IP deep links; immutable dated successor behavior; date-less provisional correction trace; operational bypass rejection; evidence-backed completion; responsive 360px controls; guide and law-firm copy; 28 focused API tests, 683 full web tests, ruff, typecheck, production build and local Playwright all passed.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-034B-RELEASE-VERIFICATION",
+          "summary": "Repository implementation and local verification pass, but exact-head CI, real-PostgreSQL execution, canonical-main merge, deployment identity and exact-production acceptance are not recorded.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Green exact-head CI including PostgreSQL, security, OpenAPI freshness, web build/unit tests and full Playwright; verified merge parent; then exact deployed identity, health and dated production E2E if released.",
+          "safe_fallback": "Do not release this additive UI/calendar contract. Existing IPLF-023B legal-deadline controls and generic compatible calendar transport remain canonical.",
+          "milestone_impact": "Blocks IPLF-034B release closure only; implementation and local verification are complete.",
+          "next_independent_slice": "Proceed to IPLF-035B after this PR merges; IPLF-035A is already implemented and locally verified."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact implementation/evidence PR and require its complete GitHub matrix to pass on the exact head before merge.",
+        "After merge, record the merge revision and advance to IPLF-035B without claiming deployment until exact runtime evidence exists."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, migration, backfill, data copy, alias or dual write. Existing provisional records may be resolved only by the existing confirmation command with a corrected date, reason and evidence retained in calculation inputs, trace and override evidence.",
+        "No provider call, registry filing, fee, payment, external message or external calendar write is added."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_DEADLINE_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml and generated projections"
+      ],
+      "allocation_review": "Brutally re-audited against PRD Sections 11.2, 13.6, 13.15, 23 and 25 and current main. IPLF-023A/023B already own the governed deadline lifecycle, IPLF-025B owns shared calendar/reminder transport, and IPLF-034A owns the dependency API. IPLF-034B implements only the missing user-facing provenance/source links, conflicting-source resolution fence, semantic calendar projection/deep links, extension no-second-writer policy, responsive E2E and release documentation. It adds no deadline, extension, reminder, calendar or task owner and does not reclaim IPLF-034A's CAL-OPS-06 implementation.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -22223,30 +22259,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-01",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22273,30 +22311,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-02",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22323,30 +22363,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-03",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22373,30 +22415,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-04",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22423,30 +22467,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-05",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22473,30 +22519,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-06",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22523,30 +22571,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-07",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -22573,30 +22623,32 @@
         "UJ-47",
         "UJ-56"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-DL-08",
-        "planned:IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL",
-        "planned:IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02",
-        "planned:IPLF-UJ-09-NORMAL",
-        "planned:IPLF-UJ-47-EXC-01",
-        "planned:IPLF-UJ-47-EXC-02",
-        "planned:IPLF-UJ-47-EXC-03",
-        "planned:IPLF-UJ-47-EXC-04",
-        "planned:IPLF-UJ-47-EXC-05",
-        "planned:IPLF-UJ-47-NORMAL",
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/calendar.py",
+        "apps/api/src/caseops_api/schemas/ip_deadlines.py",
+        "apps/api/src/caseops_api/services/calendar.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_calendar.py",
+        "apps/api/tests/test_ip_deadline_dependencies.py",
+        "apps/api/tests/test_ip_deadline_terminal_state.py",
+        "apps/api/tests/test_ip_deadline_workflow.py",
+        "apps/web/app/app/calendar/page.test.tsx",
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
+        "tests/e2e/ram-2026-08-09-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -43473,14 +43525,16 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-08-EXC-01",
-        "planned:IPLF-UJ-08-EXC-02",
-        "planned:IPLF-UJ-08-NORMAL"
+        "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-08-EXC-02",
+        "apps/web/app/app/ip/page.test.tsx#IPLF-UJ-08-EXC-02",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts#IPLF-UJ-08-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -43540,17 +43594,18 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-09-EXC-02",
         "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-09-NORMAL",
         "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_completed_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01",
-        "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_superseded_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01",
-        "planned:IPLF-UJ-09-EXC-02"
+        "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_superseded_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
         "docs/ip-implementation/evidence/m3/IPLF-034A/local-2026-08-14.md",
-        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -46849,14 +46904,18 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-56-EXC-01",
-        "planned:IPLF-UJ-56-EXC-02",
-        "planned:IPLF-UJ-56-EXC-03",
-        "planned:IPLF-UJ-56-NORMAL"
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_graph_names_every_input_that_produced_the_date#IPLF-UJ-56-EXC-03",
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-56-EXC-02",
+        "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-56-EXC-01",
+        "apps/web/app/app/ip/page.test.tsx#IPLF-UJ-56-EXC-03",
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts#IPLF-UJ-56-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49296,11 +49355,14 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-08-NORMAL"
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts#IPLF-UJ-08-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49359,10 +49421,11 @@
         "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-08-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49418,11 +49481,15 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-08-EXC-02"
+        "apps/web/app/app/ip/page.test.tsx#IPLF-UJ-08-EXC-02",
+        "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-08-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49543,10 +49610,11 @@
         "apps/api/tests/test_ip_deadline_terminal_state.py::test_uj09_exc01_superseded_deadline_rejects_every_overwrite#IPLF-UJ-09-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-TRACEABILITY-AUDIT-2026-08-14.md"
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -49602,11 +49670,14 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-09-EXC-02"
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-09-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -63353,11 +63424,14 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-56-NORMAL"
+        "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts#IPLF-UJ-56-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -63413,11 +63487,14 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-56-EXC-01"
+        "apps/api/tests/test_ip_deadline_workflow.py::test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_closed#IPLF-UJ-56-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -63473,11 +63550,14 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-56-EXC-02"
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_override_and_recalculation_chain_are_explained#IPLF-UJ-56-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -63533,11 +63613,15 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-56-EXC-03"
+        "apps/api/tests/test_ip_deadline_dependencies.py::test_cal_ops_06_graph_names_every_input_that_produced_the_date#IPLF-UJ-56-EXC-03",
+        "apps/web/app/app/ip/page.test.tsx#IPLF-UJ-56-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-023B/release-2026-08-09.md",
+        "docs/ip-implementation/evidence/m3/IPLF-034B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [

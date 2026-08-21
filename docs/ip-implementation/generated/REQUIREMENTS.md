@@ -134,14 +134,14 @@ Generated; do not edit.
 | IP-OPP-22 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | not_started | not_run | blocked | false |
 | IP-OPP-23 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | not_started | not_run | blocked | false |
 | IP-OPP-24 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | not_started | not_run | blocked | false |
-| IP-DL-01 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-02 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-03 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-04 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-05 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-06 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-07 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
-| IP-DL-08 | IP-DL | IPLF-023B, IPLF-034B | 17 | 0 | in_progress | not_run | blocked | false |
+| IP-DL-01 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-02 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-03 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-04 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-05 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-06 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-07 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
+| IP-DL-08 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
 | IP-DOC-01 | IP-DOC | IPLF-024B, IPLF-036B | 6 | 0 | in_progress | not_run | blocked | false |
 | IP-DOC-02 | IP-DOC | IPLF-024B, IPLF-036B | 6 | 0 | in_progress | not_run | blocked | false |
 | IP-DOC-03 | IP-DOC | IPLF-024B, IPLF-036B | 6 | 0 | in_progress | not_run | blocked | false |

@@ -11,8 +11,8 @@ Generated; do not edit.
 | UJ-05 | Detect and resolve duplicate | 2 | IPLF-031A | 2 | 1 | implemented | passed | false |
 | UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033A, IPLF-033B | 4 | 3 | implemented | passed | false |
 | UJ-07 | Reconcile registry update | 4 | IPLF-051B | 4 | 0 | not_started | not_run | false |
-| UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 3 | 1 | in_progress | not_run | false |
-| UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034A, IPLF-034B | 4 | 2 | in_progress | not_run | false |
+| UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 4 | 2 | implemented | passed | false |
+| UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034A, IPLF-034B | 4 | 3 | implemented | passed | false |
 | UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035A, IPLF-035B | 4 | 1 | in_progress | not_run | false |
 | UJ-11 | Recover failed or suppressed notification | 3 | IPLF-007A, IPLF-007B, IPLF-007C | 3 | 3 | implemented | not_run | false |
 | UJ-12 | Docket opposition as applicant | 4 | IPLF-040B, IPLF-041B | 4 | 0 | not_started | not_run | false |
@@ -59,7 +59,7 @@ Generated; do not edit.
 | UJ-53 | Close, abandon, transfer, or retire IP record | 5 | IPLF-022B, IPLF-039H | 8 | 1 | in_progress | not_run | false |
 | UJ-54 | Capture and approve complete trademark filing particulars | 5 | IPLF-039A, IPLF-039H | 5 | 2 | in_progress | not_run | false |
 | UJ-55 | Triage inbound registry, court, client, or associate communication | 7 | IPLF-039B, IPLF-039H | 7 | 1 | in_progress | not_run | false |
-| UJ-56 | Calculate a deadline across holiday, closure, extension, or uncertain trigger | 4 | IPLF-023B, IPLF-034B | 4 | 0 | in_progress | not_run | false |
+| UJ-56 | Calculate a deadline across holiday, closure, extension, or uncertain trigger | 4 | IPLF-023B, IPLF-034B | 5 | 2 | implemented | passed | false |
 | UJ-57 | Reassign critical work for leave, transfer, or deactivation | 7 | IPLF-039C, IPLF-039H | 9 | 2 | in_progress | not_run | false |
 | UJ-58 | Respond to a suspected missed or incorrect deadline | 6 | IPLF-039D, IPLF-039H | 6 | 2 | in_progress | not_run | false |
 | UJ-59 | Produce and sign off a daily docket control report | 4 | IPLF-038B, IPLF-039C, IPLF-039H | 6 | 2 | in_progress | not_run | false |
