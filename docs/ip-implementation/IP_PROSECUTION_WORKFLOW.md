@@ -5,7 +5,7 @@ Last updated: 22 August 2026
 Implementation slices: `IPLF-022B`, `IPLF-033A`, `IPLF-033B`
 
 Status: IPLF-033B repository implementation and local verification complete at
-`048a541d1b182bced5579030a27b93d7a6fc465a`; exact-head CI, canonical-main
+`f1429e0579159c25ec2ea7060121e7012a72f11c`; exact-head CI, canonical-main
 merge, deployment, production verification, and independent acceptance remain
 pending until their dated evidence exists.
 

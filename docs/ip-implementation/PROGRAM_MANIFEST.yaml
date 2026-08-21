@@ -9163,7 +9163,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-033B/local-2026-08-22.md",
-          "revision": "048a541d1b182bced5579030a27b93d7a6fc465a",
+          "revision": "f1429e0579159c25ec2ea7060121e7012a72f11c",
           "recorded_at": "2026-08-22T01:30:00+05:30",
           "environment": "Windows 11, CPython 3.13, locked API dependencies, migrated SQLite fixtures, production Next.js build and local Playwright Chromium. The real-PostgreSQL plan test is committed for exact-head CI and is not claimed as locally executed.",
           "fixtures": "Synthetic law-firm tenant, canonical client assigned to two Matters, three independent applications across mark/client families, manual and registry prosecution events, backdated correspondence, and no real client or registry data.",
