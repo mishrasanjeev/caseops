@@ -17,71 +17,93 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-20T10:30:00+05:30",
-      "base_revision": "ec62ff6f18ce084beb49bd8bf97b51893fdd2288",
-      "reconciliation_note": "Reconciles two copies of this block that both stamped base_revision 6c071ef5 and disagreed. The copy in the Codex calendar worktree assigned Claude IPLF-028A and Codex IPLF-039C; the copy on main closed the Claude lane and assigned Codex IPLF-028B. Each was half right, and the disagreement had a real cost: Claude built a duplicate records-governance route surface from the stale copy and deleted it unshipped after Codex merged the same endpoints. Settled from observable state rather than from either snapshot's intent - Codex has three merged and three open IPLF-028B pull requests, so that lane is in flight, not finished; Codex also has IPLF-039C commits staged in a separate worktree; Claude has IPLF-028A code merged and its evidence in flight. Read this block from origin/main, never from a sibling worktree copy.",
-      "coordination_rule": "Each lane owns only its listed files and keeps all real data operations fail-closed. A lane may edit its own slice/evidence metadata and no other lane's. Release evidence, legal-policy approval, and external providers are gates, never reasons to stop independent repository work. Where two lanes touch one slice, the split is by FILE, not by slice id: IPLF-028B has a Codex half (routes, OpenAPI, client, UI) and a Claude half (status, test and evidence references), and neither edits the other.",
-      "claude": {
-        "slice_id": "IPLF-028A",
-        "scope": "Continue the records-governance lane: keep execution fail-closed while completing policy/hold authorization artefacts, dry-run and recovery/export evidence, and the user-workflow handoff for IPLF-028B.",
-        "state": "Code merged and deployed at 9e458efd: approval workflow (#267), fail-open fixes (#269), compiled data-class projection (#270), retention authorization lifecycle (#273). Evidence in flight (#280). Cross-cutting problem-detail type fix in flight (#279). IPLF-028A-RUNTIME-DATA-CLASS-REGISTRY closed; RES-13 owner-waived not performed; POLICY-AND-HOLD-AUTHORIZATION open on retention schedule CONTENT and the tenant-facing review contract.",
-        "owned_components": [
-          "data-class registry/projection and data-operation approval/hold/purge/offboarding services",
-          "retention policy authorization lifecycle service",
-          "records-governance migrations, tests, maps, and evidence",
-          "IPLF-028A and IPLF-028B status, test, and evidence references"
-        ],
-        "merge_constraints": [
-          "Retain ownership of 20260820_0002_invoice_number_immutable.py, the data-governance projection/map, and apps/api/tests/test_postgres_validation.py.",
-          "Do not edit the calendar snapshot/candidate model, service, API, or dedicated calendar test files reserved by Codex.",
-          "Do not edit apps/api/src/caseops_api/api/routes/data_governance.py, its schemas, or its generated client: those are the Codex half of IPLF-028B."
-        ],
-        "excludes": [
-          "IP calendar snapshot/reconciliation-candidate contract",
-          "IPLF-039C schema, API, and tests",
-          "IPLF-027B destructive approval/deletion operation",
-          "data-governance API routes, OpenAPI contract, generated client, and review UI"
-        ]
-      },
+      "recorded_at": "2026-08-21T08:52:00+05:30",
+      "base_revision": "9e8d41c0",
+      "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
-        "slice_id": "IPLF-028B",
-        "scope": "Owner-gated, dry-run-only tenant data-operation create/read/review contracts, their tests, generated client and review UI; execution remains an explicit typed refusal.",
-        "state": "In flight. Merged: #274 workflows, #277 legal-hold summary, #275 integrity review page. Open: #276 history UI, #278 dry-run builder, #281 legal-hold UI.",
+        "slice_id": "IPLF-039D",
+        "branch": "codex/iplf-039d-deadline-incidents-20260821",
+        "status": "repository_implemented_local_verified_pr_open",
+        "pull_request": 285,
+        "implementation_revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
+        "scope": "Complete UJ-58 deadline-incident behavior: constrained lifecycle including disproved evidence retention, immutable evidence/impact/action history, legal-hold-aware disposition review, per-recipient notification decisions, and platform-wide kill-switch escalation with focused API/UI/PostgreSQL/E2E proof.",
         "owned_components": [
-          "data-governance API routes and OpenAPI contract",
-          "dry-run manifest service read/write fence",
-          "IPLF-028B API tests, generated client, and review UI"
+          "IP deadline-incident lifecycle, evidence, impact, action, communication-decision and kill-switch schema/API/UI contracts",
+          "IP deadline-incident tests for all UJ-58 normal and exception paths",
+          "IPLF-039D status, test, and evidence references"
         ],
         "merge_constraints": [
-          "Use the additive migration identifier 20260821_0001 or later; never rename, amend, or rebase Claude's 20260820_0002 invoice migration.",
-          "Do not alter data-governance policy fields, the reviewed data-class projection, or the governed-operation inventory.",
-          "Do not edit IPLF-028A or IPLF-028B status/evidence references: those are the Claude half."
+          "This is stacked from PR #282 exact head cf424e4c; do not amend the IPLF-039C 20260821_0001 or 20260821_0002 migrations.",
+          "Use additive migration identifier 20260821_0003 or later and keep incident data company-correlated, append-only where evidence is frozen, and fail closed.",
+          "Reuse the existing legal-hold resolver and capability/rollout catalog; do not alter Claude's data-governance policy workflow or cost-item models."
         ],
         "excludes": [
           "records-governance policy/hold/execute workflow",
-          "retention-policy legal authorization and release evidence",
-          "legal-hold activation or release",
-          "export, purge, offboarding, restore, worker, provider, object-store, or scheduler execution"
+          "IP cost/billing models and migrations",
+          "IP calendar reconciliation and daily docket control-review implementation",
+          "IPLF-027B irreversible A0 retirement"
+        ],
+        "prior_lane": {
+          "slice_id": "IPLF-039C",
+          "branch": "codex/iplf-039c-calendar-reconcile-20260820",
+          "pull_request": 282,
+          "status": "merged",
+          "implementation_revision": "b47724a8171576be9f74f8d5677cdce2a7f10731"
+        }
+      },
+      "claude": {
+        "lanes": [
+          {
+            "slice_id": "IPLF-028A/IPLF-028B evidence",
+            "branch": "docs/iplf028a-evidence-20260820",
+            "status": "in_progress",
+            "scope": "Complete records-governance policy/hold authorization evidence while real operations remain fail-closed. The IPLF-028B handoff is verified rather than assumed: the merged routes are a visibility and dry-run-creation surface, and the tenant-facing review contract is confirmed still missing because no route reaches request/approve/reject.",
+            "pull_request": 280
+          },
+          {
+            "slice_id": "IPLF-039F",
+            "branch": "feat/iplf039f-cost-items-20260820",
+            "status": "repository_implemented_local_verified_pr_open",
+            "scope": "Close the four UJ-52 paths the slice blocker recorded as unimplemented, one of which the code actively contradicted: nonbillable capture on a docket with no billing Matter, an exchange conversion that preserves the original amount beside rate/source/time, provider estimate distinguished from actual expense, and confidential rates permissioned on the read path.",
+            "pull_request": 283
+          },
+          {
+            "slice_id": "Migration revision-graph gate",
+            "branch": "fix/alembic-single-head-gate-20260820",
+            "status": "repository_implemented_local_verified_pr_open",
+            "pull_request": 284,
+            "scope": "Fail CI on a split or duplicated alembic revision graph. Recorded as EH-DEPLOY-01: three real collisions across #282, #283 and #285 in two days, none caught by anything but a manual check. Cross-cutting, so it touches scripts/migration_preflight.py and its tests only."
+          }
+        ],
+        "owned_components": [
+          "records-governance policy, hold, recovery/export evidence and IPLF-028A/IPLF-028B evidence references",
+          "IP cost-item/billing models, migrations, services, tests and IPLF-039F evidence"
+        ],
+        "merge_constraints": [
+          "Do not edit the calendar snapshot/candidate model, service, API, migration, or dedicated calendar tests reserved by Codex.",
+          "Do not reuse or amend the Codex-owned 20260821_0001 calendar migration."
+        ],
+        "excludes": [
+          "IP calendar snapshot/reconciliation-candidate contract and IPLF-039C evidence",
+          "IPLF-027B destructive approval/deletion operation"
         ]
       },
-      "codex_staged_next": {
-        "slice_id": "IPLF-039C",
-        "branch": "codex/iplf-039c-calendar-reconcile-20260820",
-        "state": "Commits staged in a separate worktree, no pull request open yet; head c89bc3ed.",
-        "note": "Recorded so a reader does not mistake the calendar commits for an unassigned lane."
-      },
+      "completed_handoffs": [
+        {
+          "slice_id": "IPLF-028B implementation",
+          "status": "merged_to_main",
+          "merge_revision": "9e8d41c0"
+        },
+        {
+          "slice_id": "invoice immutability",
+          "status": "merged_to_main",
+          "merge_revision": "6c071ef5"
+        }
+      ],
       "queued_unassigned": [
         {
           "slice_id": "IPLF-027B",
           "reason": "Blocked on consolidated authorized A0-retirement approval, resealed deletion packet, second drain, and scheduled full-history security evidence; no parallel destructive work is authorized."
-        },
-        {
-          "slice_id": "IPLF-039D",
-          "reason": "Keep queued until a separate owner is assigned; it must not share the calendar lane's model/migration work."
-        },
-        {
-          "slice_id": "IPLF-039F",
-          "reason": "Precondition MET on 2026-08-20: Claude's invoice-immutability PR #272 merged and deployed, so a cost/billing worktree can now be based on current main. Still unassigned - it needs an owner, not a further wait."
         },
         {
           "slice_id": "IPLF-029A",
@@ -10100,12 +10122,17 @@
       "implementation_refs": [
         "apps/api/alembic/versions/20260815_0001_ip_docket_control_reviews.py",
         "apps/api/alembic/versions/20260815_0002_ip_coverage_replacement_decision.py",
+        "apps/api/alembic/versions/20260821_0001_calendar_projection_reconciliation_candidates.py",
+        "apps/api/alembic/versions/20260821_0002_ip_control_review_evidence.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/calendar_sync.py",
+        "apps/api/src/caseops_api/scripts/verify_calendar_provider_sandbox.py",
         "apps/api/src/caseops_api/schemas/ip_operations.py",
         "apps/api/src/caseops_api/services/employees.py",
         "apps/api/src/caseops_api/services/ip_operations.py",
         "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/app/ip/docket/page.tsx",
         "apps/web/lib/api/openapi-types.ts",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -10127,6 +10154,7 @@
         "tests/e2e/iplf-039c-daily-docket-2026-08-15.spec.ts",
         "tests/e2e/iplf-039c-guard-first-2026-08-16-prod.spec.ts",
         "apps/api/tests/test_ip_calendar_drift.py",
+        "apps/api/tests/test_calendar_provider_sandbox_verification.py",
         "apps/api/tests/test_postgres_validation.py"
       ],
       "evidence_refs": [
@@ -10134,30 +10162,37 @@
         "docs/ip-implementation/evidence/m3/IPLF-039BC-INSPECTION-2026-08-15.md",
         "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-plan-2026-08-16.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-2026-08-17.log.txt"
+        "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-2026-08-17.log.txt",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md"
       ],
       "approvals": [],
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "Rebuild increments 1-13 add substantial repository behavior but do not functionally complete all 22 paths. UJ-62-EXC-03 is partial: the default-off drift probe compares a limited date/cancel/delete set through provider doubles, while the status contract still declares changed_event_detection=unsupported_no_provider_snapshot and no immutable provider snapshot or explicit reconciliation candidate exists. The Microsoft Graph and Google fetch_event adapters also have no live-provider verification. Migrations, constraints, defaults and uniqueness were verified on local PostgreSQL 17 + pgvector 0.8.3 at commit 9e65d8b6 (alembic head 20260815_0004, 27 tests), not hosted CI or Cloud SQL; the IP suites and browser E2E still run on SQLite.",
+          "summary": "The known IPLF-039C repository gaps are implemented: UJ-62-EXC-03 at 5af8f032 and UJ-59 at final implementation head b47724a8 are locally verified, including PostgreSQL 17, SQLite migration, API, UI, schema-index governance, and independent two-user E2E proof. Both OAuth sandboxes, hosted exact-candidate CI, exact deployment, and dated production acceptance remain unverified; Microsoft Graph automatic restore remains disabled until a documented live conditional-update contract is proved.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
-          "evidence_needed": "Implement immutable provider snapshots and an explicit accept/reject reconciliation-candidate contract for external edits/deletes; verify both fetch_event adapters against an OAuth sandbox; then obtain hosted CI and dated deployed acceptance.",
-          "safe_fallback": "Calendar drift automation stays default-off and fails closed before provider access unless readiness, entitlement and rollout gates pass; CaseOps remains authoritative and users reconcile external changes manually.",
-          "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "Complete UJ-62-EXC-03 provider-snapshot/candidate semantics, then verify both adapters against a live provider sandbox."
+          "evidence_needed": "Run the read-only verifier against Microsoft Graph and Google OAuth sandboxes; prove a guarded Graph update contract before enabling Outlook restore; then obtain hosted exact-candidate CI, exact deployment, and dated production acceptance.",
+          "safe_fallback": "Calendar drift automation stays default-off unless readiness, entitlement and rollout gates pass; CaseOps remains authoritative. Missing, unknown, unversioned and Outlook observations allow evidence review but no automatic provider overwrite.",
+          "milestone_impact": "Blocks IPLF-039C release closure only; the repository implementation and local verification are complete, while CAL-OPS provider/deployment acceptance remains open.",
+          "next_independent_slice": "Assign IPLF-039D to a separate owner after this exact candidate is pushed and hosted checks are green."
         }
       ],
       "next_actions": [
-        "Implement immutable provider snapshots and explicit reconciliation candidates for external calendar edits/deletes (UJ-62-EXC-03).",
-        "Verify the Microsoft Graph and Google fetch_event adapters against a live provider sandbox.",
+        "Run the read-only Microsoft Graph and Google OAuth sandbox verifier; prove a guarded Graph update contract before enabling Outlook automatic restore.",
         "Push to trigger the hosted postgres-validation CI job at the target commit.",
         "Take the rebuilt slice through the release gate with dated deployed acceptance."
       ],
-      "data_impact": [],
-      "documentation_impact": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "data_impact": [
+        "Additive immutable calendar_projection_reconciliation_candidates evidence and nullable all-or-none repair-claim fields on calendar_event_syncs; no obligation dates are imported or rewritten.",
+        "Additive review policy, predecessor and delta fields on ip_docket_control_reviews plus append-only exception-decision, reviewer-sample and signature evidence tables; no docket obligation is mutated by review."
+      ],
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
@@ -10166,6 +10201,24 @@
       "migration_boundary": "Additive expands 20260815_0001 and 20260815_0002 with bounded PostgreSQL lock_timeout and SQLite batch mode; empty rollback; no backfill. Existing coverage rows default to replacement_decision='none', preserving current ownership exactly.",
       "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; fail-closed acceptance-pending scope may share the train.",
       "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
+          "revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
+          "environment": "local SQLite plus ephemeral PostgreSQL 17/pgvector and fresh local API/web Playwright servers",
+          "fixtures": "deterministic tenant-isolated docket-control fixtures and two independent authenticated members; no live provider credential",
+          "assertions": "exception decisions, reviewer sampling, two-role exact-manifest signatures, report archive authorization, signed deltas, append-only persistence, tenant correlation, UI download, and independent two-user E2E",
+          "result": "passed",
+          "recorded_at": "2026-08-21T07:35:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
+          "revision": "5af8f032747ca439ae69e8135bf1b6f71f4b6330",
+          "environment": "local SQLite plus ephemeral PostgreSQL 17/pgvector and production web build",
+          "fixtures": "deterministic tenant-isolated calendar projection fixtures and provider adapter doubles; no live provider credential",
+          "assertions": "immutable candidate evidence, terminal decisions, access filtering, provider-version guard, stale-review refusal, web review flow, migration constraints and owner regressions",
+          "result": "passed",
+          "recorded_at": "2026-08-20T21:46:00+05:30"
+        },
         {
           "ref": "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
           "revision": "b7365cc1ca972662a7ae30d897610bfa92644f46",
@@ -10176,7 +10229,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. Largely unbuilt: no sign-off, export, escalation, backup policy, stale-provider concept, capability check, ethical wall, preview token, expiry, redaction or date-only timezone rule exists in this path.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. | 2026-08-20 reconciliation audit: UJ-62-EXC-03 repository behavior is now implemented and locally verified at 5af8f032. | 2026-08-21 UJ-59 audit: exception decisions, independent source/calculation/coverage sampling, two-role exact-manifest signatures, accessible history, predecessor deltas and required foreign-key indexes are implemented and locally verified at final implementation head b47724a8. Repository implementation is implemented/passed; release remains blocked only on live OAuth-provider, hosted exact-candidate, deployment and dated production evidence. Claude-owned IPLF-028A/IPLF-028B evidence and IPLF-039F cost work remain separate lanes.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -10219,16 +10272,28 @@
       ],
       "dependencies": [],
       "implementation_refs": [
+        "apps/api/alembic/versions/20260821_0003_ip_deadline_incident_lifecycle.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/api/src/caseops_api/services/ip_operations.py",
-        "apps/api/tests/test_ip_prd_slices.py"
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_workspace.py",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts"
       ],
       "test_refs": [
-        "apps/api/tests/test_ip_prd_slices.py",
-        "apps/api/tests/test_ip_039d_deadline_incidents.py",
-        "planned:IPLF-UJ-58-EXC-01",
-        "planned:IPLF-UJ-58-EXC-03",
-        "planned:IPLF-UJ-58-EXC-04",
-        "planned:IPLF-UJ-58-EXC-05"
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_normal_complete_human_review_and_immutable_resolution#IPLF-UJ-58-NORMAL",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc01_disproved_suspicion_retains_scan_and_decisions#IPLF-UJ-58-EXC-01",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc02_never_invents_remedy_deadline_or_communication#IPLF-UJ-58-EXC-02",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc03_legal_hold_and_policy_both_block_deletion#IPLF-UJ-58-EXC-03",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc04_recipient_decisions_are_versioned_and_identity_hashed#IPLF-UJ-58-EXC-04",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_exc05_platform_defect_stops_automation_until_evidenced_release#IPLF-UJ-58-EXC-05",
+        "apps/api/tests/test_ip_039d_deadline_incidents.py::test_uj58_restricted_incident_is_tenant_hidden",
+        "apps/api/tests/test_20260821_ip_deadline_incident_lifecycle_migration.py::test_incident_lifecycle_migration_is_additive_indexed_and_reversible_when_empty",
+        "apps/api/tests/test_postgres_validation.py::test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on_postgres",
+        "apps/web/app/app/ip/page.test.tsx::maps the complete restricted incident review journey",
+        "tests/e2e/iplf-039d-deadline-incidents-2026-08-21.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
@@ -10237,31 +10302,37 @@
       "approvals": [],
       "blockers": [
         {
-          "id": "IPLF-039D-UNIMPLEMENTED-PATHS",
-          "summary": "Four of the six UJ-58 paths this slice owns are not implemented. Incident status is an unconstrained string only ever set to open or verified, so a disproved suspicion cannot be recorded; no legal-hold check exists in the IP incident path; impact_json is unstructured so per-client/insurer/regulator notification decisions cannot be represented let alone differ; and no kill switch is reachable. The incident surface is two routes, create and verify.",
-          "owner": "Engineering with the product and legal owners for the incident contract",
-          "evidence_needed": "A constrained incident lifecycle including a disproved/closed-without-fault state, a legal-hold check before any incident evidence deletion, a structured per-recipient notification-decision record, and a kill-switch path for platform-wide defects, each with per-path tests.",
-          "safe_fallback": "Incidents remain record-only: no automated remedy, notification or deletion occurs today, which the abstention test pins.",
-          "milestone_impact": "Blocks IPLF-039D implementation and release closure and leaves IP-INC-01..08 open.",
+          "id": "IPLF-039D-RELEASE-EVIDENCE",
+          "summary": "All six UJ-58 paths are repository implemented and locally verified at a2c3d56c9a005792ed989f81c577064ea24798e1. The stacked exact candidate has not yet completed hosted CI, merge, deployment and dated production acceptance.",
+          "owner": "Release engineering",
+          "evidence_needed": "Green hosted checks for the exact IPLF-039D PR head, merged/deployed revision identity, health proof and dated production UJ-58 acceptance evidence.",
+          "safe_fallback": "Keep the slice release-blocked. Incident evidence is retained, automated remedies and communications are never invented, and active platform incident kill switches fail closed.",
+          "milestone_impact": "Blocks only IPLF-039D deployment_verified closure; repository implementation and verification are complete.",
           "next_independent_slice": "Continue per-path evidence with IPLF-039F (UJ-52, 7 paths)."
         }
       ],
       "next_actions": [
-        "Implement a constrained incident lifecycle with a disproved/closed-without-fault state (UJ-58-EXC-01).",
-        "Consult legal holds before any incident evidence deletion (UJ-58-EXC-03).",
-        "Model per-recipient notification decisions for client, insurer, regulator and court (UJ-58-EXC-04).",
-        "Provide a kill-switch path for platform-wide defects (UJ-58-EXC-05)."
+        "Run hosted CI for the exact stacked IPLF-039D candidate and preserve immutable check URLs.",
+        "After merge and deployment, bind deployed revision identity, health proof and dated production UJ-58 acceptance to this slice."
       ],
-      "data_impact": [],
-      "documentation_impact": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "data_impact": [
+        "Add constrained evidence and lifecycle fields to ip_deadline_incidents without rewriting existing rows.",
+        "Add tenant-correlated append-only ip_deadline_incident_impacts, ip_deadline_incident_actions and ip_deadline_incident_notification_decisions tables.",
+        "Add tenant-correlated ip_incident_kill_switches with one active switch per automated feature and an evidenced, versioned release path.",
+        "Retain incident and child evidence; deletion fails closed with legal-hold-specific or records-policy-specific reasons."
+      ],
+      "documentation_impact": [
+        "Replace the stale two-of-six path audit with complete UJ-58 per-path implementation and verification evidence.",
+        "Regenerate journey projections and data-governance maps from the canonical schema and slice record."
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039D",
       "primary_behavior": "Restricted deadline-incident evidence, impact scan, containment, ordinary-docket correction linkage and corrective-action verification.",
-      "migration_boundary": "No schema change unless named by release evidence; preserve the PRD expand/backfill/verify/switch contract.",
+      "migration_boundary": "Additive migration 20260821_0003 extends the existing incident parent and adds four tenant-correlated lifecycle tables. Empty rollback is tested; downgrade refuses when retained incident evidence exists.",
       "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; fail-closed acceptance-pending scope may share the train.",
       "evidence_metadata": [
         {
@@ -10269,12 +10340,21 @@
           "revision": "b7365cc1ca972662a7ae30d897610bfa92644f46",
           "environment": "production",
           "fixtures": "deterministic anonymized release fixtures and dated QA tenant",
-          "assertions": "slice-specific API, persistence, permission, UI, and deployed behavior assertions",
+          "assertions": "Historical baseline only; this predates the complete six-path UJ-58 implementation and cannot prove the current candidate.",
           "result": "passed",
           "recorded_at": "2026-08-02T06:25:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039D/per-path-2026-08-15.md",
+          "revision": "a2c3d56c9a005792ed989f81c577064ea24798e1",
+          "environment": "local_e2e",
+          "fixtures": "fresh isolated synthetic tenant, restricted trademark docket and content-minimised incident evidence",
+          "assertions": "All six UJ-58 paths, restricted tenant isolation, additive migration, retention, automation kill switch, API/UI workflow and exact browser resolution path.",
+          "result": "passed",
+          "recorded_at": "2026-08-21T08:46:45+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification was reset until the paths existed. | 2026-08-21 completion review: all six UJ-58 paths, tenant isolation, append-only PostgreSQL evidence, additive migration, operational automation shutdown, dense UI workflow and exact browser journey are implemented and locally verified at a2c3d56c9a005792ed989f81c577064ea24798e1. Release remains blocked on exact hosted CI, merge/deployment identity and dated production acceptance only.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -47316,15 +47396,19 @@
         "TM-DATA-15"
       ],
       "test_refs": [
+        "apps/api/tests/test_calendar_provider_sandbox_verification.py",
         "apps/api/tests/test_ip_calendar_drift.py::test_uj62_exc03_a_moved_event_is_detected#IPLF-UJ-62-EXC-03",
+        "apps/api/tests/test_ip_calendar_drift.py::test_uj62_exc03_stale_review_never_overwrites_a_later_provider_edit",
         "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc01_outage_retries_rather_than_dropping_the_projection#IPLF-UJ-62-EXC-01",
         "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc02_revocation_is_a_connection_state_that_preserves_history#IPLF-UJ-62-EXC-02",
         "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc04_projection_carries_no_privileged_content#IPLF-UJ-62-EXC-04",
         "apps/api/tests/test_ip_calendar_projection.py::test_uj62_exc05_a_date_only_obligation_carries_a_date_not_a_time#IPLF-UJ-62-EXC-05",
         "apps/api/tests/test_ip_calendar_projection.py::test_uj62_normal_projection_is_a_pointer_that_cannot_duplicate#IPLF-UJ-62-NORMAL",
+        "apps/api/tests/test_postgres_validation.py::test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres",
         "apps/web/app/app/ip/docket/page.test.tsx"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
         "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md"
       ],
@@ -66280,11 +66364,15 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_calendar_drift.py::test_uj62_exc03_a_moved_event_is_detected#IPLF-UJ-62-EXC-03",
+        "apps/api/tests/test_ip_calendar_drift.py::test_uj62_exc03_stale_review_never_overwrites_a_later_provider_edit",
+        "apps/api/tests/test_calendar_provider_sandbox_verification.py",
+        "apps/api/tests/test_postgres_validation.py::test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres",
         "apps/web/app/app/ip/docket/page.test.tsx"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -66296,14 +66384,14 @@
         "IPLF-039C",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-62 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-025, IPLF-035, IPLF-039. | 2026-08-15: verified absent. No drift detection exists for an externally edited or deleted event, so the planned: reference is accurate. | 2026-08-15 increment 11: partial. A default-off probe reports limited date/cancel/delete drift and unknown provider state, but no immutable provider snapshot or explicit reconciliation candidate implements the full PRD path.",
+      "allocation_rationale": "UJ-62 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-025, IPLF-035, IPLF-039. | 2026-08-15: verified absent. No drift detection exists for an externally edited or deleted event, so the planned: reference is accurate. | 2026-08-15 increment 11: partial. A default-off probe reports limited date/cancel/delete drift and unknown provider state. | 2026-08-20: immutable content-minimised candidates, terminal review, access filtering and guarded Google ETag restore are implemented and locally verified at 5af8f032. Live OAuth behavior and a documented guarded Outlook update remain release blockers.",
       "blockers": [
         {
-          "id": "UJ-62-EXC-03-RECONCILIATION-CANDIDATE-MISSING",
-          "summary": "External edit/delete detection is a limited default-off drift finding, not the PRD-required explicit reconciliation candidate; the status contract declares unsupported_no_provider_snapshot.",
+          "id": "UJ-62-EXC-03-PROVIDER-ACCEPTANCE-PENDING",
+          "summary": "Repository candidate semantics are implemented and locally verified. Live Microsoft Graph and Google OAuth reads are not yet evidenced, and Outlook automatic restore stays disabled because the documented Graph event-update contract exposes no verified conditional update.",
           "owner": "Calendar integration engineering",
-          "evidence_needed": "Immutable provider snapshot/version plus accept/reject reconciliation-candidate persistence, authorization, audit, and regressions.",
-          "safe_fallback": "Keep calendar automation default-off and CaseOps authoritative; require manual reconciliation.",
+          "evidence_needed": "Run the read-only OAuth sandbox verifier for both providers and prove a guarded Graph update mechanism before enabling Outlook automatic restore; then pass hosted CI and dated deployed acceptance.",
+          "safe_fallback": "Keep automation gated and CaseOps authoritative; permit evidence review while refusing automatic writes for missing, unknown, unversioned and Outlook observations.",
           "milestone_impact": "Keeps UJ-62-EXC-03 and IPLF-039C in progress/not-run/blocked."
         }
       ],

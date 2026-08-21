@@ -342,13 +342,51 @@ def test_ip_docket_end_to_end_uses_existing_notice_deadline_and_billing_owners(
     )
     assert incident.status_code == 200, incident.text
     incident_id = incident.json()["deadline_incidents"][0]["id"]
+    impact_scan = client.post(
+        f"/api/ip/dockets/{docket['id']}/deadline-incidents/{incident_id}/impact-scan",
+        headers=headers,
+        json={
+            "complete": True,
+            "items": [
+                {
+                    "record_type": "matter_deadline",
+                    "record_reference": deadline.json()["id"],
+                    "relationship": "calendar projection under review",
+                    "assessment": "not_affected",
+                    "scan_method": "manual diary reconciliation",
+                    "evidence_reference": "reconciliation:projection-1",
+                }
+            ],
+        },
+    )
+    assert impact_scan.status_code == 200, impact_scan.text
+    for recipient_type in ("client", "insurer", "regulator", "court"):
+        decision = client.post(
+            f"/api/ip/dockets/{docket['id']}/deadline-incidents/"
+            f"{incident_id}/notification-decisions",
+            headers=headers,
+            json={
+                "recipient_type": recipient_type,
+                "recipient_reference": f"{recipient_type}:projection-1",
+                "decision": "not_applicable",
+                "rationale": "No right was affected by the delayed projection.",
+                "approval_evidence_reference": f"approval:{recipient_type}:projection-1",
+            },
+        )
+        assert decision.status_code == 200, decision.text
     verified = client.post(
         f"/api/ip/dockets/{docket['id']}/deadline-incidents/{incident_id}/verify",
         headers=headers,
-        json={"corrective_action": "Projection reconciled against the diary."},
+        json={
+            "outcome": "disproved",
+            "corrective_action": "Projection reconciled against the diary.",
+            "root_cause": "The external projection was delayed without changing the deadline.",
+            "preventive_action": "Projection drift is now reviewed in the daily control.",
+            "resolution_evidence_reference": "reconciliation:projection-resolution-1",
+        },
     )
     assert verified.status_code == 200, verified.text
-    assert verified.json()["deadline_incidents"][0]["status"] == "verified"
+    assert verified.json()["deadline_incidents"][0]["status"] == "disproved"
 
     report = client.get("/api/ip/reports/docket-control", headers=headers)
     assert report.status_code == 200

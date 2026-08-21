@@ -22,6 +22,7 @@ class IpFeatureReadinessRecord(BaseModel):
         "workspace_not_configured",
         "tenant_disabled",
         "readiness_test_failed",
+        "incident_kill_switch",
     ]
     owner: str
     required_capabilities: list[str]
@@ -32,6 +33,7 @@ class IpFeatureReadinessRecord(BaseModel):
     rollout_enabled: bool
     rollout_expires_at: datetime | None
     manual_fallback_feature_id: str | None
+    blocked_by_incident_id: str | None = None
 
 
 class IpWorkspaceReadinessResponse(BaseModel):
@@ -226,17 +228,175 @@ class IpCoverageBulkReassignResponse(BaseModel):
     pending_count: int = 0
 
 
+class IpIncidentEvidenceSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    calculation_version_refs: list[str] = Field(default_factory=list, max_length=100)
+    rule_version_refs: list[str] = Field(default_factory=list, max_length=100)
+    calendar_version_refs: list[str] = Field(default_factory=list, max_length=100)
+    source_refs: list[str] = Field(default_factory=list, max_length=200)
+    message_refs: list[str] = Field(default_factory=list, max_length=200)
+    provider_event_refs: list[str] = Field(default_factory=list, max_length=200)
+    audit_refs: list[str] = Field(default_factory=list, max_length=200)
+
+
 class IpDeadlineIncidentCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     matter_deadline_id: str | None = None
     severity: Literal["low", "medium", "high", "critical"]
     summary: str = Field(min_length=5, max_length=500)
     impact: dict = Field(default_factory=dict)
     containment: str | None = Field(default=None, max_length=4000)
     correction_deadline_id: str | None = None
+    defect_scope: Literal[
+        "record_specific", "shared_rule", "shared_source", "platform_wide"
+    ] = "record_specific"
+    defect_fingerprint: str | None = Field(default=None, min_length=3, max_length=500)
+    evidence_snapshot: IpIncidentEvidenceSnapshot = Field(
+        default_factory=IpIncidentEvidenceSnapshot
+    )
+    kill_switch_features: list[str] = Field(default_factory=list, max_length=20)
+    kill_switch_evidence_reference: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_platform_containment(self) -> IpDeadlineIncidentCreateRequest:
+        if len(self.kill_switch_features) != len(set(self.kill_switch_features)):
+            raise ValueError("kill_switch_features must not contain duplicates.")
+        if self.defect_scope == "platform_wide":
+            if not self.kill_switch_features:
+                raise ValueError("Platform-wide incidents require at least one kill switch.")
+            if not self.kill_switch_evidence_reference:
+                raise ValueError("Platform-wide incidents require kill-switch evidence.")
+        elif self.kill_switch_features:
+            raise ValueError("Kill switches are restricted to platform-wide incidents.")
+        return self
+
+
+class IpDeadlineIncidentImpactItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: str = Field(min_length=2, max_length=40)
+    record_reference: str = Field(min_length=1, max_length=500)
+    relationship: str = Field(min_length=2, max_length=120)
+    assessment: Literal["affected", "not_affected", "pending"]
+    scan_method: str = Field(min_length=2, max_length=80)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpDeadlineIncidentImpactScanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[IpDeadlineIncidentImpactItem] = Field(min_length=1, max_length=500)
+    complete: bool = False
+
+
+class IpDeadlineIncidentActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_type: Literal[
+        "containment", "corrective_task", "filing", "external_advice", "prevention"
+    ]
+    action_status: Literal["planned", "completed", "not_available"]
+    action_reference: str = Field(min_length=3, max_length=500)
+    details: str = Field(min_length=5, max_length=4000)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpDeadlineIncidentNotificationDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipient_type: Literal["client", "insurer", "regulator", "court", "external_counsel"]
+    recipient_reference: str = Field(min_length=1, max_length=500)
+    decision: Literal["pending", "notify", "do_not_notify", "not_applicable"]
+    rationale: str = Field(min_length=5, max_length=4000)
+    approval_evidence_reference: str = Field(min_length=3, max_length=500)
+    communication_reference: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_communication_reference(
+        self,
+    ) -> IpDeadlineIncidentNotificationDecisionRequest:
+        if self.decision == "notify" and not self.communication_reference:
+            raise ValueError("Notify decisions require a communication reference.")
+        return self
 
 
 class IpDeadlineIncidentVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["verified", "disproved"] = "verified"
     corrective_action: str = Field(min_length=5, max_length=4000)
+    root_cause: str = Field(min_length=5, max_length=4000)
+    preventive_action: str = Field(min_length=5, max_length=4000)
+    resolution_evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpIncidentKillSwitchReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    release_reason: str = Field(min_length=5, max_length=4000)
+    release_evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpDeadlineIncidentImpactRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    record_type: str
+    record_reference_sha256: str
+    relationship: str
+    assessment: str
+    scan_method: str
+    evidence_reference: str
+    assessed_by_membership_id: str
+    assessed_at: datetime
+
+
+class IpDeadlineIncidentActionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    action_type: str
+    action_status: str
+    action_reference: str
+    details: str
+    evidence_reference: str
+    recorded_by_membership_id: str
+    recorded_at: datetime
+
+
+class IpDeadlineIncidentNotificationDecisionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    recipient_type: str
+    recipient_reference_sha256: str
+    decision: str
+    decision_version: int
+    rationale: str
+    approval_evidence_reference: str
+    communication_reference: str | None
+    decided_by_membership_id: str
+    decided_at: datetime
+
+
+class IpIncidentKillSwitchRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    feature_id: str
+    status: str
+    reason: str
+    activation_evidence_reference: str
+    activated_by_membership_id: str
+    activated_at: datetime
+    release_reason: str | None
+    release_evidence_reference: str | None
+    released_by_membership_id: str | None
+    released_at: datetime | None
+    version: int
 
 
 class IpDeadlineIncidentRecord(BaseModel):
@@ -247,11 +407,28 @@ class IpDeadlineIncidentRecord(BaseModel):
     severity: str
     summary: str
     impact_json: dict
+    evidence_snapshot_json: dict
+    preservation_manifest_sha256: str
+    defect_scope: str
+    defect_fingerprint_sha256: str | None
     containment: str | None
     correction_deadline_id: str | None
     status: str
+    impact_scan_completed_at: datetime | None
     corrective_action: str | None
+    root_cause: str | None
+    preventive_action: str | None
+    prevention_verified_at: datetime | None
+    resolution_evidence_reference: str | None
+    resolved_at: datetime | None
     verified_at: datetime | None
+    version: int
+    impacts: list[IpDeadlineIncidentImpactRecord] = Field(default_factory=list)
+    actions: list[IpDeadlineIncidentActionRecord] = Field(default_factory=list)
+    notification_decisions: list[IpDeadlineIncidentNotificationDecisionRecord] = Field(
+        default_factory=list
+    )
+    kill_switches: list[IpIncidentKillSwitchRecord] = Field(default_factory=list)
     created_at: datetime
 
 
@@ -457,10 +634,27 @@ class IpControlReviewIncludedRecord(BaseModel):
     sha256: str = Field(min_length=64, max_length=64)
 
 
+class IpControlReviewPolicy(BaseModel):
+    policy_version: str
+    required_signature_count: Literal[1, 2]
+    required_sample_size: int = Field(ge=0, le=20)
+    distinct_preparer_and_reviewer: bool
+
+
+class IpControlReviewDelta(BaseModel):
+    predecessor_review_id: str | None = None
+    predecessor_manifest_sha256: str | None = None
+    added_docket_ids: list[str] = Field(default_factory=list)
+    removed_docket_ids: list[str] = Field(default_factory=list)
+    changed_docket_ids: list[str] = Field(default_factory=list)
+    added_exception_keys: list[str] = Field(default_factory=list)
+    removed_exception_keys: list[str] = Field(default_factory=list)
+
+
 class IpControlReviewSnapshot(BaseModel):
     """Canonical, hash-bound input and output of one control-report query."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
     query_version: str
     generated_at: datetime
     timezone: str
@@ -471,6 +665,8 @@ class IpControlReviewSnapshot(BaseModel):
     report: IpDocketControlReport
     mandatory_exceptions: list[IpControlExceptionRecord] = Field(default_factory=list)
     incompleteness_reasons: list[str] = Field(default_factory=list)
+    review_policy: IpControlReviewPolicy | None = None
+    delta: IpControlReviewDelta | None = None
 
 
 class IpControlReviewFilters(BaseModel):
@@ -514,6 +710,56 @@ class IpControlReviewSignOffRequest(BaseModel):
     attestation: str = Field(min_length=5, max_length=2000)
 
 
+class IpControlReviewExceptionDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    disposition: Literal["resolved", "annotated"]
+    annotation: str = Field(min_length=5, max_length=4000)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+
+
+class IpControlReviewSampleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    docket_id: str = Field(min_length=1, max_length=36)
+    source_evidence_reference: str = Field(min_length=3, max_length=500)
+    calculation_evidence_reference: str = Field(min_length=3, max_length=500)
+    coverage_evidence_reference: str = Field(min_length=3, max_length=500)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class IpControlReviewExceptionDecisionRecord(BaseModel):
+    docket_id: str
+    exception_kind: str
+    disposition: Literal["resolved", "annotated"]
+    annotation: str
+    evidence_reference: str
+    decided_by_membership_id: str
+    decided_at: datetime
+
+
+class IpControlReviewSampleRecord(BaseModel):
+    docket_id: str
+    reviewer_membership_id: str
+    source_evidence_reference: str
+    calculation_evidence_reference: str
+    coverage_evidence_reference: str
+    notes: str | None = None
+    sampled_at: datetime
+
+
+class IpControlReviewSignatureRecord(BaseModel):
+    signer_membership_id: str
+    signer_role: Literal["preparer", "reviewer"]
+    signer_label_snapshot: str
+    attestation: str
+    manifest_sha256: str
+    sequence: Literal[1, 2]
+    signed_at: datetime
+
+
 class IpControlReviewRecord(BaseModel):
     id: str
     generated_at: datetime
@@ -528,9 +774,22 @@ class IpControlReviewRecord(BaseModel):
     export_error_redacted: str | None = None
     signer_label_snapshot: str | None = None
     signed_off_at: datetime | None = None
+    review_policy: IpControlReviewPolicy
+    predecessor_review_id: str | None = None
+    delta: IpControlReviewDelta
+    exception_decisions: list[IpControlReviewExceptionDecisionRecord] = Field(default_factory=list)
+    reviewer_samples: list[IpControlReviewSampleRecord] = Field(default_factory=list)
+    signatures: list[IpControlReviewSignatureRecord] = Field(default_factory=list)
+    pending_exception_count: int = Field(ge=0)
+    annotated_exception_count: int = Field(ge=0)
+    signoff_status: Literal["draft", "awaiting_second_signature", "signed"]
     version: int
     report: IpDocketControlReport
     snapshot: IpControlReviewSnapshot
+
+
+class IpControlReviewListResponse(BaseModel):
+    reviews: list[IpControlReviewRecord] = Field(default_factory=list)
 
 
 class IpDailyDocketQueue(BaseModel):
@@ -643,6 +902,7 @@ class IpCalendarDriftRecord(BaseModel):
     source_type: str
     source_id: str
     ip_docket_id: str | None = None
+    reconciliation_candidate_id: str | None = None
     # `unknown` is a real outcome: the provider could not be read, so the
     # projection is unverified rather than confirmed correct.
     drift_status: Literal["moved", "missing", "unknown"]
@@ -652,6 +912,36 @@ class IpCalendarDriftRecord(BaseModel):
 class IpCalendarDriftResponse(BaseModel):
     checked_at: datetime
     findings: list[IpCalendarDriftRecord] = Field(default_factory=list)
+
+
+class IpCalendarReconciliationCandidateRecord(BaseModel):
+    id: str
+    calendar_event_sync_id: str
+    calendar_connection_id: str
+    source_type: str
+    source_id: str
+    ip_docket_id: str | None
+    drift_status: Literal["moved", "missing", "unknown"]
+    snapshot_schema_version: int
+    expected_snapshot: dict
+    observed_snapshot: dict
+    snapshot_sha256: str
+    status: Literal["pending", "accepted", "rejected", "superseded"]
+    detected_by_membership_id: str | None
+    decided_by_membership_id: str | None
+    decision_evidence_reference: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class IpCalendarReconciliationCandidateListResponse(BaseModel):
+    candidates: list[IpCalendarReconciliationCandidateRecord] = Field(default_factory=list)
+
+
+class IpCalendarReconciliationDecisionRequest(BaseModel):
+    action: Literal["accept", "reject"]
+    evidence_reference: str = Field(min_length=8, max_length=500)
+    expected_snapshot_sha256: str = Field(min_length=64, max_length=64)
 
 
 class IpAssignedCoverageRecord(BaseModel):
@@ -724,9 +1014,7 @@ class IpCoverageReassignPreviewResponse(BaseModel):
     to_membership_id: str
     preview_token: str
     affected_coverage_ids: list[str] = Field(default_factory=list)
-    affected_roles: dict[str, list[Literal["responsible", "backup"]]] = Field(
-        default_factory=dict
-    )
+    affected_roles: dict[str, list[Literal["responsible", "backup"]]] = Field(default_factory=dict)
     affected_docket_ids: list[str] = Field(default_factory=list)
     blocked_docket_ids: list[str] = Field(default_factory=list)
     transfer_allowed: bool
