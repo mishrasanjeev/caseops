@@ -14123,6 +14123,8 @@ class IpPortfolioSavedView(Base):
             "company_id",
             "membership_id",
         ),
+        Index("ix_ip_portfolio_views_membership", "membership_id"),
+        Index("ix_ip_portfolio_views_team", "team_id"),
         CheckConstraint(
             "(scope = 'personal' AND team_id IS NULL) OR "
             "(scope = 'team' AND team_id IS NOT NULL)",
@@ -14166,6 +14168,7 @@ class IpPortfolioExportJob(Base):
             "requested_by_membership_id",
             "created_at",
         ),
+        Index("ix_ip_portfolio_exports_requester", "requested_by_membership_id"),
         CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed')",
             name="ck_ip_portfolio_export_status",
@@ -17067,6 +17070,10 @@ class IpImportRow(Base):
             name="ck_ip_import_row_reconciliation_decision",
         ),
         Index("ix_ip_import_rows_job_commit", "job_id", "commit_status"),
+        Index(
+            "ix_ip_import_rows_reconciled_target",
+            "reconciled_target_docket_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

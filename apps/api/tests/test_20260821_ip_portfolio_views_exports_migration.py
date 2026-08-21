@@ -62,6 +62,22 @@ def test_portfolio_workflow_migration_is_additive_and_reversible(
             for item in schema.get_unique_constraints("ip_portfolio_saved_views")
         }
         assert ("company_id", "membership_id", "name") in view_uniques
+        view_indexes = {
+            tuple(item["column_names"])
+            for item in schema.get_indexes("ip_portfolio_saved_views")
+        }
+        assert ("membership_id",) in view_indexes
+        assert ("team_id",) in view_indexes
+        export_indexes = {
+            tuple(item["column_names"])
+            for item in schema.get_indexes("ip_portfolio_export_jobs")
+        }
+        assert ("requested_by_membership_id",) in export_indexes
+        import_indexes = {
+            tuple(item["column_names"])
+            for item in schema.get_indexes("ip_import_rows")
+        }
+        assert ("reconciled_target_docket_id",) in import_indexes
         export_checks = " ".join(
             str(item["sqltext"])
             for item in schema.get_check_constraints("ip_portfolio_export_jobs")

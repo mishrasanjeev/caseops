@@ -51,6 +51,13 @@ def upgrade() -> None:
             "reconciliation_decision IS NULL OR reconciliation_decision IN "
             "('create_separate', 'link_existing', 'skip')",
         )
+    # MIGRATION-LOCK-RISK: the new nullable target column contains only NULL at
+    # index creation and is not writable until this revision is fully applied.
+    op.create_index(
+        "ix_ip_import_rows_reconciled_target",
+        "ip_import_rows",
+        ["reconciled_target_docket_id"],
+    )
 
     op.create_table(
         "ip_portfolio_saved_views",
@@ -113,6 +120,16 @@ def upgrade() -> None:
         "ip_portfolio_saved_views",
         ["company_id", "membership_id"],
     )
+    op.create_index(
+        "ix_ip_portfolio_views_membership",
+        "ip_portfolio_saved_views",
+        ["membership_id"],
+    )
+    op.create_index(
+        "ix_ip_portfolio_views_team",
+        "ip_portfolio_saved_views",
+        ["team_id"],
+    )
 
     op.create_table(
         "ip_portfolio_export_jobs",
@@ -165,9 +182,18 @@ def upgrade() -> None:
         "ip_portfolio_export_jobs",
         ["company_id", "requested_by_membership_id", "created_at"],
     )
+    op.create_index(
+        "ix_ip_portfolio_exports_requester",
+        "ip_portfolio_export_jobs",
+        ["requested_by_membership_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_ip_portfolio_exports_requester",
+        table_name="ip_portfolio_export_jobs",
+    )
     op.drop_index(
         "ix_ip_portfolio_exports_company_requester_created",
         table_name="ip_portfolio_export_jobs",
@@ -176,12 +202,24 @@ def downgrade() -> None:
     # preserve them and restore forward; table drop is pre-release rollback only.
     op.drop_table("ip_portfolio_export_jobs")
     op.drop_index(
+        "ix_ip_portfolio_views_team",
+        table_name="ip_portfolio_saved_views",
+    )
+    op.drop_index(
+        "ix_ip_portfolio_views_membership",
+        table_name="ip_portfolio_saved_views",
+    )
+    op.drop_index(
         "ix_ip_portfolio_views_company_member",
         table_name="ip_portfolio_saved_views",
     )
     # MIGRATION-ROLLBACK: restore-forward: once this revision serves saved views,
     # preserve them and restore forward; table drop is pre-release rollback only.
     op.drop_table("ip_portfolio_saved_views")
+    op.drop_index(
+        "ix_ip_import_rows_reconciled_target",
+        table_name="ip_import_rows",
+    )
     with op.batch_alter_table("ip_import_rows") as batch:
         batch.drop_constraint(
             "fk_ip_import_row_reconciled_docket_company",
