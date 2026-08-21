@@ -14531,6 +14531,7 @@ class TrademarkApplication(Base):
         ),
         UniqueConstraint("id", "company_id", name="uq_tm_application_id_company"),
         Index("ix_tm_applications_company_phase", "company_id", "filing_phase"),
+        Index("ix_tm_applications_company_asset", "company_id", "asset_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

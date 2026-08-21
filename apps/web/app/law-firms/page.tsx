@@ -99,7 +99,7 @@ const platformMoves = [
   {
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
-    body: "Search exact application and opposition numbers, work from permission-scoped saved views, configure register columns, and export an audited provenance-bearing CSV.",
+    body: "Search exact application and opposition numbers, group independent filings by mark or canonical client, and manage source-backed prosecution events, corrections and registry reconciliation from a permission-scoped workspace.",
   },
   {
     icon: FileText,

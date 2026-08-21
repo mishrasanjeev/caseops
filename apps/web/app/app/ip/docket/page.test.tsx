@@ -1105,6 +1105,53 @@ describe("IpDailyDocketPage", () => {
     });
   });
 
+  it("serializes review writes while the export audit record is pending", async () => {
+    const exception = {
+      docket_id: "ip-9",
+      kind: "uncovered",
+      critical: true,
+    } as const;
+    const reviewWithException = {
+      ...REVIEW,
+      mandatory_exceptions: [exception],
+      pending_exception_count: 1,
+    };
+    const exportedReview = {
+      ...reviewWithException,
+      export_status: "generated" as const,
+      version: 2,
+    };
+    let finishExport: ((result: typeof exportedReview) => void) | undefined;
+
+    createIpControlReviewMock.mockResolvedValue(reviewWithException);
+    recordIpControlReviewExportMock.mockReturnValue(
+      new Promise<typeof exportedReview>((resolve) => {
+        finishExport = resolve;
+      }),
+    );
+
+    render(withClient(<IpDailyDocketPage />));
+
+    const card = await screen.findByTestId("ip-docket-control-review");
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Generate control review" }),
+    );
+    const decisionButton = await within(card).findByRole("button", {
+      name: "Record decision",
+    });
+    fireEvent.click(await within(card).findByTestId("ip-docket-review-export"));
+
+    await waitFor(() =>
+      expect(recordIpControlReviewExportMock).toHaveBeenCalledTimes(1),
+    );
+    expect(decisionButton).toBeDisabled();
+
+    await act(async () => {
+      finishExport?.(exportedReview);
+    });
+    await waitFor(() => expect(decisionButton).toBeEnabled());
+  });
+
   it("records a failure, and blocks sign-off, when the manifest cannot be produced", async () => {
     createIpControlReviewMock.mockResolvedValue(REVIEW);
     downloadControlReviewManifestMock.mockImplementation(() => {

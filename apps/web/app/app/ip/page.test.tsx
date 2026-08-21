@@ -174,6 +174,39 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+function activeDocket() {
+  return {
+    id: "ip-1", company_id: "company-1", matter_id: "matter-1", record_type: "trademark",
+    title: "CASEOPS", primary_identifier: "TM-1", status: "active", is_active: true,
+    lifecycle_version: 0, access_policy_version: 0, lifecycle_effective_at: null,
+    lifecycle_reason: null, lifecycle_outcome: null, lifecycle_source: null,
+    lifecycle_evidence_ref: null, successor_docket_id: null, restricted: false,
+    current_version: 1, created_at: "2026-08-01T00:00:00Z",
+    updated_at: "2026-08-01T00:00:00Z",
+    current_particulars: {
+      form_key: "TM-A", form_version: "2026.1", readiness_status: "ready",
+      classes_json: [{ class_number: 9, specification: "Software" }],
+    },
+    notice_links: [], evidence_candidates: [], deadline_coverages: [],
+    deadline_incidents: [], title_interests: [], related_right_obligations: [], cost_items: [],
+  };
+}
+
+function prosecutionEvent(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "event-1", company_id: "company-1", docket_id: "ip-1", sequence: 1,
+    application_id: "application-1", proceeding_id: null, event_kind: "formalities",
+    source: "manual", source_reference: null, effective_at: "2026-08-10T09:00:00Z",
+    entered_at: "2026-08-10T09:05:00Z", responsible_membership_id: "membership-1",
+    entered_by_membership_id: "membership-1", reason: "Formalities reviewed.",
+    evidence_refs_json: ["attachment:evidence-1"], document_refs_json: [],
+    resulting_stage: "formalities", resulting_deadline_refs_json: [], before_phase: "draft",
+    after_phase: "formalities", candidate_status: "confirmed", supersedes_event_id: null,
+    correction_reason: null, reconciles_event_id: null, reconciliation_decision: null,
+    payload_json: {}, created_at: "2026-08-10T09:05:00Z", ...overrides,
+  };
+}
+
 describe("IpDocketPage", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/app/ip");
@@ -896,6 +929,103 @@ describe("IpDocketPage", () => {
     expect(apply).toBeEnabled();
     fireEvent.click(apply);
     await waitFor(() => expect(transitionIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("requires backdated acknowledgement before committing a correction", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpCoreRecordsMock.mockResolvedValue({
+      assets: [], proceedings: [], identifiers: [],
+      applications: [{
+        id: "application-1", version: 4, jurisdiction: "IN",
+        office: "Trade Marks Registry Mumbai", filing_phase: "response_filed",
+      }],
+    });
+    fetchIpProsecutionWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1", lifecycle_status: "active", lifecycle_version: 0,
+      current_phase: "response_filed", registry_freshness: "current",
+      data_quality_gaps: [], unconfirmed_deadline_refs: [], conflicting_event_ids: [],
+      events: [prosecutionEvent()], operational_completion_count: 1,
+      filing_evidence_count: 0, registry_acceptance_count: 0, final_disposition_count: 0,
+    });
+    previewIpDocketEventMock.mockResolvedValue({
+      docket_id: "ip-1", lifecycle_version: 0, current_phase: "response_filed",
+      proposed_phase: "formalities", backdated: true, recalculation_required: true,
+      duplicate_candidate_ids: [], checklist: [],
+      unresolved_exception_codes: ["backdated_recalculation_review_required"],
+      operational_effects_are_proposals: true, filing_claimed: false,
+    });
+
+    render(withClient(<IpDocketPage />));
+    const prosecution = await screen.findByTestId("ip-prosecution-workspace");
+    fireEvent.click(await within(prosecution).findByRole("button", { name: "Correct event" }));
+    fireEvent.change(within(prosecution).getByLabelText("Correction reason"), {
+      target: { value: "The official record corrects the event classification." },
+    });
+    fireEvent.click(within(prosecution).getByRole("button", { name: "Preview prosecution event" }));
+    await waitFor(() =>
+      expect(previewIpDocketEventMock).toHaveBeenCalledWith(
+        "ip-1",
+        expect.objectContaining({ supersedesEventId: "event-1" }),
+      ),
+    );
+    const record = within(prosecution).getByRole("button", { name: "Record prosecution event" });
+    expect(record).toBeDisabled();
+    fireEvent.click(within(prosecution).getByRole("checkbox", { name: /reviewed the recalculation preview/i }));
+    expect(record).toBeEnabled();
+    fireEvent.click(record);
+    await waitFor(() =>
+      expect(appendIpDocketEventMock).toHaveBeenCalledWith(
+        "ip-1",
+        expect.objectContaining({
+          supersedesEventId: "event-1",
+          acknowledgedExceptionCodes: ["backdated_recalculation_review_required"],
+        }),
+      ),
+    );
+  });
+
+  it("previews and commits an explicit registry-candidate reconciliation", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpCoreRecordsMock.mockResolvedValue({
+      assets: [], proceedings: [], identifiers: [],
+      applications: [{
+        id: "application-1", version: 4, jurisdiction: "IN",
+        office: "Trade Marks Registry Mumbai", filing_phase: "formalities",
+      }],
+    });
+    fetchIpProsecutionWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1", lifecycle_status: "active", lifecycle_version: 0,
+      current_phase: "formalities", registry_freshness: "candidate_pending",
+      data_quality_gaps: [], unconfirmed_deadline_refs: [], conflicting_event_ids: [],
+      events: [prosecutionEvent({
+        id: "candidate-1", source: "registry", source_reference: "ipindia:snapshot-1",
+        candidate_status: "candidate", reason: null,
+      })], operational_completion_count: 0, filing_evidence_count: 0,
+      registry_acceptance_count: 0, final_disposition_count: 0,
+    });
+
+    render(withClient(<IpDocketPage />));
+    const prosecution = await screen.findByTestId("ip-prosecution-workspace");
+    fireEvent.click(await within(prosecution).findByRole("button", { name: "Reconcile candidate" }));
+    fireEvent.click(within(prosecution).getByRole("button", { name: "Preview prosecution event" }));
+    await waitFor(() =>
+      expect(previewIpDocketEventMock).toHaveBeenCalledWith(
+        "ip-1",
+        expect.objectContaining({
+          source: "registry",
+          sourceReference: "ipindia:snapshot-1",
+          reconcilesEventId: "candidate-1",
+          reconciliationDecision: "same_fact",
+        }),
+      ),
+    );
+    fireEvent.click(within(prosecution).getByRole("button", { name: "Record prosecution event" }));
+    await waitFor(() =>
+      expect(appendIpDocketEventMock).toHaveBeenCalledWith(
+        "ip-1",
+        expect.objectContaining({ reconcilesEventId: "candidate-1" }),
+      ),
+    );
   });
 
   it("maps the complete restricted incident review journey", async () => {

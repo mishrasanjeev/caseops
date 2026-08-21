@@ -507,6 +507,7 @@ def preview_ip_docket_event(
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
         and row.candidate_status != "rejected"
+        and row.id != payload.supersedes_event_id
     ]
     latest_effective = max((_as_utc(row.effective_at) for row in rows), default=None)
     backdated = (
@@ -519,6 +520,8 @@ def preview_ip_docket_event(
     ]
     if duplicate_ids and payload.reconciles_event_id is None:
         unresolved.append("duplicate_reconciliation_required")
+    if backdated:
+        unresolved.append("backdated_recalculation_review_required")
     return IpDocketEventPreviewResponse(
         docket_id=docket.id,
         lifecycle_version=docket.lifecycle_version,
@@ -559,6 +562,76 @@ def _append_locked_event(
         proceeding_id=payload.proceeding_id,
         for_update=True,
     )
+    existing_events = list(
+        session.scalars(
+            select(IpDocketEvent)
+            .where(
+                IpDocketEvent.company_id == docket.company_id,
+                IpDocketEvent.docket_id == docket.id,
+            )
+            .order_by(IpDocketEvent.sequence)
+        )
+    )
+    duplicate_ids = [
+        row.id
+        for row in existing_events
+        if row.event_kind == payload.event_kind
+        and row.application_id == payload.application_id
+        and row.proceeding_id == payload.proceeding_id
+        and row.effective_at.date() == payload.effective_at.date()
+        and row.candidate_status != "rejected"
+        and row.id != payload.supersedes_event_id
+    ]
+    unresolved_confirmed_duplicate = (
+        duplicate_ids
+        and payload.reconciles_event_id is None
+        and payload.supersedes_event_id is None
+        and not (
+            payload.source == "registry" and payload.candidate_status == "candidate"
+        )
+    )
+    if unresolved_confirmed_duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A matching event already exists; preview and record an explicit "
+                "reconciliation decision."
+            ),
+        )
+    latest_effective = max(
+        (_as_utc(row.effective_at) for row in existing_events),
+        default=None,
+    )
+    backdated = (
+        latest_effective is not None
+        and _as_utc(payload.effective_at) < latest_effective
+    )
+    if (
+        backdated
+        and "backdated_recalculation_review_required"
+        not in payload.acknowledged_exception_codes
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Backdated events require acknowledgement of the recalculation preview."
+            ),
+        )
+    latest_target_effective = max(
+        (
+            _as_utc(row.effective_at)
+            for row in existing_events
+            if row.application_id == payload.application_id
+            and row.proceeding_id == payload.proceeding_id
+            and row.after_phase is not None
+            and row.candidate_status in {"confirmed", "reconciled"}
+        ),
+        default=None,
+    )
+    target_phase_is_backdated = (
+        latest_target_effective is not None
+        and _as_utc(payload.effective_at) < latest_target_effective
+    )
     _prior_event(
         session,
         company_id=docket.company_id,
@@ -581,11 +654,12 @@ def _append_locked_event(
             )
     proposed_phase = payload.after_phase or EVENT_PHASES.get(payload.event_kind)
     before_phase = payload.before_phase
-    apply_phase = not (
+    phase_effect_is_accepted = not (
         payload.source == "registry"
         and payload.reconciles_event_id is None
         and payload.candidate_status == "candidate"
     )
+    apply_phase = phase_effect_is_accepted and not target_phase_is_backdated
     if application is not None:
         if application.version != payload.expected_application_version:
             raise HTTPException(status_code=409, detail="Application version changed; reload.")
@@ -617,10 +691,19 @@ def _append_locked_event(
                 application.lifecycle_version += 1
             application.version += 1
             application.updated_at = datetime.now(UTC)
+        elif proposed_phase is not None and phase_effect_is_accepted:
+            # A historical event changes the legal history and therefore the
+            # optimistic version, but cannot rewind the current phase past a
+            # later accepted event.
+            application.version += 1
+            application.updated_at = datetime.now(UTC)
     elif proceeding is not None:
         before_phase = proceeding.stage
         if proposed_phase is not None and apply_phase:
             proceeding.stage = proposed_phase
+            proceeding.version += 1
+            proceeding.updated_at = datetime.now(UTC)
+        elif proposed_phase is not None and phase_effect_is_accepted:
             proceeding.version += 1
             proceeding.updated_at = datetime.now(UTC)
     next_sequence = (
@@ -634,6 +717,15 @@ def _append_locked_event(
     ) + 1
     checklist = _event_checklist(payload)
     event_payload = dict(payload.payload)
+    if payload.correspondence is not None:
+        event_payload["correspondence"] = payload.correspondence.model_dump(mode="json")
+    event_payload["acknowledged_exception_codes"] = sorted(
+        set(payload.acknowledged_exception_codes)
+    )
+    event_payload["backdated"] = backdated
+    event_payload["recalculation_preserved_current_phase"] = bool(
+        target_phase_is_backdated and proposed_phase is not None
+    )
     event_payload["stage_checklist"] = [row.model_dump(mode="json") for row in checklist]
     event_payload["operational_completion"] = bool(
         _payload_refs(payload.payload, "task_refs")

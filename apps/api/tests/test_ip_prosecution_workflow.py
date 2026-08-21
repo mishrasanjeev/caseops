@@ -43,18 +43,16 @@ def _event(
         "document_refs": ["attachment:official-document-1"],
         "resulting_deadline_refs": ["candidate:response-deadline-1"],
         "candidate_status": "confirmed" if source == "manual" else "candidate",
+        "correspondence": {
+            "direction": "inward",
+            "received_at": "2026-08-07T05:00:00Z",
+            "due_at": "2026-09-07T05:00:00Z",
+        },
         "payload": {
             "form_refs": ["form:TM-M:2026.1"],
             "fee_evidence_refs": ["receipt:synthetic-1"],
             "approval_refs": ["approval:lawyer-1"],
             "task_refs": ["matter-task:synthetic-1"],
-            "correspondence_direction": "inward",
-            "received_at": "2026-08-07T05:00:00Z",
-            "due_at": "2026-09-07T05:00:00Z",
-            "prepared_at": None,
-            "approved_at": None,
-            "filed_at": None,
-            "accepted_at": None,
             "deadlines_confirmed": False,
         },
     }
@@ -121,6 +119,18 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     assert original["after_phase"] == "formalities"
     assert original["payload_json"]["operational_completion"] is True
     assert original["payload_json"]["filing_evidence"] is False
+    assert original["payload_json"]["correspondence"]["direction"] == "inward"
+
+    duplicate_manual = client.post(
+        f"/api/ip/dockets/{docket['id']}/events",
+        headers=headers,
+        json=_event(
+            membership_id=membership_id,
+            application_id=application["id"],
+            application_version=2,
+        ),
+    )
+    assert duplicate_manual.status_code == 409, duplicate_manual.text
 
     registry_payload = _event(
         membership_id=membership_id,
@@ -194,6 +204,38 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     assert backdated.status_code == 200, backdated.text
     assert backdated.json()["backdated"] is True
     assert backdated.json()["recalculation_required"] is True
+    assert "backdated_recalculation_review_required" in backdated.json()[
+        "unresolved_exception_codes"
+    ]
+
+    backdated_payload = _event(
+        membership_id=membership_id,
+        application_id=application["id"],
+        application_version=4,
+        event_kind="examination_report",
+        effective_at=datetime(2026, 8, 1, 6, 0, tzinfo=UTC),
+    )
+    refused_backdated = client.post(
+        f"/api/ip/dockets/{docket['id']}/events",
+        headers=headers,
+        json=backdated_payload,
+    )
+    assert refused_backdated.status_code == 409, refused_backdated.text
+    backdated_payload["acknowledged_exception_codes"] = [
+        "backdated_recalculation_review_required"
+    ]
+    committed_backdated = client.post(
+        f"/api/ip/dockets/{docket['id']}/events",
+        headers=headers,
+        json=backdated_payload,
+    )
+    assert committed_backdated.status_code == 201, committed_backdated.text
+    assert committed_backdated.json()["payload_json"][
+        "acknowledged_exception_codes"
+    ] == ["backdated_recalculation_review_required"]
+    assert committed_backdated.json()["payload_json"][
+        "recalculation_preserved_current_phase"
+    ] is True
 
     workspace = client.get(
         f"/api/ip/dockets/{docket['id']}/prosecution",
@@ -203,12 +245,12 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     body = workspace.json()
     assert body["current_phase"] == "response_filed"
     assert body["registry_freshness"] == "current"
-    assert body["operational_completion_count"] == 4
+    assert body["operational_completion_count"] == 5
     assert body["filing_evidence_count"] == 1
     assert body["registry_acceptance_count"] == 0
     assert body["final_disposition_count"] == 0
     assert body["unconfirmed_deadline_refs"] == ["candidate:response-deadline-1"]
-    assert len(body["events"]) == 4
+    assert len(body["events"]) == 5
 
     with get_session_factory()() as session:
         persisted_original = session.get(IpDocketEvent, original["id"])
@@ -217,7 +259,7 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
         assert persisted_original.event_kind == "formalities"
         assert stored_application is not None
         assert stored_application.filing_phase == "response_filed"
-        assert stored_application.version == 4
+        assert stored_application.version == 5
         actions = set(session.scalars(select(AuditEvent.action)).all())
         assert "ip_docket.event_appended" in actions
 

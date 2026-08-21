@@ -1503,18 +1503,51 @@ async def get_ip_portfolio_families(
     context: IpViewer,
     session: DbSession,
     grouping: Annotated[str, Query(pattern="^(mark|client)$")] = "mark",
+    query: Annotated[str | None, Query(max_length=200)] = None,
     matter_id: Annotated[str | None, Query(max_length=36)] = None,
+    client: Annotated[list[str] | None, Query()] = None,
+    proprietor: Annotated[list[str] | None, Query()] = None,
+    nice_class: Annotated[list[int] | None, Query()] = None,
+    responsible_membership_id: Annotated[list[str] | None, Query()] = None,
+    team_id: Annotated[list[str] | None, Query()] = None,
+    asset_kind: Annotated[list[str] | None, Query()] = None,
     jurisdiction: Annotated[list[str] | None, Query()] = None,
+    office: Annotated[list[str] | None, Query()] = None,
     filing_phase: Annotated[list[str] | None, Query()] = None,
+    docket_status: Annotated[list[str] | None, Query()] = None,
+    deadline_state: Annotated[list[str] | None, Query()] = None,
+    opposition_only: bool = False,
+    registry_sync_state: Annotated[list[str] | None, Query()] = None,
     include_inactive: bool = False,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    cursor: str | None = None,
 ) -> IpPortfolioFamilyResponse:
     filters = IpPortfolioFilters(
+        query=query,
         matter_id=matter_id,
+        client=client or [],
+        proprietor=proprietor or [],
+        nice_class=nice_class or [],
+        responsible_membership_id=responsible_membership_id or [],
+        team_id=team_id or [],
+        asset_kind=asset_kind or [],
         jurisdiction=jurisdiction or [],
+        office=office or [],
         filing_phase=filing_phase or [],
+        docket_status=docket_status or [],
+        deadline_state=deadline_state or [],
+        opposition_only=opposition_only,
+        registry_sync_state=registry_sync_state or [],
         include_inactive=include_inactive,
     )
-    return list_ip_portfolio_families(session, context=context, grouping=grouping, filters=filters)
+    return list_ip_portfolio_families(
+        session,
+        context=context,
+        grouping=grouping,
+        filters=filters,
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.post("/docket-queues", response_model=IpDocketQueueRecord, status_code=201)

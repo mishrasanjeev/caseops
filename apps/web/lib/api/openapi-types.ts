@@ -19433,6 +19433,26 @@ export interface components {
             /** Proceedings */
             proceedings: components["schemas"]["IpProceedingResponse"][];
         };
+        /** IpCorrespondenceMilestones */
+        IpCorrespondenceMilestones: {
+            /** Accepted At */
+            accepted_at?: string | null;
+            /** Approved At */
+            approved_at?: string | null;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "inward" | "outward";
+            /** Due At */
+            due_at?: string | null;
+            /** Filed At */
+            filed_at?: string | null;
+            /** Prepared At */
+            prepared_at?: string | null;
+            /** Received At */
+            received_at?: string | null;
+        };
         /** IpCostItemCreateRequest */
         IpCostItemCreateRequest: {
             /** Amount Minor */
@@ -20602,6 +20622,8 @@ export interface components {
         };
         /** IpDocketEventCreateRequest */
         IpDocketEventCreateRequest: {
+            /** Acknowledged Exception Codes */
+            acknowledged_exception_codes?: string[];
             /** After Phase */
             after_phase?: string | null;
             /** Application Id */
@@ -20616,6 +20638,7 @@ export interface components {
             candidate_status: "candidate" | "confirmed" | "reconciled" | "rejected";
             /** Correction Reason */
             correction_reason?: string | null;
+            correspondence?: components["schemas"]["IpCorrespondenceMilestones"] | null;
             /** Document Refs */
             document_refs?: string[];
             /**
@@ -22515,6 +22538,10 @@ export interface components {
             families?: components["schemas"]["IpPortfolioFamily"][];
             /** Grouping */
             grouping: string;
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
             /**
              * Ungrouped Member Count
              * @default 0
@@ -45923,11 +45950,25 @@ export interface operations {
     get_ip_portfolio_families_api_ip_portfolio_families_get: {
         parameters: {
             query?: {
+                asset_kind?: string[] | null;
+                client?: string[] | null;
+                cursor?: string | null;
+                deadline_state?: string[] | null;
+                docket_status?: string[] | null;
                 filing_phase?: string[] | null;
                 grouping?: string;
                 include_inactive?: boolean;
                 jurisdiction?: string[] | null;
+                limit?: number;
                 matter_id?: string | null;
+                nice_class?: number[] | null;
+                office?: string[] | null;
+                opposition_only?: boolean;
+                proprietor?: string[] | null;
+                query?: string | null;
+                registry_sync_state?: string[] | null;
+                responsible_membership_id?: string[] | null;
+                team_id?: string[] | null;
             };
             header?: never;
             path?: never;

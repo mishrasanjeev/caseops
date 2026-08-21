@@ -2196,12 +2196,49 @@ function ProsecutionCard({
     queryKey: ["ip", "core-records", docket.id],
     queryFn: () => fetchIpCoreRecords(docket.id),
   });
-  const application = core.data?.applications[0] ?? null;
+  const [applicationId, setApplicationId] = useState("");
+  const applications = core.data?.applications ?? [];
+  const application =
+    applications.find((candidate) => candidate.id === applicationId) ??
+    applications[0] ??
+    null;
+  useEffect(() => {
+    if (!applicationId && applications[0]) setApplicationId(applications[0].id);
+  }, [applicationId, applications]);
   const [eventKind, setEventKind] = useState<(typeof EVENT_KINDS)[number]>("formalities");
   const [effectiveAt, setEffectiveAt] = useState(localDateTimeValue);
   const [reason, setReason] = useState("");
   const [evidenceRef, setEvidenceRef] = useState("");
   const [documentRef, setDocumentRef] = useState("");
+  const [supersedesEventId, setSupersedesEventId] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [reconcilesEventId, setReconcilesEventId] = useState("");
+  const [reconciliationDecision, setReconciliationDecision] = useState<
+    "" | "same_fact" | "keep_separate" | "reject_candidate"
+  >("");
+  const [eventSource, setEventSource] = useState<"manual" | "registry">("manual");
+  const [sourceReference, setSourceReference] = useState("");
+  const [backdatedAcknowledged, setBackdatedAcknowledged] = useState(false);
+  const [correspondenceDirection, setCorrespondenceDirection] = useState<
+    "none" | "inward" | "outward"
+  >("none");
+  const [receivedAt, setReceivedAt] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [preparedAt, setPreparedAt] = useState("");
+  const [approvedAt, setApprovedAt] = useState("");
+  const [filedAt, setFiledAt] = useState("");
+  const [acceptedAt, setAcceptedAt] = useState("");
+  const correspondence = correspondenceDirection === "none"
+    ? null
+    : {
+        direction: correspondenceDirection,
+        received_at: receivedAt ? new Date(receivedAt).toISOString() : null,
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
+        prepared_at: preparedAt ? new Date(preparedAt).toISOString() : null,
+        approved_at: approvedAt ? new Date(approvedAt).toISOString() : null,
+        filed_at: filedAt ? new Date(filedAt).toISOString() : null,
+        accepted_at: acceptedAt ? new Date(acceptedAt).toISOString() : null,
+      };
   const eventInput: IpDocketEventInput | null = currentMembershipId && effectiveAt
     ? {
         lifecycleVersion: docket.lifecycle_version,
@@ -2213,9 +2250,24 @@ function ProsecutionCard({
         reason,
         evidenceRefs: evidenceRef.trim() ? [evidenceRef.trim()] : [],
         documentRefs: documentRef.trim() ? [documentRef.trim()] : [],
+        source: eventSource,
+        sourceReference: sourceReference.trim() || null,
+        candidateStatus: reconcilesEventId ? "reconciled" : "confirmed",
+        supersedesEventId: supersedesEventId || null,
+        correctionReason: correctionReason.trim() || null,
+        reconcilesEventId: reconcilesEventId || null,
+        reconciliationDecision: reconciliationDecision || null,
+        acknowledgedExceptionCodes: backdatedAcknowledged
+          ? ["backdated_recalculation_review_required"]
+          : [],
+        correspondence,
       }
     : null;
-  const inputSignature = JSON.stringify(eventInput);
+  const inputSignature = JSON.stringify(
+    eventInput
+      ? { ...eventInput, acknowledgedExceptionCodes: [] }
+      : null,
+  );
   const [previewedSignature, setPreviewedSignature] = useState<string | null>(null);
   const preview = useMutation({
     mutationFn: () => previewIpDocketEvent(docket.id, eventInput!),
@@ -2231,6 +2283,20 @@ function ProsecutionCard({
       setReason("");
       setEvidenceRef("");
       setDocumentRef("");
+      setSupersedesEventId("");
+      setCorrectionReason("");
+      setReconcilesEventId("");
+      setReconciliationDecision("");
+      setEventSource("manual");
+      setSourceReference("");
+      setBackdatedAcknowledged(false);
+      setCorrespondenceDirection("none");
+      setReceivedAt("");
+      setDueAt("");
+      setPreparedAt("");
+      setApprovedAt("");
+      setFiledAt("");
+      setAcceptedAt("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ip", "prosecution", docket.id] }),
         queryClient.invalidateQueries({ queryKey: ["ip", "core-records", docket.id] }),
@@ -2239,8 +2305,22 @@ function ProsecutionCard({
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record the prosecution event.")),
   });
-  const valid = Boolean(eventInput && reason.trim().length >= 5 && effectiveAt);
+  const valid = Boolean(
+    eventInput &&
+    effectiveAt &&
+    (eventSource === "registry" || reason.trim().length >= 5) &&
+    (eventSource !== "registry" || sourceReference.trim()) &&
+    (!supersedesEventId || correctionReason.trim().length >= 5) &&
+    (!reconcilesEventId || reconciliationDecision) &&
+    (correspondenceDirection === "none" ||
+      receivedAt || dueAt || preparedAt || approvedAt || filedAt || acceptedAt),
+  );
   const previewCurrent = previewedSignature === inputSignature ? preview.data : undefined;
+  const commitBlocked = Boolean(
+    !previewCurrent ||
+    (previewCurrent.backdated && !backdatedAcknowledged) ||
+    (previewCurrent.duplicate_candidate_ids.length > 0 && !reconcilesEventId),
+  );
 
   return (
     <Card className="min-w-0" data-testid="ip-prosecution-workspace">
@@ -2270,6 +2350,33 @@ function ProsecutionCard({
 
         {enabled ? (
           <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
+            {applications.length ? (
+              <Field label="Application">
+                <select
+                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={application?.id ?? ""}
+                  onChange={(event) => setApplicationId(event.target.value)}
+                >
+                  {applications.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {[candidate.jurisdiction, candidate.office, candidate.filing_phase]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+            {supersedesEventId ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+                Correction will supersede event {supersedesEventId}; the original remains in history.
+              </div>
+            ) : null}
+            {reconcilesEventId ? (
+              <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-xs text-blue-950">
+                Reconciliation will append a decision for event {reconcilesEventId}.
+              </div>
+            ) : null}
             <Field label="Event type">
               <select className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={eventKind} onChange={(event) => setEventKind(event.target.value as typeof eventKind)}>
                 {EVENT_KINDS.map((kind) => <option key={kind} value={kind}>{kind.replaceAll("_", " ")}</option>)}
@@ -2277,12 +2384,77 @@ function ProsecutionCard({
             </Field>
             <Field label="Effective date and time"><Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></Field>
             <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+            {eventSource === "registry" ? (
+              <Field label="Registry source reference">
+                <Input value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} />
+              </Field>
+            ) : null}
+            {supersedesEventId ? (
+              <Field label="Correction reason">
+                <Textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} />
+              </Field>
+            ) : null}
+            {reconcilesEventId ? (
+              <Field label="Reconciliation decision">
+                <select
+                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={reconciliationDecision}
+                  onChange={(event) => setReconciliationDecision(event.target.value as typeof reconciliationDecision)}
+                >
+                  <option value="">Select decision</option>
+                  <option value="same_fact">Same legal fact</option>
+                  <option value="keep_separate">Keep separate</option>
+                  <option value="reject_candidate">Reject candidate</option>
+                </select>
+              </Field>
+            ) : null}
             <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} placeholder="attachment:…" /></Field>
             <Field label="Document reference"><Input value={documentRef} onChange={(event) => setDocumentRef(event.target.value)} placeholder="attachment:…" /></Field>
+            <Field label="Correspondence direction">
+              <select
+                className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={correspondenceDirection}
+                onChange={(event) => setCorrespondenceDirection(event.target.value as typeof correspondenceDirection)}
+              >
+                <option value="none">Not linked</option>
+                <option value="inward">Inward registry communication</option>
+                <option value="outward">Outward response</option>
+              </select>
+            </Field>
+            {correspondenceDirection !== "none" ? (
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <Field label="Received at"><Input type="datetime-local" value={receivedAt} onChange={(event) => setReceivedAt(event.target.value)} /></Field>
+                <Field label="Due at"><Input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></Field>
+                <Field label="Prepared at"><Input type="datetime-local" value={preparedAt} onChange={(event) => setPreparedAt(event.target.value)} /></Field>
+                <Field label="Approved at"><Input type="datetime-local" value={approvedAt} onChange={(event) => setApprovedAt(event.target.value)} /></Field>
+                <Field label="Filed at"><Input type="datetime-local" value={filedAt} onChange={(event) => setFiledAt(event.target.value)} /></Field>
+                <Field label="Accepted at"><Input type="datetime-local" value={acceptedAt} onChange={(event) => setAcceptedAt(event.target.value)} /></Field>
+              </div>
+            ) : null}
             <p className="text-xs text-[var(--color-mute)]">A checklist or operational task is not filing evidence and never proves registry acceptance.</p>
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview prosecution event</Button>
-              <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => commit.mutate()} disabled={!previewCurrent || commit.isPending}>Record prosecution event</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => commit.mutate()} disabled={commitBlocked || commit.isPending}>Record prosecution event</Button>
+              {supersedesEventId || reconcilesEventId ? (
+                <Button
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    setSupersedesEventId("");
+                    setCorrectionReason("");
+                    setReconcilesEventId("");
+                    setReconciliationDecision("");
+                    setEventSource("manual");
+                    setSourceReference("");
+                    setPreviewedSignature(null);
+                    preview.reset();
+                  }}
+                >
+                  Cancel exception flow
+                </Button>
+              ) : null}
             </div>
           </form>
         ) : <p className="text-xs text-[var(--color-mute)]">IP write permission is required to record an event.</p>}
@@ -2291,20 +2463,128 @@ function ProsecutionCard({
           <div className="rounded-md border border-[var(--color-line)] p-3 text-xs" data-testid="ip-event-preview">
             <div className="font-semibold">Preview only · {previewCurrent.current_phase} → {previewCurrent.proposed_phase ?? "unchanged"}</div>
             <div className="mt-1">Backdated recalculation: {previewCurrent.recalculation_required ? "required" : "not required"}</div>
+            {previewCurrent.backdated ? (
+              <label className="mt-2 flex min-h-9 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-950">
+                <input
+                  type="checkbox"
+                  checked={backdatedAcknowledged}
+                  onChange={(event) => setBackdatedAcknowledged(event.target.checked)}
+                />
+                <span>I reviewed the recalculation preview and later accepted events will remain current.</span>
+              </label>
+            ) : null}
+            {previewCurrent.duplicate_candidate_ids.length && !reconcilesEventId ? (
+              <div className="mt-2 grid gap-2 rounded-md border border-blue-300 bg-blue-50 p-2 text-blue-950">
+                <strong>Possible duplicate event</strong>
+                <select
+                  aria-label="Duplicate event"
+                  className="h-9 min-w-0 w-full rounded-md border border-blue-300 bg-white px-2"
+                  value={reconcilesEventId}
+                  onChange={(event) => {
+                    setReconcilesEventId(event.target.value);
+                    setReconciliationDecision(event.target.value ? "keep_separate" : "");
+                  }}
+                >
+                  <option value="">Select the event to reconcile</option>
+                  {previewCurrent.duplicate_candidate_ids.map((id) => <option key={id} value={id}>{id}</option>)}
+                </select>
+              </div>
+            ) : null}
             <ul className="mt-2 grid gap-1">
               {previewCurrent.checklist.map((item) => <li key={item.key}>{item.satisfied ? "✓" : "○"} {item.label}</li>)}
             </ul>
+            {previewCurrent.unresolved_exception_codes.length ? (
+              <div className="mt-2 break-words text-amber-800">
+                Exceptions: {previewCurrent.unresolved_exception_codes.join(", ")}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {prosecution.data?.events.length ? (
           <ol className="grid min-w-0 gap-2" aria-label="Prosecution event timeline">
-            {prosecution.data.events.map((event) => (
-              <li key={event.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-xs">
-                <strong>#{event.sequence} {event.event_kind.replaceAll("_", " ")}</strong>
-                <div className="mt-1 break-words">{event.source} · {new Date(event.effective_at).toLocaleString()} · {event.before_phase ?? "—"} → {event.after_phase ?? "—"}</div>
-              </li>
-            ))}
+            {prosecution.data.events.map((event) => {
+              const eventCorrespondence = event.payload_json.correspondence as
+                | { direction?: string; received_at?: string | null; filed_at?: string | null }
+                | undefined;
+              return (
+                <li key={event.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-xs">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <strong>#{event.sequence} {event.event_kind.replaceAll("_", " ")}</strong>
+                    <Badge tone={event.candidate_status === "candidate" ? "warning" : undefined}>
+                      {event.candidate_status}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 break-words">{event.source} · {new Date(event.effective_at).toLocaleString()} · {event.before_phase ?? "—"} → {event.after_phase ?? "—"}</div>
+                  {event.reason ? <div className="mt-1 break-words">{event.reason}</div> : null}
+                  {event.supersedes_event_id ? <div className="mt-1 break-words text-amber-800">Supersedes {event.supersedes_event_id}</div> : null}
+                  {event.reconciles_event_id ? <div className="mt-1 break-words text-blue-800">{event.reconciliation_decision?.replaceAll("_", " ")} · reconciles {event.reconciles_event_id}</div> : null}
+                  {eventCorrespondence?.direction ? (
+                    <div className="mt-1 break-words text-[var(--color-mute)]">
+                      {eventCorrespondence.direction} correspondence
+                      {eventCorrespondence.received_at ? ` · received ${new Date(eventCorrespondence.received_at).toLocaleString()}` : ""}
+                      {eventCorrespondence.filed_at ? ` · filed ${new Date(eventCorrespondence.filed_at).toLocaleString()}` : ""}
+                    </div>
+                  ) : null}
+                  {event.document_refs_json.length || event.resulting_deadline_refs_json.length ? (
+                    <div className="mt-1 break-words text-[var(--color-mute)]">
+                      {[...event.document_refs_json, ...event.resulting_deadline_refs_json].join(" · ")}
+                    </div>
+                  ) : null}
+                  {enabled ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {EVENT_KINDS.includes(event.event_kind as typeof eventKind) ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() => {
+                            if (event.application_id) setApplicationId(event.application_id);
+                            setEventKind(event.event_kind as typeof eventKind);
+                            setEffectiveAt(localDateTimeValue());
+                            setEventSource("manual");
+                            setSupersedesEventId(event.id);
+                            setCorrectionReason("");
+                            setReconcilesEventId("");
+                            setReconciliationDecision("");
+                            setReason(`Correct event ${event.sequence}.`);
+                            setBackdatedAcknowledged(false);
+                            setPreviewedSignature(null);
+                            preview.reset();
+                          }}
+                        >
+                          Correct event
+                        </Button>
+                      ) : null}
+                      {event.candidate_status === "candidate" ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() => {
+                            if (event.application_id) setApplicationId(event.application_id);
+                            setEventKind(event.event_kind as typeof eventKind);
+                            setEffectiveAt(localDateTimeValue());
+                            setEventSource("registry");
+                            setSourceReference(event.source_reference ?? "");
+                            setReconcilesEventId(event.id);
+                            setReconciliationDecision("same_fact");
+                            setSupersedesEventId("");
+                            setCorrectionReason("");
+                            setReason("");
+                            setBackdatedAcknowledged(false);
+                            setPreviewedSignature(null);
+                            preview.reset();
+                          }}
+                        >
+                          Reconcile candidate
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
         ) : <p className="text-xs text-[var(--color-mute)]">No prosecution events have been recorded.</p>}
       </CardContent>

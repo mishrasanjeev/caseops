@@ -8153,6 +8153,37 @@ export type IpPortfolioResponse = {
   next_cursor: string | null;
 };
 
+export type IpPortfolioFamilyMember = {
+  application_id: string;
+  docket_id: string;
+  asset_id: string | null;
+  office: string | null;
+  jurisdiction: string | null;
+  filing_phase: string;
+  lifecycle_version: number;
+  primary_identifier: string | null;
+  open_deadline_count: number;
+  overdue_deadline_count: number;
+};
+
+export type IpPortfolioFamily = {
+  grouping: "mark" | "client";
+  family_key: string;
+  label: string;
+  member_count: number;
+  distinct_jurisdictions: string[];
+  distinct_filing_phases: string[];
+  members: IpPortfolioFamilyMember[];
+};
+
+export type IpPortfolioFamilyResponse = {
+  grouping: "mark" | "client";
+  families: IpPortfolioFamily[];
+  ungrouped_member_count: number;
+  limit: number;
+  next_cursor: string | null;
+};
+
 export type IpPortfolioSavedView = {
   id: string;
   name: string;
@@ -8550,6 +8581,23 @@ export type IpDocketEventInput = {
   reason: string;
   evidenceRefs: string[];
   documentRefs: string[];
+  source?: "manual" | "registry";
+  sourceReference?: string | null;
+  candidateStatus?: "candidate" | "confirmed" | "reconciled" | "rejected";
+  supersedesEventId?: string | null;
+  correctionReason?: string | null;
+  reconcilesEventId?: string | null;
+  reconciliationDecision?: "same_fact" | "keep_separate" | "reject_candidate" | null;
+  acknowledgedExceptionCodes?: string[];
+  correspondence?: {
+    direction: "inward" | "outward";
+    received_at?: string | null;
+    due_at?: string | null;
+    prepared_at?: string | null;
+    approved_at?: string | null;
+    filed_at?: string | null;
+    accepted_at?: string | null;
+  } | null;
 };
 
 export type IpDocketEventPreview = {
@@ -9318,6 +9366,19 @@ export async function fetchIpPortfolio(
   return apiRequest(`/api/ip/portfolio?${params.toString()}`);
 }
 
+export async function fetchIpPortfolioFamilies(
+  filters: IpPortfolioFilters,
+  input: {
+    grouping: "mark" | "client";
+    limit?: number;
+    cursor?: string | null;
+  },
+): Promise<IpPortfolioFamilyResponse> {
+  const params = ipPortfolioParams(filters, input);
+  params.set("grouping", input.grouping);
+  return apiRequest(`/api/ip/portfolio/families?${params.toString()}`);
+}
+
 export async function listIpPortfolioSavedViews(): Promise<{
   views: IpPortfolioSavedView[];
 }> {
@@ -10070,13 +10131,20 @@ function ipDocketEventBody(input: IpDocketEventInput) {
     expected_application_version: input.applicationVersion ?? null,
     application_id: input.applicationId ?? null,
     event_kind: input.eventKind,
-    source: "manual",
+    source: input.source ?? "manual",
+    source_reference: input.sourceReference ?? null,
     effective_at: input.effectiveAt,
     responsible_membership_id: input.responsibleMembershipId,
     reason: input.reason,
     evidence_refs: input.evidenceRefs,
     document_refs: input.documentRefs,
-    candidate_status: "confirmed",
+    candidate_status: input.candidateStatus ?? "confirmed",
+    supersedes_event_id: input.supersedesEventId ?? null,
+    correction_reason: input.correctionReason ?? null,
+    reconciles_event_id: input.reconcilesEventId ?? null,
+    reconciliation_decision: input.reconciliationDecision ?? null,
+    acknowledged_exception_codes: input.acknowledgedExceptionCodes ?? [],
+    correspondence: input.correspondence ?? null,
     payload: { deadlines_confirmed: false },
   };
 }
