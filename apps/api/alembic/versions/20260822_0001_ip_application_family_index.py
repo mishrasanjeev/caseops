@@ -7,9 +7,8 @@ Create Date: 2026-08-22
 The index supports aggregate-first mark-family pagination. It changes no data
 and introduces no new record owner or retention surface.
 
-MIGRATION-LOCK-RISK: a normal catalog/index-build lock is required on
-``trademark_applications``. Production rollout should use the standard brief
-write-maintenance window and inspect table/index size first.
+MIGRATION-LOCK-RISK: PostgreSQL builds the index concurrently so normal writes
+remain available; other test/development dialects use their ordinary index DDL.
 MIGRATION-ROLLBACK: safe; dropping the index changes performance only.
 """
 
@@ -22,19 +21,40 @@ down_revision = "20260821_0005"
 branch_labels = None
 depends_on = None
 
-# DATA-GOVERNANCE-MAP: no change; index duplicates tenant/asset lookup keys only.
+# DATA-GOVERNANCE-MAP: updated
 
 
 def upgrade() -> None:
-    op.create_index(
-        "ix_tm_applications_company_asset",
-        "trademark_applications",
-        ["company_id", "asset_id"],
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            op.create_index(
+                "ix_tm_applications_company_asset",
+                "trademark_applications",
+                ["company_id", "asset_id"],
+                postgresql_concurrently=True,
+            )
+    else:
+        # MIGRATION-LOCK-RISK: acknowledged: non-PostgreSQL paths are isolated
+        # development/test databases and never serve concurrent production writes.
+        op.create_index(
+            "ix_tm_applications_company_asset",
+            "trademark_applications",
+            ["company_id", "asset_id"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_tm_applications_company_asset",
-        table_name="trademark_applications",
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            op.drop_index(
+                "ix_tm_applications_company_asset",
+                table_name="trademark_applications",
+                postgresql_concurrently=True,
+            )
+    else:
+        op.drop_index(
+            "ix_tm_applications_company_asset",
+            table_name="trademark_applications",
+        )
