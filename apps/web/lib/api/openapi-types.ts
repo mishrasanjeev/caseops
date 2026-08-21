@@ -12776,10 +12776,17 @@ export interface components {
             /** Detail */
             detail?: string | null;
             /**
+             * Display Type
+             * @enum {string}
+             */
+            display_type: "hearing" | "task_date" | "filing_deadline" | "internal_target" | "renewal" | "client_instruction" | "reminder" | "deadline";
+            /**
              * Id
              * @description Source row's primary key prefixed by kind.
              */
             id: string;
+            /** Ip Docket Id */
+            ip_docket_id?: string | null;
             /**
              * Kind
              * @enum {string}

@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BadgeIndianRupee,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
   FileCheck2,
   Plus,
   Scale,
@@ -48,6 +51,7 @@ import {
   fetchIpCoreRecords,
   fetchIpCoverageTransfersAwaitingMe,
   fetchIpDeadlineImpact,
+  fetchIpDeadlineDependencies,
   fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
   fetchIpDockets,
@@ -79,6 +83,7 @@ import {
   type IpCoreRecords,
   type IpDocket,
   type IpDeadlineIncident,
+  type IpDeadlineRuleVersion,
   type IpLegalDeadline,
   type IpSharedHearing,
   type IpResponsibilityAssignmentInput,
@@ -88,6 +93,7 @@ import {
   type IpIdentifier,
   type IpWorkspaceConfigurationStatus,
   type IpWorkspaceTestResult,
+  type IpWorkingCalendarVersion,
   updateIpSharedHearing,
   updateTrademarkApplicationPhase,
 } from "@/lib/api/endpoints";
@@ -98,6 +104,16 @@ import { useSession } from "@/lib/use-session";
 const TODAY = new Date().toISOString().slice(0, 10);
 const FORM_SELECT_CLASS =
   "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
+
+function verifiedHttpSource(reference: string | null | undefined): string | null {
+  if (!reference) return null;
+  try {
+    const parsed = new URL(reference);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? reference : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function IpDocketPage() {
   const searchParams = useSearchParams();
@@ -1486,6 +1502,112 @@ function HearingWorkflowCard({
   );
 }
 
+function DeadlineProvenance({
+  deadline,
+  rule,
+  calendar,
+}: {
+  deadline: IpLegalDeadline;
+  rule: IpDeadlineRuleVersion | undefined;
+  calendar: IpWorkingCalendarVersion | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const dependencies = useQuery({
+    queryKey: ["ip", "deadline-dependencies", deadline.id],
+    queryFn: () => fetchIpDeadlineDependencies(deadline.id),
+    enabled: open,
+  });
+  const ruleSource = verifiedHttpSource(rule?.source_reference);
+  const calendarSource = verifiedHttpSource(calendar?.source_reference);
+
+  return (
+    <div className="mt-2 min-w-0 text-xs">
+      <div className="flex min-w-0 flex-col gap-1 text-[var(--color-mute)] sm:flex-row sm:flex-wrap">
+        <span className="break-words">Governing rule: {deadline.rule_citation}</span>
+        {ruleSource ? (
+          <a
+            className="inline-flex min-w-0 items-center gap-1 break-all font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+            href={ruleSource}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open verified rule source
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+          </a>
+        ) : (
+          <span className="break-words">Source reference: {rule?.source_reference ?? "Unavailable"}</span>
+        )}
+        {calendarSource ? (
+          <a
+            className="inline-flex min-w-0 items-center gap-1 break-all font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+            href={calendarSource}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open verified calendar source
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+          </a>
+        ) : null}
+      </div>
+      <Button
+        className="mt-2 w-full sm:w-auto"
+        type="button"
+        size="sm"
+        variant="secondary"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
+        {open ? "Hide calculation provenance" : "View calculation provenance"}
+      </Button>
+      {open ? (
+        <div
+          className="mt-2 min-w-0 border-l-2 border-[var(--color-line)] pl-3"
+          data-testid={`ip-deadline-provenance-${deadline.id}`}
+        >
+          {dependencies.isPending ? <p>Loading stored calculation evidence…</p> : null}
+          {dependencies.isError ? (
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+              <p className="min-w-0 flex-1 break-words text-red-700">
+                {apiErrorMessage(dependencies.error, "Calculation provenance could not be loaded.")}
+              </p>
+              <Button size="sm" type="button" onClick={() => dependencies.refetch()}>
+                Retry provenance
+              </Button>
+            </div>
+          ) : null}
+          {dependencies.data ? (
+            <>
+              <p className="break-words text-[var(--color-mute)]">
+                Stored by {dependencies.data.engine_version} from source version {dependencies.data.source_version}.
+              </p>
+              <ul className="mt-2 flex min-w-0 flex-col gap-2" aria-label="Deadline calculation inputs">
+                {dependencies.data.nodes.map((node, index) => (
+                  <li key={`${node.kind}-${node.reference_id ?? index}`} className="min-w-0">
+                    <span className="font-semibold">{node.label}</span>
+                    {node.detail ? <span className="break-words"> · {node.detail}</span> : null}
+                    {!node.available ? <span className="font-semibold text-red-700"> · unavailable</span> : null}
+                  </li>
+                ))}
+              </ul>
+              {!dependencies.data.nodes.some((node) => node.kind === "extension") ? (
+                <p className="mt-2 break-words text-[var(--color-mute)]">
+                  No approved extension is included in this calculation. An extension application alone does not move the legal date.
+                </p>
+              ) : null}
+              {dependencies.data.unavailable_inputs.length ? (
+                <p className="mt-2 break-words font-semibold text-red-700">
+                  Incomplete provenance: {dependencies.data.unavailable_inputs.join(", ")}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DeadlineWorkspaceCard({
   docket,
   enabled,
@@ -1585,6 +1707,8 @@ function DeadlineWorkspaceCard({
 
   const confirm = useMutation({
     mutationFn: async (deadline: IpLegalDeadline) => {
+      const requiresSourcedCorrection =
+        deadline.result_on === null || deadline.certainty === "conflicting";
       let impactToken: string | null = null;
       if (deadline.supersedes_deadline_id) {
         impactToken = (
@@ -1598,11 +1722,11 @@ function DeadlineWorkspaceCard({
         internalTargetOn: internalTargetOn || null,
         reminderOffsetsDays: [30, 14, 7, 1, 0],
         correctedResultOn:
-          deadline.result_on === null && actionDate ? actionDate : null,
+          requiresSourcedCorrection && actionDate ? actionDate : null,
         correctionReason:
-          deadline.result_on === null ? actionReason || null : null,
+          requiresSourcedCorrection ? actionReason || null : null,
         correctionEvidenceReference:
-          deadline.result_on === null ? evidenceReference || null : null,
+          requiresSourcedCorrection ? evidenceReference || null : null,
         impactToken,
       });
     },
@@ -1645,6 +1769,8 @@ function DeadlineWorkspaceCard({
       }),
     ...mutationOptions,
   });
+  const deadlineActionPending =
+    confirm.isPending || recalculate.isPending || override.isPending || complete.isPending;
 
   return (
     <Card className="min-w-0 xl:col-span-2" data-testid="ip-deadline-workspace">
@@ -1756,7 +1882,8 @@ function DeadlineWorkspaceCard({
                   !title.trim() ||
                   !selectedRuleId ||
                   !selectedCalendarId ||
-                  proposal.isPending
+                  proposal.isPending ||
+                  deadlineActionPending
                 }
               >
                 Calculate deadline proposal
@@ -1818,12 +1945,19 @@ function DeadlineWorkspaceCard({
         ) : null}
 
         <div className="flex min-w-0 flex-col gap-3">
-          {workspace.data?.deadlines.map((deadline) => (
-            <div
-              key={deadline.id}
-              className="min-w-0 rounded-lg border border-[var(--color-line)] p-3"
-              data-testid={`ip-legal-deadline-${deadline.id}`}
-            >
+          {workspace.data?.deadlines.map((deadline) => {
+            const governingRule = workspace.data.rules.find(
+              (row) => row.id === deadline.rule_version_id,
+            );
+            const governingCalendar = workspace.data.calendars.find(
+              (row) => row.id === deadline.calendar_version_id,
+            );
+            return (
+              <div
+                key={deadline.id}
+                className="min-w-0 rounded-lg border border-[var(--color-line)] p-3"
+                data-testid={`ip-legal-deadline-${deadline.id}`}
+              >
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="break-words font-semibold">{deadline.title}</div>
@@ -1833,9 +1967,28 @@ function DeadlineWorkspaceCard({
                   <div className="mt-2 break-words text-xs text-[var(--color-mute)]">
                     {deadline.explanation}
                   </div>
-                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                    Governing source: {deadline.rule_citation}
-                  </div>
+                  <DeadlineProvenance
+                    deadline={deadline}
+                    rule={governingRule}
+                    calendar={governingCalendar}
+                  />
+                  {deadline.certainty === "conflicting" ? (
+                    <div
+                      className="mt-2 min-w-0 border-l-2 border-amber-400 pl-3 text-xs"
+                      data-testid={`ip-deadline-rule-conflict-${deadline.id}`}
+                    >
+                      <p className="font-semibold text-amber-900">
+                        Conflicting source evidence blocks confirmation until a sourced correction is recorded.
+                      </p>
+                      <ul className="mt-1 flex min-w-0 flex-col gap-1">
+                        {workspace.data.rules.map((row) => (
+                          <li key={row.id} className="break-words">
+                            {row.key} v{row.version} · {row.status} · {row.source_reference}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
                 {deadline.is_critical ? (
                   <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">
@@ -1852,9 +2005,9 @@ function DeadlineWorkspaceCard({
                       disabled={
                         !primaryId.trim() ||
                         (deadline.is_critical && !backupId.trim()) ||
-                        (deadline.result_on === null &&
+                        ((deadline.result_on === null || deadline.certainty === "conflicting") &&
                           (!actionDate || !actionReason.trim() || !evidenceReference.trim())) ||
-                        confirm.isPending
+                        deadlineActionPending
                       }
                       onClick={() => confirm.mutate(deadline)}
                     >
@@ -1868,7 +2021,7 @@ function DeadlineWorkspaceCard({
                         size="sm"
                         variant="secondary"
                         disabled={
-                          !baseDate || !actionReason.trim() || !evidenceReference.trim() || recalculate.isPending
+                          !baseDate || !actionReason.trim() || !evidenceReference.trim() || deadlineActionPending
                         }
                         onClick={() => recalculate.mutate(deadline)}
                       >
@@ -1882,7 +2035,7 @@ function DeadlineWorkspaceCard({
                           !actionDate ||
                           !actionReason.trim() ||
                           !evidenceReference.trim() ||
-                          override.isPending
+                          deadlineActionPending
                         }
                         onClick={() => override.mutate(deadline)}
                       >
@@ -1892,7 +2045,7 @@ function DeadlineWorkspaceCard({
                         className="w-full sm:w-auto"
                         size="sm"
                         disabled={
-                          !evidenceReference.trim() || !attestation.trim() || complete.isPending
+                          !evidenceReference.trim() || !attestation.trim() || deadlineActionPending
                         }
                         onClick={() => complete.mutate(deadline)}
                       >
@@ -1902,8 +2055,9 @@ function DeadlineWorkspaceCard({
                   ) : null}
                 </div>
               ) : null}
-            </div>
-          ))}
+              </div>
+            );
+          })}
           {workspace.data && workspace.data.deadlines.length === 0 ? (
             <p className="text-sm text-[var(--color-mute)]">No legal deadline proposals yet.</p>
           ) : null}

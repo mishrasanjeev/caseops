@@ -509,6 +509,21 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     assert confirmed["state"] == "confirmed"
     assert confirmed["matter_deadline_id"] is not None
     assert len(confirmed["responsibilities"]) == 2
+    calendar_view = client.get(
+        "/api/calendar/events",
+        headers=owner_headers,
+        params={"from": "2026-08-16", "to": "2026-08-18"},
+    )
+    assert calendar_view.status_code == 200, calendar_view.text
+    calendar_rows = calendar_view.json()["events"]
+    legal_date = next(row for row in calendar_rows if row["title"] == deadline["title"])
+    internal_target = next(
+        row for row in calendar_rows if row["title"] == f"Internal target: {deadline['title']}"
+    )
+    assert legal_date["display_type"] == "filing_deadline"
+    assert internal_target["display_type"] == "internal_target"
+    assert legal_date["ip_docket_id"] == docket["id"]
+    assert internal_target["ip_docket_id"] == docket["id"]
     with get_session_factory()() as session:
         initial_syncs = list(
             session.scalars(
@@ -830,6 +845,28 @@ def test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_cl
         item for item in workspace.json()["exceptions"] if item["deadline_id"] == provisional["id"]
     )
     assert set(exception["exception_kinds"]) >= {"conflicting", "unowned"}
+
+    resolved_confirmation = client.post(
+        f"/api/ip/deadlines/{provisional['id']}/confirm",
+        headers=legal_headers,
+        json={
+            "expected_version": provisional["version"],
+            "responsibilities": _responsibilities(legal_id, reviewer_id),
+            "corrected_result_on": "2026-08-18",
+            "correction_reason": "Independent review resolved the competing official sources.",
+            "correction_evidence_reference": "attachment:source-conflict-resolution",
+        },
+    )
+    assert resolved_confirmation.status_code == 200, resolved_confirmation.text
+    assert resolved_confirmation.json()["state"] == "confirmed"
+    assert resolved_confirmation.json()["certainty"] == "certain"
+    assert resolved_confirmation.json()["id"] == provisional["id"]
+    assert resolved_confirmation.json()["override_evidence_ref"] == (
+        "attachment:source-conflict-resolution"
+    )
+    assert resolved_confirmation.json()["calculation_trace"][-1]["operation"] == (
+        "sourced_confirmation_correction"
+    )
 
     impact = client.get(
         f"/api/ip/deadline-rules/{rule['id']}/impact",

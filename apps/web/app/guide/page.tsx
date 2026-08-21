@@ -302,8 +302,16 @@ export default function GuidePage() {
                     <li>
                       <strong>Use Calendar for date work.</strong>{" "}
                       <a className="underline" href="/app/calendar">Calendar</a> combines
-                      visible hearings, tasks, and matter deadlines. Provider sync conflicts
-                      stay reviewable rather than overwriting manually protected dates.
+                      visible legal filing deadlines, internal targets, hearings/listings,
+                      renewals, and task dates with distinct labels. IP legal dates link back
+                      to their docket. Provider sync conflicts stay reviewable rather than
+                      overwriting manually protected dates.
+                    </li>
+                    <li>
+                      <strong>Inspect an IP deadline before relying on it.</strong> In the IP
+                      workspace, open calculation provenance to see the stored trigger, rule,
+                      working calendar, approved extension input, override, and predecessor
+                      chain. An extension application alone does not move the legal date.
                     </li>
                     <li>
                       <strong>Use Portfolio for the roll-up.</strong>{" "}

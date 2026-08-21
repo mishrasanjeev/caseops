@@ -2016,17 +2016,29 @@ export type OutsideCounselWorkspace = z.infer<typeof outsideCounselWorkspace>;
 
 // Phase B / J08 / M08 — unified calendar feed.
 export const calendarEventKind = z.enum(["hearing", "task", "deadline"]);
+export const calendarEventDisplayType = z.enum([
+  "hearing",
+  "task_date",
+  "filing_deadline",
+  "internal_target",
+  "renewal",
+  "client_instruction",
+  "reminder",
+  "deadline",
+]);
 export const calendarProvider = z.enum(["outlook", "google_calendar"]);
 
 export const calendarEventRecord = z.object({
   id: z.string(),
   kind: calendarEventKind,
+  display_type: calendarEventDisplayType.optional(),
   occurs_on: z.string(), // ISO yyyy-mm-dd
   title: z.string(),
   matter_id: z.string(),
   matter_title: z.string(),
   matter_code: z.string(),
   status: z.string().nullable().optional(),
+  ip_docket_id: z.string().nullable().optional(),
   detail: z.string().nullable().optional(),
 });
 
@@ -3360,6 +3372,7 @@ export const caseTrackingSupportMatrixAdminResponse = z.object({
 });
 
 export type CalendarEventKind = z.infer<typeof calendarEventKind>;
+export type CalendarEventDisplayType = z.infer<typeof calendarEventDisplayType>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
 export type CalendarConnectionRecord = z.infer<typeof calendarConnectionRecord>;
