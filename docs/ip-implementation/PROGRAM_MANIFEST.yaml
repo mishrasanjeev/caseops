@@ -17,17 +17,17 @@
     "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
-      "recorded_at": "2026-08-20T00:00:00+05:30",
+      "recorded_at": "2026-08-21T07:35:00+05:30",
       "base_revision": "9e8d41c0",
       "coordination_rule": "Each lane is independently mergeable. Its owner may edit only the listed components and its own slice/evidence metadata; do not absorb another lane's migrations, generated projections, provider credentials, or release evidence.",
       "codex": {
         "slice_id": "IPLF-039C",
         "branch": "codex/iplf-039c-calendar-reconcile-20260820",
         "status": "repository_implemented_local_verified",
-        "implementation_revision": "5af8f032747ca439ae69e8135bf1b6f71f4b6330",
-        "scope": "Implement UJ-62-EXC-03: immutable external-provider snapshots plus persisted, authorized accept/reject reconciliation candidates for calendar edits and deletes; add focused API/PostgreSQL tests and bounded OAuth-sandbox verification scaffolding.",
+        "implementation_revision": "3082506368c8c34807a14d89ffe04f573f7129c8",
+        "scope": "Complete IPLF-039C repository behavior: UJ-62-EXC-03 immutable external-provider reconciliation and UJ-59 immutable daily-docket exception decisions, independent reviewer samples, two-role signatures, accessible history, and signed-report deltas; retain fail-closed provider gates.",
         "owned_components": [
-          "IP calendar drift/reconciliation service and its dedicated schema/API contract",
+          "IP calendar drift/reconciliation and daily docket control-review services with their dedicated schema/API contracts",
           "IP calendar projection and drift tests, including UJ-62-EXC-03",
           "IPLF-039C status, test, and evidence references"
         ],
@@ -10107,6 +10107,7 @@
         "apps/api/alembic/versions/20260815_0001_ip_docket_control_reviews.py",
         "apps/api/alembic/versions/20260815_0002_ip_coverage_replacement_decision.py",
         "apps/api/alembic/versions/20260821_0001_calendar_projection_reconciliation_candidates.py",
+        "apps/api/alembic/versions/20260821_0002_ip_control_review_evidence.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/services/calendar_sync.py",
@@ -10146,34 +10147,36 @@
         "docs/ip-implementation/evidence/m3/IPLF-039C/rebuild-2026-08-15.md",
         "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-plan-2026-08-16.md",
         "docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-2026-08-17.log.txt",
-        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md"
       ],
       "approvals": [],
       "blockers": [
         {
           "id": "IPLF-039C-REBUILD-INCOMPLETE",
-          "summary": "The UJ-62-EXC-03 repository gap is implemented at commit 5af8f032: immutable content-minimised provider snapshots, authorized terminal candidates, bounded UI/API review, guarded Google ETag repair, and fail-closed missing/unknown/unversioned/Outlook writes are locally verified, including PostgreSQL 17. The full 22-path slice remains incomplete because UJ-59 still lacks exception annotation/resolution evidence, second-reviewer and multiple-signature policy, reviewer sampling, and subsequent-delta linkage. Both OAuth sandboxes, hosted CI, exact deployment, and dated production acceptance remain unverified; Microsoft Graph automatic restore remains disabled until a documented live conditional-update contract is proved.",
+          "summary": "The known IPLF-039C repository gaps are implemented: UJ-62-EXC-03 at 5af8f032 and UJ-59 at 30825063 are locally verified, including PostgreSQL 17, SQLite migration, API, UI, and independent two-user E2E proof. Both OAuth sandboxes, hosted exact-candidate CI, exact deployment, and dated production acceptance remain unverified; Microsoft Graph automatic restore remains disabled until a documented live conditional-update contract is proved.",
           "owner": "Engineering with the product owner for the daily-docket and calendar contracts",
-          "evidence_needed": "Implement and test the remaining UJ-59 workflow; run the read-only verifier against Microsoft Graph and Google OAuth sandboxes; prove a guarded Graph update contract before enabling Outlook restore; then obtain hosted CI, exact deployment, and dated production acceptance.",
+          "evidence_needed": "Run the read-only verifier against Microsoft Graph and Google OAuth sandboxes; prove a guarded Graph update contract before enabling Outlook restore; then obtain hosted exact-candidate CI, exact deployment, and dated production acceptance.",
           "safe_fallback": "Calendar drift automation stays default-off unless readiness, entitlement and rollout gates pass; CaseOps remains authoritative. Missing, unknown, unversioned and Outlook observations allow evidence review but no automatic provider overwrite.",
-          "milestone_impact": "Blocks IPLF-039C implementation and release closure; CAL-OPS-07, 08 and 10 remain open and CAL-OPS-09 and 13 are advanced but not closed.",
-          "next_independent_slice": "Complete the remaining UJ-59 review-evidence workflow while OAuth sandbox and hosted release verification proceed independently."
+          "milestone_impact": "Blocks IPLF-039C release closure only; the repository implementation and local verification are complete, while CAL-OPS provider/deployment acceptance remains open.",
+          "next_independent_slice": "Assign IPLF-039D to a separate owner after this exact candidate is pushed and hosted checks are green."
         }
       ],
       "next_actions": [
-        "Complete UJ-59 exception annotation/resolution, second-reviewer/multiple-signature policy, reviewer sampling and subsequent-delta linkage.",
         "Run the read-only Microsoft Graph and Google OAuth sandbox verifier; prove a guarded Graph update contract before enabling Outlook automatic restore.",
         "Push to trigger the hosted postgres-validation CI job at the target commit.",
         "Take the rebuilt slice through the release gate with dated deployed acceptance."
       ],
       "data_impact": [
-        "Additive immutable calendar_projection_reconciliation_candidates evidence and nullable all-or-none repair-claim fields on calendar_event_syncs; no obligation dates are imported or rewritten."
+        "Additive immutable calendar_projection_reconciliation_candidates evidence and nullable all-or-none repair-claim fields on calendar_event_syncs; no obligation dates are imported or rewritten.",
+        "Additive review policy, predecessor and delta fields on ip_docket_control_reviews plus append-only exception-decision, reviewer-sample and signature evidence tables; no docket obligation is mutated by review."
       ],
       "documentation_impact": [
-        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "source_kind": "prd_explicit",
@@ -10182,6 +10185,15 @@
       "migration_boundary": "Additive expands 20260815_0001 and 20260815_0002 with bounded PostgreSQL lock_timeout and SQLite batch mode; empty rollback; no backfill. Existing coverage rows default to replacement_decision='none', preserving current ownership exactly.",
       "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; fail-closed acceptance-pending scope may share the train.",
       "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
+          "revision": "3082506368c8c34807a14d89ffe04f573f7129c8",
+          "environment": "local SQLite plus ephemeral PostgreSQL 17/pgvector and fresh local API/web Playwright servers",
+          "fixtures": "deterministic tenant-isolated docket-control fixtures and two independent authenticated members; no live provider credential",
+          "assertions": "exception decisions, reviewer sampling, two-role exact-manifest signatures, report archive authorization, signed deltas, append-only persistence, tenant correlation, UI download, and independent two-user E2E",
+          "result": "passed",
+          "recorded_at": "2026-08-21T07:35:00+05:30"
+        },
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/calendar-reconciliation-2026-08-20.md",
           "revision": "5af8f032747ca439ae69e8135bf1b6f71f4b6330",
@@ -10201,7 +10213,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. | 2026-08-20 reconciliation audit: UJ-62-EXC-03 repository behavior is now implemented and locally verified at 5af8f032, but the full slice deliberately remains in_progress/not_run/blocked for UJ-59, live provider, hosted CI and deployment gaps. Claude-owned IPLF-028A/IPLF-028B evidence and IPLF-039F cost work remain separate lanes.",
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | Code-inspection audit 2026-08-15 estimated roughly 4 of 22 owned journey paths are implemented. This is inspection-grade only: no test was written or run, and no status was changed on its strength. It is recorded so the remaining work is scoped as missing features plus tests, not tests alone. | 2026-08-20 reconciliation audit: UJ-62-EXC-03 repository behavior is now implemented and locally verified at 5af8f032. | 2026-08-21 UJ-59 audit: exception decisions, independent source/calculation/coverage sampling, two-role exact-manifest signatures, accessible history and predecessor deltas are implemented and locally verified at 30825063. Repository implementation is implemented/passed; release remains blocked only on live OAuth-provider, hosted exact-candidate, deployment and dated production evidence. Claude-owned IPLF-028A/IPLF-028B evidence and IPLF-039F cost work remain separate lanes.",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
