@@ -11,11 +11,12 @@ as a redacted teaser.
 
 from __future__ import annotations
 
+import json
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import Select, String, and_, false, func, or_, select
+from sqlalchemy import Select, String, and_, case, false, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -53,6 +54,8 @@ from caseops_api.services.session_context import SessionContext
 
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
+MAX_FAMILY_LIMIT = 100
+DEFAULT_FAMILY_LIMIT = 25
 REGISTRY_FRESHNESS_WINDOW = timedelta(hours=24)
 
 PROPRIETOR_ROLES = {"applicant", "owner", "proprietor"}
@@ -92,6 +95,84 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
     if not application_id:
         raise HTTPException(status_code=400, detail="Invalid portfolio cursor.")
     return parsed, application_id
+
+
+def _encode_family_cursor(member_count: int, label: str, family_key: str) -> str:
+    raw = json.dumps(
+        [member_count, label.casefold(), family_key],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode()
+    return urlsafe_b64encode(raw).decode()
+
+
+def _decode_family_cursor(cursor: str) -> tuple[int, str, str]:
+    try:
+        member_count, label, family_key = json.loads(
+            urlsafe_b64decode(cursor.encode()).decode()
+        )
+        if (
+            not isinstance(member_count, int)
+            or member_count < 1
+            or not isinstance(label, str)
+            or not isinstance(family_key, str)
+            or not family_key
+        ):
+            raise ValueError
+    except Exception as exc:  # noqa: BLE001 - opaque cursor is a client contract
+        raise HTTPException(status_code=400, detail="Invalid family cursor.") from exc
+    return member_count, label, family_key
+
+
+def _primary_client_expressions(company_id: str):
+    """Return stable primary-client expressions without multiplying Matter rows."""
+
+    assignment_order = (
+        MatterClientAssignment.is_primary.desc(),
+        MatterClientAssignment.created_at,
+        MatterClientAssignment.id,
+    )
+    primary_client_id = (
+        select(MatterClientAssignment.client_id)
+        .join(Client, Client.id == MatterClientAssignment.client_id)
+        .where(
+            MatterClientAssignment.matter_id == IpDocketRecord.matter_id,
+            Client.company_id == company_id,
+        )
+        .order_by(*assignment_order)
+        .limit(1)
+        .correlate(IpDocketRecord)
+        .scalar_subquery()
+    )
+    primary_client_name = (
+        select(Client.name)
+        .join(
+            MatterClientAssignment,
+            MatterClientAssignment.client_id == Client.id,
+        )
+        .where(
+            MatterClientAssignment.matter_id == IpDocketRecord.matter_id,
+            Client.company_id == company_id,
+        )
+        .order_by(*assignment_order)
+        .limit(1)
+        .correlate(IpDocketRecord)
+        .scalar_subquery()
+    )
+    legacy_name = func.trim(func.coalesce(Matter.client_name, ""))
+    family_key = case(
+        (primary_client_id.is_not(None), primary_client_id),
+        (
+            legacy_name != "",
+            literal("legacy:") + func.lower(legacy_name),
+        ),
+        else_=None,
+    )
+    label = case(
+        (primary_client_name.is_not(None), primary_client_name),
+        else_=legacy_name,
+    )
+    return family_key, label
 
 
 def _latest_registry_sync_at():
@@ -911,6 +992,8 @@ def list_ip_portfolio_families(
     context: SessionContext,
     grouping: str,
     filters: IpPortfolioFilters,
+    limit: int = DEFAULT_FAMILY_LIMIT,
+    cursor: str | None = None,
 ) -> IpPortfolioFamilyResponse:
     """IP-PROS-11 — group related applications without merging their identity.
 
@@ -921,40 +1004,98 @@ def list_ip_portfolio_families(
 
     if grouping not in {"mark", "client"}:
         raise HTTPException(status_code=400, detail="grouping must be 'mark' or 'client'.")
+    if limit < 1 or limit > MAX_FAMILY_LIMIT:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Family limit must be between 1 and {MAX_FAMILY_LIMIT}.",
+        )
 
     statement = _scoped_query(session, context=context, filters=filters)
-    rows = list(session.execute(statement).all())
+    if grouping == "mark":
+        family_key_expression = TrademarkApplication.asset_id
+        family_label_expression = func.coalesce(IpAsset.title, "")
+    else:
+        family_key_expression, family_label_expression = _primary_client_expressions(
+            context.company.id
+        )
 
-    visible = rows
+    member_count_expression = func.count(TrademarkApplication.id)
+    label_sort_expression = func.lower(func.coalesce(family_label_expression, ""))
+    family_statement = (
+        statement.with_only_columns(
+            family_key_expression.label("family_key"),
+            family_label_expression.label("family_label"),
+            member_count_expression.label("member_count"),
+        )
+        .where(family_key_expression.is_not(None))
+        .group_by(family_key_expression, family_label_expression)
+    )
+    if cursor:
+        cursor_count, cursor_label, cursor_key = _decode_family_cursor(cursor)
+        family_statement = family_statement.having(
+            or_(
+                member_count_expression < cursor_count,
+                and_(
+                    member_count_expression == cursor_count,
+                    label_sort_expression > cursor_label,
+                ),
+                and_(
+                    member_count_expression == cursor_count,
+                    label_sort_expression == cursor_label,
+                    family_key_expression > cursor_key,
+                ),
+            )
+        )
+    family_rows = list(
+        session.execute(
+            family_statement.order_by(
+                member_count_expression.desc(),
+                label_sort_expression,
+                family_key_expression,
+            ).limit(limit + 1)
+        ).all()
+    )
+    has_more = len(family_rows) > limit
+    family_rows = family_rows[:limit]
+    selected_keys = [row.family_key for row in family_rows]
+
+    if selected_keys:
+        visible = list(
+            session.execute(
+                statement.add_columns(family_key_expression.label("family_key"))
+                .where(family_key_expression.in_(selected_keys))
+                .order_by(TrademarkApplication.id)
+            ).all()
+        )
+    else:
+        visible = []
+
+    ungrouped = int(
+        session.scalar(
+            statement.with_only_columns(func.count(TrademarkApplication.id))
+            .where(family_key_expression.is_(None))
+            .order_by(None)
+        )
+        or 0
+    )
 
     deadlines = _deadline_counts(
         session,
         company_id=context.company.id,
-        docket_ids=[docket.id for _a, _s, docket in visible],
+        docket_ids=[docket.id for _a, _s, docket, _family_key in visible],
     )
     primary_identifiers = _primary_application_identifiers(
         session,
         company_id=context.company.id,
-        application_ids=[application.id for application, _asset, _docket in visible],
+        application_ids=[
+            application.id for application, _asset, _docket, _family_key in visible
+        ],
     )
 
     grouped: dict[str, dict] = {}
-    ungrouped = 0
-    for application, asset, docket in visible:
-        if grouping == "mark":
-            key = application.asset_id
-            label = (asset.title if asset else None) or ""
-        else:
-            key = docket.matter_id
-            # Label a client family from the Matter, not from whichever member
-            # happens to be first; a docket title names one filing, not a client.
-            matter = session.get(Matter, key) if key else None
-            label = (getattr(matter, "title", None) or "") if matter else ""
-        if not key:
-            # A record with no mark or no client cannot be grouped; it is
-            # counted rather than forced into a synthetic family.
-            ungrouped += 1
-            continue
+    labels_by_key = {row.family_key: row.family_label or "" for row in family_rows}
+    for application, _asset, docket, key in visible:
+        label = labels_by_key[key]
         open_count, _unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
         bucket = grouped.setdefault(key, {"label": label, "members": []})
         if not bucket["label"]:
@@ -974,8 +1115,8 @@ def list_ip_portfolio_families(
             )
         )
 
-    families = [
-        IpPortfolioFamily(
+    family_by_key = {
+        key: IpPortfolioFamily(
             grouping=grouping,
             family_key=key,
             label=bucket["label"],
@@ -983,16 +1124,34 @@ def list_ip_portfolio_families(
             distinct_jurisdictions=sorted(
                 {m.jurisdiction for m in bucket["members"] if m.jurisdiction}
             ),
-            distinct_filing_phases=sorted({m.filing_phase for m in bucket["members"]}),
+            distinct_filing_phases=sorted(
+                {m.filing_phase for m in bucket["members"]}
+            ),
             members=sorted(
                 bucket["members"], key=lambda m: (m.jurisdiction or "", m.application_id)
             ),
         )
         for key, bucket in grouped.items()
+    }
+    families = [
+        family_by_key[row.family_key]
+        for row in family_rows
+        if row.family_key in family_by_key
     ]
-    families.sort(key=lambda f: (-f.member_count, f.label, f.family_key))
+    next_cursor = None
+    if has_more and family_rows:
+        last = family_rows[-1]
+        next_cursor = _encode_family_cursor(
+            int(last.member_count),
+            last.family_label or "",
+            last.family_key,
+        )
     return IpPortfolioFamilyResponse(
-        grouping=grouping, families=families, ungrouped_member_count=ungrouped
+        grouping=grouping,
+        families=families,
+        ungrouped_member_count=ungrouped,
+        limit=limit,
+        next_cursor=next_cursor,
     )
 
 

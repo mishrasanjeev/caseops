@@ -11,7 +11,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tests.test_auth_company import auth_headers, bootstrap_company
-from tests.test_clients import _mk_matter
+from tests.test_clients import _mk_client, _mk_matter
 from tests.test_ip_record_workflow import _particulars
 
 
@@ -146,38 +146,108 @@ def test_ip_pros_11_member_lifecycle_stays_independent(client: TestClient) -> No
 
 
 def test_families_group_by_client_and_report_ungrouped(client: TestClient) -> None:
-    """Client grouping is a separate axis over the same records."""
+    """Client grouping crosses Matters and preserves a truthful ungrouped count."""
 
     bootstrap = bootstrap_company(client)
     token = str(bootstrap["access_token"])
     headers = auth_headers(token)
     first_matter = _mk_matter(client, token, "IP-FAM-033A-C1")
     second_matter = _mk_matter(client, token, "IP-FAM-033A-C2")
+    ungrouped_matter = _mk_matter(client, token, "IP-FAM-033A-C3")
+    shared_client_response = _mk_client(
+        client,
+        token,
+        name="Shared Trademark Client",
+        primary_contact_email="shared-client@example.com",
+    )
+    assert shared_client_response.status_code == 200, shared_client_response.text
+    shared_client = shared_client_response.json()
+    for matter in (first_matter, second_matter):
+        assigned = client.post(
+            f"/api/matters/{matter['id']}/clients",
+            headers=headers,
+            json={"client_id": shared_client["id"], "role": "proprietor"},
+        )
+        assert assigned.status_code == 200, assigned.text
 
     d1 = _docket(client, headers, matter_id=first_matter["id"], title="Client One Mark")
     d2 = _docket(client, headers, matter_id=second_matter["id"], title="Client Two Mark")
+    d3 = _docket(client, headers, matter_id=ungrouped_matter["id"], title="No Client Mark")
     a1 = _asset(client, headers, docket_id=d1["id"], title="Mark One")
     a2 = _asset(client, headers, docket_id=d2["id"], title="Mark Two")
+    a3 = _asset(client, headers, docket_id=d3["id"], title="Mark Three")
     _application(client, headers, docket_id=d1["id"], asset_id=a1["id"])
     _application(
         client, headers, docket_id=d1["id"], asset_id=a1["id"], office="UKIPO", jurisdiction="GB"
     )
     _application(client, headers, docket_id=d2["id"], asset_id=a2["id"])
+    _application(client, headers, docket_id=d3["id"], asset_id=a3["id"])
 
     by_client = _families(client, headers, grouping="client").json()
     assert by_client["grouping"] == "client"
-    assert [f["member_count"] for f in by_client["families"]] == [2, 1]
-    assert by_client["families"][0]["family_key"] == first_matter["id"]
-    assert by_client["families"][0]["label"] == first_matter["title"]
+    assert [f["member_count"] for f in by_client["families"]] == [3]
+    assert by_client["families"][0]["family_key"] == shared_client["id"]
+    assert by_client["families"][0]["label"] == "Shared Trademark Client"
+    assert by_client["ungrouped_member_count"] == 1
 
     by_mark = _families(client, headers, grouping="mark").json()
-    assert sorted(f["member_count"] for f in by_mark["families"]) == [1, 2]
+    assert sorted(f["member_count"] for f in by_mark["families"]) == [1, 1, 2]
 
     # Filters still apply to the grouped view.
     filtered = _families(client, headers, grouping="mark", jurisdiction="GB").json()
     assert sum(f["member_count"] for f in filtered["families"]) == 1
 
     assert _families(client, headers, grouping="invalid").status_code == 422
+
+
+def test_family_pages_are_bounded_and_cursor_stable(client: TestClient) -> None:
+    """IPLF-033B returns whole families without an unbounded application scan."""
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    expected_keys: set[str] = set()
+    for number in range(4):
+        matter = _mk_matter(client, token, f"IP-FAM-033B-PAGE-{number}")
+        docket = _docket(
+            client,
+            headers,
+            matter_id=matter["id"],
+            title=f"Paged Mark {number}",
+        )
+        asset = _asset(
+            client,
+            headers,
+            docket_id=docket["id"],
+            title=f"Paged Mark {number}",
+        )
+        expected_keys.add(asset["id"])
+        _application(client, headers, docket_id=docket["id"], asset_id=asset["id"])
+
+    first = _families(client, headers, grouping="mark", limit=2)
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["limit"] == 2
+    assert len(first_body["families"]) == 2
+    assert first_body["next_cursor"]
+
+    second = _families(
+        client,
+        headers,
+        grouping="mark",
+        limit=2,
+        cursor=first_body["next_cursor"],
+    )
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert len(second_body["families"]) == 2
+    assert second_body["next_cursor"] is None
+    returned_keys = {
+        family["family_key"]
+        for family in [*first_body["families"], *second_body["families"]]
+    }
+    assert returned_keys == expected_keys
+    assert _families(client, headers, grouping="mark", cursor="broken").status_code == 400
 
 
 def test_families_are_access_scoped_and_tenant_isolated(client: TestClient) -> None:

@@ -2111,6 +2111,35 @@ def test_foreign_key_indexes_exist_after_head(pg_engine):
     assert not missing, f"Foreign-key columns missing leading indexes: {missing}"
 
 
+def test_application_family_query_is_bounded_and_uses_tenant_asset_index(pg_engine):
+    inspector = inspect(pg_engine)
+    indexes = {
+        str(index["name"]): tuple(index["column_names"])
+        for index in inspector.get_indexes("trademark_applications")
+    }
+    assert indexes["ix_tm_applications_company_asset"] == ("company_id", "asset_id")
+
+    company_id = str(uuid4())
+    with pg_engine.connect() as connection:
+        connection.execute(text("SET LOCAL enable_seqscan = off"))
+        plan_rows = connection.execute(
+            text(
+                "EXPLAIN (COSTS OFF) "
+                "SELECT asset_id, count(id) AS member_count "
+                "FROM trademark_applications "
+                "WHERE company_id = :company_id AND asset_id IS NOT NULL "
+                "GROUP BY asset_id "
+                "ORDER BY member_count DESC, asset_id "
+                "LIMIT 26"
+            ),
+            {"company_id": company_id},
+        ).scalars()
+        plan = "\n".join(str(row) for row in plan_rows)
+
+    assert "Limit" in plan
+    assert "ix_tm_applications_company_asset" in plan
+
+
 def test_conflict_check_trigram_indexes_exist_after_head(pg_engine):
     expected = {
         "ix_clients_name_trgm",

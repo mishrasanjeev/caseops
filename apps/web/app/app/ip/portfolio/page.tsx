@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   List,
   LoaderCircle,
+  Network,
   RotateCcw,
   Search,
   Settings2,
@@ -56,12 +57,14 @@ import {
   deleteIpPortfolioSavedView,
   downloadIpPortfolioExport,
   fetchIpPortfolio,
+  fetchIpPortfolioFamilies,
   listIpPortfolioExports,
   listIpPortfolioSavedViews,
   previewIpPortfolioExport,
   retryIpPortfolioExport,
   updateIpPortfolioSavedView,
   type IpPortfolioFilters,
+  type IpPortfolioFamily,
   type IpPortfolioResponse,
   type IpPortfolioRow,
   type IpPortfolioSavedView,
@@ -136,7 +139,8 @@ export default function IpPortfolioPage() {
   const [selectedViewId, setSelectedViewId] = useState("none");
   const [saveOpen, setSaveOpen] = useState(false);
   const [viewName, setViewName] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid" | "families">("list");
+  const [familyGrouping, setFamilyGrouping] = useState<"mark" | "client">("mark");
   const [exportPreview, setExportPreview] = useState<Awaited<
     ReturnType<typeof previewIpPortfolioExport>
   > | null>(null);
@@ -147,6 +151,18 @@ export default function IpPortfolioPage() {
     queryFn: ({ pageParam }) => fetchIpPortfolio(filters, { limit: 50, cursor: pageParam }),
     getNextPageParam: (lastPage) => lastPage.next_cursor,
     enabled: canView,
+  });
+  const familyListing = useInfiniteQuery({
+    queryKey: ["ip", "portfolio", "families", familyGrouping, filters],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      fetchIpPortfolioFamilies(filters, {
+        grouping: familyGrouping,
+        limit: 25,
+        cursor: pageParam,
+      }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor,
+    enabled: canView && viewMode === "families",
   });
   const savedViews = useQuery({
     queryKey: ["ip", "portfolio", "views"],
@@ -290,6 +306,15 @@ export default function IpPortfolioPage() {
                 onClick={() => setViewMode("grid")}
               >
                 <LayoutGrid className="h-4 w-4" aria-hidden />
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "families" ? "secondary" : "ghost"}
+                aria-label="Family view"
+                title="Family view"
+                onClick={() => setViewMode("families")}
+              >
+                <Network className="h-4 w-4" aria-hidden />
               </Button>
             </div>
             <Button size="sm" variant="outline" href="/app/ip/portfolio/imports">
@@ -513,7 +538,24 @@ export default function IpPortfolioPage() {
         {counts ? <PortfolioCounts counts={counts} /> : null}
       </section>
 
-      {listing.isPending ? (
+      {viewMode === "families" ? (
+        <PortfolioFamilies
+          grouping={familyGrouping}
+          onGroupingChange={setFamilyGrouping}
+          families={
+            familyListing.data?.pages.flatMap((page) => page.families) ?? []
+          }
+          ungroupedCount={
+            familyListing.data?.pages[0]?.ungrouped_member_count ?? 0
+          }
+          pending={familyListing.isPending}
+          error={familyListing.error}
+          hasNextPage={familyListing.hasNextPage}
+          fetchingNextPage={familyListing.isFetchingNextPage}
+          onRetry={() => familyListing.refetch()}
+          onLoadMore={() => familyListing.fetchNextPage()}
+        />
+      ) : listing.isPending ? (
         <div className="flex flex-col gap-2" role="status" aria-label="Loading trademark portfolio">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -639,6 +681,135 @@ export default function IpPortfolioPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function PortfolioFamilies({
+  grouping,
+  onGroupingChange,
+  families,
+  ungroupedCount,
+  pending,
+  error,
+  hasNextPage,
+  fetchingNextPage,
+  onRetry,
+  onLoadMore,
+}: {
+  grouping: "mark" | "client";
+  onGroupingChange: (value: "mark" | "client") => void;
+  families: IpPortfolioFamily[];
+  ungroupedCount: number;
+  pending: boolean;
+  error: Error | null;
+  hasNextPage: boolean;
+  fetchingNextPage: boolean;
+  onRetry: () => void;
+  onLoadMore: () => void;
+}) {
+  return (
+    <section className="flex min-w-0 flex-col gap-4" aria-label="Application families">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-y border-[var(--color-line)] py-3">
+        <div className="flex rounded-md border border-[var(--color-line)] p-0.5">
+          <Button
+            size="sm"
+            variant={grouping === "mark" ? "secondary" : "ghost"}
+            onClick={() => onGroupingChange("mark")}
+          >
+            Mark families
+          </Button>
+          <Button
+            size="sm"
+            variant={grouping === "client" ? "secondary" : "ghost"}
+            onClick={() => onGroupingChange("client")}
+          >
+            Client families
+          </Button>
+        </div>
+        {ungroupedCount ? (
+          <Badge tone="warning">{ungroupedCount} ungrouped applications</Badge>
+        ) : null}
+      </div>
+
+      {pending ? (
+        <div className="flex flex-col gap-2" role="status" aria-label="Loading application families">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      ) : error ? (
+        <QueryErrorState
+          error={error}
+          title="Could not load application families"
+          onRetry={onRetry}
+        />
+      ) : families.length === 0 ? (
+        <EmptyState
+          title="No matching application families"
+          description="The current portfolio filters do not contain grouped applications."
+        />
+      ) : (
+        <div className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">
+          {families.map((family) => (
+            <article
+              key={family.family_key}
+              className="min-w-0 py-5"
+              data-testid={`ip-family-${family.family_key}`}
+            >
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 px-1">
+                <div className="min-w-0">
+                  <h2 className="break-words text-base font-semibold">
+                    {family.label || "Untitled family"}
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--color-mute)]">
+                    {family.member_count} applications · {family.distinct_jurisdictions.join(", ") || "Jurisdiction pending"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {family.distinct_filing_phases.map((phase) => (
+                    <Badge key={phase}>{phase.replaceAll("_", " ")}</Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {family.members.map((member) => (
+                  <Link
+                    key={member.application_id}
+                    href={`/app/ip?docket=${encodeURIComponent(member.docket_id)}`}
+                    className="min-w-0 rounded-md border border-[var(--color-line)] bg-white p-3 hover:border-[var(--color-brand-500)] hover:bg-[var(--color-bg-2)]"
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <strong className="min-w-0 break-words text-sm">
+                        {member.primary_identifier ?? "Application number pending"}
+                      </strong>
+                      {member.overdue_deadline_count ? (
+                        <Badge tone="warning">{member.overdue_deadline_count} overdue</Badge>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                      {[member.jurisdiction, member.office].filter(Boolean).join(" · ") || "Office pending"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium">{member.filing_phase.replaceAll("_", " ")}</span>
+                      <span className="text-[var(--color-mute)]">v{member.lifecycle_version}</span>
+                      <span className="text-[var(--color-mute)]">{member.open_deadline_count} open deadlines</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {hasNextPage ? (
+        <div className="flex justify-center">
+          <Button variant="outline" disabled={fetchingNextPage} onClick={onLoadMore}>
+            {fetchingNextPage ? "Loading" : "Load more families"}
+          </Button>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

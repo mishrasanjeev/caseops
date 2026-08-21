@@ -143,6 +143,8 @@ class IpPortfolioFamilyResponse(BaseModel):
     grouping: str
     families: list[IpPortfolioFamily] = Field(default_factory=list)
     ungrouped_member_count: int = 0
+    limit: int
+    next_cursor: str | None = None
 
 
 class IpPortfolioSavedViewCreate(BaseModel):

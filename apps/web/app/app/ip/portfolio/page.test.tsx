@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createExportMock,
+  fetchFamiliesMock,
   fetchPortfolioMock,
   listExportsMock,
   listViewsMock,
@@ -13,6 +14,7 @@ const {
   useCapabilityMock,
 } = vi.hoisted(() => ({
   createExportMock: vi.fn(),
+  fetchFamiliesMock: vi.fn(),
   fetchPortfolioMock: vi.fn(),
   listExportsMock: vi.fn(),
   listViewsMock: vi.fn(),
@@ -23,6 +25,7 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpPortfolio: fetchPortfolioMock,
+  fetchIpPortfolioFamilies: fetchFamiliesMock,
   listIpPortfolioSavedViews: listViewsMock,
   listIpPortfolioExports: listExportsMock,
   createIpPortfolioExport: createExportMock,
@@ -107,12 +110,57 @@ const RESPONSE = {
   next_cursor: null,
 };
 
+const FAMILY_RESPONSE = {
+  grouping: "mark" as const,
+  families: [
+    {
+      grouping: "mark" as const,
+      family_key: "asset-1",
+      label: "Aster Device",
+      member_count: 2,
+      distinct_jurisdictions: ["GB", "IN"],
+      distinct_filing_phases: ["filed", "pre_filing"],
+      members: [
+        {
+          application_id: "application-1",
+          docket_id: "docket-1",
+          asset_id: "asset-1",
+          office: "Trade Marks Registry Mumbai",
+          jurisdiction: "IN",
+          filing_phase: "filed",
+          lifecycle_version: 2,
+          primary_identifier: "TM / 2026 / 00421",
+          open_deadline_count: 2,
+          overdue_deadline_count: 0,
+        },
+        {
+          application_id: "application-2",
+          docket_id: "docket-2",
+          asset_id: "asset-1",
+          office: "UKIPO",
+          jurisdiction: "GB",
+          filing_phase: "pre_filing",
+          lifecycle_version: 1,
+          primary_identifier: "UK00004123456",
+          open_deadline_count: 1,
+          overdue_deadline_count: 1,
+        },
+      ],
+    },
+  ],
+  ungrouped_member_count: 1,
+  limit: 25,
+  next_cursor: null,
+};
+
 describe("IpPortfolioPage", () => {
   beforeEach(() => {
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchPortfolioMock.mockReset();
     fetchPortfolioMock.mockResolvedValue(RESPONSE);
+    fetchFamiliesMock.mockReset();
+    fetchFamiliesMock.mockResolvedValue(FAMILY_RESPONSE);
     listViewsMock.mockReset();
     listViewsMock.mockResolvedValue({ views: [] });
     listExportsMock.mockReset();
@@ -165,6 +213,33 @@ describe("IpPortfolioPage", () => {
     await waitFor(() =>
       expect(createExportMock).toHaveBeenCalledWith(
         expect.objectContaining({ rowLimit: 50000, previewToken: "export-preview-token" }),
+      ),
+    );
+  });
+
+  it("renders paginated application families and switches grouping axes", async () => {
+    render(withClient(<IpPortfolioPage />));
+    fireEvent.click(screen.getByRole("button", { name: "Family view" }));
+
+    await waitFor(() =>
+      expect(fetchFamiliesMock).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ grouping: "mark", limit: 25, cursor: null }),
+      ),
+    );
+    expect(await screen.findByRole("heading", { name: "Aster Device" })).toBeVisible();
+    expect(screen.getByText("UK00004123456")).toBeVisible();
+    expect(screen.getByText("1 ungrouped applications")).toBeVisible();
+    expect(screen.getByRole("link", { name: /UK00004123456/ })).toHaveAttribute(
+      "href",
+      "/app/ip?docket=docket-2",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Client families" }));
+    await waitFor(() =>
+      expect(fetchFamiliesMock).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ grouping: "client" }),
       ),
     );
   });
