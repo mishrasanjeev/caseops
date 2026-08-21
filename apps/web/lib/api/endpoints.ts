@@ -91,6 +91,9 @@ import {
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
   type TenantDataGovernanceIntegrityReport,
+  type TenantDataOperationDryRunListResponse,
+  type TenantDataOperationDryRunInput,
+  type TenantDataOperationDryRunRecord,
   type ProviderOperationReplayBatchResponse,
   type ProviderOperationReplayPreviewResponse,
   type ProviderCostProfileListResponse,
@@ -205,6 +208,9 @@ import {
   providerOperationActionResponse,
   providerOperationListResponse,
   tenantDataGovernanceIntegrityReport,
+  tenantDataOperationDryRunListResponse,
+  tenantDataOperationDryRunInput,
+  tenantDataOperationDryRunRecord,
   providerOperationReplayBatchResponse,
   providerOperationReplayPreviewResponse,
   providerCostProfileListResponse,
@@ -6825,6 +6831,51 @@ export async function listProviderOperations(input?: {
 export async function fetchTenantDataGovernanceIntegrity(): Promise<TenantDataGovernanceIntegrityReport> {
   const data = await apiRequest<unknown>("/api/admin/data-governance/integrity");
   return tenantDataGovernanceIntegrityReport.parse(data);
+}
+
+export async function listTenantDataOperationDryRuns(
+  limit = 20,
+): Promise<TenantDataOperationDryRunListResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/dry-runs?limit=${encodeURIComponent(String(limit))}`,
+  );
+  return tenantDataOperationDryRunListResponse.parse(data);
+}
+
+export async function createTenantDataOperationDryRun(
+  input: TenantDataOperationDryRunInput,
+): Promise<TenantDataOperationDryRunRecord> {
+  const payload = tenantDataOperationDryRunInput.parse(input);
+  const data = await apiRequest<unknown>(
+    "/api/admin/data-governance/operations/dry-runs",
+    {
+      method: "POST",
+      body: {
+        operation_type: payload.operationType,
+        request_evidence_ref: payload.requestEvidenceRef,
+        items: payload.items.map((item) => ({
+          data_class_id: item.dataClassId,
+          target_type: item.targetType,
+          target_reference_hash: item.targetReferenceHash,
+          candidate_record_count: item.candidateRecordCount,
+          estimated_bytes: item.estimatedBytes,
+          detail_redacted: item.detailRedacted ?? null,
+        })),
+        retention_policy_version_id: payload.retentionPolicyVersionId ?? null,
+        as_of: payload.asOf ?? null,
+      },
+    },
+  );
+  return tenantDataOperationDryRunRecord.parse(data);
+}
+
+export async function fetchTenantDataOperationDryRun(
+  operationId: string,
+): Promise<TenantDataOperationDryRunRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/dry-runs/${encodeURIComponent(operationId)}`,
+  );
+  return tenantDataOperationDryRunRecord.parse(data);
 }
 
 export async function fetchProviderReadiness(): Promise<ProviderReadinessListResponse> {
