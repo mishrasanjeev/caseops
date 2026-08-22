@@ -2412,6 +2412,19 @@ export const tenantDataGovernanceIntegrityReport = z.object({
   is_complete: z.boolean(),
 });
 
+// Aggregate preservation state deliberately excludes hold titles, authorities,
+// requester/approver identities, scopes, and held-item references.
+export const tenantLegalHoldSummary = z.object({
+  draft_count: z.number().int().min(0),
+  active_count: z.number().int().min(0),
+  released_count: z.number().int().min(0),
+  cancelled_count: z.number().int().min(0),
+  active_company_wide_count: z.number().int().min(0),
+  active_scoped_count: z.number().int().min(0),
+  active_item_count: z.number().int().min(0),
+  preservation_effective: z.boolean(),
+});
+
 const tenantDataOperationType = z.enum([
   "tenant_export",
   "retention_purge",
@@ -3406,6 +3419,7 @@ export type TenantDataGovernanceIntegrityCheck =
   z.infer<typeof tenantDataGovernanceIntegrityCheck>;
 export type TenantDataGovernanceIntegrityReport =
   z.infer<typeof tenantDataGovernanceIntegrityReport>;
+export type TenantLegalHoldSummary = z.infer<typeof tenantLegalHoldSummary>;
 export type TenantDataOperationDryRunSummary =
   z.infer<typeof tenantDataOperationDryRunSummary>;
 export type TenantDataOperationDryRunInput =

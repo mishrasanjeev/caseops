@@ -91,6 +91,7 @@ import {
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
   type TenantDataGovernanceIntegrityReport,
+  type TenantLegalHoldSummary,
   type TenantDataOperationDryRunListResponse,
   type TenantDataOperationDryRunInput,
   type TenantDataOperationDryRunRecord,
@@ -208,6 +209,7 @@ import {
   providerOperationActionResponse,
   providerOperationListResponse,
   tenantDataGovernanceIntegrityReport,
+  tenantLegalHoldSummary,
   tenantDataOperationDryRunListResponse,
   tenantDataOperationDryRunInput,
   tenantDataOperationDryRunRecord,
@@ -6830,6 +6832,11 @@ export async function listProviderOperations(input?: {
 export async function fetchTenantDataGovernanceIntegrity(): Promise<TenantDataGovernanceIntegrityReport> {
   const data = await apiRequest<unknown>("/api/admin/data-governance/integrity");
   return tenantDataGovernanceIntegrityReport.parse(data);
+}
+
+export async function fetchTenantLegalHoldSummary(): Promise<TenantLegalHoldSummary> {
+  const data = await apiRequest<unknown>("/api/admin/data-governance/holds/summary");
+  return tenantLegalHoldSummary.parse(data);
 }
 
 export async function listTenantDataOperationDryRuns(
