@@ -9630,6 +9630,10 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
   return apiRequest("/api/ip/dockets");
 }
 
+export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
 export async function fetchIpSharedHearings(
   docketId: string,
 ): Promise<{ docket_id: string; hearings: IpSharedHearing[] }> {

@@ -54,6 +54,7 @@ import {
   fetchIpDeadlineDependencies,
   fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
+  fetchIpDocket,
   fetchIpDockets,
   fetchIpSharedHearings,
   fetchIpProsecutionWorkspace,
@@ -117,6 +118,7 @@ function verifiedHttpSource(reference: string | null | undefined): string | null
 
 export default function IpDocketPage() {
   const searchParams = useSearchParams();
+  const requestedDocketId = searchParams.get("docket");
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
@@ -130,7 +132,7 @@ export default function IpDocketPage() {
   const canManageAccess = useCapability("matter_access:manage");
   const session = useSession();
   const [selectedId, setSelectedId] = useState<string | null>(() =>
-    searchParams.get("docket"),
+    requestedDocketId,
   );
   const [showCreate, setShowCreate] = useState(false);
 
@@ -144,10 +146,29 @@ export default function IpDocketPage() {
     queryFn: fetchIpDockets,
     enabled: canView && readiness.data?.workspace_available === true,
   });
+  const requestedDocket = useQuery({
+    queryKey: ["ip", "dockets", requestedDocketId],
+    queryFn: () => fetchIpDocket(requestedDocketId!),
+    enabled:
+      canView &&
+      readiness.data?.workspace_available === true &&
+      Boolean(requestedDocketId),
+  });
   const dockets = listing.data?.dockets ?? [];
   const selected = useMemo(
-    () => dockets.find((row) => row.id === selectedId) ?? dockets[0] ?? null,
-    [dockets, selectedId],
+    () =>
+      (selectedId === requestedDocketId ? requestedDocket.data : null) ??
+      dockets.find((row) => row.id === selectedId) ??
+      dockets[0] ??
+      null,
+    [dockets, requestedDocket.data, requestedDocketId, selectedId],
+  );
+  const portfolioDockets = useMemo(
+    () =>
+      selected && !dockets.some((row) => row.id === selected.id)
+        ? [selected, ...dockets]
+        : dockets,
+    [dockets, selected],
   );
 
   const refresh = async () => {
@@ -236,15 +257,15 @@ export default function IpDocketPage() {
         canConfigure={canConfigure}
       />
 
-      {listing.isPending ? (
+      {listing.isPending && !selected ? (
         <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
-      ) : listing.isError ? (
+      ) : listing.isError && !selected ? (
         <EmptyState
           title="Could not load the IP docket"
           description={apiErrorMessage(listing.error, "The IP API did not respond.")}
           action={<Button onClick={() => listing.refetch()}>Retry</Button>}
         />
-      ) : dockets.length === 0 ? (
+      ) : portfolioDockets.length === 0 ? (
         <EmptyState
           title="No IP records yet"
           description="Create a trademark record to validate filing particulars and begin the evidence-backed docket."
@@ -256,7 +277,16 @@ export default function IpDocketPage() {
           <Card className="min-w-0">
             <CardHeader><CardTitle as="h2">Portfolio</CardTitle></CardHeader>
             <CardContent className="flex flex-col gap-2">
-              {dockets.map((row) => (
+              {listing.isPending ? (
+                <p className="text-sm text-[var(--color-mute)]" role="status">
+                  Loading the rest of the portfolio…
+                </p>
+              ) : listing.isError ? (
+                <Button variant="secondary" onClick={() => listing.refetch()}>
+                  Retry portfolio
+                </Button>
+              ) : null}
+              {portfolioDockets.map((row) => (
                 <button
                   key={row.id}
                   type="button"
