@@ -9921,6 +9921,8 @@
         "apps/api/tests/test_20260822_ip_renewal_foundation_migration.py",
         "apps/api/tests/test_migration_order.py",
         "apps/api/tests/test_ip_data_governance_map.py",
+        "apps/api/tests/test_route_coverage_matrix.py::test_every_api_route_is_referenced_by_at_least_one_test",
+        "apps/api/tests/test_schema_fk_indexes.py",
         "apps/api/tests/test_postgres_validation.py::test_shared_reliability_actual_postgres_downgrade_refuses_evidence"
       ],
       "evidence_refs": [
@@ -9929,11 +9931,11 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-037A/local-2026-08-22.md",
-          "revision": "8b4c62c5ca8353e70eb848f5a7a9422f9868e5b0",
+          "revision": "5a3687cfb4857278c6bd777e6d72417c12705dfd",
           "recorded_at": "2026-08-22T09:45:00+05:30",
           "environment": "Windows 11 local branch on integrated main 1a1ee0effb640d2c91238b2f917021de2b4297b4; CPython 3.13 isolated SQLite fixtures; local PostgreSQL 17 plus pgvector container; generated OpenAPI TypeScript client; Next.js 16 typecheck. No exact-head CI, deployment, production verification, frontend workflow or browser E2E.",
           "fixtures": "Synthetic law-firm and foreign tenant, trademark docket, candidate/confirmed registration event, confirmed filing and registry-acceptance events, active legal rule/calendar versions, renewal/grace/next-term deadlines, official-fee estimate, accepted immutable certificate document and two client-instruction revisions.",
-          "assertions": "Tenant isolation; verified registration/deadline prerequisites; instruction supersession and acknowledgement CAS; term state/version/timestamp CAS; payment/filing initiation not accepted or completed; immutable filing evidence; registry acceptance; accepted docket-linked certificate; next-term deadline triggered by the acceptance event; additive downgrade/re-upgrade; populated-downgrade refusal; downgrade lineage remains above retained evidence; governance inventory and runtime projection; OpenAPI and TypeScript compatibility. Counts: source-wide Ruff passed, 21 focused/governance tests passed, 97 PostgreSQL tests passed, governance map and data-class projection valid, web typecheck passed.",
+          "assertions": "Tenant isolation; verified registration/deadline prerequisites; instruction supersession and acknowledgement CAS; term state/version/timestamp CAS; payment/filing initiation not accepted or completed; immutable filing evidence; registry acceptance; accepted docket-linked certificate; next-term deadline triggered by the acceptance event; additive downgrade/re-upgrade; populated-downgrade refusal; downgrade lineage remains above retained evidence; every foreign key has a leading index; route coverage anchors; governance inventory and runtime projection; OpenAPI and TypeScript compatibility. Counts: source-wide Ruff passed, 23 focused/governance/route/index tests passed, PostgreSQL full run passed 96 tests with one unrelated lock-observation timeout that passed on isolated rerun, governance map and data-class projection valid, web typecheck passed.",
           "result": "passed"
         }
       ],
