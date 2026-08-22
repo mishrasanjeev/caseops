@@ -32,6 +32,7 @@ from caseops_api.db.models import (
 from caseops_api.governance.data_class_projection import (
     require_admissible_data_class,
     require_current_projection,
+    review_coverage,
 )
 from caseops_api.schemas.data_governance import (
     TenantDataGovernanceIntegrityCheck,
@@ -52,7 +53,7 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.governance_integrity_scan import run_integrity_scan
-from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.security import require_step_up_always
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
 
@@ -355,6 +356,58 @@ EXPORT_EXCLUSIONS: tuple[dict[str, str], ...] = (
 )
 
 
+def _registered_scope_exclusion(session: Session) -> dict[str, str] | None:
+    """State the manifest's reach, in the place a reader looks for what is missing.
+
+    The five entries above are policy exclusions: categories deliberately
+    withheld. A reader who sees five carefully-reasoned omissions reasonably
+    concludes everything else is covered. It is not. A manifest can only name
+    data classes the reviewed projection admits, and today that is six
+    governance-metadata tables out of an inventoried estate of hundreds - no
+    matter file, document, communication or invoice among them.
+
+    That gap lives in the integrity report already, which is owner-only and a
+    different surface. Attaching it here puts the number on the artefact whose
+    interpretation depends on it: a tenant export manifest that lists five
+    exclusions and omits this one reads as near-complete while being nearly
+    empty. Reported for every operation type, because the limit is a property of
+    the registry rather than of exporting.
+    """
+
+    coverage = review_coverage(session)
+    if coverage is None:
+        # The projection could not be trusted. The dry run refuses before
+        # reaching here, so this is belt-and-braces rather than a live path -
+        # but returning a zeroed exclusion would be the reassuring number this
+        # function exists to refuse.
+        return None
+    total = coverage.total
+    unavailable = coverage.reviewed_elsewhere + coverage.unreviewed
+    return {
+        "category": "data_classes_not_admitted_to_operation_projection",
+        "reason": (
+            f"This operation can only reach {coverage.admitted} of {total} inventoried "
+            f"data classes. The other {unavailable} are not admitted to this "
+            f"operation projection: {coverage.reviewed_elsewhere} are reviewed by "
+            f"another governance slice and {coverage.unreviewed} have not yet been "
+            f"reviewed. None of those {unavailable} classes can be exported, purged "
+            f"or offboarded by this manifest, whatever retention terms are in force."
+        ),
+        "reference_metadata": (
+            "Registration is a reviewed governance act, not a runtime setting. "
+            "See IPLF-028A-DATA-CLASS-COVERAGE in the enterprise gap ledger."
+        ),
+    }
+
+
+def _manifest_exclusions(session: Session, *, operation_type: str) -> list[dict[str, str]]:
+    """Policy exclusions where they apply, plus the registry limit always."""
+
+    entries = export_exclusions() if operation_type == "tenant_export" else []
+    scope = _registered_scope_exclusion(session)
+    return entries + ([scope] if scope else [])
+
+
 def export_exclusions() -> list[dict[str, str]]:
     """The documented exclusion set for a tenant export manifest."""
     return [dict(entry) for entry in EXPORT_EXCLUSIONS]
@@ -404,7 +457,7 @@ def activate_legal_hold(
     express because it is a property of the session, not the row.
     """
 
-    require_recent_step_up(session, context=context, purpose="legal_hold_change")
+    require_step_up_always(session, context=context, purpose="legal_hold_change")
     hold = session.get(LegalHold, hold_id)
     if hold is None or hold.company_id != context.company.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal hold not found.")
@@ -476,7 +529,7 @@ def release_legal_hold(
     even existed.
     """
 
-    require_recent_step_up(session, context=context, purpose="legal_hold_change")
+    require_step_up_always(session, context=context, purpose="legal_hold_change")
     hold = session.get(LegalHold, hold_id)
     if hold is None or hold.company_id != context.company.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal hold not found.")
@@ -718,9 +771,7 @@ def create_dry_run_manifest(
         # Only a tenant export leaves the platform, so only it carries the
         # exclusion record. Attaching the list to a purge or restore manifest
         # would imply a redistribution boundary that operation does not have.
-        "exclusions": (
-            export_exclusions() if payload.operation_type == "tenant_export" else []
-        ),
+        "exclusions": _manifest_exclusions(session, operation_type=payload.operation_type),
         # Only an offboarding revokes a tenant's access surface.
         "offboarding_plan": (
             [

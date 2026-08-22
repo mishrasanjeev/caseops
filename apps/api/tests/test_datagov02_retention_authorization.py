@@ -75,7 +75,22 @@ def proposer(client: TestClient) -> SessionContext:
     return SessionContext(company=company, user=user, membership=membership)
 
 
-def _colleague(session: Session, company: Company, label: str = "Reviewer") -> SessionContext:
+def _colleague(
+    session: Session,
+    company: Company,
+    label: str = "Reviewer",
+    *,
+    step_up: bool = True,
+) -> SessionContext:
+    """A second person in the same company.
+
+    ``step_up`` defaults to True because approving and activating a retention
+    schedule now require a recent step-up unconditionally. Before that, a
+    reviewer with no MFA enrolment satisfied the control by not having one, and
+    these tests passed straight through that hole. Tests that are ABOUT step-up
+    pass ``step_up=False`` and arrange the factor themselves.
+    """
+
     user = User(
         email=f"{label.lower()}-{uuid4().hex[:8]}@fixture.example",
         full_name=label,
@@ -86,7 +101,10 @@ def _colleague(session: Session, company: Company, label: str = "Reviewer") -> S
     membership = CompanyMembership(company_id=company.id, user_id=user.id, role="admin")
     session.add(membership)
     session.flush()
-    return SessionContext(company=company, user=user, membership=membership)
+    context = SessionContext(company=company, user=user, membership=membership)
+    if step_up:
+        _step_up(session, context, purpose=STEP_UP_PURPOSE)
+    return context
 
 
 def _policy(session: Session, company_id: str) -> DataRetentionPolicy:
@@ -320,6 +338,9 @@ class TestTheLifecycleIsDrivable:
         # Control: four eyes measured against the recorded proposer.
         version = self._candidate(session, proposer)
 
+        # Satisfy step-up so the refusal below is the FOUR-EYES rule and not the
+        # step-up gate, which now fires first and unconditionally.
+        _step_up(session, proposer, purpose=STEP_UP_PURPOSE)
         with pytest.raises(HTTPException) as excinfo:
             approve_version(
                 session, context=proposer, version_id=version.id, reviewer_label="Self"
@@ -680,6 +701,9 @@ class TestControlsThatHadNoKillingTest:
         version.policy_hash = policy_terms_hash(version)
         session.flush()
 
+        # Satisfy step-up so the refusal below is the rule this test names
+        # and not the step-up gate, which now fires first.
+        _step_up(session, proposer, purpose=STEP_UP_PURPOSE)
         with pytest.raises(HTTPException) as excinfo:
             approve_version(
                 session,
@@ -832,7 +856,7 @@ class TestStepUpGatesTheAuthorizingDirection:
         )
         version.policy_hash = policy_terms_hash(version)
         session.flush()
-        reviewer = _colleague(session, proposer.company)
+        reviewer = _colleague(session, proposer.company, step_up=False)
         _enrol_mfa(session, reviewer)
 
         with pytest.raises(HTTPException) as excinfo:

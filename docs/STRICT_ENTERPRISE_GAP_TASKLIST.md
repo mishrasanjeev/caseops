@@ -1376,3 +1376,159 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   This raises the severity: the gap is not an occasional hazard of unusual
   scheduling, it is the ordinary outcome whenever two lanes touch migrations in
   the same week, and it recurs every time main moves.
+
+## 2026-08-22 Step-up second-factor audit
+
+### EH-SEC-01 - Step-up is conditional on MFA enrolment, and enrolment defaults to none
+
+- **Status:** Partially implemented. The control exists, is correct once a
+  tenant enables it, and five of the highest-consequence call sites are now
+  unconditional. The remaining ~45 keep the conditional default.
+- **Gap found:** `services/security.py::require_recent_step_up` requires a
+  step-up only when the caller **already has MFA enrolled**, or when tenant
+  policy mandates MFA:
+
+  ```python
+  should_require = require_if_mfa_enrolled and setting is not None and setting.status == "enrolled"
+  ```
+
+  `TenantSecurityPolicy.tenant_admin_mfa_required` and `all_users_mfa_required`
+  both default to `False`, and a tenant with no policy row has no requirement at
+  all. So for a new tenant the resolved rule is **"an actor with no MFA
+  enrolment satisfies the second factor by not having one"** — the default
+  posture, not an edge case.
+- **Why this is not simply a bug:** the conditional shape is a deliberate
+  progressive-adoption stance and it is right for most actions. A hard
+  requirement everywhere would lock a tenant out of its own product before it
+  has adopted MFA. The gap is not that the rule is conditional; it is that the
+  conditional rule is applied *uniformly*, including to actions that are
+  irreversible or that grant authority, where proceeding with no second factor
+  is worse than refusing.
+- **Closed here (unconditional via the new `require_step_up_always`):**
+  | Purpose | Why it cannot be conditional |
+  |---|---|
+  | `data_operation_execution` | Authorises an export, purge or offboarding (closed earlier, PR #296) |
+  | `retention_policy_activation` × 2 | Approving and activating a schedule authorises **every future purge** under it — upstream of the gate closed in #296, which is why leaving it conditional was an inconsistency |
+  | `legal_hold_change` × 2 | Activating and, critically, **releasing** a hold lifts preservation and makes held evidence deletable |
+- **Recorded, deliberately NOT changed here:** each of these is outside the
+  records-governance lane, and hardening them has real lockout consequences
+  that are a product decision rather than a defect fix. Listed by the strength
+  of the case for making them unconditional:
+  | Purpose | Sites | Consequence if performed without a second factor |
+  |---|---|---|
+  | `role_capability_change` | 1 | Privilege escalation from a compromised session |
+  | `destructive_action` | 2 | Named as destructive |
+  | `payment_activation_change` | 3 | Enables live payment capture |
+  | `billing_export` | 13 | Bulk financial data egress |
+  | `connector_credential_change` / `connector_disconnect` | 8 | Provider credential and integration control |
+  | `record_access_change` | 1 | Alters who can see restricted records |
+  | `platform_admin_access` | 1 | Cross-tenant administrative reach |
+- **Severity:** not stop-ship on its own — a tenant that enables the MFA policy
+  is protected on every one of these paths, and the product decision to allow
+  progressive adoption is legitimate. It is a fail-open **default** on
+  irreversible actions, which the hardening protocol counts as a gap whether or
+  not a bug has been reported.
+- **Decision needed from the product/security owner:** whether the
+  `role_capability_change` and `destructive_action` purposes should join the
+  unconditional set, accepting that a tenant with no MFA enrolment could not
+  perform them at all.
+- **A hollow test found and replaced:**
+  `test_both_lifecycle_paths_demand_step_up` asserted
+  `'require_recent_step_up' in inspect.getsource(...)`. A source-text grep
+  cannot distinguish a conditional gate from an unconditional one, so it passed
+  throughout the period the gate was open for un-enrolled actors. It now deletes
+  the step-up row and asserts a real 403. Verified by falsification: restoring
+  the conditional helper fails the new test and passed the old one.
+- **Verification:** `verify-backend.sh` across the data-governance, retention,
+  approval, review-contract and hold suites — 81 passed. Every test that had to
+  change was green *because* of the hole, which is the clearest evidence that
+  the hole was load-bearing.
+
+### EH-SEC-02 - Step-up purposes are audit labels, not enforcement boundaries
+
+- **Status:** Partially implemented. True for the five `require_step_up_always`
+  sites, which match the purpose exactly. Not true for the ~45 sites on
+  `require_recent_step_up`.
+- **Gap found:** `require_recent_step_up` falls back to *any* purpose:
+
+  ```python
+  if recent_step_up_expires_at(session, context=context, purpose=purpose):
+      return
+  if purpose != "step_up" and recent_step_up_expires_at(session, context=context):
+      return
+  ```
+
+  The second call passes no purpose, so it matches any unexpired step-up row.
+  **Verified empirically**, not read off the source: a step-up completed for
+  `matter_summary` satisfies a later requirement for `legal_hold_change`
+  (`conditional=True`), while `require_step_up_always` refuses it
+  (`always=False`).
+- **Why it matters:** `STEP_UP_PURPOSES` reads as a set of separately-governed
+  controls, and its own comment says purposes are named apart "so the two can be
+  governed independently later". At enforcement time they are interchangeable
+  for the whole TTL — `mfa_step_up_ttl_minutes`, default **15**. So one MFA
+  prompt accepted for the mildest reason currently authorises the strongest one
+  within that window, on every conditional site.
+- **Not changed here, deliberately.** Removing the fallback re-prompts users on
+  every distinct purpose within a working session, which has a real usability
+  cost and reaches ~45 call sites outside the records-governance lane. That is a
+  product decision. What is not acceptable is for the current behaviour to be
+  true *by accident*, so it is now pinned by
+  `apps/api/tests/test_step_up_purpose_semantics.py`, whose failure message says
+  to update this entry deliberately rather than let code and ledger diverge.
+- **Interaction with EH-SEC-01:** the five hardened sites gain a second property
+  beyond unconditionality — a cross-purpose step-up cannot authorise them
+  either. That was a consequence of matching the purpose exactly rather than a
+  separately argued decision, and it is asserted so it cannot regress silently.
+- **A related sharp edge, safe but undiagnosable:** `complete_step_up` records
+  `purpose if purpose in STEP_UP_PURPOSES else "step_up"`. A typo in a caller's
+  purpose string therefore produces a row labelled `step_up`, which
+  `require_step_up_always` would never accept — the control would refuse
+  *forever* rather than fail open. That is the safe direction, but the 403 says
+  nothing about the cause. The test asserts every purpose used with the
+  unconditional gate is registered.
+- **Severity:** not stop-ship. It narrows, but does not remove, the value of a
+  second factor, and the strongest actions are already exempt.
+- **Decision needed from the product/security owner:** whether the conditional
+  gate should stop accepting cross-purpose step-ups, accepting the extra prompts.
+
+### Owner decisions on EH-SEC-01 and EH-SEC-02 — 2026-08-22
+
+Both open questions were put to the repository owner and both were answered.
+Recorded here because a security posture chosen deliberately and a security gap
+left by accident look identical in the code six months later.
+
+**EH-SEC-01 — do not extend the unconditional set.** Asked whether
+`role_capability_change` and `destructive_action` should require a second factor
+unconditionally. Answer: **no — avoid MFA.** The conditional,
+progressive-adoption rule stands for those and for the rest of the ~45 sites.
+
+**EH-SEC-02 — keep the cross-purpose fallback.** Asked whether the conditional
+gate should stop accepting a step-up completed for a different purpose. Answer:
+**no — no frequent prompts.** One step-up continues to satisfy any purpose for
+the TTL.
+
+Consequences, stated plainly so nobody has to re-derive them:
+
+- On the ~45 conditional sites, an actor with **no MFA enrolment** has no second
+  factor at all, and an actor with one enrolled needs only a single step-up per
+  15-minute window to authorise anything. That is now a **chosen posture**, not
+  an oversight. Tenants that want more can still set
+  `TenantSecurityPolicy.all_users_mfa_required`, which is the intended lever.
+- The five `require_step_up_always` sites are **out of scope of both answers**
+  and keep their stronger behaviour. The questions asked whether to *extend*
+  hardening to more purposes and whether to *remove* the fallback from the
+  conditional gate; neither asked to weaken protection already shipped for
+  irreversible acts, and reading them that way would silently reverse a merged,
+  owner-accepted control (#296). Those five are: authorising an export/purge
+  execution, approving and activating a retention schedule, and activating and
+  releasing a legal hold.
+- The practical cost of that exemption is **one extra MFA prompt per irreversible
+  act** — releasing a hold or authorising a purge needs a step-up for that exact
+  purpose. If the owner intends "no frequent prompts" to cover these five as
+  well, say so and they revert to the conditional gate; this note exists so that
+  is a decision rather than a discovery.
+
+Status of both entries stays `Partially implemented`: the control is now
+deliberately partial rather than accidentally so, and the tests pin which half
+is which.
