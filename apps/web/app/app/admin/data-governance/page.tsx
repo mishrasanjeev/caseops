@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import {
   fetchTenantDataGovernanceIntegrity,
   fetchTenantDataOperationDryRun,
+  fetchTenantLegalHoldSummary,
   createTenantDataOperationDryRun,
   listTenantDataOperationDryRuns,
 } from "@/lib/api/endpoints";
@@ -44,6 +45,11 @@ export default function DataGovernancePage() {
   const history = useQuery({
     queryKey: ["admin", "data-governance", "dry-runs"],
     queryFn: () => listTenantDataOperationDryRuns(20),
+    enabled: canAudit,
+  });
+  const legalHoldSummary = useQuery({
+    queryKey: ["admin", "data-governance", "legal-hold-summary"],
+    queryFn: fetchTenantLegalHoldSummary,
     enabled: canAudit,
   });
   const selectedManifest = useQuery({
@@ -90,6 +96,18 @@ export default function DataGovernancePage() {
             <div className="flex flex-col gap-3">
               <p className="text-sm text-[var(--color-mute)]">{report.data.finding_count} finding(s), {report.data.unavailable_count} unavailable check(s).</p>
               {report.data.checks.map((check) => <div key={check.check_id} className="rounded-lg border border-[var(--color-line)] p-4" data-testid={`governance-check-${check.check_id}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{check.check_id}</span><Badge tone={tone(check.status)}>{check.status}</Badge></div><p className="mt-2 text-sm text-[var(--color-mute)]">{check.summary}</p>{check.blocked_by ? <p className="mt-2 text-xs text-[var(--color-mute)]">Blocked by: {check.blocked_by}</p> : null}</div>)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle as="h2">Legal-hold preservation</CardTitle><CardDescription>Aggregate preservation visibility only. Hold records, scopes, authorities, and held-item references are never shown here.</CardDescription></CardHeader>
+        <CardContent>
+          {legalHoldSummary.isPending ? <Skeleton className="h-28 w-full" /> : legalHoldSummary.isError ? <QueryErrorState title="Could not load legal-hold preservation" error={legalHoldSummary.error} onRetry={legalHoldSummary.refetch} /> : (
+            <div className="flex flex-col gap-4" data-testid="legal-hold-summary">
+              <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">Current preservation state</span><Badge tone={legalHoldSummary.data.preservation_effective ? "success" : "warning"}>{legalHoldSummary.data.preservation_effective ? "preservation effective" : "preservation not effective"}</Badge></div>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-[var(--color-mute)]">Active holds</dt><dd>{legalHoldSummary.data.active_count}</dd></div><div><dt className="text-[var(--color-mute)]">Company-wide</dt><dd>{legalHoldSummary.data.active_company_wide_count}</dd></div><div><dt className="text-[var(--color-mute)]">Scoped</dt><dd>{legalHoldSummary.data.active_scoped_count}</dd></div><div><dt className="text-[var(--color-mute)]">Held items</dt><dd>{legalHoldSummary.data.active_item_count}</dd></div></dl>
+              <p className="text-xs text-[var(--color-mute)]">Draft: {legalHoldSummary.data.draft_count} · Released: {legalHoldSummary.data.released_count} · Cancelled: {legalHoldSummary.data.cancelled_count}</p>
             </div>
           )}
         </CardContent>

@@ -2016,17 +2016,29 @@ export type OutsideCounselWorkspace = z.infer<typeof outsideCounselWorkspace>;
 
 // Phase B / J08 / M08 — unified calendar feed.
 export const calendarEventKind = z.enum(["hearing", "task", "deadline"]);
+export const calendarEventDisplayType = z.enum([
+  "hearing",
+  "task_date",
+  "filing_deadline",
+  "internal_target",
+  "renewal",
+  "client_instruction",
+  "reminder",
+  "deadline",
+]);
 export const calendarProvider = z.enum(["outlook", "google_calendar"]);
 
 export const calendarEventRecord = z.object({
   id: z.string(),
   kind: calendarEventKind,
+  display_type: calendarEventDisplayType.optional(),
   occurs_on: z.string(), // ISO yyyy-mm-dd
   title: z.string(),
   matter_id: z.string(),
   matter_title: z.string(),
   matter_code: z.string(),
   status: z.string().nullable().optional(),
+  ip_docket_id: z.string().nullable().optional(),
   detail: z.string().nullable().optional(),
 });
 
@@ -2398,6 +2410,19 @@ export const tenantDataGovernanceIntegrityReport = z.object({
   finding_count: z.number().int().min(0),
   unavailable_count: z.number().int().min(0),
   is_complete: z.boolean(),
+});
+
+// Aggregate preservation state deliberately excludes hold titles, authorities,
+// requester/approver identities, scopes, and held-item references.
+export const tenantLegalHoldSummary = z.object({
+  draft_count: z.number().int().min(0),
+  active_count: z.number().int().min(0),
+  released_count: z.number().int().min(0),
+  cancelled_count: z.number().int().min(0),
+  active_company_wide_count: z.number().int().min(0),
+  active_scoped_count: z.number().int().min(0),
+  active_item_count: z.number().int().min(0),
+  preservation_effective: z.boolean(),
 });
 
 const tenantDataOperationType = z.enum([
@@ -3360,6 +3385,7 @@ export const caseTrackingSupportMatrixAdminResponse = z.object({
 });
 
 export type CalendarEventKind = z.infer<typeof calendarEventKind>;
+export type CalendarEventDisplayType = z.infer<typeof calendarEventDisplayType>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
 export type CalendarConnectionRecord = z.infer<typeof calendarConnectionRecord>;
@@ -3393,6 +3419,7 @@ export type TenantDataGovernanceIntegrityCheck =
   z.infer<typeof tenantDataGovernanceIntegrityCheck>;
 export type TenantDataGovernanceIntegrityReport =
   z.infer<typeof tenantDataGovernanceIntegrityReport>;
+export type TenantLegalHoldSummary = z.infer<typeof tenantLegalHoldSummary>;
 export type TenantDataOperationDryRunSummary =
   z.infer<typeof tenantDataOperationDryRunSummary>;
 export type TenantDataOperationDryRunInput =

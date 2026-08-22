@@ -19,7 +19,18 @@ from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
+from caseops_api.services.calendar import _deadline_display_type
 from tests.test_auth_company import auth_headers, bootstrap_company
+
+
+def test_calendar_deadline_display_types_are_legally_distinct() -> None:
+    """IPLF-REQ-IP-DL-07 / CAL-OPS-01: labels do not collapse into one date kind."""
+
+    assert _deadline_display_type("legal_deadline") == "filing_deadline"
+    assert _deadline_display_type("internal_target") == "internal_target"
+    assert _deadline_display_type("renewal") == "renewal"
+    assert _deadline_display_type("client_instruction") == "client_instruction"
+    assert _deadline_display_type("unclassified") == "deadline"
 
 
 def _create_matter(

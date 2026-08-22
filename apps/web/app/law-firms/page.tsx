@@ -10,6 +10,7 @@ import {
   Gavel,
   Landmark,
   Lock,
+  PanelsTopLeft,
   Scale,
   Search,
   ShieldCheck,
@@ -95,6 +96,21 @@ const hearingFlow = [
 ] as const;
 
 const platformMoves = [
+  {
+    icon: Gavel,
+    title: "IP hearing docket",
+    body: "Record exact, session-based or unpublished hearing times without hidden defaults; inspect recipient/channel outcomes and the reminder generation replaced by every reschedule or later time confirmation.",
+  },
+  {
+    icon: Clock3,
+    title: "Governed IP deadlines",
+    body: "Calculate against versioned rules and working calendars, confirm with named coverage, inspect source-linked provenance, supersede rather than overwrite, and distinguish filing dates from internal targets and renewals.",
+  },
+  {
+    icon: PanelsTopLeft,
+    title: "Trademark portfolio",
+    body: "Search exact application and opposition numbers, group independent filings by mark or canonical client, and manage source-backed prosecution events, corrections and registry reconciliation from a permission-scoped workspace.",
+  },
   {
     icon: FileText,
     title: "Contracts and playbooks",

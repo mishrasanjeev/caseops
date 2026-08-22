@@ -14,6 +14,7 @@ import {
   FileSignature,
   Gavel,
   HardDrive,
+  History,
   Inbox,
   LayoutDashboard,
   Languages,
@@ -59,10 +60,18 @@ const NAV: NavItem[] = [
   // sessions start with "what must I do today".
   { href: "/app/today", label: "Today", icon: Sun, section: "overview" },
   { href: "/app/matters", label: "Matters", icon: Briefcase, section: "casework" },
+  { href: "/app/imports", label: "Import activity", icon: History, section: "casework" },
   {
     href: "/app/ip",
     label: "IP docket",
     icon: BookOpenCheck,
+    section: "ip",
+    requiresCapability: "ip:read",
+  },
+  {
+    href: "/app/ip/portfolio",
+    label: "Trademark portfolio",
+    icon: PanelsTopLeft,
     section: "ip",
     requiresCapability: "ip:read",
   },

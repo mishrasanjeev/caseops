@@ -204,6 +204,53 @@ resolves it properly — the default is "work it out", never "assume an answer".
   for this slice, which is why `verification_status` stays `not_run` and
   `release_status` stays `blocked` in the manifest.
 
+## End-user proof, added 2026-08-21
+
+The gap above was that every proof was developer-internal. API tests and CHECK
+constraints show the fix compiles and the database refuses bad rows; neither
+shows a lawyer that the workflow works. Two of these four defects were
+*user-visible* in a way an API test cannot reach:
+
+- **UJ-52-EXC-01** the failure was in the cost card, which replaced its entire
+  form with "Cost items require a linked Matter" whenever the record had no
+  billing Matter. The API would have accepted a nonbillable cost; the surface
+  offered no way to send one.
+- **UJ-52-EXC-05** a withheld rate has to *read* as withheld. Rendering it as
+  `0.00` is indistinguishable to the reader from a cost of nothing, and only
+  the rendered page can prove which one appears.
+
+`tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts` covers both through a real
+browser against a real API:
+
+1. On a docket with no billing Matter, the card offers **Add nonbillable cost
+   evidence**, explains the deferral, records the fee, and reports it as
+   `Nonbillable` — a terminal status, distinct from `unlinked`.
+2. An estimate renders as *Estimate — not an expense* (UJ-52-EXC-04); the owner
+   sees both amounts; a **partner**, who holds `ip:fees_view` but not
+   `ip:fees_manage`, sees the ordinary cost in full, sees *Amount withheld —
+   requires fee-management access* for the confidential one, and sees neither
+   the real figure nor a `0.00` substituted for it. The description stays
+   visible, because the existence of the cost is not the secret.
+
+**2 passed** on two consecutive runs, so this is repeatable rather than a
+single lucky pass. The first run failed on an over-loose locator — `Nonbillable`
+matched the card's explanatory copy and its submit button as well as the
+recorded row — which is worth recording because the *product* behaved correctly
+in that run and only the assertion was wrong. It now matches exactly.
+
+The spec is committed and is selected by the default `playwright.config.ts`,
+which uses a `testDir` plus a two-entry `testIgnore` denylist rather than a
+`testMatch` allowlist, so it cannot be silently excluded from a normal run.
+
+`data-testid="ip-cost-workspace"` was added to the cost card to scope the
+assertions, matching the pattern the IPLF-039D spec established.
+
+**Still not claimed:** this runs against a locally served build, not the
+deployed caseops.ai surface, and no run against production with real
+credentials has happened. Under the Playwright-on-prod rule that keeps the
+slice's own verdict short of `Properly fixed` on the deployed surface, and
+`release_status` stays `blocked`.
+
 ## Migration note for the integrator — resolved 2026-08-21
 
 This migration is now `20260821_0003`, chained from `20260821_0002`. It was

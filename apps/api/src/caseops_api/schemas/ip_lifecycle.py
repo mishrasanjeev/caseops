@@ -24,6 +24,43 @@ IpEventSource = Literal["manual", "registry", "integration", "system"]
 IpCandidateStatus = Literal["candidate", "confirmed", "reconciled", "rejected"]
 
 
+class IpCorrespondenceMilestones(BaseModel):
+    direction: Literal["inward", "outward"]
+    received_at: datetime | None = None
+    due_at: datetime | None = None
+    prepared_at: datetime | None = None
+    approved_at: datetime | None = None
+    filed_at: datetime | None = None
+    accepted_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_milestones(self) -> IpCorrespondenceMilestones:
+        milestones = [
+            self.received_at,
+            self.due_at,
+            self.prepared_at,
+            self.approved_at,
+            self.filed_at,
+            self.accepted_at,
+        ]
+        if not any(milestones):
+            raise ValueError("Correspondence requires at least one milestone timestamp.")
+        if any(value is not None and value.utcoffset() is None for value in milestones):
+            raise ValueError("Correspondence milestone timestamps must include a timezone.")
+        if self.received_at and self.due_at and self.due_at < self.received_at:
+            raise ValueError("Correspondence due time cannot precede receipt.")
+        outward = [
+            value
+            for value in (self.prepared_at, self.approved_at, self.filed_at, self.accepted_at)
+            if value is not None
+        ]
+        if any(later < earlier for earlier, later in zip(outward, outward[1:], strict=False)):
+            raise ValueError(
+                "Outward correspondence milestones must remain chronological."
+            )
+        return self
+
+
 class IpDocketEventCreateRequest(BaseModel):
     expected_lifecycle_version: int = Field(ge=0)
     expected_application_version: int | None = Field(default=None, ge=1)
@@ -46,6 +83,8 @@ class IpDocketEventCreateRequest(BaseModel):
     correction_reason: str | None = Field(default=None, max_length=2000)
     reconciles_event_id: str | None = None
     reconciliation_decision: Literal["same_fact", "keep_separate", "reject_candidate"] | None = None
+    acknowledged_exception_codes: list[str] = Field(default_factory=list, max_length=100)
+    correspondence: IpCorrespondenceMilestones | None = None
     payload: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -54,6 +93,8 @@ class IpDocketEventCreateRequest(BaseModel):
             raise ValueError("An event can target an application or proceeding, not both.")
         if self.source == "manual" and not (self.reason or "").strip():
             raise ValueError("Manual events require a reason.")
+        if self.source == "registry" and not (self.source_reference or "").strip():
+            raise ValueError("Registry events require a source reference.")
         if self.supersedes_event_id and not (self.correction_reason or "").strip():
             raise ValueError("Corrected events require a correction reason.")
         if self.reconciles_event_id and self.reconciliation_decision is None:

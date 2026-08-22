@@ -19,6 +19,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CalendarEventKind = Literal["hearing", "task", "deadline"]
+CalendarEventDisplayType = Literal[
+    "hearing",
+    "task_date",
+    "filing_deadline",
+    "internal_target",
+    "renewal",
+    "client_instruction",
+    "reminder",
+    "deadline",
+]
 CalendarProviderLiteral = Literal["outlook", "google_calendar"]
 CalendarConnectionStatusLiteral = Literal["connected", "revoked", "error"]
 CalendarSyncSourceTypeLiteral = Literal["matter_hearing", "matter_deadline", "matter_task"]
@@ -85,6 +95,7 @@ class CalendarEventRecord(BaseModel):
 
     id: str = Field(description="Source row's primary key prefixed by kind.")
     kind: CalendarEventKind
+    display_type: CalendarEventDisplayType
     occurs_on: date = Field(description="ISO yyyy-mm-dd. All events are date-granular.")
     title: str = Field(min_length=1, max_length=400)
     matter_id: str
@@ -94,6 +105,7 @@ class CalendarEventRecord(BaseModel):
     # status, task status, deadline status). Useful for grey-ing
     # completed items in the grid without another round-trip.
     status: str | None = None
+    ip_docket_id: str | None = None
     # Free-text disambiguation for multiple events on the same matter
     # in the same day. e.g. "Bombay HC, Justice Patel" for a hearing,
     # "High" for a task priority.

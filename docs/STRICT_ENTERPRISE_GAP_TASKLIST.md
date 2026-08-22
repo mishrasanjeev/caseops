@@ -1302,3 +1302,77 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   exist. Keep the enum members for forward compatibility.
 - **Severity:** stop-ship for the hearing-reminder workflow (F-03): it is the
   product inviting a failure it cannot fulfil.
+
+## 2026-08-20 Parallel-lane deploy control gap
+
+### EH-DEPLOY-01 - A split alembic revision graph reaches the trunk unchecked
+
+- **Status:** Partially implemented — control written and unit-proven in
+  `fix/alembic-single-head-gate-20260820` (PR #284), **not yet merged**. It is
+  not `Implemented` until it is on `main` and has demonstrably failed a real
+  offending pull request.
+- **Gap found:** two lanes each added a migration whose `down_revision` was
+  `20260820_0002` — `20260821_0001` (calendar reconciliation, PR #282) and
+  `20260821_0002` (IP cost items, PR #283). That is two alembic heads, and
+  `alembic upgrade head` refuses to run with more than one, so the deploy fails
+  at the migration step.
+- **Why nothing caught it:** `scripts/migration_preflight.py` checked lock risk
+  (UJ-67-EXC-01) and destructive downgrades (UJ-67-EXC-06) but never the shape
+  of the revision graph. The `postgres-validation` job does run `alembic upgrade
+  head`, yet **neither pull request's branch contains both migrations** — each
+  holds only its own file — so neither branch can fail. The collision first
+  appears on the trunk, after both have merged.
+- **Why this is a fail-open control, not bad luck:** nothing about the two lanes
+  was irregular. Any two parallel branches adding a migration from the same
+  parent produce this, and the repository runs many concurrent lanes by design.
+  The default outcome of ordinary work was a broken trunk.
+- **A blind spot in the first version of this control, found in review.**
+  Checking `len(heads) > 1` misses a cycle entirely. A graph that is *only* a
+  cycle has **zero** heads, and — the harder case — a sound chain beside a
+  disconnected cycle has **exactly one**, so neither "more than one head" nor
+  "exactly one head" sees it. `MIGRATION-REVISION-CYCLE` therefore walks
+  `down_revision` to a base independently of the head count, and a merge
+  revision counts as grounded only when *every* parent is: one poisoned branch
+  makes the merge unreachable.
+- **Control required:** evaluate the revision graph over every migration present
+  rather than only the changed one, so the pull-request merge commit — which is
+  what CI builds — sees both files and fails before merge. Report the heads and
+  their paths, and name the resolution (re-chain, or an explicit merge revision);
+  a gate that only refuses gets deleted rather than satisfied.
+- **Severity:** stop-ship for any release train carrying two concurrent
+  migration lanes. Not stop-ship for a single-lane release.
+- **Residual risk after PR #284:** the gate fires on the *second* lane's CI run
+  after the first merges. It does not resolve an existing collision — #282 and
+  #283 still need a re-chain or merge revision, whichever lands second. It also
+  cannot see a migration that exists only in an unmerged sibling branch, which
+  is correct: that is not yet a property of the trunk.
+- **Verification:** with both lanes' real migration files present,
+  `python scripts/migration_preflight.py validate` exits 1 and names both heads;
+  with either alone, and on current `main`, it exits 0 reporting the single
+  head. Unit coverage in
+  `apps/api/tests/test_uj67_migration_preflight.py::TestRevisionGraphShape`
+  (linear chain, the exact collision shape, merge-revision resolution, duplicate
+  revision ids, and an assertion that the committed graph has one head).
+- **Three real occurrences in two days, none caught by anything but a manual
+  check.** The gap was recorded from a predicted collision. It has since
+  happened three times for real, and the *predicted* failure mode was the least
+  dangerous of them:
+  1. **2026-08-20, two heads.** `20260821_0001` (calendar) and the IP-cost
+     migration both chained from `20260820_0002`. Predicted; resolved by
+     re-chaining.
+  2. **2026-08-21, duplicate id.** PR #282 carried a *second* migration,
+     `20260821_0002`, colliding with the IP-cost migration's id.
+  3. **2026-08-21, duplicate id again.** PR #285 claimed `20260821_0003`,
+     colliding with the same branch a second time.
+  A duplicate id is worse than a split head and was the case nobody predicted.
+  Two heads make `alembic upgrade head` refuse to run — loud, and it stops. A
+  duplicate id makes alembic emit a warning and then resolve it silently,
+  leaving one migration unreachable: no error, no failed deploy, columns that
+  never appear.
+  Demonstrated against the real files rather than a reconstruction: restoring
+  the pre-renumber IP-cost migration beside `20260821_0003_ip_deadline_incident_lifecycle.py`
+  makes `validate` exit 1 with `MIGRATION-DUPLICATE-REVISION` naming both files;
+  removing it returns exit 0 and `single head 20260821_0003`.
+  This raises the severity: the gap is not an occasional hazard of unusual
+  scheduling, it is the ordinary outcome whenever two lanes touch migrations in
+  the same week, and it recurs every time main moves.

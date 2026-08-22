@@ -312,6 +312,34 @@ def test_uj54_exc01_unsupported_mark_or_form_type_blocks_filing_ready(
     assert blocked.json()["readiness_errors"]
 
 
+def test_ip_port_06_label_and_colour_marks_retain_non_text_categories(
+    client: TestClient,
+) -> None:
+    headers, token = _actor(client)
+    matter = _mk_matter(client, token, "IP-PORT-06-CATEGORIES")
+
+    for mark_kind in ("label", "colour"):
+        created = _docket(
+            client,
+            headers,
+            matter_id=matter["id"],
+            particulars=_particulars(
+                mark=f"ASTER {mark_kind.upper()}",
+                mark_kind=mark_kind,
+                representation={
+                    "document_reference": f"document:{mark_kind}-mark",
+                    "evidence_reference": f"fixture:{mark_kind}-mark",
+                },
+            ),
+        )
+        assert created.status_code == 201, created.text
+        particulars = created.json()["current_particulars"]
+        assert particulars["mark_kind"] == mark_kind
+        assert particulars["representation_json"]["document_reference"] == (
+            f"document:{mark_kind}-mark"
+        )
+
+
 def test_uj54_exc02_missing_priority_evidence_is_an_explicit_exception(
     client: TestClient,
 ) -> None:
