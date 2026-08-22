@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
+  type ConflictCheckListResponse,
   type ConflictCheckRecord,
   listConflictChecks,
   resolveConflictCheck,
@@ -74,7 +75,17 @@ export function ConflictCheckCard({
       )
     : [];
   const isHistorical = historicalReasons.length > 0;
-  const refreshAll = async () => {
+  const reconcileCheck = async (check: ConflictCheckRecord) => {
+    queryClient.setQueryData<ConflictCheckListResponse>(
+      ["matters", matterId, "conflict-checks"],
+      (current) => ({
+        matter_id: matterId,
+        checks: [
+          check,
+          ...(current?.checks ?? []).filter((item) => item.id !== check.id),
+        ],
+      }),
+    );
     await queryClient.invalidateQueries({
       queryKey: ["matters", matterId, "conflict-checks"],
     });
@@ -96,7 +107,7 @@ export function ConflictCheckCard({
         <RunCheckDialog
           matterId={matterId}
           defaultOpposingParty={opposingParty}
-          onSuccess={refreshAll}
+          onSuccess={reconcileCheck}
         />
       </CardHeader>
       <CardContent>
@@ -150,7 +161,7 @@ export function ConflictCheckCard({
               <CandidatesList candidates={latest.candidates} />
             )}
             {latest.status === "pending" && canResolve && !isHistorical ? (
-              <ResolveBar checkId={latest.id} onResolved={refreshAll} />
+              <ResolveBar checkId={latest.id} onResolved={reconcileCheck} />
             ) : null}
             {latest.status === "pending" && !canResolve && !isHistorical ? (
               <p
@@ -319,7 +330,7 @@ function RunCheckDialog({
 }: {
   matterId: string;
   defaultOpposingParty: string | null | undefined;
-  onSuccess: () => Promise<void>;
+  onSuccess: (check: ConflictCheckRecord) => Promise<void>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [opposing, setOpposing] = useState(defaultOpposingParty ?? "");
@@ -335,11 +346,11 @@ function RunCheckDialog({
           .map((s) => s.trim())
           .filter((s) => s.length > 0),
       }),
-    onSuccess: async () => {
+    onSuccess: async (check) => {
       setOpen(false);
       setOpposing(defaultOpposingParty ?? "");
       setRelated("");
-      await onSuccess();
+      await onSuccess(check);
       toast.success("Conflict scan completed.");
     },
     onError: (err) => {
@@ -443,7 +454,7 @@ function ResolveBar({
   onResolved,
 }: {
   checkId: string;
-  onResolved: () => Promise<void>;
+  onResolved: (check: ConflictCheckRecord) => Promise<void>;
 }): React.JSX.Element {
   const [waiverNote, setWaiverNote] = useState("");
   const [showWaiver, setShowWaiver] = useState(false);
@@ -453,10 +464,10 @@ function ResolveBar({
       status: "cleared" | "conflicted" | "waived";
       resolution_note?: string;
     }) => resolveConflictCheck({ checkId, ...input }),
-    onSuccess: async () => {
+    onSuccess: async (check) => {
       setWaiverNote("");
       setShowWaiver(false);
-      await onResolved();
+      await onResolved(check);
       toast.success("Conflict check resolved.");
     },
     onError: (err) => {
