@@ -20,7 +20,11 @@ import {
   fetchTenantLegalHoldSummary,
   createTenantDataOperationDryRun,
   listTenantDataOperationDryRuns,
+  requestTenantDataOperationReview,
+  approveTenantDataOperationReview,
+  rejectTenantDataOperationReview,
 } from "@/lib/api/endpoints";
+import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
 
 function tone(status: "ok" | "findings" | "unavailable"): "success" | "warning" | "neutral" {
@@ -29,6 +33,13 @@ function tone(status: "ok" | "findings" | "unavailable"): "success" | "warning" 
 
 export default function DataGovernancePage() {
   const canAudit = useCapability("audit:export");
+  // Reviewing is a separate capability from tenant oversight on purpose: a
+  // four-eyes control reachable only by owners cannot be satisfied by a
+  // one-owner tenant. An admin holds this and not audit:export.
+  const canReview = useCapability("data_operations:review");
+  const [approverLabel, setApproverLabel] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
   const [operationType, setOperationType] = useState<"tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation">("tenant_export");
@@ -45,7 +56,7 @@ export default function DataGovernancePage() {
   const history = useQuery({
     queryKey: ["admin", "data-governance", "dry-runs"],
     queryFn: () => listTenantDataOperationDryRuns(20),
-    enabled: canAudit,
+    enabled: canAudit || canReview,
   });
   const legalHoldSummary = useQuery({
     queryKey: ["admin", "data-governance", "legal-hold-summary"],
@@ -55,7 +66,7 @@ export default function DataGovernancePage() {
   const selectedManifest = useQuery({
     queryKey: ["admin", "data-governance", "dry-runs", selectedOperationId],
     queryFn: () => fetchTenantDataOperationDryRun(selectedOperationId!),
-    enabled: canAudit && selectedOperationId !== null,
+    enabled: (canAudit || canReview) && selectedOperationId !== null,
   });
   const createDryRun = useMutation({
     mutationFn: () => createTenantDataOperationDryRun({
@@ -71,6 +82,24 @@ export default function DataGovernancePage() {
     onError: () => setRequestError("The dry-run manifest could not be created. Verify the registered class ID and the 64-character SHA-256 target reference."),
   });
 
+  const reviewMutation = useMutation({
+    mutationFn: async (action: { kind: "request" } | { kind: "approve" } | { kind: "reject" }) => {
+      const id = selectedOperationId!;
+      if (action.kind === "request") return requestTenantDataOperationReview(id);
+      if (action.kind === "approve") return approveTenantDataOperationReview(id, approverLabel.trim());
+      return rejectTenantDataOperationReview(id, rejectionReason.trim());
+    },
+    onSuccess: () => {
+      setReviewError(null);
+      setRejectionReason("");
+      queryClient.invalidateQueries({ queryKey: ["admin", "data-governance", "dry-runs"] });
+    },
+    // The API distinguishes its refusals by a machine-readable type and each
+    // has a different remedy, so surface the server's own sentence rather than
+    // one generic line that sends the reviewer to the wrong fix.
+    onError: (error) => setReviewError(apiErrorMessage(error, "The review action could not be completed.")),
+  });
+
   function submitDryRun(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!requestEvidenceRef.trim() || !dataClassId.trim() || !targetType.trim() || !/^[0-9a-f]{64}$/i.test(targetReferenceHash.trim())) {
@@ -81,14 +110,19 @@ export default function DataGovernancePage() {
     createDryRun.mutate();
   }
 
-  if (!canAudit) {
-    return <EmptyState icon={ShieldAlert} title="Workspace owner required" description="Data-governance review is limited to the workspace owner." />;
+  if (!canAudit && !canReview) {
+    return <EmptyState icon={ShieldAlert} title="Data-governance access required" description="Tenant oversight is limited to the workspace owner. Reviewing a data operation additionally requires the data-operation review capability." />;
   }
 
   return (
     <div className="flex flex-col gap-6">
       <Link href="/app/admin" className="text-sm text-[var(--color-mute)] hover:text-[var(--color-ink)]">← Back to admin</Link>
-      <PageHeader eyebrow="Admin · Data governance" title="Data-governance integrity" description="Review-only control visibility. This page cannot approve, export, purge, offboard, restore, or execute a tenant data operation." />
+      {/* The old copy said this page "cannot approve". It can now, so saying
+          otherwise would be a false assurance on the one screen where a false
+          assurance matters most. What stays true, and is what the reader needs,
+          is that approving authorises an execution and never performs one. */}
+      <PageHeader eyebrow="Admin · Data governance" title="Data-governance integrity" description="Control visibility and data-operation review. Approving a manifest authorises an execution under dual approval; it never exports, purges, offboards, restores, or executes anything here." />
+      {canAudit ? (
       <Card>
         <CardHeader><CardTitle as="h2">Current integrity checks</CardTitle><CardDescription>Unavailable checks are intentionally not shown as healthy.</CardDescription></CardHeader>
         <CardContent>
@@ -100,6 +134,8 @@ export default function DataGovernancePage() {
           )}
         </CardContent>
       </Card>
+      ) : null}
+      {canAudit ? (
       <Card>
         <CardHeader><CardTitle as="h2">Legal-hold preservation</CardTitle><CardDescription>Aggregate preservation visibility only. Hold records, scopes, authorities, and held-item references are never shown here.</CardDescription></CardHeader>
         <CardContent>
@@ -112,6 +148,8 @@ export default function DataGovernancePage() {
           )}
         </CardContent>
       </Card>
+      ) : null}
+      {canAudit ? (
       <Card>
         <CardHeader><CardTitle as="h2">Prepare dry-run manifest</CardTitle><CardDescription>Creates only an immutable review record. Use a registered class ID and a SHA-256 target reference; do not enter client, matter, or document identifiers.</CardDescription></CardHeader>
         <CardContent>
@@ -125,12 +163,75 @@ export default function DataGovernancePage() {
           </form>
         </CardContent>
       </Card>
+      ) : null}
       <Card>
         <CardHeader><CardTitle as="h2">Dry-run manifests</CardTitle><CardDescription>Immutable review records only. Selecting a manifest does not request approval or execute an operation.</CardDescription></CardHeader>
         <CardContent>
           {history.isPending ? <Skeleton className="h-32 w-full" /> : history.isError ? <QueryErrorState title="Could not load dry-run manifests" error={history.error} onRetry={history.refetch} /> : history.data.operations.length === 0 ? <p className="text-sm text-[var(--color-mute)]">No dry-run manifests are available for this workspace.</p> : <div className="flex flex-col gap-2">{history.data.operations.map((operation) => <button key={operation.id} type="button" data-testid={`dry-run-${operation.id}`} onClick={() => setSelectedOperationId(operation.id)} className="rounded-lg border border-[var(--color-line)] p-4 text-left hover:bg-[var(--color-surface-muted)]"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{operation.operation_type.replaceAll("_", " ")}</span><Badge tone={operation.approval_status === "rejected" ? "warning" : "neutral"}>{operation.approval_status}</Badge></div><p className="mt-2 text-xs text-[var(--color-mute)]">{operation.completed_at} · {operation.id}</p></button>)}</div>}
         </CardContent>
       </Card>
+      {selectedOperationId && canReview ? (
+        <Card data-testid="data-operation-review">
+          <CardHeader>
+            <CardTitle as="h2">Review this operation</CardTitle>
+            <CardDescription>
+              Approving authorises an execution. It does not run one — export, purge, offboarding and restore all remain refused.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            {selectedManifest.isPending ? <Skeleton className="h-24 w-full" /> : selectedManifest.isError ? null : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-sm text-[var(--color-mute)]">Review state</span>
+                  <Badge tone={selectedManifest.data.approved_operation_id ? "success" : selectedManifest.data.approval_status === "rejected" ? "warning" : "neutral"}>
+                    {selectedManifest.data.approved_operation_id
+                      ? "authorised, not executed"
+                      : selectedManifest.data.approval_status === "requested"
+                        ? "awaiting a second approver"
+                        : selectedManifest.data.approval_status === "rejected"
+                          ? "refused"
+                          : "not submitted"}
+                  </Badge>
+                </div>
+
+                {selectedManifest.data.approved_operation_id ? (
+                  <div className="rounded-lg border border-[var(--color-line)] p-4 text-sm">
+                    <p>This manifest was approved. It authorised operation <span className="break-all font-mono text-xs">{selectedManifest.data.approved_operation_id}</span>, which is planned and has not run.</p>
+                    <p className="mt-2 text-[var(--color-mute)]">A signed authorisation is withdrawn by an explicit revocation, not by refusing the manifest afterwards.</p>
+                  </div>
+                ) : selectedManifest.data.approval_status === "rejected" ? (
+                  <div className="rounded-lg border border-[var(--color-line)] p-4 text-sm">
+                    <p>Refused: {selectedManifest.data.rejection_reason}</p>
+                    <p className="mt-2 text-[var(--color-mute)]">A refusal is final. Prepare a fresh dry run if the operation is still needed — whatever was objected to may change what the manifest should contain.</p>
+                  </div>
+                ) : selectedManifest.data.approval_status === "not_requested" ? (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-sm text-[var(--color-mute)]">Submitting asks a second person to approve. It authorises nothing on its own.</p>
+                    <div><Button type="button" onClick={() => reviewMutation.mutate({ kind: "request" })} disabled={reviewMutation.isPending}>Submit for approval</Button></div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-5">
+                    <p className="text-sm text-[var(--color-mute)]">
+                      Approval requires a second person and a recent MFA step-up. The colleague who requested this operation cannot approve it, and refusing needs neither — an approver who cannot complete MFA must still be able to stop it.
+                    </p>
+                    <div className="grid gap-2">
+                      <Label htmlFor="review-approver-label">Approve as</Label>
+                      <Input id="review-approver-label" value={approverLabel} onChange={(event) => setApproverLabel(event.target.value)} placeholder="Records Partner" />
+                      <div><Button type="button" onClick={() => reviewMutation.mutate({ kind: "approve" })} disabled={approverLabel.trim().length < 2 || reviewMutation.isPending}>Approve — authorise, do not run</Button></div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="review-rejection-reason">Refuse, with a reason</Label>
+                      <Input id="review-rejection-reason" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} placeholder="The retention schedule cited here has not been approved." />
+                      <div><Button type="button" variant="secondary" onClick={() => reviewMutation.mutate({ kind: "reject" })} disabled={rejectionReason.trim().length < 1 || reviewMutation.isPending}>Refuse this operation</Button></div>
+                    </div>
+                  </div>
+                )}
+                {reviewError ? <p role="alert" className="text-sm text-[var(--color-danger-700)]">{reviewError}</p> : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
       {selectedOperationId ? <Card data-testid="dry-run-detail"><CardHeader><CardTitle as="h2">Manifest detail</CardTitle><CardDescription>Target references remain hashed or redacted. This detail is not an execution authorization.</CardDescription></CardHeader><CardContent>{selectedManifest.isPending ? <Skeleton className="h-28 w-full" /> : selectedManifest.isError ? <QueryErrorState title="Could not load manifest detail" error={selectedManifest.error} onRetry={selectedManifest.refetch} /> : <dl className="grid gap-3 text-sm"><div><dt className="text-[var(--color-mute)]">Operation</dt><dd>{selectedManifest.data.operation_type}</dd></div><div><dt className="text-[var(--color-mute)]">Manifest hash</dt><dd className="break-all font-mono text-xs">{selectedManifest.data.manifest_hash}</dd></div><div><dt className="text-[var(--color-mute)]">Request scope hash</dt><dd className="break-all font-mono text-xs">{selectedManifest.data.request_scope_hash}</dd></div><div><dt className="text-[var(--color-mute)]">Reviewable items</dt><dd>{selectedManifest.data.items.length} item(s), {selectedManifest.data.exclusions.length} exclusion(s)</dd></div></dl>}</CardContent></Card> : null}
     </div>
   );

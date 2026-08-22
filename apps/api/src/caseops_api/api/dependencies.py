@@ -142,6 +142,49 @@ def require_capability(
     return _dep
 
 
+def require_any_capability(*capabilities: str) -> Callable[..., SessionContext]:
+    """Admit a caller holding ANY ONE of `capabilities`.
+
+    Written for a specific shape: a record that two different roles need for two
+    different reasons. The data-governance dry-run manifests are the case - an
+    owner reads them as part of tenant oversight under ``audit:export``, and a
+    reviewer reads them because they are being asked to sign one under
+    ``data_operations:review``. Requiring both would mean only owners qualify,
+    which is the unsatisfiable-four-eyes problem again; picking one would lock
+    out the other reason.
+
+    Use this only where every listed capability genuinely justifies the SAME
+    access. It is not a way to soften a gate that should stay narrow.
+    """
+
+    if not capabilities:
+        raise RuntimeError("require_any_capability needs at least one capability")
+    for capability in capabilities:
+        if CAPABILITY_ROLES.get(capability) is None:
+            raise RuntimeError(
+                f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES."
+            )
+
+    def _dep(
+        context: Annotated[SessionContext, Depends(get_current_context)],
+        session: DbSession,
+    ) -> SessionContext:
+        if any(
+            membership_has_capability(session, context.membership, capability)
+            for capability in capabilities
+        ):
+            return context
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Requires one of {sorted(capabilities)}; you are "
+                f"{context.membership.role!r}."
+            ),
+        )
+
+    return _dep
+
+
 def list_capabilities(roles: Iterable[MembershipRole]) -> list[str]:
     """Helper for sanity checks / tests."""
     return list_static_capabilities(roles)

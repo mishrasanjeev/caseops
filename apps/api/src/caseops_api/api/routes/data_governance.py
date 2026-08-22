@@ -6,7 +6,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.api.dependencies import (
+    DbSession,
+    require_any_capability,
+    require_capability,
+)
 from caseops_api.db.models import TenantDataOperation
 from caseops_api.schemas.data_governance import (
     TenantDataGovernanceIntegrityReport,
@@ -45,6 +49,16 @@ DataGovernanceOperator = Annotated[
 DataOperationReviewer = Annotated[
     SessionContext,
     Depends(require_capability("data_operations:review")),
+]
+#: Reading a manifest is not exporting a tenant. An owner reads these as
+#: oversight; a reviewer reads them because they are being asked to sign one,
+#: and an approver who cannot see what needs review or read what they are
+#: signing has a signature and nothing to base it on. Gating the read on
+#: audit:export alone made the second pair of eyes blind - the same
+#: unsatisfiable-four-eyes shape as gating the approval itself would have.
+DataOperationManifestReader = Annotated[
+    SessionContext,
+    Depends(require_any_capability("audit:export", "data_operations:review")),
 ]
 
 
@@ -92,7 +106,7 @@ def read_tenant_legal_hold_summary(
     summary="List reviewable non-executable tenant data-operation dry runs",
 )
 def list_operation_dry_runs(
-    context: DataGovernanceOperator,
+    context: DataOperationManifestReader,
     session: DbSession,
     limit: int = Query(default=50, ge=1, le=100),
 ) -> TenantDataOperationDryRunListResponse:
@@ -106,7 +120,7 @@ def list_operation_dry_runs(
 )
 def read_operation_dry_run(
     operation_id: str,
-    context: DataGovernanceOperator,
+    context: DataOperationManifestReader,
     session: DbSession,
 ) -> TenantDataOperationDryRunRecord:
     return get_dry_run_manifest(session, context=context, operation_id=operation_id)
