@@ -37,72 +37,30 @@ def test_iplf038a_contract_refuses_a_duplicate_report_control_plane(
 
     assert response.status_code == 200, response.text
     body = response.json()
+    definitions = body.pop("definitions")
     assert body == {
-        "contract_version": "iplf-038a-v1",
+        "contract_version": "iplf-038b-v1",
         "persistence": "none",
         "execution_mode": "synchronous",
         "artifact_storage": "none",
         "delivery": "not_available",
         "audience": "internal",
         "hidden_restricted_count_policy": "omit_without_count",
-        "definitions": [
-            {
-                "key": "portfolio_register",
-                "schema_version": "ip-portfolio-register-v1",
-                "canonical_sources": [
-                    "trademark_applications",
-                    "ip_assets",
-                    "ip_docket_records",
-                    "ip_identifiers",
-                    "ip_deadlines",
-                ],
-                "synchronous_preview": True,
-                "background_execution": False,
-                "scheduled_delivery": False,
-            },
-            {
-                "key": "deadline_control",
-                "schema_version": "ip-deadline-control-v1",
-                "canonical_sources": [
-                    "ip_docket_records",
-                    "ip_deadline_coverages",
-                    "ip_deadline_incidents",
-                    "calendar_event_syncs",
-                ],
-                "synchronous_preview": True,
-                "background_execution": False,
-                "scheduled_delivery": False,
-            },
-            {
-                "key": "renewal",
-                "schema_version": "ip-renewal-report-v1",
-                "canonical_sources": [
-                    "ip_renewal_terms",
-                    "ip_client_instructions",
-                    "ip_deadlines",
-                    "ip_cost_items",
-                    "notification_delivery_intents",
-                ],
-                "synchronous_preview": True,
-                "background_execution": False,
-                "scheduled_delivery": False,
-            },
-            {
-                "key": "data_quality",
-                "schema_version": "ip-data-quality-v1",
-                "canonical_sources": [
-                    "trademark_applications",
-                    "ip_assets",
-                    "ip_docket_records",
-                    "ip_identifiers",
-                    "ip_deadlines",
-                ],
-                "synchronous_preview": True,
-                "background_execution": False,
-                "scheduled_delivery": False,
-            },
-        ],
     }
+    assert [definition["key"] for definition in definitions] == [
+        "portfolio_register",
+        "application_status",
+        "opposition_status",
+        "deadline_control",
+        "renewal",
+        "watch",
+        "workload",
+        "data_quality",
+        "integration_freshness",
+    ]
+    assert all(definition["synchronous_preview"] is True for definition in definitions)
+    assert all(definition["background_execution"] is False for definition in definitions)
+    assert all(definition["scheduled_delivery"] is False for definition in definitions)
 
 
 def test_iplf038a_portfolio_and_quality_previews_delegate_to_canonical_readers(

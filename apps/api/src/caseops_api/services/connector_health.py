@@ -1074,6 +1074,16 @@ def list_tenant_connector_health(
     context: SessionContext,
 ) -> ConnectorHealthListResponse:
     refresh_connector_health_records(session, context=context)
+    return read_tenant_connector_health(session, context=context)
+
+
+def read_tenant_connector_health(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> ConnectorHealthListResponse:
+    """Return persisted tenant health without running connector probes or writes."""
+
     rows = list(
         session.scalars(
             select(ConnectorHealthRecord)

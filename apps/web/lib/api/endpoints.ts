@@ -11032,6 +11032,83 @@ export async function fetchIpDailyDocket(input?: {
   return apiRequest(`/api/ip/daily-docket${query ? `?${query}` : ""}`);
 }
 
+export type IpReportKind =
+  | "portfolio_register"
+  | "application_status"
+  | "opposition_status"
+  | "deadline_control"
+  | "renewal"
+  | "watch"
+  | "workload"
+  | "data_quality"
+  | "integration_freshness";
+
+export type IpReportDefinition = {
+  key: IpReportKind;
+  schema_version: string;
+  canonical_sources: string[];
+  synchronous_preview: boolean;
+  background_execution: boolean;
+  scheduled_delivery: boolean;
+};
+
+export type IpReportFoundationContract = {
+  contract_version: "iplf-038b-v1";
+  persistence: "none";
+  execution_mode: "synchronous";
+  artifact_storage: "none";
+  delivery: "not_available";
+  audience: "internal";
+  hidden_restricted_count_policy: "omit_without_count";
+  definitions: IpReportDefinition[];
+};
+
+export type IpReportPreview = {
+  report_kind: IpReportKind;
+  schema_version: string;
+  generated_at: string;
+  timezone: "UTC";
+  audience: "internal";
+  confidentiality: "internal" | "restricted";
+  filters: Record<string, unknown>;
+  freshness: {
+    status: "current" | "mixed" | "unavailable";
+    generated_at: string;
+    source_cutoffs: Record<string, string | null>;
+    unavailable_sources: string[];
+  };
+  hidden_restricted_count_policy: "omit_without_count";
+  row_count: number;
+  truncated: boolean;
+  summary: Record<string, unknown>;
+  rows: Record<string, unknown>[];
+  snapshot_sha256: string;
+};
+
+export async function fetchIpReportFoundation(): Promise<IpReportFoundationContract> {
+  return apiRequest("/api/ip/reports/foundation-contract");
+}
+
+export async function previewIpReport(input: {
+  reportKind: IpReportKind;
+  rowLimit: number;
+  confidentiality: "internal" | "restricted";
+  filters?: Record<string, unknown>;
+  renewalStates?: string[];
+}): Promise<IpReportPreview> {
+  return apiRequest("/api/ip/reports/preview", {
+    method: "POST",
+    body: {
+      report_kind: input.reportKind,
+      row_limit: input.rowLimit,
+      audience: "internal",
+      confidentiality: input.confidentiality,
+      filters: input.filters ?? {},
+      renewal_states: input.renewalStates ?? [],
+    },
+  });
+}
+
 export type IpAssignedCoverage = {
   coverage_id: string;
   docket_id: string;
