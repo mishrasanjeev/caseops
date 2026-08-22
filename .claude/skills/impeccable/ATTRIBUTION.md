@@ -14,11 +14,27 @@ See `vendor/NOTICE.md` for the upstream attribution chain.
 
 ## What we changed
 
-Nothing in the skill files themselves. CaseOps-specific design direction
-lives in the project root at `.impeccable.md`, which the skill is designed
-to consume. If we need to diverge from an upstream heuristic in the future,
-the divergence lives in `.impeccable.md` (or a successor doc), not in edits
-to the vendored files.
+CaseOps-specific design direction lives in the project root at
+`.impeccable.md`, which the skill is designed to consume. Divergence from an
+upstream *heuristic* belongs there, not in edits to the vendored files.
+
+One deletion from `SKILL.md`, approved by the repository owner on 2026-08-22:
+
+- Removed the `<post-update-cleanup>` block (upstream v2.1.1). It instructed
+  every invocation to run
+  `.claude/skills/impeccable/scripts/cleanup-deprecated.mjs` and then delete
+  itself from `SKILL.md`. Neither half applies to a vendored copy: that script
+  was never vendored (there is no `scripts/` directory here), and the
+  deprecated skills it names - `arrange`, `normalize` - do not exist in this
+  repository either. So it could only ever fail, while prompting a detour on
+  every frontend task.
+
+  This is a packaging artefact of vendoring rather than a heuristic, which is
+  why it is fixed here instead of in `.impeccable.md`: no note in a project
+  doc can stop a block inside `SKILL.md` from being read and acted on.
+
+  Re-review on the next upstream pull. If upstream ships a real `scripts/`
+  directory, vendor it and restore the block.
 
 ## How it is wired
 
@@ -32,5 +48,8 @@ to the vendored files.
 ## Updates
 
 To pull a newer release, re-run the download block used to populate this
-directory (see the commit that introduced it) and re-review the diff. Do
-not edit the skill files in place — make changes in `.impeccable.md`.
+directory (see the commit that introduced it) and re-review the diff. Prefer
+`.impeccable.md` for anything that is a design opinion; edit a skill file only
+for a packaging artefact that cannot be addressed from outside it, and record
+the edit under *What we changed* above so the next puller sees the divergence
+before overwriting it.
