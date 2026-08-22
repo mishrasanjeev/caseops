@@ -1775,8 +1775,8 @@
         "IPLF-037A",
         "IPLF-037B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "evidence_refs": [],
@@ -10024,27 +10024,64 @@
       "dependencies": [
         "IPLF-037A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-26-EXC-01",
-        "planned:IPLF-UJ-26-EXC-02",
-        "planned:IPLF-UJ-26-EXC-03",
-        "planned:IPLF-UJ-26-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_renewals.py",
+        "apps/api/src/caseops_api/schemas/ip_renewals.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/app/app/ip/renewals/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_reminders_and_instruction_cancellation#IPLF-UJ-26-EXC-01",
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_projects_grace_and_overdue_without_silent_writes#IPLF-UJ-26-EXC-02",
+        "apps/api/tests/test_ip_renewals.py::test_ip_renewal_full_backend_contract_and_evidence_gates#IPLF-UJ-26-EXC-03",
+        "tests/e2e/iplf-037b-renewal-workflow-2026-08-22.spec.ts::IPLF-037B completes UJ-26 and renewal exception paths#IPLF-UJ-26-NORMAL",
+        "apps/web/app/app/ip/renewals/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md",
+          "revision": "82128d196635f6661981b40adacd16aaccfbd153",
+          "environment": "local SQLite API, component, production-build and Playwright fixtures",
+          "fixtures": "deterministic isolated law-firm tenant with verified registration, deadlines, responsibility, filing, acceptance, certificate and next-term evidence",
+          "assertions": "UJ-26 normal, no-instruction notification, grace reconciliation, initiation-not-acceptance, access isolation, source provenance and responsive UI",
+          "result": "passed",
+          "recorded_at": "2026-08-22T17:51:00+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-037B-RELEASE-VERIFY",
+          "state": "active",
+          "summary": "Repository verification passed; exact-head CI, merged-main recheck, deployment and dated production verification remain pending.",
+          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health, migration boundary and production UJ-26 acceptance evidence.",
+          "owner": "CaseOps release workflow",
+          "milestone_impact": "Blocks release_status only; repository implementation and local verification are complete.",
+          "next_independent_slice": "IPLF-038A"
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run the exact-head CI/PostgreSQL/security/CodeQL matrix, merge only when green, deploy through the canonical release workflow, and attach dated production identity/health/UJ-26 evidence.",
+        "After production verification, remove IPLF-037B-RELEASE-VERIFY and set release_status to deployment_verified on the exact deployed revision."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change. Reads IPLF-037A renewal/instruction rows and existing legal evidence owners; writes instructions and term transitions only through the canonical renewal writer and reminder intents only through notification_delivery_intents."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "allocation_review": "2026-08-22 current-main reconciliation: IPLF-037A already owned renewal and instruction persistence plus every evidence gate. IPLF-037B therefore adds only the operational portfolio projection, responsibility-based notification lifecycle, responsive user workflow, exception handling and release proof. It creates no renewal, deadline, event, document, cost, communication, task, calendar, notification, provider, report or audit duplicate. All four UJ-26 paths have concrete API/UI/browser tests; repository verification passed at exact implementation revision 82128d196635f6661981b40adacd16aaccfbd153. Release remains fail-closed until exact-head CI, merge, deployment and production verification.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -23617,18 +23654,20 @@
       "journey_ids": [
         "UJ-26"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-REN-01",
-        "planned:IPLF-UJ-26-EXC-01",
-        "planned:IPLF-UJ-26-EXC-02",
-        "planned:IPLF-UJ-26-EXC-03",
-        "planned:IPLF-UJ-26-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_renewals.py",
+        "apps/web/app/app/ip/renewals/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_projects_grace_and_overdue_without_silent_writes",
+        "tests/e2e/iplf-037b-renewal-workflow-2026-08-22.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -23651,18 +23690,20 @@
       "journey_ids": [
         "UJ-26"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-REN-02",
-        "planned:IPLF-UJ-26-EXC-01",
-        "planned:IPLF-UJ-26-EXC-02",
-        "planned:IPLF-UJ-26-EXC-03",
-        "planned:IPLF-UJ-26-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_renewals.py",
+        "apps/web/app/app/ip/renewals/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_renewals.py::test_ip_renewal_full_backend_contract_and_evidence_gates",
+        "tests/e2e/iplf-037b-renewal-workflow-2026-08-22.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -23685,18 +23726,20 @@
       "journey_ids": [
         "UJ-26"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-REN-03",
-        "planned:IPLF-UJ-26-EXC-01",
-        "planned:IPLF-UJ-26-EXC-02",
-        "planned:IPLF-UJ-26-EXC-03",
-        "planned:IPLF-UJ-26-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_renewals.py",
+        "apps/web/app/app/ip/renewals/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_renewals.py::test_ip_renewal_full_backend_contract_and_evidence_gates",
+        "tests/e2e/iplf-037b-renewal-workflow-2026-08-22.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -44639,14 +44682,16 @@
         "IP-REN-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-26-EXC-01",
-        "planned:IPLF-UJ-26-EXC-02",
-        "planned:IPLF-UJ-26-EXC-03",
-        "planned:IPLF-UJ-26-NORMAL"
+        "apps/api/tests/test_ip_renewals.py::test_ip_renewal_full_backend_contract_and_evidence_gates#IPLF-UJ-26-EXC-03",
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_projects_grace_and_overdue_without_silent_writes#IPLF-UJ-26-EXC-02",
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_reminders_and_instruction_cancellation#IPLF-UJ-26-EXC-01",
+        "tests/e2e/iplf-037b-renewal-workflow-2026-08-22.spec.ts::IPLF-037B completes UJ-26 and renewal exception paths#IPLF-UJ-26-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -52981,11 +53026,13 @@
         "IP-REN-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-26-NORMAL"
+        "tests/e2e/iplf-037b-renewal-workflow-2026-08-22.spec.ts::IPLF-037B completes UJ-26 and renewal exception paths#IPLF-UJ-26-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53013,11 +53060,13 @@
         "IP-REN-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-26-EXC-01"
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_reminders_and_instruction_cancellation#IPLF-UJ-26-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53045,11 +53094,13 @@
         "IP-REN-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-26-EXC-02"
+        "apps/api/tests/test_ip_renewals.py::test_renewal_portfolio_projects_grace_and_overdue_without_silent_writes#IPLF-UJ-26-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53077,11 +53128,13 @@
         "IP-REN-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-26-EXC-03"
+        "apps/api/tests/test_ip_renewals.py::test_ip_renewal_full_backend_contract_and_evidence_gates#IPLF-UJ-26-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [

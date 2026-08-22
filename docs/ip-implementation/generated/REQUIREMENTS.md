@@ -164,9 +164,9 @@ Generated; do not edit.
 | IP-WATCH-03 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
 | IP-WATCH-04 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
 | IP-WATCH-05 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
-| IP-REN-01 | IP-REN | IPLF-037B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-REN-02 | IP-REN | IPLF-037B | 5 | 0 | not_started | not_run | blocked | false |
-| IP-REN-03 | IP-REN | IPLF-037B | 5 | 0 | not_started | not_run | blocked | false |
+| IP-REN-01 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
+| IP-REN-02 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
+| IP-REN-03 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
 | JUDGE-01 | JUDGE | IPLF-003C, IPLF-060B | 9 | 0 | in_progress | not_run | blocked | false |
 | JUDGE-02 | JUDGE | IPLF-003C, IPLF-060B | 9 | 0 | in_progress | not_run | blocked | false |
 | JUDGE-03 | JUDGE | IPLF-003C, IPLF-060B | 9 | 0 | in_progress | not_run | blocked | false |
