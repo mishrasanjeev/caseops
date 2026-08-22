@@ -186,6 +186,9 @@ from caseops_api.schemas.ip_renewals import (
     IpClientInstructionAcknowledgeRequest,
     IpClientInstructionCreateRequest,
     IpRenewalFoundationContract,
+    IpRenewalPortfolioResponse,
+    IpRenewalReminderScheduleRequest,
+    IpRenewalReminderScheduleResponse,
     IpRenewalTermCreateRequest,
     IpRenewalTermListResponse,
     IpRenewalTermRecord,
@@ -348,8 +351,10 @@ from caseops_api.services.ip_renewals import (
     acknowledge_client_instruction,
     create_client_instruction,
     create_renewal_term,
+    list_renewal_portfolio,
     list_renewal_terms,
     renewal_foundation_contract,
+    schedule_renewal_instruction_reminders,
     transition_renewal_term,
 )
 from caseops_api.services.ip_workspace import (
@@ -654,6 +659,17 @@ async def get_ip_renewal_foundation_contract(
 
 
 @router.get(
+    "/renewals/portfolio",
+    response_model=IpRenewalPortfolioResponse,
+)
+async def get_ip_renewal_portfolio(
+    context: IpViewer,
+    session: DbSession,
+) -> IpRenewalPortfolioResponse:
+    return list_renewal_portfolio(session, context=context)
+
+
+@router.get(
     "/dockets/{docket_id}/renewal-terms",
     response_model=IpRenewalTermListResponse,
 )
@@ -680,6 +696,26 @@ async def post_ip_renewal_term(
         session,
         context=context,
         docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/renewal-terms/{term_id}/instruction-reminders",
+    response_model=IpRenewalReminderScheduleResponse,
+)
+async def post_ip_renewal_instruction_reminders(
+    docket_id: str,
+    term_id: str,
+    payload: IpRenewalReminderScheduleRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalReminderScheduleResponse:
+    return schedule_renewal_instruction_reminders(
+        session,
+        context=context,
+        docket_id=docket_id,
+        term_id=term_id,
         payload=payload,
     )
 

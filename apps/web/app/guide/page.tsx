@@ -690,6 +690,46 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Trademark renewals
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/renewals">Trademark renewals</a>{" "}
+                    for the portfolio-wide due, instructed, filing, accepted, grace, and
+                    overdue register. Each term shows the confirmed legal deadline, rule
+                    citation, source version, grace date, recorded state, and any date-derived
+                    state that still needs an explicit workflow transition.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Select a term and schedule instruction notifications. Active primary
+                        and backup deadline owners receive an immediate in-app request plus
+                        the future reminder offsets; repeating the action does not duplicate
+                        them.
+                      </>,
+                      <>
+                        Record the client decision, scope, authority, channel, and evidence
+                        reference. Receiving an instruction cancels queued no-instruction
+                        reminders. A reviewer then accepts, rejects, or requests clarification.
+                      </>,
+                      <>
+                        Record filing initiation with its provider reference. This state is not
+                        Filed, Registry accepted, or Completed.
+                      </>,
+                      <>
+                        Link the confirmed filing event, then the separate registry-acceptance
+                        event. Completion requires an accepted certificate document and a
+                        confirmed next-term deadline calculated from that acceptance event.
+                      </>,
+                    ]}
+                  />
+                  <Callout tone="warn" title="Calendar status never rewrites legal state">
+                    When the renewal date passes, the portfolio reports Grace period or
+                    Overdue and flags reconciliation. A user must still record the legal
+                    transition with a reason; the report does not silently change the
+                    canonical term.
+                  </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     IP document workflow
                   </h3>
                   <p>

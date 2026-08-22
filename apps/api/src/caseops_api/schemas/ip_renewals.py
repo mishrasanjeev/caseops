@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -23,6 +23,19 @@ InstructionDecision = Literal[
 ]
 InstructionStatus = Literal[
     "pending", "accepted", "rejected", "clarification_required", "superseded"
+]
+RenewalCalendarPhase = Literal["due", "grace", "overdue", "closed"]
+RenewalAction = Literal[
+    "request_instruction",
+    "review_instruction",
+    "record_filing_initiation",
+    "record_filing",
+    "await_registry_acceptance",
+    "record_registry_acceptance",
+    "record_certificate_and_next_term",
+    "resolve_grace_period",
+    "resolve_overdue_term",
+    "none",
 ]
 
 
@@ -206,3 +219,107 @@ class IpRenewalTermRecord(BaseModel):
 class IpRenewalTermListResponse(BaseModel):
     items: list[IpRenewalTermRecord]
     total: int
+
+
+class IpRenewalDeadlineSummary(BaseModel):
+    id: str
+    title: str
+    deadline_kind: str
+    result_on: date | None
+    result_at: datetime | None
+    state: str
+    certainty: str
+    rule_citation: str
+    source_version: str
+    explanation: str
+
+
+class IpRenewalReminderSummary(BaseModel):
+    total: int = 0
+    queued: int = 0
+    sent_or_delivered: int = 0
+    cancelled: int = 0
+    blocked_or_failed: int = 0
+    next_scheduled_for: datetime | None = None
+    last_delivered_at: datetime | None = None
+
+
+class IpRenewalWorkflowRecord(BaseModel):
+    docket_id: str
+    docket_title: str
+    primary_identifier: str | None
+    record_type: str
+    term: IpRenewalTermRecord
+    renewal_deadline: IpRenewalDeadlineSummary
+    grace_deadline: IpRenewalDeadlineSummary | None
+    reporting_state: RenewalState
+    calendar_phase: RenewalCalendarPhase
+    action_required: RenewalAction
+    days_until_renewal: int | None
+    days_until_grace_end: int | None
+    state_reconciliation_required: bool
+    reminders: IpRenewalReminderSummary
+
+
+class IpRenewalPortfolioCounts(BaseModel):
+    total: int = 0
+    due: int = 0
+    instructed: int = 0
+    filing_in_progress: int = 0
+    filed: int = 0
+    accepted: int = 0
+    grace: int = 0
+    overdue: int = 0
+    completed: int = 0
+    cancelled: int = 0
+    action_required: int = 0
+
+
+class IpRenewalPortfolioResponse(BaseModel):
+    generated_at: datetime
+    items: list[IpRenewalWorkflowRecord]
+    counts: IpRenewalPortfolioCounts
+
+
+class IpRenewalReminderScheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_state: RenewalState
+    expected_version: int = Field(gt=0)
+    expected_updated_at: datetime
+    reminder_offsets_days: list[int] = Field(
+        default_factory=lambda: [90, 60, 30, 7, 1],
+        min_length=1,
+        max_length=10,
+    )
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def normalize_reminder_expected_updated_at(cls, value: datetime) -> datetime:
+        return _as_aware(value)
+
+    @field_validator("reminder_offsets_days")
+    @classmethod
+    def validate_reminder_offsets(cls, value: list[int]) -> list[int]:
+        if any(offset < 0 or offset > 3650 for offset in value):
+            raise ValueError("reminder offsets must be between 0 and 3650 days")
+        return sorted(set(value), reverse=True)
+
+
+class IpRenewalReminderIntentRecord(BaseModel):
+    id: str
+    recipient_membership_id: str | None
+    recipient_label: str
+    role: str
+    event_type: str
+    status: str
+    scheduled_for: datetime | None
+    delivered_at: datetime | None
+
+
+class IpRenewalReminderScheduleResponse(BaseModel):
+    term_id: str
+    schedule_source_type: Literal["ip_renewal_term"] = "ip_renewal_term"
+    created_count: int
+    existing_count: int
+    intents: list[IpRenewalReminderIntentRecord]

@@ -5234,6 +5234,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instruction-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Renewal Instruction Reminders */
+        post: operations["post_ip_renewal_instruction_reminders_api_ip_dockets__docket_id__renewal_terms__term_id__instruction_reminders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions": {
         parameters: {
             query?: never;
@@ -6030,6 +6047,23 @@ export interface paths {
         };
         /** Get Ip Renewal Foundation Contract */
         get: operations["get_ip_renewal_foundation_contract_api_ip_renewals_foundation_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/renewals/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Renewal Portfolio */
+        get: operations["get_ip_renewal_portfolio_api_ip_renewals_portfolio_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -23228,6 +23262,29 @@ export interface components {
              */
             updated_at: string;
         };
+        /** IpRenewalDeadlineSummary */
+        IpRenewalDeadlineSummary: {
+            /** Certainty */
+            certainty: string;
+            /** Deadline Kind */
+            deadline_kind: string;
+            /** Explanation */
+            explanation: string;
+            /** Id */
+            id: string;
+            /** Result At */
+            result_at: string | null;
+            /** Result On */
+            result_on: string | null;
+            /** Rule Citation */
+            rule_citation: string;
+            /** Source Version */
+            source_version: string;
+            /** State */
+            state: string;
+            /** Title */
+            title: string;
+        };
         /** IpRenewalFoundationContract */
         IpRenewalFoundationContract: {
             /**
@@ -23280,6 +23337,160 @@ export interface components {
              * @default ip_renewal_terms
              */
             renewal_owner: string;
+        };
+        /** IpRenewalPortfolioCounts */
+        IpRenewalPortfolioCounts: {
+            /**
+             * Accepted
+             * @default 0
+             */
+            accepted: number;
+            /**
+             * Action Required
+             * @default 0
+             */
+            action_required: number;
+            /**
+             * Cancelled
+             * @default 0
+             */
+            cancelled: number;
+            /**
+             * Completed
+             * @default 0
+             */
+            completed: number;
+            /**
+             * Due
+             * @default 0
+             */
+            due: number;
+            /**
+             * Filed
+             * @default 0
+             */
+            filed: number;
+            /**
+             * Filing In Progress
+             * @default 0
+             */
+            filing_in_progress: number;
+            /**
+             * Grace
+             * @default 0
+             */
+            grace: number;
+            /**
+             * Instructed
+             * @default 0
+             */
+            instructed: number;
+            /**
+             * Overdue
+             * @default 0
+             */
+            overdue: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** IpRenewalPortfolioResponse */
+        IpRenewalPortfolioResponse: {
+            counts: components["schemas"]["IpRenewalPortfolioCounts"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["IpRenewalWorkflowRecord"][];
+        };
+        /** IpRenewalReminderIntentRecord */
+        IpRenewalReminderIntentRecord: {
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Id */
+            id: string;
+            /** Recipient Label */
+            recipient_label: string;
+            /** Recipient Membership Id */
+            recipient_membership_id: string | null;
+            /** Role */
+            role: string;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Status */
+            status: string;
+        };
+        /** IpRenewalReminderScheduleRequest */
+        IpRenewalReminderScheduleRequest: {
+            /**
+             * Expected State
+             * @enum {string}
+             */
+            expected_state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Reminder Offsets Days */
+            reminder_offsets_days?: number[];
+        };
+        /** IpRenewalReminderScheduleResponse */
+        IpRenewalReminderScheduleResponse: {
+            /** Created Count */
+            created_count: number;
+            /** Existing Count */
+            existing_count: number;
+            /** Intents */
+            intents: components["schemas"]["IpRenewalReminderIntentRecord"][];
+            /**
+             * Schedule Source Type
+             * @default ip_renewal_term
+             * @constant
+             */
+            schedule_source_type: "ip_renewal_term";
+            /** Term Id */
+            term_id: string;
+        };
+        /** IpRenewalReminderSummary */
+        IpRenewalReminderSummary: {
+            /**
+             * Blocked Or Failed
+             * @default 0
+             */
+            blocked_or_failed: number;
+            /**
+             * Cancelled
+             * @default 0
+             */
+            cancelled: number;
+            /** Last Delivered At */
+            last_delivered_at?: string | null;
+            /** Next Scheduled For */
+            next_scheduled_for?: string | null;
+            /**
+             * Queued
+             * @default 0
+             */
+            queued: number;
+            /**
+             * Sent Or Delivered
+             * @default 0
+             */
+            sent_or_delivered: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** IpRenewalTermCreateRequest */
         IpRenewalTermCreateRequest: {
@@ -23386,6 +23597,42 @@ export interface components {
              * @enum {string}
              */
             target_state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
+        };
+        /** IpRenewalWorkflowRecord */
+        IpRenewalWorkflowRecord: {
+            /**
+             * Action Required
+             * @enum {string}
+             */
+            action_required: "request_instruction" | "review_instruction" | "record_filing_initiation" | "record_filing" | "await_registry_acceptance" | "record_registry_acceptance" | "record_certificate_and_next_term" | "resolve_grace_period" | "resolve_overdue_term" | "none";
+            /**
+             * Calendar Phase
+             * @enum {string}
+             */
+            calendar_phase: "due" | "grace" | "overdue" | "closed";
+            /** Days Until Grace End */
+            days_until_grace_end: number | null;
+            /** Days Until Renewal */
+            days_until_renewal: number | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            grace_deadline: components["schemas"]["IpRenewalDeadlineSummary"] | null;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Record Type */
+            record_type: string;
+            reminders: components["schemas"]["IpRenewalReminderSummary"];
+            renewal_deadline: components["schemas"]["IpRenewalDeadlineSummary"];
+            /**
+             * Reporting State
+             * @enum {string}
+             */
+            reporting_state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
+            /** State Reconciliation Required */
+            state_reconciliation_required: boolean;
+            term: components["schemas"]["IpRenewalTermRecord"];
         };
         /** IpResponsibilityInput */
         IpResponsibilityInput: {
@@ -45267,6 +45514,42 @@ export interface operations {
             };
         };
     };
+    post_ip_renewal_instruction_reminders_api_ip_dockets__docket_id__renewal_terms__term_id__instruction_reminders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRenewalReminderScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalReminderScheduleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_client_instruction_api_ip_dockets__docket_id__renewal_terms__term_id__instructions_post: {
         parameters: {
             query?: never;
@@ -46926,6 +47209,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpRenewalFoundationContract"];
+                };
+            };
+        };
+    };
+    get_ip_renewal_portfolio_api_ip_renewals_portfolio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalPortfolioResponse"];
                 };
             };
         };
