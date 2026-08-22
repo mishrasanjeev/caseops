@@ -75,7 +75,7 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
         "steps.prod-playwright-prerequisites.outputs.ready == 'true'"
     )
     assert "id: prod-playwright-prerequisites" in workflow
-    assert workflow.count(prerequisite_gate) == 2
+    assert workflow.count(prerequisite_gate) == 3
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
         "npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list" in workflow
@@ -155,6 +155,38 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     assert "PROD_API_BASE_URL:" not in a0_step
     assert "CASEOPS_IP_QA_EMAIL:" not in a0_step
     assert "CASEOPS_IP_QA_SLUG:" not in a0_step
+
+
+def test_renewal_production_acceptance_is_exact_release_and_fail_closed() -> None:
+    workflow = _read_repo_text(".github/workflows/prod-verify.yml")
+    config = _read_repo_text("playwright.ip-renewal-prod.config.ts")
+    broad_config = _read_repo_text("playwright.prod-ram.config.ts")
+    spec = _read_repo_text("tests/e2e/iplf-037b-renewal-2026-08-22-prod.spec.ts")
+
+    assert "Run IPLF-037B renewal acceptance" in workflow
+    assert "playwright.ip-renewal-prod.config.ts" in workflow
+    assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
+    assert 'required("CASEOPS_IP_QA_PASSWORD")' in spec
+    for fixture_id in (
+        "CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID",
+        "CASEOPS_IP_RENEWAL_RULE_VERSION_ID",
+        "CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID",
+        "CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID",
+    ):
+        assert fixture_id in workflow
+        assert fixture_id in spec
+    assert 'const WEB = "https://caseops.ai"' in spec
+    assert 'const API = "https://api.caseops.ai"' in spec
+    assert 'const SLUG = "caseops-ip-qa"' in spec
+    assert "process.env.PROD_BASE_URL" not in spec
+    assert "process.env.PROD_API_BASE_URL" not in spec
+    assert "cleanup refuses non-reserved Matter shapes" in spec
+    assert "await disposeMatter(matter)" in spec
+    assert "await deactivateSupervisor()" in spec
+    assert "trace: \"off\"" in config
+    assert "screenshot: \"off\"" in config
+    assert "video: \"off\"" in config
+    assert "iplf-037b-renewal-2026-08-22-prod" not in broad_config
 
 
 def test_guard_first_production_acceptance_is_isolated_and_recoverable() -> None:

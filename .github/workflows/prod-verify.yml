@@ -150,6 +150,18 @@ jobs:
           CASEOPS_IP_A0_PROD_MODE: verify
         run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list
 
+      - name: Run IPLF-037B renewal acceptance
+        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        timeout-minutes: 8
+        env:
+          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
+          CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
+          CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
+          CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID }}
+        run: npx playwright test --config=playwright.ip-renewal-prod.config.ts --reporter=list
+
       - name: Run prod-Playwright suite (notice module)
         # The RAM batch is intentionally broad and can expose an independent
         # provider or quota incident.  The Notice suite is still a required

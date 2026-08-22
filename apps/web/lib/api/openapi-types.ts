@@ -20213,7 +20213,7 @@ export interface components {
              * Deadline Kind
              * @enum {string}
              */
-            deadline_kind: "legal_deadline" | "internal_target" | "task_date" | "hearing" | "renewal" | "client_instruction" | "reminder";
+            deadline_kind: "legal_deadline" | "internal_target" | "task_date" | "hearing" | "renewal" | "renewal_grace" | "client_instruction" | "reminder";
             /**
              * Direction
              * @default after
@@ -20811,7 +20811,7 @@ export interface components {
              * Deadline Kind
              * @enum {string}
              */
-            deadline_kind: "legal_deadline" | "internal_target" | "task_date" | "hearing" | "renewal" | "client_instruction" | "reminder";
+            deadline_kind: "legal_deadline" | "internal_target" | "task_date" | "hearing" | "renewal" | "renewal_grace" | "client_instruction" | "reminder";
             /** Docket Id */
             docket_id: string;
             /** Engine Version */

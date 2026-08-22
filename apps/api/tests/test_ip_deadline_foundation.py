@@ -102,6 +102,13 @@ def test_uncertain_trigger_remains_visible_without_manufactured_precision() -> N
     ]
 
 
+def test_calculation_contract_accepts_the_canonical_renewal_grace_kind() -> None:
+    request = _request(deadline_kind="renewal_grace")
+
+    assert request.deadline_kind == "renewal_grace"
+    assert calculate_ip_deadline(request).result_on == date(2026, 8, 18)
+
+
 def test_calendar_rejects_conflicting_day_classification() -> None:
     with pytest.raises(ValueError, match="both a holiday and an exceptional working day"):
         _calendar(exceptional_working_days=[date(2026, 8, 17)])
