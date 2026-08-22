@@ -34,6 +34,12 @@ assertion.
 - Six active users matching both reserved synthetic constraints
   `ip-access-prod-*@example.com` and `IP Access Production Reviewer *` were
   deactivated. No wider directory record was changed.
+- A second exact-release workflow, `32600668010`, verified deployed revision
+  `2304e4aee8f999d69af25c5934e4271e895b0648`. IPLF-026B passed at 360 px in
+  33.5 seconds. The broad batch completed with 78 passed, 1 failed, and 3
+  skipped; its sole failure was the older PR #237 navigation oracle omitting
+  the newly deployed `IP reports` link. A0 and Notice passed. IPLF-037B failed
+  only because its four governed renewal version IDs remain absent.
 
 No real client record, recipient, provider operation, filing, fee, payment,
 external message, or legal act was created by the investigation or cleanup.
@@ -52,6 +58,9 @@ external message, or legal act was created by the investigation or cleanup.
 4. The production journey records its synthetic membership immediately after
    creation and deactivates it in `finally` when any earlier assertion fails.
    Teardown failure is itself a test failure.
+5. The production grouped-navigation oracle now includes the capability-gated
+   `IP reports` route already present in the canonical sidebar, preventing a
+   newly deployed navigation item from being misreported as unreachable.
 
 ## Local verification
 
@@ -60,6 +69,7 @@ external message, or legal act was created by the investigation or cleanup.
 | IP page focused Vitest suite | 24 passed |
 | Generated Next route types and TypeScript | passed |
 | IPLF-026B local 360 px Playwright journey | 1 passed in 14.0 seconds |
+| Capability-visible grouped navigation at 360 px | 1 passed in 1.0 minute |
 | Production IPLF-026B Playwright compile/discovery | 1 test discovered |
 | Diff/whitespace integrity | passed |
 

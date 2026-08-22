@@ -241,6 +241,11 @@ const NAV_GROUPS: ReadonlyArray<{
         href: "/app/ip/renewals",
         capability: "ip:read",
       },
+      {
+        label: "IP reports",
+        href: "/app/ip/reports",
+        capability: "ip:read",
+      },
     ],
   },
   {
