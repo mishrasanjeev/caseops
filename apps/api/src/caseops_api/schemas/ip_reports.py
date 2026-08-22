@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from caseops_api.schemas.ip_portfolio import IpPortfolioFilters
 from caseops_api.schemas.ip_renewals import RenewalState
@@ -54,6 +54,15 @@ class IpReportPreviewRequest(BaseModel):
     row_limit: int = Field(default=200, ge=1, le=200)
     audience: Literal["internal"] = "internal"
     confidentiality: Literal["internal", "restricted"] = "internal"
+
+    @model_validator(mode="after")
+    def validate_report_filter_scope(self) -> IpReportPreviewRequest:
+        portfolio_filter_values = self.filters.model_dump(exclude_defaults=True)
+        if self.report_kind in {"deadline_control", "renewal"} and portfolio_filter_values:
+            raise ValueError(f"portfolio filters are not supported for {self.report_kind}")
+        if self.report_kind != "renewal" and self.renewal_states:
+            raise ValueError(f"renewal_states is not supported for {self.report_kind}")
+        return self
 
 
 class IpReportFreshness(BaseModel):

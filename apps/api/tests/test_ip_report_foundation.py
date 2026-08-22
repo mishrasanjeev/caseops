@@ -188,6 +188,7 @@ def test_iplf038a_deadline_and_renewal_empty_states_are_honest(
     assert renewal_body["row_count"] == 0
     assert renewal_body["summary"]["total"] == 0
     assert renewal_body["filters"]["renewal_states"] == ["due"]
+    assert "portfolio" not in renewal_body["filters"]
     assert renewal_body["freshness"]["status"] == "mixed"
     assert renewal_body["freshness"]["unavailable_sources"] == ["registry_freshness"]
 
@@ -214,6 +215,22 @@ def test_iplf038a_report_contract_fails_closed_on_unapproved_shape(
 
     invalid_state = _preview(client, headers, "renewal", renewal_states=["invented"])
     assert invalid_state.status_code == 422
+
+    ignored_portfolio_filter = _preview(
+        client,
+        headers,
+        "renewal",
+        filters={"jurisdiction": ["IN"]},
+    )
+    assert ignored_portfolio_filter.status_code == 422
+
+    ignored_renewal_filter = _preview(
+        client,
+        headers,
+        "deadline_control",
+        renewal_states=["due"],
+    )
+    assert ignored_renewal_filter.status_code == 422
 
     client.cookies.clear()
     unauthenticated = client.get("/api/ip/reports/foundation-contract")

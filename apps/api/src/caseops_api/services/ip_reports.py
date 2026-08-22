@@ -247,11 +247,11 @@ def preview_ip_report(
         )
 
     definition = _definition(payload.report_kind)
-    filters = {
-        "portfolio": payload.filters.model_dump(mode="json"),
-        "renewal_states": payload.renewal_states,
-        "row_limit": payload.row_limit,
-    }
+    filters: dict[str, Any] = {"row_limit": payload.row_limit}
+    if payload.report_kind in {"portfolio_register", "data_quality"}:
+        filters["portfolio"] = payload.filters.model_dump(mode="json")
+    elif payload.report_kind == "renewal":
+        filters["renewal_states"] = payload.renewal_states
     snapshot = {
         "report_kind": payload.report_kind,
         "schema_version": definition.schema_version,
