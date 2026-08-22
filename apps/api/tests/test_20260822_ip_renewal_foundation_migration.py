@@ -92,3 +92,50 @@ def test_ip_renewal_foundation_is_additive_tenant_scoped_and_reversible(
     assert TABLES.issubset(_tables(database_url))
     get_settings.cache_clear()
     clear_engine_cache()
+
+
+def test_ip_renewal_foundation_refuses_destructive_populated_downgrade(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    database_url = f"sqlite+pysqlite:///{(tmp_path / 'populated-renewals.db').as_posix()}"
+    monkeypatch.setenv("CASEOPS_ENV", "e2e")
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    clear_engine_cache()
+    config = _config(project_root)
+    command.upgrade(config, MIGRATION_HEAD)
+
+    engine = create_engine(database_url, future=True)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("PRAGMA foreign_keys=OFF"))
+            connection.execute(
+                text(
+                    "INSERT INTO ip_renewal_terms ("
+                    "id, company_id, docket_id, term_sequence, registration_event_id, "
+                    "renewal_deadline_id, state, version, created_by_membership_id, "
+                    "updated_by_membership_id, created_at, updated_at"
+                    ") VALUES ("
+                    ":id, :company_id, :docket_id, 1, :event_id, :deadline_id, "
+                    "'due', 1, :membership_id, :membership_id, CURRENT_TIMESTAMP, "
+                    "CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": "renewal-1",
+                    "company_id": "company-1",
+                    "docket_id": "docket-1",
+                    "event_id": "event-1",
+                    "deadline_id": "deadline-1",
+                    "membership_id": "membership-1",
+                },
+            )
+    finally:
+        engine.dispose()
+
+    with pytest.raises(RuntimeError, match="Refusing to discard persisted renewal"):
+        command.downgrade(config, PREVIOUS_HEAD)
+    assert _head(database_url) == MIGRATION_HEAD
+    get_settings.cache_clear()
+    clear_engine_cache()

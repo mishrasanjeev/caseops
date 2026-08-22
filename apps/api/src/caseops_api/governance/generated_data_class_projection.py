@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "36fd83ff1e6cefafa163fb32902b6d61bb5863685ea25f2d775194c382d94b57"
-MAP_SCHEMA_FINGERPRINT = "91609e3336ea40997da3f9822fe9b5f84a10e04654d80c6252f2cd0704cc7dca"
+MAP_DOCUMENT_FINGERPRINT = "2ca52aad755920b33b6bfbc3c13824fe1b42a2e15f24bcc53518c00f7d2506f4"
+MAP_SCHEMA_FINGERPRINT = "d64bd2a8d58e38d4b9890f2a035236c497a17ee05e91e158dadfffd0744c742a"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "8cd6ce888107bf41b3607ebaa6dd45ac22b14b6fdcb6f938b91c7a394ea9c7d3"
+ORM_SCHEMA_FINGERPRINT = "0f4c03a4f662fd01c830ca533a69110fed5788471f94d7d4bef46e9005e93295"
 
-PROJECTION_ID = "cd25a0095611eb825a6cc1399b4efd25fe02f10803fe0f529bbdc7ac65c9595d"
+PROJECTION_ID = "1d259eec6c5c176bbc7e55275cda7d3ead5d406d312e5b8f8b64b4878c671114"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -145,6 +145,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "inbound_email_aliases",
         "inbound_email_events",
         "ip_assets",
+        "ip_client_instructions",
         "ip_control_review_exception_decisions",
         "ip_control_review_sample_evidence",
         "ip_control_review_signatures",
@@ -174,6 +175,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_proceedings",
         "ip_related_right_obligations",
         "ip_relationships",
+        "ip_renewal_terms",
         "ip_responsibility_assignments",
         "ip_rule_sets",
         "ip_rule_versions",

@@ -9,10 +9,10 @@ deadline, docket-event, cost, document, communication, and membership owners.
 They do not duplicate operational calendars, billing/payment state, document
 bytes, provider delivery state, or notification delivery.
 
-MIGRATION-LOCK-RISK: additive table and index DDL only; no existing row is
-rewritten. PostgreSQL takes brief catalogue locks while creating empty tables.
-MIGRATION-ROLLBACK: safe before dependent renewal data is relied upon; the
-downgrade drops only these new tables and their indexes.
+MIGRATION-LOCK-RISK: acknowledged: additive table and index DDL only; every
+index is built immediately after its empty table and no existing row is scanned.
+MIGRATION-ROLLBACK: restore-forward: downgrade is allowed only while both new
+tables remain empty; it refuses to discard persisted legal or instruction data.
 """
 
 from __future__ import annotations
@@ -27,6 +27,9 @@ branch_labels = None
 depends_on = None
 
 # DATA-GOVERNANCE-MAP: updated
+
+RENEWAL_TABLE = "ip_renewal_terms"
+INSTRUCTION_TABLE = "ip_client_instructions"
 
 
 def upgrade() -> None:
@@ -159,6 +162,8 @@ def upgrade() -> None:
             name="uq_ip_renewal_term_legal_basis",
         ),
     )
+    # MIGRATION-LOCK-RISK: acknowledged: the renewal table was created empty
+    # in this transaction and no application writer can have populated it yet.
     op.create_index(
         "ix_ip_renewal_terms_company_state_deadline",
         "ip_renewal_terms",
@@ -280,6 +285,8 @@ def upgrade() -> None:
             name="uq_ip_client_instruction_term_version",
         ),
     )
+    # MIGRATION-LOCK-RISK: acknowledged: the instruction table was created empty
+    # in this transaction and no application writer can have populated it yet.
     op.create_index(
         "ix_ip_client_instructions_company_term_status",
         "ip_client_instructions",
@@ -288,13 +295,26 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    persisted_rows = sum(
+        int(bind.execute(sa.text(f"SELECT COUNT(*) FROM {table}")).scalar_one())
+        for table in (RENEWAL_TABLE, INSTRUCTION_TABLE)
+    )
+    if persisted_rows:
+        raise RuntimeError(
+            "Refusing to discard persisted renewal or client-instruction evidence."
+        )
     op.drop_index(
         "ix_ip_client_instructions_company_term_status",
-        table_name="ip_client_instructions",
+        table_name=INSTRUCTION_TABLE,
     )
-    op.drop_table("ip_client_instructions")
+    # MIGRATION-ROLLBACK: restore-forward: this drop is reachable only while the
+    # pre-release table is empty; a populated deployment must roll forward.
+    op.drop_table(INSTRUCTION_TABLE)
     op.drop_index(
         "ix_ip_renewal_terms_company_state_deadline",
-        table_name="ip_renewal_terms",
+        table_name=RENEWAL_TABLE,
     )
-    op.drop_table("ip_renewal_terms")
+    # MIGRATION-ROLLBACK: restore-forward: this drop is reachable only while the
+    # pre-release table is empty; a populated deployment must roll forward.
+    op.drop_table(RENEWAL_TABLE)
