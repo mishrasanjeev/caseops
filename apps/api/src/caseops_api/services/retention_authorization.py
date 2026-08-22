@@ -44,7 +44,7 @@ from caseops_api.db.models import (
     DataRetentionPolicyVersionStatus,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.security import require_step_up_always
 from caseops_api.services.session_context import SessionContext
 
 STEP_UP_PURPOSE = "retention_policy_activation"
@@ -233,7 +233,7 @@ def approve_version(
     else and satisfy the step-up themselves, which is most of the control.
     """
 
-    require_recent_step_up(session, context=context, purpose=STEP_UP_PURPOSE)
+    require_step_up_always(session, context=context, purpose=STEP_UP_PURPOSE)
     version = _load(session, context=context, version_id=version_id)
     _require_status(version, DataRetentionPolicyVersionStatus.CANDIDATE, verb="approved")
     _require_terms_unchanged(version)
@@ -287,7 +287,7 @@ def activate_version(
     two answers about how long to keep the same records.
     """
 
-    require_recent_step_up(session, context=context, purpose=STEP_UP_PURPOSE)
+    require_step_up_always(session, context=context, purpose=STEP_UP_PURPOSE)
     version = _load(session, context=context, version_id=version_id)
     _require_status(version, DataRetentionPolicyVersionStatus.APPROVED, verb="activated")
     # No terms check here, deliberately. trg_data_retention_versions_immutable

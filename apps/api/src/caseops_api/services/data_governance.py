@@ -52,7 +52,7 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.governance_integrity_scan import run_integrity_scan
-from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.security import require_step_up_always
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
 
@@ -404,7 +404,7 @@ def activate_legal_hold(
     express because it is a property of the session, not the row.
     """
 
-    require_recent_step_up(session, context=context, purpose="legal_hold_change")
+    require_step_up_always(session, context=context, purpose="legal_hold_change")
     hold = session.get(LegalHold, hold_id)
     if hold is None or hold.company_id != context.company.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal hold not found.")
@@ -476,7 +476,7 @@ def release_legal_hold(
     even existed.
     """
 
-    require_recent_step_up(session, context=context, purpose="legal_hold_change")
+    require_step_up_always(session, context=context, purpose="legal_hold_change")
     hold = session.get(LegalHold, hold_id)
     if hold is None or hold.company_id != context.company.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal hold not found.")

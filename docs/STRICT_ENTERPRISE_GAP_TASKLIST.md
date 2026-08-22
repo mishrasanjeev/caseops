@@ -1376,3 +1376,70 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   This raises the severity: the gap is not an occasional hazard of unusual
   scheduling, it is the ordinary outcome whenever two lanes touch migrations in
   the same week, and it recurs every time main moves.
+
+## 2026-08-22 Step-up second-factor audit
+
+### EH-SEC-01 - Step-up is conditional on MFA enrolment, and enrolment defaults to none
+
+- **Status:** Partially implemented. The control exists, is correct once a
+  tenant enables it, and five of the highest-consequence call sites are now
+  unconditional. The remaining ~45 keep the conditional default.
+- **Gap found:** `services/security.py::require_recent_step_up` requires a
+  step-up only when the caller **already has MFA enrolled**, or when tenant
+  policy mandates MFA:
+
+  ```python
+  should_require = require_if_mfa_enrolled and setting is not None and setting.status == "enrolled"
+  ```
+
+  `TenantSecurityPolicy.tenant_admin_mfa_required` and `all_users_mfa_required`
+  both default to `False`, and a tenant with no policy row has no requirement at
+  all. So for a new tenant the resolved rule is **"an actor with no MFA
+  enrolment satisfies the second factor by not having one"** — the default
+  posture, not an edge case.
+- **Why this is not simply a bug:** the conditional shape is a deliberate
+  progressive-adoption stance and it is right for most actions. A hard
+  requirement everywhere would lock a tenant out of its own product before it
+  has adopted MFA. The gap is not that the rule is conditional; it is that the
+  conditional rule is applied *uniformly*, including to actions that are
+  irreversible or that grant authority, where proceeding with no second factor
+  is worse than refusing.
+- **Closed here (unconditional via the new `require_step_up_always`):**
+  | Purpose | Why it cannot be conditional |
+  |---|---|
+  | `data_operation_execution` | Authorises an export, purge or offboarding (closed earlier, PR #296) |
+  | `retention_policy_activation` × 2 | Approving and activating a schedule authorises **every future purge** under it — upstream of the gate closed in #296, which is why leaving it conditional was an inconsistency |
+  | `legal_hold_change` × 2 | Activating and, critically, **releasing** a hold lifts preservation and makes held evidence deletable |
+- **Recorded, deliberately NOT changed here:** each of these is outside the
+  records-governance lane, and hardening them has real lockout consequences
+  that are a product decision rather than a defect fix. Listed by the strength
+  of the case for making them unconditional:
+  | Purpose | Sites | Consequence if performed without a second factor |
+  |---|---|---|
+  | `role_capability_change` | 1 | Privilege escalation from a compromised session |
+  | `destructive_action` | 2 | Named as destructive |
+  | `payment_activation_change` | 3 | Enables live payment capture |
+  | `billing_export` | 13 | Bulk financial data egress |
+  | `connector_credential_change` / `connector_disconnect` | 8 | Provider credential and integration control |
+  | `record_access_change` | 1 | Alters who can see restricted records |
+  | `platform_admin_access` | 1 | Cross-tenant administrative reach |
+- **Severity:** not stop-ship on its own — a tenant that enables the MFA policy
+  is protected on every one of these paths, and the product decision to allow
+  progressive adoption is legitimate. It is a fail-open **default** on
+  irreversible actions, which the hardening protocol counts as a gap whether or
+  not a bug has been reported.
+- **Decision needed from the product/security owner:** whether the
+  `role_capability_change` and `destructive_action` purposes should join the
+  unconditional set, accepting that a tenant with no MFA enrolment could not
+  perform them at all.
+- **A hollow test found and replaced:**
+  `test_both_lifecycle_paths_demand_step_up` asserted
+  `'require_recent_step_up' in inspect.getsource(...)`. A source-text grep
+  cannot distinguish a conditional gate from an unconditional one, so it passed
+  throughout the period the gate was open for un-enrolled actors. It now deletes
+  the step-up row and asserts a real 403. Verified by falsification: restoring
+  the conditional helper fails the new test and passed the old one.
+- **Verification:** `verify-backend.sh` across the data-governance, retention,
+  approval, review-contract and hold suites — 81 passed. Every test that had to
+  change was green *because* of the hole, which is the clearest evidence that
+  the hole was load-bearing.

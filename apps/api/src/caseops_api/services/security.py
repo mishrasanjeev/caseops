@@ -606,6 +606,39 @@ def require_recent_step_up(
     )
 
 
+def require_step_up_always(
+    session: Session,
+    *,
+    context: SessionContext,
+    purpose: str,
+) -> None:
+    """Demand a recent step-up regardless of MFA enrolment or tenant policy.
+
+    ``require_recent_step_up`` above is deliberately conditional: it asks for a
+    step-up only when the caller has MFA *enrolled*, or when tenant policy
+    mandates it. That is a progressive-adoption stance and it is right for most
+    sensitive actions - it cannot lock a tenant out of its own product before
+    it has adopted MFA.
+
+    It is the wrong stance for an action that is irreversible or that grants
+    authority, because there the conditional rule resolves to "an approver with
+    no enrolment satisfies the second factor by not having one". Both MFA policy
+    flags default to False and a tenant with no policy row has none at all, so
+    that is the DEFAULT posture, not an edge case.
+
+    Callers of this function accept the trade deliberately: a tenant that has
+    not adopted MFA cannot perform this action until someone enrols. Use it only
+    where that is better than proceeding without a second factor.
+    """
+
+    if recent_step_up_expires_at(session, context=context, purpose=purpose):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"This action always requires a recent MFA step-up. Purpose: {purpose}.",
+    )
+
+
 def enforce_platform_mfa(
     session: Session,
     *,

@@ -36,7 +36,7 @@ from caseops_api.db.models import (
     TenantDataOperation,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.security import recent_step_up_expires_at
+from caseops_api.services.security import require_step_up_always
 from caseops_api.services.session_context import SessionContext
 
 STEP_UP_PURPOSE = "data_operation_execution"
@@ -77,39 +77,6 @@ def _approved_execution(
             TenantDataOperation.company_id == context.company.id,
             TenantDataOperation.approves_operation_id == dry_run_id,
         )
-    )
-
-
-def _require_step_up_unconditionally(session: Session, *, context: SessionContext) -> None:
-    """Demand a recent step-up from the approver, enrolled in MFA or not.
-
-    ``require_recent_step_up`` is conditional by design: it only requires a
-    step-up when the caller already has MFA *enrolled*, or when tenant policy
-    mandates MFA. That is the right default for ordinary sensitive actions - it
-    cannot lock out a tenant that has not adopted MFA yet.
-
-    It is the wrong default here. Authorising an export, purge or offboarding is
-    the single most destructive thing this system can be asked to permit, and
-    under the conditional rule an approver with no MFA enrolment satisfied the
-    control by not having one. The advertised second factor was absent exactly
-    where it mattered most, and the existing service tests did not notice
-    because each one enrols MFA on the approver first.
-
-    So this fails closed instead: no recent step-up for this purpose, no
-    approval. A tenant that has not adopted MFA cannot approve a data operation
-    until someone enrols, which is the correct answer rather than an obstacle.
-    Rejection stays ungated - refusing is the safe direction, and an approver
-    who cannot complete MFA must still be able to stop a pending export.
-    """
-
-    if recent_step_up_expires_at(session, context=context, purpose=STEP_UP_PURPOSE):
-        return
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail=(
-            "Approving a tenant data operation always requires a recent MFA "
-            f"step-up. Purpose: {STEP_UP_PURPOSE}."
-        ),
     )
 
 
@@ -263,7 +230,7 @@ def approve_execution(
     and again by the database.
     """
 
-    _require_step_up_unconditionally(session, context=context)
+    require_step_up_always(session, context=context, purpose=STEP_UP_PURPOSE)
     dry_run = _load(session, context=context, operation_id=operation_id)
     _require_submitted(dry_run, verb="approved")
     if dry_run.requested_by_membership_id is None:

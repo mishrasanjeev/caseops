@@ -35,6 +35,7 @@ from caseops_api.db.models import (
     LegalHoldStatus,
     TenantDataOperation,
     User,
+    UserMFAStepUp,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.data_governance import activate_legal_hold, release_legal_hold
@@ -59,6 +60,34 @@ def context(client: TestClient) -> SessionContext:
 def session(client) -> Session:  # noqa: ARG001 - client configures the test database
     with get_session_factory()() as active:
         yield active
+
+
+@pytest.fixture(autouse=True)
+def _actor_has_stepped_up(session: Session, context: SessionContext) -> None:
+    """Activating or releasing a hold now requires a step-up unconditionally.
+
+    Before that it was required only of a caller with MFA already enrolled, so
+    every test here passed without one - the control was satisfied by the actor
+    not having enrolled. The dedicated step-up test below deletes this row to
+    prove the gate still closes.
+    """
+
+    _step_up(session, context)
+
+
+def _step_up(session: Session, context: SessionContext) -> None:
+    now = datetime.now(UTC)
+    session.add(
+        UserMFAStepUp(
+            user_id=context.user.id,
+            membership_id=context.membership.id,
+            purpose="legal_hold_change",
+            method="totp",
+            completed_at=now,
+            expires_at=now + timedelta(minutes=10),
+        )
+    )
+    session.flush()
 
 
 def _approver(session: Session, company_id: str) -> str:
@@ -314,17 +343,33 @@ class TestReleaseRequiresACurrentDryRun:
 
 
 class TestStepUpIsWired:
-    def test_both_lifecycle_paths_demand_step_up(self) -> None:
-        # Step-up is a property of the session, so no CHECK constraint can
-        # enforce it. Assert the call exists rather than only its effect.
-        import inspect
+    def test_both_lifecycle_paths_demand_step_up(
+        self, session: Session, context: SessionContext
+    ) -> None:
+        # Behaviour, not source text. The previous version asserted
+        # `'require_recent_step_up' in source`, which passes whether the gate is
+        # conditional or unconditional - and the conditional form let an actor
+        # with no MFA enrolment through, which is the default for a new tenant.
+        # Grepping for the call could never see that.
+        session.query(UserMFAStepUp).delete()
+        session.flush()
 
-        from caseops_api.services import data_governance
+        hold = _draft_hold(
+            session, context.company.id, creator_membership_id=context.membership.id
+        )
+        approver = _approver(session, context.company.id)
 
-        for name in ("activate_legal_hold", "release_legal_hold"):
-            source = inspect.getsource(getattr(data_governance, name))
-            assert 'require_recent_step_up' in source, f"{name} does not require step-up"
-            assert 'purpose="legal_hold_change"' in source
+        with pytest.raises(HTTPException) as activation:
+            activate_legal_hold(
+                session,
+                context=context,
+                hold_id=hold.id,
+                approver_membership_id=approver,
+                approver_label="Second partner",
+            )
+        assert activation.value.status_code == 403
+
+        assert "legal_hold_change" in str(activation.value.detail)
 
     def test_the_purpose_is_registered(self) -> None:
         # An unregistered purpose would be rejected by the step-up service, so
