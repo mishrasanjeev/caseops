@@ -32,6 +32,7 @@ from caseops_api.db.models import (
 from caseops_api.governance.data_class_projection import (
     require_admissible_data_class,
     require_current_projection,
+    review_coverage,
 )
 from caseops_api.schemas.data_governance import (
     TenantDataGovernanceIntegrityCheck,
@@ -353,6 +354,56 @@ EXPORT_EXCLUSIONS: tuple[dict[str, str], ...] = (
         "exported so the recipient can retrieve the original.",
     },
 )
+
+
+def _registered_scope_exclusion(session: Session) -> dict[str, str] | None:
+    """State the manifest's reach, in the place a reader looks for what is missing.
+
+    The five entries above are policy exclusions: categories deliberately
+    withheld. A reader who sees five carefully-reasoned omissions reasonably
+    concludes everything else is covered. It is not. A manifest can only name
+    data classes the reviewed projection admits, and today that is six
+    governance-metadata tables out of a inventoried estate of hundreds - no
+    matter file, document, communication or invoice among them.
+
+    That gap lives in the integrity report already, which is owner-only and a
+    different surface. Attaching it here puts the number on the artefact whose
+    interpretation depends on it: a tenant export manifest that lists five
+    exclusions and omits this one reads as near-complete while being nearly
+    empty. Reported for every operation type, because the limit is a property of
+    the registry rather than of exporting.
+    """
+
+    coverage = review_coverage(session)
+    if coverage is None:
+        # The projection could not be trusted. The dry run refuses before
+        # reaching here, so this is belt-and-braces rather than a live path -
+        # but returning a zeroed exclusion would be the reassuring number this
+        # function exists to refuse.
+        return None
+    total = coverage.admitted + coverage.reviewed_elsewhere + coverage.unreviewed
+    return {
+        "category": "data_classes_not_yet_registered",
+        "reason": (
+            f"This operation can only reach data classes the reviewed projection "
+            f"admits: {coverage.admitted} of {total} inventoried classes. The "
+            f"remaining {coverage.unreviewed} are unregistered and cannot be "
+            f"exported, purged or offboarded by any manifest, whatever retention "
+            f"terms are in force."
+        ),
+        "reference_metadata": (
+            "Registration is a reviewed governance act, not a runtime setting. "
+            "See IPLF-028A-DATA-CLASS-COVERAGE in the enterprise gap ledger."
+        ),
+    }
+
+
+def _manifest_exclusions(session: Session, *, operation_type: str) -> list[dict[str, str]]:
+    """Policy exclusions where they apply, plus the registry limit always."""
+
+    entries = export_exclusions() if operation_type == "tenant_export" else []
+    scope = _registered_scope_exclusion(session)
+    return entries + ([scope] if scope else [])
 
 
 def export_exclusions() -> list[dict[str, str]]:
@@ -718,9 +769,7 @@ def create_dry_run_manifest(
         # Only a tenant export leaves the platform, so only it carries the
         # exclusion record. Attaching the list to a purge or restore manifest
         # would imply a redistribution boundary that operation does not have.
-        "exclusions": (
-            export_exclusions() if payload.operation_type == "tenant_export" else []
-        ),
+        "exclusions": _manifest_exclusions(session, operation_type=payload.operation_type),
         # Only an offboarding revokes a tenant's access surface.
         "offboarding_plan": (
             [

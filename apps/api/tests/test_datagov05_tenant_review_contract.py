@@ -572,6 +572,39 @@ def test_datagov05_the_approver_can_read_what_they_are_asked_to_sign(
         assert response.status_code == 403, f"{route}: {response.text}"
 
 
+def test_datagov05_a_manifest_states_how_little_it_can_reach(client: TestClient) -> None:
+    """A manifest that lists only policy exclusions reads as near-complete.
+
+    The five documented export exclusions are deliberate policy omissions -
+    secrets, cross-tenant data, cost data, restricted records, licensed
+    payloads. A reader who sees five carefully-reasoned omissions reasonably
+    concludes everything else is covered. It is not: a manifest can only name
+    data classes the reviewed projection admits, and today those are six
+    governance-metadata tables with no matter file, document, communication or
+    invoice among them.
+
+    The count already existed in the integrity report, which is a different and
+    owner-only surface. This asserts it also reaches the artefact whose meaning
+    depends on it.
+    """
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    manifest = _create_dry_run(client, owner_token)
+
+    scope = [
+        e for e in manifest["exclusions"]
+        if e["category"] == "data_classes_not_yet_registered"
+    ]
+    assert len(scope) == 1, "every manifest must state the registry limit"
+    reason = scope[0]["reason"]
+    # Real numbers, not prose. "some classes are unregistered" is unactionable.
+    assert "of" in reason and any(ch.isdigit() for ch in reason)
+    assert "cannot be" in reason
+    # It must point at the governance act that would change the answer.
+    assert "IPLF-028A-DATA-CLASS-COVERAGE" in scope[0]["reference_metadata"]
+
+
 def test_datagov05_an_unsubmitted_manifest_cannot_be_approved(client: TestClient) -> None:
     """Approval has to follow a submission, not replace it."""
 

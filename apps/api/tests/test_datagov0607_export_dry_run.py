@@ -133,7 +133,14 @@ class TestDocumentedExclusions:
     ) -> None:
         record = _run(context)
 
-        assert {entry.category for entry in record.exclusions} == _REQUIRED_CATEGORIES
+        categories = {entry.category for entry in record.exclusions}
+        assert _REQUIRED_CATEGORIES <= categories
+        # Superset, not equality. The five above are DATA-GOV-07 POLICY
+        # exclusions. `data_classes_not_yet_registered` is a different kind of
+        # statement - how far the manifest can reach at all - and it belongs on
+        # every operation type, so equality here would forbid the one entry that
+        # stops this list reading as near-complete.
+        assert categories - _REQUIRED_CATEGORIES == {"data_classes_not_yet_registered"}
 
     def test_each_exclusion_carries_a_reason_and_a_way_forward(
         self, context: SessionContext
@@ -172,7 +179,14 @@ class TestExclusionsAreScopedToExport:
         # got, which is its own kind of false assurance.
         record = _run(context, operation_type="retention_purge")
 
-        assert record.exclusions == []
+        assert [e.category for e in record.exclusions] == [
+            "data_classes_not_yet_registered"
+        ], (
+            "a purge carries no EXPORT policy exclusion - no redistribution "
+            "boundary applies to it - but the registry limit is a property of "
+            "the registry rather than of exporting, and a purge is bounded by it "
+            "exactly as an export is"
+        )
 
     def test_a_tenant_export_carries_them(self, context: SessionContext) -> None:
         record = _run(context, operation_type="tenant_export")
