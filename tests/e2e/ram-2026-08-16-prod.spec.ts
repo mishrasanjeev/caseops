@@ -212,6 +212,7 @@ const NAV_GROUPS: ReadonlyArray<{
     label: "Casework",
     items: [
       { label: "Matters", href: "/app/matters" },
+      { label: "Import activity", href: "/app/imports" },
       { label: "Notices", href: "/app/notices" },
       { label: "Intake", href: "/app/intake", capability: "intake:submit" },
       { label: "Mailbox", href: "/app/mailbox" },
@@ -225,6 +226,11 @@ const NAV_GROUPS: ReadonlyArray<{
     label: "Intellectual property",
     items: [
       { label: "IP docket", href: "/app/ip", capability: "ip:read" },
+      {
+        label: "Trademark portfolio",
+        href: "/app/ip/portfolio",
+        capability: "ip:read",
+      },
       {
         label: "Deadline control",
         href: "/app/ip/docket",
