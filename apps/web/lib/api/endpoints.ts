@@ -8449,6 +8449,125 @@ export type IpDocket = {
   updated_at: string;
 };
 
+export type IpRenewalState =
+  | "due"
+  | "instructed"
+  | "filing_in_progress"
+  | "filed"
+  | "accepted"
+  | "grace"
+  | "overdue"
+  | "completed"
+  | "cancelled";
+
+export type IpRenewalInstruction = {
+  id: string;
+  instruction_version: number;
+  row_version: number;
+  decision: "renew" | "do_not_renew" | "defer" | "clarification_required";
+  status: "pending" | "accepted" | "rejected" | "clarification_required" | "superseded";
+  scope_json: Record<string, unknown>;
+  options_json: Array<Record<string, unknown>>;
+  instruction_deadline_at: string | null;
+  source_channel: string;
+  authority_name: string;
+  authority_reference: string | null;
+  evidence_refs_json: string[];
+  received_at: string;
+  acknowledgement_reason: string | null;
+  updated_at: string;
+};
+
+export type IpRenewalTerm = {
+  id: string;
+  docket_id: string;
+  term_sequence: number;
+  registration_event_id: string;
+  renewal_deadline_id: string;
+  grace_deadline_id: string | null;
+  fee_cost_item_id: string | null;
+  filing_initiated_reference: string | null;
+  filing_event_id: string | null;
+  acceptance_event_id: string | null;
+  certificate_document_id: string | null;
+  next_term_deadline_id: string | null;
+  state: IpRenewalState;
+  version: number;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  instructions: IpRenewalInstruction[];
+};
+
+export type IpRenewalDeadline = {
+  id: string;
+  title: string;
+  deadline_kind: string;
+  result_on: string | null;
+  result_at: string | null;
+  state: string;
+  certainty: string;
+  rule_citation: string;
+  source_version: string;
+  explanation: string;
+};
+
+export type IpRenewalWorkflow = {
+  docket_id: string;
+  docket_title: string;
+  primary_identifier: string | null;
+  record_type: string;
+  term: IpRenewalTerm;
+  renewal_deadline: IpRenewalDeadline;
+  grace_deadline: IpRenewalDeadline | null;
+  fee: {
+    id: string;
+    category: string;
+    description: string;
+    cost_nature: string;
+    billable: boolean;
+    evidence_reference: string;
+    billing_link_type: string | null;
+    billing_link_id: string | null;
+    reconciliation_status: string;
+    reconciled_at: string | null;
+  } | null;
+  reporting_state: IpRenewalState;
+  calendar_phase: "due" | "grace" | "overdue" | "closed";
+  action_required:
+    | "request_instruction"
+    | "review_instruction"
+    | "record_filing_initiation"
+    | "record_filing"
+    | "await_registry_acceptance"
+    | "record_registry_acceptance"
+    | "record_certificate_and_next_term"
+    | "resolve_grace_period"
+    | "resolve_overdue_term"
+    | "none";
+  days_until_renewal: number | null;
+  days_until_grace_end: number | null;
+  state_reconciliation_required: boolean;
+  reminders: {
+    total: number;
+    queued: number;
+    sent_or_delivered: number;
+    cancelled: number;
+    blocked_or_failed: number;
+    next_scheduled_for: string | null;
+    last_delivered_at: string | null;
+  };
+};
+
+export type IpRenewalPortfolio = {
+  generated_at: string;
+  items: IpRenewalWorkflow[];
+  counts: Record<IpRenewalState, number> & {
+    total: number;
+    action_required: number;
+  };
+};
+
 export type IpHearingReminder = {
   id: string;
   recipient_membership_id: string | null;
@@ -9672,6 +9791,130 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchIpRenewalPortfolio(): Promise<IpRenewalPortfolio> {
+  return apiRequest("/api/ip/renewals/portfolio");
+}
+
+export async function scheduleIpRenewalReminders(input: {
+  docketId: string;
+  term: Pick<IpRenewalTerm, "id" | "state" | "version" | "updated_at">;
+  reminderOffsetsDays?: number[];
+}): Promise<{
+  term_id: string;
+  created_count: number;
+  existing_count: number;
+  intents: Array<{
+    id: string;
+    recipient_membership_id: string | null;
+    recipient_label: string;
+    role: string;
+    event_type: string;
+    status: string;
+    scheduled_for: string | null;
+    delivered_at: string | null;
+  }>;
+}> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/renewal-terms/${encodeURIComponent(input.term.id)}/instruction-reminders`,
+    {
+      method: "POST",
+      body: {
+        expected_state: input.term.state,
+        expected_version: input.term.version,
+        expected_updated_at: input.term.updated_at,
+        reminder_offsets_days: input.reminderOffsetsDays ?? [90, 60, 30, 7, 1],
+      },
+    },
+  );
+}
+
+export async function createIpRenewalInstruction(input: {
+  docketId: string;
+  termId: string;
+  decision: IpRenewalInstruction["decision"];
+  scope: Record<string, unknown>;
+  sourceChannel: string;
+  authorityName: string;
+  authorityReference?: string | null;
+  evidenceRefs: string[];
+  receivedAt: string;
+  currentInstruction?: IpRenewalInstruction | null;
+}): Promise<IpRenewalTerm> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/renewal-terms/${encodeURIComponent(input.termId)}/instructions`,
+    {
+      method: "POST",
+      body: {
+        decision: input.decision,
+        scope: input.scope,
+        options: [],
+        source_channel: input.sourceChannel,
+        authority_name: input.authorityName,
+        authority_reference: input.authorityReference ?? null,
+        evidence_refs: input.evidenceRefs,
+        received_at: input.receivedAt,
+        expected_current_instruction_id: input.currentInstruction?.id ?? null,
+        expected_current_row_version: input.currentInstruction?.row_version ?? null,
+      },
+    },
+  );
+}
+
+export async function acknowledgeIpRenewalInstruction(input: {
+  docketId: string;
+  termId: string;
+  instruction: IpRenewalInstruction;
+  status: "accepted" | "rejected" | "clarification_required";
+  reason: string;
+}): Promise<IpRenewalTerm> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/renewal-terms/${encodeURIComponent(input.termId)}/instructions/${encodeURIComponent(input.instruction.id)}/acknowledge`,
+    {
+      method: "POST",
+      body: {
+        expected_status: "pending",
+        expected_row_version: input.instruction.row_version,
+        expected_updated_at: input.instruction.updated_at,
+        status: input.status,
+        reason: input.reason,
+      },
+    },
+  );
+}
+
+export async function transitionIpRenewalTerm(input: {
+  docketId: string;
+  term: IpRenewalTerm;
+  targetState: IpRenewalState;
+  reason: string;
+  feeCostItemId?: string | null;
+  filingInitiatedReference?: string | null;
+  filingEventId?: string | null;
+  acceptanceEventId?: string | null;
+  certificateDocumentId?: string | null;
+  nextTermDeadlineId?: string | null;
+}): Promise<IpRenewalTerm> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/renewal-terms/${encodeURIComponent(input.term.id)}/transition`,
+    {
+      method: "POST",
+      body: {
+        expected_state: input.term.state,
+        expected_version: input.term.version,
+        expected_updated_at: input.term.updated_at,
+        target_state: input.targetState,
+        reason: input.reason,
+        fee_cost_item_id: input.feeCostItemId ?? null,
+        filing_initiated_reference: input.filingInitiatedReference ?? null,
+        filing_event_id: input.filingEventId ?? null,
+        acceptance_event_id: input.acceptanceEventId ?? null,
+        certificate_document_id: input.certificateDocumentId ?? null,
+        next_term_deadline_id: input.nextTermDeadlineId ?? null,
+      },
+    },
+  );
 }
 
 export async function fetchIpSharedHearings(

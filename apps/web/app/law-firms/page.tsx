@@ -112,6 +112,11 @@ const platformMoves = [
     body: "Search exact application and opposition numbers, group independent filings by mark or canonical client, and manage source-backed prosecution events, corrections and registry reconciliation from a permission-scoped workspace.",
   },
   {
+    icon: Clock3,
+    title: "Trademark renewal control",
+    body: "Track each verified renewal term from client instruction and fee evidence through filing, registry acceptance, certificate and the next confirmed term. Date-derived grace and overdue queues remain distinct from recorded legal state, with responsibility-based notifications and source citations.",
+  },
+  {
     icon: FileText,
     title: "Contracts and playbooks",
     body: "Upload, compare against playbooks, surface deviations, and move obligations back into the matter graph.",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from caseops_api.db.models import (
     IpCostItem,
@@ -13,10 +14,12 @@ from caseops_api.db.models import (
     IpDocumentLink,
     IpDocumentTaxonomyEntry,
     IpDocumentVersion,
+    IpResponsibilityAssignment,
     IpRuleSet,
     IpRuleVersion,
     LegalWorkingCalendar,
     LegalWorkingCalendarVersion,
+    NotificationDeliveryIntent,
 )
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -24,8 +27,10 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 # Full templates anchor the route-coverage gate; the workflow tests below use
 # concrete IDs and a shared base path to exercise each operation end to end.
 TESTED_RENEWAL_ROUTE_TEMPLATES = (
+    "/api/ip/renewals/portfolio",
     "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions",
     "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions/{instruction_id}/acknowledge",  # noqa: E501
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instruction-reminders",
     "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/transition",
 )
 
@@ -253,6 +258,42 @@ def _seed_renewal_fixture(client: TestClient) -> tuple[dict, dict[str, str], dic
         )
         session.add_all([renewal, grace, next_term, fee, taxonomy])
         session.flush()
+        session.add_all(
+            [
+                IpResponsibilityAssignment(
+                    company_id=company_id,
+                    docket_id=docket.id,
+                    deadline_id=renewal.id,
+                    membership_id=membership_id,
+                    membership_label_snapshot="Owner",
+                    role="primary",
+                    effective_from=now - timedelta(days=1),
+                    effective_until=None,
+                    accepted_at=now,
+                    replacement_source="renewal-fixture",
+                    escalation_policy_json={"supervisor_after_days": 0},
+                    version=1,
+                    created_by_membership_id=membership_id,
+                    creator_label_snapshot="Owner",
+                ),
+                IpResponsibilityAssignment(
+                    company_id=company_id,
+                    docket_id=docket.id,
+                    deadline_id=renewal.id,
+                    membership_id=membership_id,
+                    membership_label_snapshot="Supervising owner",
+                    role="supervisor",
+                    effective_from=now - timedelta(days=1),
+                    effective_until=None,
+                    accepted_at=now,
+                    replacement_source="renewal-fixture",
+                    escalation_policy_json={"supervisor_after_days": 0},
+                    version=1,
+                    created_by_membership_id=membership_id,
+                    creator_label_snapshot="Owner",
+                ),
+            ]
+        )
         certificate = IpDocument(
             company_id=company_id,
             taxonomy_entry_id=taxonomy.id,
@@ -382,6 +423,7 @@ def test_ip_renewal_full_backend_contract_and_evidence_gates(client: TestClient)
     assert acknowledged.status_code == 200, acknowledged.text
     term = acknowledged.json()
     assert term["state"] == "instructed"
+    instructed_term_version = term["version"]
 
     stale_revision = client.post(
         f"{base}/{term['id']}/instructions",
@@ -423,6 +465,8 @@ def test_ip_renewal_full_backend_contract_and_evidence_gates(client: TestClient)
     )
     assert acknowledged_revision.status_code == 200, acknowledged_revision.text
     term = acknowledged_revision.json()
+    assert term["state"] == "instructed"
+    assert term["version"] == instructed_term_version
 
     initiated_payload = {
         "expected_state": term["state"],
@@ -576,3 +620,167 @@ def test_ip_renewal_reads_are_tenant_isolated(client: TestClient) -> None:
         headers=second_headers,
     )
     assert isolated.status_code == 404
+
+
+def test_renewal_portfolio_reminders_and_instruction_cancellation(
+    client: TestClient,
+) -> None:
+    _, headers, ids = _seed_renewal_fixture(client)
+    _confirm_sources(ids)
+    base = f"/api/ip/dockets/{ids['docket']}/renewal-terms"
+    created = client.post(
+        base,
+        headers=headers,
+        json={
+            "registration_event_id": ids["registration"],
+            "renewal_deadline_id": ids["renewal"],
+            "grace_deadline_id": ids["grace"],
+            "fee_cost_item_id": ids["fee"],
+        },
+    )
+    assert created.status_code == 201, created.text
+    term = created.json()
+
+    portfolio = client.get("/api/ip/renewals/portfolio", headers=headers)
+    assert portfolio.status_code == 200, portfolio.text
+    assert portfolio.json()["counts"] == {
+        "total": 1,
+        "due": 1,
+        "instructed": 0,
+        "filing_in_progress": 0,
+        "filed": 0,
+        "accepted": 0,
+        "grace": 0,
+        "overdue": 0,
+        "completed": 0,
+        "cancelled": 0,
+        "action_required": 1,
+    }
+    workflow = portfolio.json()["items"][0]
+    assert workflow["action_required"] == "request_instruction"
+    assert workflow["renewal_deadline"]["rule_citation"]
+    assert workflow["renewal_deadline"]["source_version"]
+    assert workflow["fee"] == {
+        "id": ids["fee"],
+        "category": "official_fee",
+        "description": "Renewal official fee quote",
+        "cost_nature": "estimate",
+        "billable": False,
+        "evidence_reference": "registry://fees/renewal-v1",
+        "billing_link_type": None,
+        "billing_link_id": None,
+        "reconciliation_status": "unlinked",
+        "reconciled_at": None,
+    }
+
+    reminder_payload = {
+        "expected_state": term["state"],
+        "expected_version": term["version"],
+        "expected_updated_at": term["updated_at"],
+        "reminder_offsets_days": [90, 30, 7],
+    }
+    scheduled = client.post(
+        f"{base}/{term['id']}/instruction-reminders",
+        headers=headers,
+        json=reminder_payload,
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    assert scheduled.json()["created_count"] == 5
+    assert {row["status"] for row in scheduled.json()["intents"]} == {
+        "delivered",
+        "queued",
+    }
+    assert any(
+        row["event_type"] == "renewal_no_instruction_escalation"
+        and row["status"] == "queued"
+        for row in scheduled.json()["intents"]
+    )
+
+    repeated = client.post(
+        f"{base}/{term['id']}/instruction-reminders",
+        headers=headers,
+        json=reminder_payload,
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["created_count"] == 0
+    assert repeated.json()["existing_count"] == 5
+
+    instruction = client.post(
+        f"{base}/{term['id']}/instructions",
+        headers=headers,
+        json={
+            "decision": "renew",
+            "scope": {"jurisdiction": "IN", "classes": [9, 42]},
+            "source_channel": "client_portal",
+            "authority_name": "Authorized client contact",
+            "authority_reference": "CLIENT-RENEW-1",
+            "evidence_refs": ["portal://instruction/renewal-1"],
+            "received_at": datetime.now(UTC).isoformat(),
+        },
+    )
+    assert instruction.status_code == 201, instruction.text
+    with get_session_factory()() as session:
+        reminder_statuses = list(
+            session.scalars(
+                select(NotificationDeliveryIntent.status).where(
+                    NotificationDeliveryIntent.schedule_source_type
+                    == "ip_renewal_term",
+                    NotificationDeliveryIntent.schedule_source_id == term["id"],
+                )
+            ).all()
+        )
+    assert reminder_statuses.count("cancelled") == 4
+    assert reminder_statuses.count("delivered") == 1
+
+    refreshed = client.get("/api/ip/renewals/portfolio", headers=headers).json()
+    assert refreshed["items"][0]["action_required"] == "review_instruction"
+    assert refreshed["items"][0]["reminders"]["cancelled"] == 4
+
+
+def test_renewal_portfolio_projects_grace_and_overdue_without_silent_writes(
+    client: TestClient,
+) -> None:
+    _, headers, ids = _seed_renewal_fixture(client)
+    _confirm_sources(ids)
+    base = f"/api/ip/dockets/{ids['docket']}/renewal-terms"
+    created = client.post(
+        base,
+        headers=headers,
+        json={
+            "registration_event_id": ids["registration"],
+            "renewal_deadline_id": ids["renewal"],
+            "grace_deadline_id": ids["grace"],
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    with get_session_factory()() as session:
+        renewal = session.get(IpDeadline, ids["renewal"])
+        grace = session.get(IpDeadline, ids["grace"])
+        assert renewal is not None and grace is not None
+        renewal.result_on = date.today() - timedelta(days=1)
+        grace.result_on = date.today() + timedelta(days=30)
+        session.commit()
+
+    grace_report = client.get("/api/ip/renewals/portfolio", headers=headers)
+    assert grace_report.status_code == 200, grace_report.text
+    grace_item = grace_report.json()["items"][0]
+    assert grace_item["term"]["state"] == "due"
+    assert grace_item["reporting_state"] == "grace"
+    assert grace_item["calendar_phase"] == "grace"
+    assert grace_item["state_reconciliation_required"] is True
+    assert grace_item["action_required"] == "resolve_grace_period"
+
+    with get_session_factory()() as session:
+        grace = session.get(IpDeadline, ids["grace"])
+        assert grace is not None
+        grace.result_on = date.today() - timedelta(days=1)
+        session.commit()
+
+    overdue_report = client.get("/api/ip/renewals/portfolio", headers=headers)
+    assert overdue_report.status_code == 200, overdue_report.text
+    overdue_item = overdue_report.json()["items"][0]
+    assert overdue_item["term"]["state"] == "due"
+    assert overdue_item["reporting_state"] == "overdue"
+    assert overdue_item["calendar_phase"] == "overdue"
+    assert overdue_item["action_required"] == "resolve_overdue_term"
