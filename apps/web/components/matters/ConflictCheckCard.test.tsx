@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -105,6 +105,32 @@ describe("ConflictCheckCard historical evidence", () => {
     expect(screen.getByTestId("matter-conflict-card")).not.toHaveTextContent(
       /contacts/i,
     );
+  });
+
+  it("projects a completed scan before the history revalidation finishes", async () => {
+    listConflictChecksMock
+      .mockResolvedValueOnce({ matter_id: "matter-1", checks: [] })
+      .mockImplementationOnce(() => new Promise(() => undefined));
+    runConflictCheckMock.mockResolvedValue(checkRecord());
+
+    render(
+      withClient(
+        <ConflictCheckCard
+          matterId="matter-1"
+          matterLifecycleVersion={4}
+          opposingParty="Acme Private Limited"
+        />,
+      ),
+    );
+
+    expect(
+      await screen.findByText("No conflict check has been run yet."),
+    ).toBeVisible();
+    fireEvent.click(screen.getByTestId("conflict-run-open"));
+    fireEvent.click(await screen.findByTestId("conflict-run-submit"));
+
+    expect(await screen.findByTestId("conflict-status-cleared")).toBeVisible();
+    await waitFor(() => expect(listConflictChecksMock).toHaveBeenCalledTimes(2));
   });
 
   it("labels a pre-reopen clearance historical and retains its original outcome", async () => {
