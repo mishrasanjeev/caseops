@@ -161,6 +161,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/data-governance/operations/{operation_id}/review/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a submitted manifest under step-up and four eyes
+         * @description Authorise an execution. This does not perform one.
+         *
+         *     The execute route below still refuses unconditionally, and the response
+         *     carries ``executed: false`` so a 200 here cannot be read as "it ran".
+         */
+        post: operations["approve_operation_review_api_admin_data_governance_operations__operation_id__review_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/operations/{operation_id}/review/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refuse a submitted manifest, keeping the record of the refusal */
+        post: operations["reject_operation_review_api_admin_data_governance_operations__operation_id__review_reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/operations/{operation_id}/review/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit a completed dry-run manifest for execution approval */
+        post: operations["request_operation_review_api_admin_data_governance_operations__operation_id__review_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/data-governance/operations/dry-runs": {
         parameters: {
             query?: never;
@@ -33713,6 +33770,11 @@ export interface components {
             /** Unavailable Count */
             unavailable_count: number;
         };
+        /** TenantDataOperationApprovalRequest */
+        TenantDataOperationApprovalRequest: {
+            /** Approver Label */
+            approver_label: string;
+        };
         /**
          * TenantDataOperationDependencyPlan
          * @description DATA-GOV-08 dependency plan: what is removed, in what order.
@@ -33744,6 +33806,8 @@ export interface components {
              * @enum {string}
              */
             approval_status: "not_requested" | "requested" | "rejected";
+            /** Approved Operation Id */
+            approved_operation_id?: string | null;
             /**
              * As Of
              * Format: date-time
@@ -33821,6 +33885,8 @@ export interface components {
              * @enum {string}
              */
             approval_status: "not_requested" | "requested" | "rejected";
+            /** Approved Operation Id */
+            approved_operation_id?: string | null;
             /**
              * As Of
              * Format: date-time
@@ -33942,6 +34008,48 @@ export interface components {
             disposition: "revoke" | "stop" | "preserve" | "unenumerable";
             /** Record Count */
             record_count: number | null;
+        };
+        /** TenantDataOperationRejectionRequest */
+        TenantDataOperationRejectionRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * TenantDataOperationReviewRecord
+         * @description The reviewable state of one manifest after a review transition.
+         *
+         *     Deliberately not the execute row. Approval produces a separate authorised
+         *     operation in status ``planned``; this reports the manifest's review state
+         *     and, when one exists, the id of the operation the approval authorised.
+         *     Execution itself remains refused.
+         */
+        TenantDataOperationReviewRecord: {
+            /**
+             * Approval Status
+             * @enum {string}
+             */
+            approval_status: "not_requested" | "requested" | "rejected";
+            /** Approved Operation Id */
+            approved_operation_id?: string | null;
+            /**
+             * Executed
+             * @default false
+             * @constant
+             */
+            executed: false;
+            /** Id */
+            id: string;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /**
+             * Operation Type
+             * @enum {string}
+             */
+            operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Request Scope Hash */
+            request_scope_hash: string;
         };
         /**
          * TenantDataOperationUnsatisfiedDependency
@@ -34962,6 +35070,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_operation_review_api_admin_data_governance_operations__operation_id__review_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantDataOperationApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_operation_review_api_admin_data_governance_operations__operation_id__review_reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantDataOperationRejectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_operation_review_api_admin_data_governance_operations__operation_id__review_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationReviewRecord"];
                 };
             };
             /** @description Validation Error */

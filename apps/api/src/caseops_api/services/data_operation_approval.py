@@ -36,7 +36,7 @@ from caseops_api.db.models import (
     TenantDataOperation,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.security import recent_step_up_expires_at
 from caseops_api.services.session_context import SessionContext
 
 STEP_UP_PURPOSE = "data_operation_execution"
@@ -59,6 +59,57 @@ def _load(session: Session, *, context: SessionContext, operation_id: str) -> Te
 def _conflict(code: str, detail: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT, detail={"type": code, "detail": detail}
+    )
+
+
+def _approved_execution(
+    session: Session, *, context: SessionContext, dry_run_id: str
+) -> TenantDataOperation | None:
+    """The execute row a manifest's approval created, if one exists.
+
+    This is the only durable record that a manifest was approved: the dry run
+    itself may never hold 'approved'. Anything that needs to know the review
+    outcome has to ask this question rather than read the manifest's status.
+    """
+
+    return session.scalar(
+        select(TenantDataOperation).where(
+            TenantDataOperation.company_id == context.company.id,
+            TenantDataOperation.approves_operation_id == dry_run_id,
+        )
+    )
+
+
+def _require_step_up_unconditionally(session: Session, *, context: SessionContext) -> None:
+    """Demand a recent step-up from the approver, enrolled in MFA or not.
+
+    ``require_recent_step_up`` is conditional by design: it only requires a
+    step-up when the caller already has MFA *enrolled*, or when tenant policy
+    mandates MFA. That is the right default for ordinary sensitive actions - it
+    cannot lock out a tenant that has not adopted MFA yet.
+
+    It is the wrong default here. Authorising an export, purge or offboarding is
+    the single most destructive thing this system can be asked to permit, and
+    under the conditional rule an approver with no MFA enrolment satisfied the
+    control by not having one. The advertised second factor was absent exactly
+    where it mattered most, and the existing service tests did not notice
+    because each one enrols MFA on the approver first.
+
+    So this fails closed instead: no recent step-up for this purpose, no
+    approval. A tenant that has not adopted MFA cannot approve a data operation
+    until someone enrols, which is the correct answer rather than an obstacle.
+    Rejection stays ungated - refusing is the safe direction, and an approver
+    who cannot complete MFA must still be able to stop a pending export.
+    """
+
+    if recent_step_up_expires_at(session, context=context, purpose=STEP_UP_PURPOSE):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "Approving a tenant data operation always requires a recent MFA "
+            f"step-up. Purpose: {STEP_UP_PURPOSE}."
+        ),
     )
 
 
@@ -142,6 +193,26 @@ def reject_execution(
 
     operation = _load(session, context=context, operation_id=operation_id)
     _require_submitted(operation, verb="rejected")
+
+    # An approved manifest KEEPS approval_status 'requested' - the execute row is
+    # the record of the outcome - so `_require_submitted` alone lets an approved
+    # manifest be rejected afterwards. That would leave the manifest reading
+    # 'rejected' beside a live authorised execution in 'planned': two
+    # contradictory pieces of approval evidence, with the dangerous one silent.
+    #
+    # Refuse rather than neutralise. Withdrawing an authorisation someone has
+    # already signed is a revocation, and a revocation needs its own recorded
+    # actor, reason and audit rather than being a side effect of a reject call.
+    # Refusing keeps both records true and names the operation to look at.
+    authorised = _approved_execution(session, context=context, dry_run_id=operation.id)
+    if authorised is not None:
+        raise _conflict(
+            "data_operation_already_approved",
+            "This manifest was already approved; execution "
+            f"{authorised.id} authorises it. A signed authorisation is revoked "
+            "explicitly, not by rejecting the manifest afterwards.",
+        )
+
     cleaned = reason.strip()
     if not cleaned:
         raise _conflict(
@@ -192,7 +263,7 @@ def approve_execution(
     and again by the database.
     """
 
-    require_recent_step_up(session, context=context, purpose=STEP_UP_PURPOSE)
+    _require_step_up_unconditionally(session, context=context)
     dry_run = _load(session, context=context, operation_id=operation_id)
     _require_submitted(dry_run, verb="approved")
     if dry_run.requested_by_membership_id is None:
@@ -212,12 +283,7 @@ def approve_execution(
     # without this check a second call would produce a second authorised
     # execution from one review. uq_tenant_data_operation_approves_operation is
     # the backstop for the concurrent case; this is the clean answer.
-    already = session.scalar(
-        select(TenantDataOperation).where(
-            TenantDataOperation.company_id == context.company.id,
-            TenantDataOperation.approves_operation_id == dry_run.id,
-        )
-    )
+    already = _approved_execution(session, context=context, dry_run_id=dry_run.id)
     if already is not None:
         raise _conflict(
             "data_operation_already_approved",

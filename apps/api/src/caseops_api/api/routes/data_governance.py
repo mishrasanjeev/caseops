@@ -7,11 +7,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.db.models import TenantDataOperation
 from caseops_api.schemas.data_governance import (
     TenantDataGovernanceIntegrityReport,
+    TenantDataOperationApprovalRequest,
     TenantDataOperationDryRunListResponse,
     TenantDataOperationDryRunRecord,
     TenantDataOperationDryRunRequest,
+    TenantDataOperationRejectionRequest,
+    TenantDataOperationReviewRecord,
     TenantLegalHoldSummary,
 )
 from caseops_api.services.data_governance import (
@@ -22,12 +26,25 @@ from caseops_api.services.data_governance import (
     list_dry_run_manifests,
     reject_data_operation_execution,
 )
+from caseops_api.services.data_operation_approval import (
+    approve_execution,
+    reject_execution,
+    request_execution,
+)
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 DataGovernanceOperator = Annotated[
     SessionContext,
     Depends(require_capability("audit:export")),
+]
+#: The review contract is gated separately from the read-only routes above.
+#: Those use ``audit:export``, which is owner-only; a four-eyes control behind
+#: an owner-only capability is unsatisfiable for a tenant with one owner,
+#: because the only role that can reach it is the role that made the request.
+DataOperationReviewer = Annotated[
+    SessionContext,
+    Depends(require_capability("data_operations:review")),
 ]
 
 
@@ -93,6 +110,105 @@ def read_operation_dry_run(
     session: DbSession,
 ) -> TenantDataOperationDryRunRecord:
     return get_dry_run_manifest(session, context=context, operation_id=operation_id)
+
+
+def _review_record(operation: TenantDataOperation) -> TenantDataOperationReviewRecord:
+    """Report review state against the MANIFEST id, whichever row we hold.
+
+    ``request_execution`` and ``reject_execution`` return the dry run itself,
+    while ``approve_execution`` returns the separate execute row it created. A
+    client correlates on the manifest it submitted, so the response always keys
+    on that: for an approval the manifest id is the execute row's
+    ``approves_operation_id``, and the execute row's own id is reported beside
+    it as what the approval authorised.
+    """
+
+    if operation.approves_operation_id is not None:
+        return TenantDataOperationReviewRecord(
+            id=operation.approves_operation_id,
+            operation_type=operation.operation_type,
+            # The dry run keeps 'requested'; the execute row IS the record that
+            # it was approved, so do not invent an 'approved' status here.
+            approval_status="requested",
+            rejection_reason=None,
+            # Copied onto the execute row at approval, so reading them from it
+            # reports the manifest that was actually reviewed.
+            manifest_hash=operation.manifest_hash,
+            request_scope_hash=operation.request_scope_hash,
+            approved_operation_id=operation.id,
+        )
+    return TenantDataOperationReviewRecord(
+        id=operation.id,
+        operation_type=operation.operation_type,
+        approval_status=operation.approval_status,
+        rejection_reason=operation.rejection_reason,
+        manifest_hash=operation.manifest_hash,
+        request_scope_hash=operation.request_scope_hash,
+        approved_operation_id=None,
+    )
+
+
+@router.post(
+    "/operations/{operation_id}/review/request",
+    response_model=TenantDataOperationReviewRecord,
+    summary="Submit a completed dry-run manifest for execution approval",
+)
+def request_operation_review(
+    operation_id: str,
+    context: DataOperationReviewer,
+    session: DbSession,
+) -> TenantDataOperationReviewRecord:
+    operation = request_execution(session, context=context, operation_id=operation_id)
+    session.commit()
+    return _review_record(operation)
+
+
+@router.post(
+    "/operations/{operation_id}/review/reject",
+    response_model=TenantDataOperationReviewRecord,
+    summary="Refuse a submitted manifest, keeping the record of the refusal",
+)
+def reject_operation_review(
+    operation_id: str,
+    payload: TenantDataOperationRejectionRequest,
+    context: DataOperationReviewer,
+    session: DbSession,
+) -> TenantDataOperationReviewRecord:
+    operation = reject_execution(
+        session,
+        context=context,
+        operation_id=operation_id,
+        reason=payload.reason,
+    )
+    session.commit()
+    return _review_record(operation)
+
+
+@router.post(
+    "/operations/{operation_id}/review/approve",
+    response_model=TenantDataOperationReviewRecord,
+    summary="Approve a submitted manifest under step-up and four eyes",
+)
+def approve_operation_review(
+    operation_id: str,
+    payload: TenantDataOperationApprovalRequest,
+    context: DataOperationReviewer,
+    session: DbSession,
+) -> TenantDataOperationReviewRecord:
+    """Authorise an execution. This does not perform one.
+
+    The execute route below still refuses unconditionally, and the response
+    carries ``executed: false`` so a 200 here cannot be read as "it ran".
+    """
+
+    operation = approve_execution(
+        session,
+        context=context,
+        operation_id=operation_id,
+        approver_label=payload.approver_label,
+    )
+    session.commit()
+    return _review_record(operation)
 
 
 @router.post(

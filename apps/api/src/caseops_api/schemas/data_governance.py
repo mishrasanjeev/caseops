@@ -120,6 +120,11 @@ class TenantDataOperationDryRunRecord(BaseModel):
     status: Literal["dry_run_complete"]
     approval_status: DataOperationDryRunApprovalStatus
     rejection_reason: str | None
+    #: Set once the manifest has been approved. The dry run itself may never
+    #: hold 'approved' - the separate execute row IS the record of the
+    #: outcome - so without this a reader that lost the approve response
+    #: cannot tell a pending manifest from an approved one.
+    approved_operation_id: str | None = None
     request_scope_hash: str
     manifest_hash: str
     request_evidence_ref: str
@@ -129,6 +134,45 @@ class TenantDataOperationDryRunRecord(BaseModel):
     offboarding_plan: list[TenantDataOperationOffboardingCategory]
     exclusions: list[TenantDataOperationExclusion]
     items: list[TenantDataOperationItemRecord]
+
+
+class TenantDataOperationApprovalRequest(BaseModel):
+    #: The role or title the approver signs as, snapshotted onto the authorised
+    #: operation. The approver is always the caller - it is never a parameter,
+    #: because accepting an approver id would let one person record another as
+    #: having approved, and the step-up satisfied would be the caller's.
+    approver_label: str = Field(min_length=2, max_length=255)
+
+
+class TenantDataOperationRejectionRequest(BaseModel):
+    #: A refusal that does not say why cannot be acted on months later, so the
+    #: reason is required rather than defaulted. The service enforces the same
+    #: bound and refuses an over-long reason instead of truncating it.
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class TenantDataOperationReviewRecord(BaseModel):
+    """The reviewable state of one manifest after a review transition.
+
+    Deliberately not the execute row. Approval produces a separate authorised
+    operation in status ``planned``; this reports the manifest's review state
+    and, when one exists, the id of the operation the approval authorised.
+    Execution itself remains refused.
+    """
+
+    id: str
+    operation_type: DataOperationType
+    approval_status: DataOperationDryRunApprovalStatus
+    rejection_reason: str | None
+    manifest_hash: str
+    request_scope_hash: str
+    #: Present only after an approval. Its existence is what records that the
+    #: manifest was approved - the dry run itself may never hold 'approved'.
+    approved_operation_id: str | None = None
+    #: Always false. Approving authorises an execution; it does not perform one,
+    #: and the execute route still refuses unconditionally. Stated in the
+    #: response so a client cannot infer otherwise from a 200.
+    executed: Literal[False] = False
 
 
 class TenantDataOperationDryRunSummary(BaseModel):
@@ -146,6 +190,11 @@ class TenantDataOperationDryRunSummary(BaseModel):
     status: Literal["dry_run_complete"]
     approval_status: DataOperationDryRunApprovalStatus
     rejection_reason: str | None
+    #: Set once the manifest has been approved. The dry run itself may never
+    #: hold 'approved' - the separate execute row IS the record of the
+    #: outcome - so without this a reader that lost the approve response
+    #: cannot tell a pending manifest from an approved one.
+    approved_operation_id: str | None = None
     request_scope_hash: str
     manifest_hash: str
     request_evidence_ref: str
