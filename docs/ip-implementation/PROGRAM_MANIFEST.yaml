@@ -56,13 +56,21 @@
             "slice_id": "IPLF-028A/IPLF-028B evidence",
             "branch": "docs/iplf028a-evidence-20260820",
             "status": "in_progress",
-            "scope": "Complete records-governance policy/hold authorization evidence and the IPLF-028B workflow handoff while real operations remain fail-closed."
+            "scope": "Complete records-governance policy/hold authorization evidence while real operations remain fail-closed. The IPLF-028B handoff is verified rather than assumed: the merged routes are a visibility and dry-run-creation surface, and the tenant-facing review contract is confirmed still missing because no route reaches request/approve/reject.",
+            "pull_request": 280
           },
           {
             "slice_id": "IPLF-039F",
             "branch": "feat/iplf039f-cost-items-20260820",
             "status": "merged",
             "scope": "Claude-owned IP cost-item and billing workflow merged through PR #283 at 3802de0f; IPLF-030B chains its migration after Claude's 20260821_0004."
+          },
+          {
+            "slice_id": "Migration revision-graph gate",
+            "branch": "fix/alembic-single-head-gate-20260820",
+            "status": "merged",
+            "pull_request": 284,
+            "scope": "Fail CI on a split, duplicated, or cyclic Alembic revision graph. The gate merged through PR #284 at fdfdd3eb after three real collisions across #282, #283 and #285 in two days."
           }
         ],
         "owned_components": [
@@ -7888,14 +7896,17 @@
         "apps/api/tests/test_postgres_validation.py::test_records_governance_guards_reject_real_postgres_mutations"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md"
+        "docs/ip-implementation/evidence/m2/IPLF-028A/repository-foundation-2026-08-13.md",
+        "docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md",
+        "docs/ip-implementation/evidence/m2/IPLF-028B/route-handoff-2026-08-20.md",
+        "docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-2026-08-20.md"
       ],
       "evidence_metadata": [],
       "approvals": [],
       "blockers": [
         {
           "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
-          "summary": "No approved retention schedule, legal-hold activation/release workflow, step-up/four-eyes decision, or tenant-facing review contract has been supplied for a real data operation.",
+          "summary": "Two of the four named artefacts now exist and two do not. IMPLEMENTED: the legal-hold activation/release workflow (DATA-GOV-05), and the step-up/four-eyes decision for data-operation execution (PR #267). MECHANISM ONLY: the retention schedule has a propose/approve/activate/retire lifecycle under four eyes and step-up (PR #273), but no schedule CONTENT has been approved - which classes are kept, for how long, on what legal basis is a legal decision, and while none exists a retention purge cannot be authorized at all. MISSING (verified 2026-08-20, not merely asserted): the tenant-facing review contract. The five merged IPLF-028B pull requests (#274-#278) add a visibility and dry-run-creation surface - create/list/read a dry run, read the integrity report and the legal-hold summary, and an execute route that refuses unconditionally - all gated on audit:export. They do not add a review workflow: request_execution, reject_execution and approve_execution (PR #267) and propose_version, approve_version, activate_version and retire_version (PR #273) have zero references from any route, and their only callers in the repository are their own tests. A tenant can see what an operation would do and see execution refused; a tenant cannot request, approve or reject anything, so there is no user workflow for the required workflow tests to review. Forward risk recorded for whoever routes the approval: audit:export is _OWNER_ONLY, so exposing four eyes behind it would make the control unsatisfiable for a single-owner tenant. Evidence: docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md and docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-2026-08-20.md.",
           "owner": "Authorized legal/privacy owner, security owner, and product owner",
           "evidence_needed": "Approved policy/version authority, named dual-approval and step-up controls, jurisdiction/tenant exceptions, and reviewed user workflow tests.",
           "safe_fallback": "Keep execution impossible in the schema and service; preserve only opaque dry-run evidence and typed 503 execute rejection.",
