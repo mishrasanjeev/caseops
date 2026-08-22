@@ -363,7 +363,7 @@ def _registered_scope_exclusion(session: Session) -> dict[str, str] | None:
     withheld. A reader who sees five carefully-reasoned omissions reasonably
     concludes everything else is covered. It is not. A manifest can only name
     data classes the reviewed projection admits, and today that is six
-    governance-metadata tables out of a inventoried estate of hundreds - no
+    governance-metadata tables out of an inventoried estate of hundreds - no
     matter file, document, communication or invoice among them.
 
     That gap lives in the integrity report already, which is owner-only and a
@@ -381,15 +381,17 @@ def _registered_scope_exclusion(session: Session) -> dict[str, str] | None:
         # but returning a zeroed exclusion would be the reassuring number this
         # function exists to refuse.
         return None
-    total = coverage.admitted + coverage.reviewed_elsewhere + coverage.unreviewed
+    total = coverage.total
+    unavailable = coverage.reviewed_elsewhere + coverage.unreviewed
     return {
-        "category": "data_classes_not_yet_registered",
+        "category": "data_classes_not_admitted_to_operation_projection",
         "reason": (
-            f"This operation can only reach data classes the reviewed projection "
-            f"admits: {coverage.admitted} of {total} inventoried classes. The "
-            f"remaining {coverage.unreviewed} are unregistered and cannot be "
-            f"exported, purged or offboarded by any manifest, whatever retention "
-            f"terms are in force."
+            f"This operation can only reach {coverage.admitted} of {total} inventoried "
+            f"data classes. The other {unavailable} are not admitted to this "
+            f"operation projection: {coverage.reviewed_elsewhere} are reviewed by "
+            f"another governance slice and {coverage.unreviewed} have not yet been "
+            f"reviewed. None of those {unavailable} classes can be exported, purged "
+            f"or offboarded by this manifest, whatever retention terms are in force."
         ),
         "reference_metadata": (
             "Registration is a reviewed governance act, not a runtime setting. "

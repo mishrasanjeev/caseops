@@ -37,6 +37,7 @@ from caseops_api.db.models import (
     UserMFAStepUp,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.governance.data_class_projection import review_coverage
 from caseops_api.services.data_operation_approval import STEP_UP_PURPOSE
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_data_governance_service import _payload
@@ -594,13 +595,22 @@ def test_datagov05_a_manifest_states_how_little_it_can_reach(client: TestClient)
 
     scope = [
         e for e in manifest["exclusions"]
-        if e["category"] == "data_classes_not_yet_registered"
+        if e["category"] == "data_classes_not_admitted_to_operation_projection"
     ]
     assert len(scope) == 1, "every manifest must state the registry limit"
     reason = scope[0]["reason"]
-    # Real numbers, not prose. "some classes are unregistered" is unactionable.
-    assert "of" in reason and any(ch.isdigit() for ch in reason)
-    assert "cannot be" in reason
+    with get_session_factory()() as session:
+        coverage = review_coverage(session)
+    assert coverage is not None
+    unavailable = coverage.reviewed_elsewhere + coverage.unreviewed
+    # All three buckets must reconcile. Reporting only `unreviewed` here would
+    # silently omit classes reviewed elsewhere but still unreachable by this
+    # operation projection.
+    assert f"{coverage.admitted} of {coverage.total}" in reason
+    assert f"other {unavailable}" in reason
+    assert f"{coverage.reviewed_elsewhere} are reviewed by another" in reason
+    assert f"{coverage.unreviewed} have not yet been reviewed" in reason
+    assert f"None of those {unavailable}" in reason
     # It must point at the governance act that would change the answer.
     assert "IPLF-028A-DATA-CLASS-COVERAGE" in scope[0]["reference_metadata"]
 
