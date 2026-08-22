@@ -103,6 +103,13 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "workspace:admin": _OWNER_ADMIN,
     "audit:export": _OWNER_ONLY,
     "matter_access:manage": _OWNER_ADMIN,
+    # DATA-GOV-05 review contract. Deliberately NOT audit:export, which the
+    # existing read-only data-governance routes use: that is _OWNER_ONLY, and a
+    # four-eyes control reachable only by owners is unsatisfiable for the many
+    # tenants with exactly one owner - the only role able to reach the surface
+    # would be the role that made the request. _OWNER_ADMIN is the narrowest set
+    # that can actually contain two distinct people.
+    "data_operations:review": _OWNER_ADMIN,
     # --- intake (Sprint 8b BG-025) ---
     # Submit: anyone authenticated so a business-unit manager with
     # only a viewer role can still file a request. Triage + assign:
