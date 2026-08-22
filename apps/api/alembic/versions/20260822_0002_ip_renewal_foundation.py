@@ -1,0 +1,365 @@
+"""Add the IPLF-037A renewal and client-instruction foundation.
+
+Revision ID: 20260822_0002
+Revises: 20260822_0001
+Create Date: 2026-08-22
+
+The two new tenant-scoped tables link renewal legal state to the existing
+deadline, docket-event, cost, document, communication, and membership owners.
+They do not duplicate operational calendars, billing/payment state, document
+bytes, provider delivery state, or notification delivery.
+
+MIGRATION-LOCK-RISK: acknowledged: additive table and index DDL only; every
+index is built immediately after its empty table and no existing row is scanned.
+MIGRATION-ROLLBACK: restore-forward: downgrade is allowed only while both new
+tables remain empty; it refuses to discard persisted legal or instruction data.
+"""
+
+from __future__ import annotations
+
+import sqlalchemy as sa
+
+from alembic import op
+
+revision = "20260822_0002"
+down_revision = "20260822_0001"
+branch_labels = None
+depends_on = None
+
+# DATA-GOVERNANCE-MAP: updated
+
+RENEWAL_TABLE = "ip_renewal_terms"
+INSTRUCTION_TABLE = "ip_client_instructions"
+
+RENEWAL_FK_INDEX_COLUMNS = (
+    "docket_id",
+    "registration_event_id",
+    "renewal_deadline_id",
+    "grace_deadline_id",
+    "fee_cost_item_id",
+    "filing_event_id",
+    "acceptance_event_id",
+    "certificate_document_id",
+    "next_term_deadline_id",
+    "created_by_membership_id",
+    "updated_by_membership_id",
+)
+INSTRUCTION_FK_INDEX_COLUMNS = (
+    "docket_id",
+    "source_communication_id",
+    "acknowledged_by_membership_id",
+    "supersedes_instruction_id",
+    "resulting_event_id",
+    "created_by_membership_id",
+)
+FK_INDEXES: tuple[tuple[str, str], ...] = tuple(
+    (RENEWAL_TABLE, column) for column in RENEWAL_FK_INDEX_COLUMNS
+) + tuple((INSTRUCTION_TABLE, column) for column in INSTRUCTION_FK_INDEX_COLUMNS)
+
+
+def _create_fk_indexes(table_name: str, columns: tuple[str, ...]) -> None:
+    for column in columns:
+        op.create_index(
+            f"ix_{table_name}_{column}", table_name, [column, "company_id"]
+        )
+
+
+def _drop_fk_indexes(table_name: str, columns: tuple[str, ...]) -> None:
+    for column in reversed(columns):
+        op.drop_index(f"ix_{table_name}_{column}", table_name=table_name)
+
+
+def upgrade() -> None:
+    op.create_table(
+        "ip_renewal_terms",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("company_id", sa.String(length=36), nullable=False),
+        sa.Column("docket_id", sa.String(length=36), nullable=False),
+        sa.Column("term_sequence", sa.Integer(), nullable=False),
+        sa.Column("registration_event_id", sa.String(length=36), nullable=False),
+        sa.Column("renewal_deadline_id", sa.String(length=36), nullable=False),
+        sa.Column("grace_deadline_id", sa.String(length=36), nullable=True),
+        sa.Column("fee_cost_item_id", sa.String(length=36), nullable=True),
+        sa.Column("filing_initiated_reference", sa.String(length=500), nullable=True),
+        sa.Column("filing_event_id", sa.String(length=36), nullable=True),
+        sa.Column("acceptance_event_id", sa.String(length=36), nullable=True),
+        sa.Column("certificate_document_id", sa.String(length=36), nullable=True),
+        sa.Column("next_term_deadline_id", sa.String(length=36), nullable=True),
+        sa.Column("state", sa.String(length=24), nullable=False),
+        sa.Column("version", sa.Integer(), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_by_membership_id", sa.String(length=36), nullable=False),
+        sa.Column("updated_by_membership_id", sa.String(length=36), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "term_sequence > 0", name="ck_ip_renewal_term_sequence_positive"
+        ),
+        sa.CheckConstraint("version > 0", name="ck_ip_renewal_term_version_positive"),
+        sa.CheckConstraint(
+            "state IN ('due', 'instructed', 'filing_in_progress', 'filed', "
+            "'accepted', 'grace', 'overdue', 'completed', 'cancelled')",
+            name="ck_ip_renewal_term_state",
+        ),
+        sa.CheckConstraint(
+            "state NOT IN ('filed', 'accepted', 'completed') OR filing_event_id IS NOT NULL",
+            name="ck_ip_renewal_term_filed_evidence",
+        ),
+        sa.CheckConstraint(
+            "state NOT IN ('accepted', 'completed') OR acceptance_event_id IS NOT NULL",
+            name="ck_ip_renewal_term_acceptance_evidence",
+        ),
+        sa.CheckConstraint(
+            "state <> 'completed' OR (certificate_document_id IS NOT NULL "
+            "AND next_term_deadline_id IS NOT NULL AND completed_at IS NOT NULL)",
+            name="ck_ip_renewal_term_completion_evidence",
+        ),
+        sa.ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_renewal_term_docket_company",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["registration_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_renewal_term_registration_event_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["renewal_deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_renewal_term_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["grace_deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_renewal_term_grace_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["filing_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_renewal_term_filing_event_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["acceptance_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_renewal_term_acceptance_event_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["next_term_deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_renewal_term_next_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["certificate_document_id", "company_id"],
+            ["ip_documents.id", "ip_documents.company_id"],
+            name="fk_ip_renewal_term_certificate_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["fee_cost_item_id"],
+            ["ip_cost_items.id"],
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_renewal_term_creator_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_renewal_term_updater_company",
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "company_id", name="uq_ip_renewal_term_id_company"),
+        sa.UniqueConstraint(
+            "company_id",
+            "docket_id",
+            "registration_event_id",
+            "renewal_deadline_id",
+            name="uq_ip_renewal_term_legal_basis",
+        ),
+    )
+    # MIGRATION-LOCK-RISK: acknowledged: the renewal table was created empty
+    # in this transaction and no application writer can have populated it yet.
+    op.create_index(
+        "ix_ip_renewal_terms_company_state_deadline",
+        "ip_renewal_terms",
+        ["company_id", "state", "renewal_deadline_id"],
+    )
+    # MIGRATION-LOCK-RISK: acknowledged: these FK-support indexes are created
+    # while the new renewal table is empty and unavailable to application writers.
+    _create_fk_indexes(RENEWAL_TABLE, RENEWAL_FK_INDEX_COLUMNS)
+
+    op.create_table(
+        "ip_client_instructions",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("company_id", sa.String(length=36), nullable=False),
+        sa.Column("docket_id", sa.String(length=36), nullable=False),
+        sa.Column("renewal_term_id", sa.String(length=36), nullable=False),
+        sa.Column("instruction_version", sa.Integer(), nullable=False),
+        sa.Column("row_version", sa.Integer(), nullable=False),
+        sa.Column("decision", sa.String(length=32), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("scope_json", sa.JSON(), nullable=False),
+        sa.Column("options_json", sa.JSON(), nullable=False),
+        sa.Column("instruction_deadline_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("source_channel", sa.String(length=40), nullable=False),
+        sa.Column("source_communication_id", sa.String(length=36), nullable=True),
+        sa.Column("authority_name", sa.String(length=255), nullable=False),
+        sa.Column("authority_reference", sa.String(length=255), nullable=True),
+        sa.Column("evidence_refs_json", sa.JSON(), nullable=False),
+        sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("acknowledged_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("acknowledged_by_membership_id", sa.String(length=36), nullable=True),
+        sa.Column("acknowledgement_reason", sa.Text(), nullable=True),
+        sa.Column("supersedes_instruction_id", sa.String(length=36), nullable=True),
+        sa.Column("resulting_event_id", sa.String(length=36), nullable=True),
+        sa.Column("created_by_membership_id", sa.String(length=36), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "instruction_version > 0",
+            name="ck_ip_client_instruction_version_positive",
+        ),
+        sa.CheckConstraint(
+            "row_version > 0", name="ck_ip_client_instruction_row_version_positive"
+        ),
+        sa.CheckConstraint(
+            "decision IN ('renew', 'do_not_renew', 'defer', 'clarification_required')",
+            name="ck_ip_client_instruction_decision",
+        ),
+        sa.CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'clarification_required', "
+            "'superseded')",
+            name="ck_ip_client_instruction_status",
+        ),
+        sa.CheckConstraint(
+            "supersedes_instruction_id IS NULL OR supersedes_instruction_id <> id",
+            name="ck_ip_client_instruction_supersedes_not_self",
+        ),
+        sa.CheckConstraint(
+            "status NOT IN ('accepted', 'rejected', 'clarification_required') OR "
+            "(acknowledged_at IS NOT NULL AND acknowledged_by_membership_id IS NOT NULL)",
+            name="ck_ip_client_instruction_acknowledged",
+        ),
+        sa.CheckConstraint(
+            "resulting_event_id IS NULL OR status = 'accepted'",
+            name="ck_ip_client_instruction_result_requires_acceptance",
+        ),
+        sa.ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_client_instruction_docket_company",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["renewal_term_id", "company_id"],
+            ["ip_renewal_terms.id", "ip_renewal_terms.company_id"],
+            name="fk_ip_client_instruction_renewal_company",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["supersedes_instruction_id", "company_id"],
+            ["ip_client_instructions.id", "ip_client_instructions.company_id"],
+            name="fk_ip_client_instruction_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["resulting_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_client_instruction_result_event_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["source_communication_id"],
+            ["communications.id"],
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_client_instruction_creator_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["acknowledged_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_client_instruction_acknowledger_company",
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "company_id", name="uq_ip_client_instruction_id_company"),
+        sa.UniqueConstraint(
+            "renewal_term_id",
+            "instruction_version",
+            name="uq_ip_client_instruction_term_version",
+        ),
+    )
+    # MIGRATION-LOCK-RISK: acknowledged: the instruction table was created empty
+    # in this transaction and no application writer can have populated it yet.
+    op.create_index(
+        "ix_ip_client_instructions_company_term_status",
+        "ip_client_instructions",
+        ["company_id", "renewal_term_id", "status"],
+    )
+    # MIGRATION-LOCK-RISK: acknowledged: these FK-support indexes are created
+    # while the new instruction table is empty and unavailable to application writers.
+    _create_fk_indexes(INSTRUCTION_TABLE, INSTRUCTION_FK_INDEX_COLUMNS)
+
+
+def downgrade() -> None:
+    bind = op.get_bind()
+    persisted_rows = sum(
+        int(bind.execute(sa.text(f"SELECT COUNT(*) FROM {table}")).scalar_one())
+        for table in (RENEWAL_TABLE, INSTRUCTION_TABLE)
+    )
+    if persisted_rows:
+        raise RuntimeError(
+            "Refusing to discard persisted renewal or client-instruction evidence."
+        )
+    _drop_fk_indexes(INSTRUCTION_TABLE, INSTRUCTION_FK_INDEX_COLUMNS)
+    op.drop_index(
+        "ix_ip_client_instructions_company_term_status",
+        table_name=INSTRUCTION_TABLE,
+    )
+    # MIGRATION-ROLLBACK: restore-forward: this drop is reachable only while the
+    # pre-release table is empty; a populated deployment must roll forward.
+    op.drop_table(INSTRUCTION_TABLE)
+    _drop_fk_indexes(RENEWAL_TABLE, RENEWAL_FK_INDEX_COLUMNS)
+    op.drop_index(
+        "ix_ip_renewal_terms_company_state_deadline",
+        table_name=RENEWAL_TABLE,
+    )
+    # MIGRATION-ROLLBACK: restore-forward: this drop is reachable only while the
+    # pre-release table is empty; a populated deployment must roll forward.
+    op.drop_table(RENEWAL_TABLE)

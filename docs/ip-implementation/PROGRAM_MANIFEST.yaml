@@ -1775,7 +1775,7 @@
         "IPLF-037A",
         "IPLF-037B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -9888,36 +9888,90 @@
       "source_kind": "derived",
       "scope_source": "IPLF-037",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "Additive Alembic expand 20260822_0002 creates empty ip_renewal_terms and ip_client_instructions tables, rewrites no existing row, and downgrades cleanly to 20260822_0001. No backfill or switch is authorized in this foundation slice.",
+      "release_boundary": "Repository implementation and local verification are complete. Release remains blocked until the exact branch head passes CI/PostgreSQL/security/CodeQL, is merged, deployed through the canonical migration boundary, and receives dated production verification; IPLF-037B owns user-workflow activation and journey proof.",
       "requirement_ids": [],
       "journey_path_ids": [],
       "ownership": [
         {
-          "classification": "EXTEND",
+          "classification": "NEW",
           "component": "IPLF-037 canonical scope: Renewal terms/instruction/filing/acceptance.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "apps/api/src/caseops_api/services/ip_renewals.py is the single renewal/instruction command service. Existing ip_deadlines, matter_deadlines, ip_docket_events, ip_cost_items, ip_documents, communications, audit and notification owners remain canonical for their states.",
+          "compatibility_path": "Additive /api/ip/dockets/{docket_id}/renewal-terms routes link to existing owners and expose no legacy replacement path. No calendar, billing, document, communication, notification or provider state is copied.",
+          "retirement_gate": "Nothing is retired. Future IPLF-037B UI, reporting and notification adapters must call this writer and preserve optimistic-concurrency and evidence gates."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-023A",
+        "IPLF-024A",
+        "IPLF-039F"
+      ],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260822_0002_ip_renewal_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_renewals.py",
+        "apps/api/src/caseops_api/services/ip_renewals.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+        "apps/web/lib/api/openapi-types.ts",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_renewals.py",
+        "apps/api/tests/test_20260822_ip_renewal_foundation_migration.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/api/tests/test_ip_data_governance_map.py",
+        "apps/api/tests/test_route_coverage_matrix.py::test_every_api_route_is_referenced_by_at_least_one_test",
+        "apps/api/tests/test_schema_fk_indexes.py",
+        "apps/api/tests/test_postgres_validation.py::test_shared_reliability_actual_postgres_downgrade_refuses_evidence"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-037A/local-2026-08-22.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-037A/local-2026-08-22.md",
+          "revision": "5a3687cfb4857278c6bd777e6d72417c12705dfd",
+          "recorded_at": "2026-08-22T09:45:00+05:30",
+          "environment": "Windows 11 local branch on integrated main 1a1ee0effb640d2c91238b2f917021de2b4297b4; CPython 3.13 isolated SQLite fixtures; local PostgreSQL 17 plus pgvector container; generated OpenAPI TypeScript client; Next.js 16 typecheck. No exact-head CI, deployment, production verification, frontend workflow or browser E2E.",
+          "fixtures": "Synthetic law-firm and foreign tenant, trademark docket, candidate/confirmed registration event, confirmed filing and registry-acceptance events, active legal rule/calendar versions, renewal/grace/next-term deadlines, official-fee estimate, accepted immutable certificate document and two client-instruction revisions.",
+          "assertions": "Tenant isolation; verified registration/deadline prerequisites; instruction supersession and acknowledgement CAS; term state/version/timestamp CAS; payment/filing initiation not accepted or completed; immutable filing evidence; registry acceptance; accepted docket-linked certificate; next-term deadline triggered by the acceptance event; additive downgrade/re-upgrade; populated-downgrade refusal; downgrade lineage remains above retained evidence; every foreign key has a leading index; route coverage anchors; governance inventory and runtime projection; OpenAPI and TypeScript compatibility. Counts: source-wide Ruff passed, 23 focused/governance/route/index tests passed, PostgreSQL full run passed 96 tests with one unrelated lock-observation timeout that passed on isolated rerun, governance map and data-class projection valid, web typecheck passed.",
+          "result": "passed"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-037A-EXACT-HEAD-RELEASE-PROOF",
+          "summary": "The backend foundation is locally verified only. Exact-head CI, security/CodeQL, merge, migration deployment and exact production verification have not yet run for this branch; the user workflow remains assigned to IPLF-037B.",
+          "owner": "Engineering and the authorized release operator",
+          "evidence_needed": "Exact-head CI including PostgreSQL and migration matrix, security and CodeQL success, merged-main recheck, canonical deployment/migration evidence, production health/runtime identity, and IPLF-037B frontend/browser journey proof before activation claims.",
+          "safe_fallback": "Keep the additive API unused by product navigation; existing deadline, docket event, cost, document, communication and notification owners remain unchanged.",
+          "milestone_impact": "Blocks IPLF-037A release closure and IPLF-037B activation claims, not independent repository implementation.",
+          "next_independent_slice": "IPLF-037B"
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the IPLF-037A PR and require exact-head CI, PostgreSQL, security and CodeQL success before merge.",
+        "After merge, recheck main and deploy migration 20260822_0002 only through the canonical production job with exact runtime identity and health proof.",
+        "Implement IPLF-037B against this single writer: renewal workspace/portfolio states, reminder and no-instruction escalation through existing notification owners, explicit grace/overdue handling, reporting, responsive UI and all UJ-26 browser paths."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Two new tenant-scoped legal-state tables are added empty. Composite company foreign keys prevent cross-tenant legal-owner links where the referenced owner exposes (id, company_id); service guards tenant-check fee and communication links whose existing owners expose only a single-column primary key.",
+        "No existing row is backfilled or rewritten. No duplicate task, operational deadline, calendar item, amount/payment, document binary, communication body, provider delivery, notification, audit or export state is created.",
+        "Both tables are mapped as tenant_restricted_legal_content with registry_fail_closed disposition; no retention, export, purge, restore or provider operation is activated."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-037A/local-2026-08-22.md",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+        "docs/ip-implementation/generated/IMPLEMENTATION.md"
+      ],
+      "allocation_review": "Brutal current-main audit found neither ledger-owned table existed. This slice implements exactly ip_renewal_terms and ip_client_instructions and links every adjacent fact to the deployed canonical owners: ip_deadlines for verified legal calculations, matter_deadlines only for later operational projection, ip_docket_events for registration/filing/acceptance, ip_cost_items for fee evidence, ip_documents for certificate versions, communications for channel evidence, and existing notification/audit owners. It deliberately creates no filing-transaction, task, calendar, payment, document, communication, notification, provider or report duplicate. IPLF-037B retains all direct IP-REN and UJ-26 allocations, UI, exception and release proof.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -9960,7 +10014,7 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-037 canonical scope: Renewal terms/instruction/filing/acceptance.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
+          "canonical_writer": "apps/api/src/caseops_api/services/ip_renewals.py is the single renewal/instruction command service. Existing ip_deadlines, matter_deadlines, ip_docket_events, ip_cost_items, ip_documents, communications, audit and notification owners remain canonical for their states.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }

@@ -2719,9 +2719,10 @@ def test_shared_reliability_downgrade_lock_excludes_postgres_writer(pg_engine):
 
 
 def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine):
-    """Alembic itself must leave revision 0001 installed once evidence exists."""
+    """Alembic must not cross the revision that owns retained evidence."""
 
     from alembic.config import Config
+    from alembic.script import ScriptDirectory
 
     from alembic import command
 
@@ -2731,10 +2732,6 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
     _truncate_postgres_application_tables(pg_engine)
-    with pg_engine.connect() as connection:
-        installed_revision = connection.scalar(
-            text("SELECT version_num FROM alembic_version")
-        )
     now = datetime(2026, 8, 12, 6, 55, tzinfo=UTC)
     with Session(pg_engine) as seed:
         company_id = _seed_company(seed)
@@ -2768,7 +2765,14 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
 
     with pg_engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-        assert revision == installed_revision
+        assert revision is not None
+        remaining_lineage = {
+            candidate.revision
+            for candidate in ScriptDirectory.from_config(config).walk_revisions(
+                base="base", head=revision
+            )
+        }
+        assert "20260812_0001" in remaining_lineage
         assert connection.scalar(
             text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
             {"id": record_id},

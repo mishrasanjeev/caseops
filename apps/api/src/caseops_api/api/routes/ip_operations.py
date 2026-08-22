@@ -182,6 +182,15 @@ from caseops_api.schemas.ip_records import (
     TrademarkApplicationPhaseUpdateRequest,
     TrademarkApplicationResponse,
 )
+from caseops_api.schemas.ip_renewals import (
+    IpClientInstructionAcknowledgeRequest,
+    IpClientInstructionCreateRequest,
+    IpRenewalFoundationContract,
+    IpRenewalTermCreateRequest,
+    IpRenewalTermListResponse,
+    IpRenewalTermRecord,
+    IpRenewalTermTransitionRequest,
+)
 from caseops_api.schemas.shared_work import (
     IpOperationalDeadlineCreateRequest,
     IpOperationalDeadlineListResponse,
@@ -334,6 +343,14 @@ from caseops_api.services.ip_records import (
     resolve_ip_identifier_duplicate,
     search_ip_identifiers,
     update_trademark_application_phase,
+)
+from caseops_api.services.ip_renewals import (
+    acknowledge_client_instruction,
+    create_client_instruction,
+    create_renewal_term,
+    list_renewal_terms,
+    renewal_foundation_contract,
+    transition_renewal_term,
 )
 from caseops_api.services.ip_workspace import (
     enable_ip_workspace,
@@ -621,6 +638,112 @@ async def post_ip_covered_deadline_terminalization(
         session,
         context=context,
         deadline_id=deadline_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/renewals/foundation-contract",
+    response_model=IpRenewalFoundationContract,
+)
+async def get_ip_renewal_foundation_contract(
+    context: IpViewer,
+) -> IpRenewalFoundationContract:
+    del context
+    return renewal_foundation_contract()
+
+
+@router.get(
+    "/dockets/{docket_id}/renewal-terms",
+    response_model=IpRenewalTermListResponse,
+)
+async def get_ip_renewal_terms(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpRenewalTermListResponse:
+    return list_renewal_terms(session, context=context, docket_id=docket_id)
+
+
+@router.post(
+    "/dockets/{docket_id}/renewal-terms",
+    response_model=IpRenewalTermRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_renewal_term(
+    docket_id: str,
+    payload: IpRenewalTermCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalTermRecord:
+    return create_renewal_term(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/renewal-terms/{term_id}/instructions",
+    response_model=IpRenewalTermRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_client_instruction(
+    docket_id: str,
+    term_id: str,
+    payload: IpClientInstructionCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalTermRecord:
+    return create_client_instruction(
+        session,
+        context=context,
+        docket_id=docket_id,
+        term_id=term_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/renewal-terms/{term_id}/instructions/"
+    "{instruction_id}/acknowledge",
+    response_model=IpRenewalTermRecord,
+)
+async def post_ip_client_instruction_acknowledgement(
+    docket_id: str,
+    term_id: str,
+    instruction_id: str,
+    payload: IpClientInstructionAcknowledgeRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalTermRecord:
+    return acknowledge_client_instruction(
+        session,
+        context=context,
+        docket_id=docket_id,
+        term_id=term_id,
+        instruction_id=instruction_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/renewal-terms/{term_id}/transition",
+    response_model=IpRenewalTermRecord,
+)
+async def post_ip_renewal_term_transition(
+    docket_id: str,
+    term_id: str,
+    payload: IpRenewalTermTransitionRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalTermRecord:
+    return transition_renewal_term(
+        session,
+        context=context,
+        docket_id=docket_id,
+        term_id=term_id,
         payload=payload,
     )
 
