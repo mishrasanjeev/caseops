@@ -21,6 +21,14 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
+# Full templates anchor the route-coverage gate; the workflow tests below use
+# concrete IDs and a shared base path to exercise each operation end to end.
+TESTED_RENEWAL_ROUTE_TEMPLATES = (
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions",
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions/{instruction_id}/acknowledge",  # noqa: E501
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/transition",
+)
+
 
 def _deadline(
     *,

@@ -15,6 +15,29 @@ from caseops_api.db.session import clear_engine_cache
 PREVIOUS_HEAD = "20260822_0001"
 MIGRATION_HEAD = "20260822_0002"
 TABLES = {"ip_renewal_terms", "ip_client_instructions"}
+EXPECTED_FK_INDEXES = {
+    "ip_renewal_terms": {
+        "docket_id",
+        "registration_event_id",
+        "renewal_deadline_id",
+        "grace_deadline_id",
+        "fee_cost_item_id",
+        "filing_event_id",
+        "acceptance_event_id",
+        "certificate_document_id",
+        "next_term_deadline_id",
+        "created_by_membership_id",
+        "updated_by_membership_id",
+    },
+    "ip_client_instructions": {
+        "docket_id",
+        "source_communication_id",
+        "acknowledged_by_membership_id",
+        "supersedes_instruction_id",
+        "resulting_event_id",
+        "created_by_membership_id",
+    },
+}
 
 
 def _config(project_root: Path) -> Config:
@@ -46,6 +69,18 @@ def _foreign_key_targets(database_url: str, table_name: str) -> set[str]:
         return {
             str(foreign_key["referred_table"])
             for foreign_key in inspect(engine).get_foreign_keys(table_name)
+        }
+    finally:
+        engine.dispose()
+
+
+def _leading_index_columns(database_url: str, table_name: str) -> set[str]:
+    engine = create_engine(database_url, future=True)
+    try:
+        return {
+            str(index["column_names"][0])
+            for index in inspect(engine).get_indexes(table_name)
+            if index.get("column_names")
         }
     finally:
         engine.dispose()
@@ -84,6 +119,10 @@ def test_ip_renewal_foundation_is_additive_tenant_scoped_and_reversible(
         "communications",
         "company_memberships",
     }.issubset(_foreign_key_targets(database_url, "ip_client_instructions"))
+    for table_name, expected_columns in EXPECTED_FK_INDEXES.items():
+        assert expected_columns.issubset(
+            _leading_index_columns(database_url, table_name)
+        )
 
     command.downgrade(config, PREVIOUS_HEAD)
     assert TABLES.isdisjoint(_tables(database_url))

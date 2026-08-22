@@ -16386,6 +16386,53 @@ class IpRenewalTerm(Base):
             "state",
             "renewal_deadline_id",
         ),
+        Index("ix_ip_renewal_terms_docket_id", "docket_id", "company_id"),
+        Index(
+            "ix_ip_renewal_terms_registration_event_id",
+            "registration_event_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_renewal_deadline_id",
+            "renewal_deadline_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_grace_deadline_id",
+            "grace_deadline_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_fee_cost_item_id", "fee_cost_item_id", "company_id"
+        ),
+        Index(
+            "ix_ip_renewal_terms_filing_event_id", "filing_event_id", "company_id"
+        ),
+        Index(
+            "ix_ip_renewal_terms_acceptance_event_id",
+            "acceptance_event_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_certificate_document_id",
+            "certificate_document_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_next_term_deadline_id",
+            "next_term_deadline_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_created_by_membership_id",
+            "created_by_membership_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_renewal_terms_updated_by_membership_id",
+            "updated_by_membership_id",
+            "company_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -16499,6 +16546,32 @@ class IpClientInstruction(Base):
             "company_id",
             "renewal_term_id",
             "status",
+        ),
+        Index("ix_ip_client_instructions_docket_id", "docket_id", "company_id"),
+        Index(
+            "ix_ip_client_instructions_source_communication_id",
+            "source_communication_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_client_instructions_acknowledged_by_membership_id",
+            "acknowledged_by_membership_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_client_instructions_supersedes_instruction_id",
+            "supersedes_instruction_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_client_instructions_resulting_event_id",
+            "resulting_event_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ip_client_instructions_created_by_membership_id",
+            "created_by_membership_id",
+            "company_id",
         ),
     )
 

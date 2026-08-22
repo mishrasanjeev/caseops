@@ -31,6 +31,43 @@ depends_on = None
 RENEWAL_TABLE = "ip_renewal_terms"
 INSTRUCTION_TABLE = "ip_client_instructions"
 
+RENEWAL_FK_INDEX_COLUMNS = (
+    "docket_id",
+    "registration_event_id",
+    "renewal_deadline_id",
+    "grace_deadline_id",
+    "fee_cost_item_id",
+    "filing_event_id",
+    "acceptance_event_id",
+    "certificate_document_id",
+    "next_term_deadline_id",
+    "created_by_membership_id",
+    "updated_by_membership_id",
+)
+INSTRUCTION_FK_INDEX_COLUMNS = (
+    "docket_id",
+    "source_communication_id",
+    "acknowledged_by_membership_id",
+    "supersedes_instruction_id",
+    "resulting_event_id",
+    "created_by_membership_id",
+)
+FK_INDEXES: tuple[tuple[str, str], ...] = tuple(
+    (RENEWAL_TABLE, column) for column in RENEWAL_FK_INDEX_COLUMNS
+) + tuple((INSTRUCTION_TABLE, column) for column in INSTRUCTION_FK_INDEX_COLUMNS)
+
+
+def _create_fk_indexes(table_name: str, columns: tuple[str, ...]) -> None:
+    for column in columns:
+        op.create_index(
+            f"ix_{table_name}_{column}", table_name, [column, "company_id"]
+        )
+
+
+def _drop_fk_indexes(table_name: str, columns: tuple[str, ...]) -> None:
+    for column in reversed(columns):
+        op.drop_index(f"ix_{table_name}_{column}", table_name=table_name)
+
 
 def upgrade() -> None:
     op.create_table(
@@ -169,6 +206,9 @@ def upgrade() -> None:
         "ip_renewal_terms",
         ["company_id", "state", "renewal_deadline_id"],
     )
+    # MIGRATION-LOCK-RISK: acknowledged: these FK-support indexes are created
+    # while the new renewal table is empty and unavailable to application writers.
+    _create_fk_indexes(RENEWAL_TABLE, RENEWAL_FK_INDEX_COLUMNS)
 
     op.create_table(
         "ip_client_instructions",
@@ -292,6 +332,9 @@ def upgrade() -> None:
         "ip_client_instructions",
         ["company_id", "renewal_term_id", "status"],
     )
+    # MIGRATION-LOCK-RISK: acknowledged: these FK-support indexes are created
+    # while the new instruction table is empty and unavailable to application writers.
+    _create_fk_indexes(INSTRUCTION_TABLE, INSTRUCTION_FK_INDEX_COLUMNS)
 
 
 def downgrade() -> None:
@@ -304,6 +347,7 @@ def downgrade() -> None:
         raise RuntimeError(
             "Refusing to discard persisted renewal or client-instruction evidence."
         )
+    _drop_fk_indexes(INSTRUCTION_TABLE, INSTRUCTION_FK_INDEX_COLUMNS)
     op.drop_index(
         "ix_ip_client_instructions_company_term_status",
         table_name=INSTRUCTION_TABLE,
@@ -311,6 +355,7 @@ def downgrade() -> None:
     # MIGRATION-ROLLBACK: restore-forward: this drop is reachable only while the
     # pre-release table is empty; a populated deployment must roll forward.
     op.drop_table(INSTRUCTION_TABLE)
+    _drop_fk_indexes(RENEWAL_TABLE, RENEWAL_FK_INDEX_COLUMNS)
     op.drop_index(
         "ix_ip_renewal_terms_company_state_deadline",
         table_name=RENEWAL_TABLE,
