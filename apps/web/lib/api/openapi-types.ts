@@ -5159,6 +5159,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/renewal-terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Renewal Terms */
+        get: operations["get_ip_renewal_terms_api_ip_dockets__docket_id__renewal_terms_get"];
+        put?: never;
+        /** Post Ip Renewal Term */
+        post: operations["post_ip_renewal_term_api_ip_dockets__docket_id__renewal_terms_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Client Instruction */
+        post: operations["post_ip_client_instruction_api_ip_dockets__docket_id__renewal_terms__term_id__instructions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/instructions/{instruction_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Client Instruction Acknowledgement */
+        post: operations["post_ip_client_instruction_acknowledgement_api_ip_dockets__docket_id__renewal_terms__term_id__instructions__instruction_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Renewal Term Transition */
+        post: operations["post_ip_renewal_term_transition_api_ip_dockets__docket_id__renewal_terms__term_id__transition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/title-interests": {
         parameters: {
             query?: never;
@@ -5887,6 +5956,23 @@ export interface paths {
         };
         /** Get Ip Workspace Readiness */
         get: operations["get_ip_workspace_readiness_api_ip_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/renewals/foundation-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Renewal Foundation Contract */
+        get: operations["get_ip_renewal_foundation_contract_api_ip_renewals_foundation_contract_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -19066,6 +19152,139 @@ export interface components {
             /** Satisfied */
             satisfied: boolean;
         };
+        /** IpClientInstructionAcknowledgeRequest */
+        IpClientInstructionAcknowledgeRequest: {
+            /** Expected Row Version */
+            expected_row_version: number;
+            /**
+             * Expected Status
+             * @constant
+             */
+            expected_status: "pending";
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Reason */
+            reason: string;
+            /** Resulting Event Id */
+            resulting_event_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "rejected" | "clarification_required";
+        };
+        /** IpClientInstructionCreateRequest */
+        IpClientInstructionCreateRequest: {
+            /** Authority Name */
+            authority_name: string;
+            /** Authority Reference */
+            authority_reference?: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "renew" | "do_not_renew" | "defer" | "clarification_required";
+            /** Evidence Refs */
+            evidence_refs: string[];
+            /** Expected Current Instruction Id */
+            expected_current_instruction_id?: string | null;
+            /** Expected Current Row Version */
+            expected_current_row_version?: number | null;
+            /** Instruction Deadline At */
+            instruction_deadline_at?: string | null;
+            /** Options */
+            options?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Scope */
+            scope: {
+                [key: string]: unknown;
+            };
+            /** Source Channel */
+            source_channel: string;
+            /** Source Communication Id */
+            source_communication_id?: string | null;
+        };
+        /** IpClientInstructionRecord */
+        IpClientInstructionRecord: {
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledged By Membership Id */
+            acknowledged_by_membership_id: string | null;
+            /** Acknowledgement Reason */
+            acknowledgement_reason: string | null;
+            /** Authority Name */
+            authority_name: string;
+            /** Authority Reference */
+            authority_reference: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "renew" | "do_not_renew" | "defer" | "clarification_required";
+            /** Docket Id */
+            docket_id: string;
+            /** Evidence Refs Json */
+            evidence_refs_json: string[];
+            /** Id */
+            id: string;
+            /** Instruction Deadline At */
+            instruction_deadline_at: string | null;
+            /** Instruction Version */
+            instruction_version: number;
+            /** Options Json */
+            options_json: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Renewal Term Id */
+            renewal_term_id: string;
+            /** Resulting Event Id */
+            resulting_event_id: string | null;
+            /** Row Version */
+            row_version: number;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Source Channel */
+            source_channel: string;
+            /** Source Communication Id */
+            source_communication_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected" | "clarification_required" | "superseded";
+            /** Supersedes Instruction Id */
+            supersedes_instruction_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** IpCompanyRulePolicyRecord */
         IpCompanyRulePolicyRecord: {
             /**
@@ -22951,6 +23170,165 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** IpRenewalFoundationContract */
+        IpRenewalFoundationContract: {
+            /**
+             * Communication Owner
+             * @default communications
+             */
+            communication_owner: string;
+            /**
+             * Completion Rule
+             * @default Payment or filing initiation never completes a renewal; registry acceptance, certificate evidence, and a confirmed next-term deadline are required.
+             */
+            completion_rule: string;
+            /**
+             * Cost Owner
+             * @default ip_cost_items
+             */
+            cost_owner: string;
+            /**
+             * Document Owner
+             * @default ip_documents
+             */
+            document_owner: string;
+            /**
+             * Instruction Owner
+             * @default ip_client_instructions
+             */
+            instruction_owner: string;
+            /**
+             * Legal Deadline Owner
+             * @default ip_deadlines
+             */
+            legal_deadline_owner: string;
+            /**
+             * Legal Event Owner
+             * @default ip_docket_events
+             */
+            legal_event_owner: string;
+            /**
+             * Notification Owner
+             * @default notification_delivery_intents
+             */
+            notification_owner: string;
+            /**
+             * Operational Deadline Owner
+             * @default matter_deadlines
+             */
+            operational_deadline_owner: string;
+            /**
+             * Renewal Owner
+             * @default ip_renewal_terms
+             */
+            renewal_owner: string;
+        };
+        /** IpRenewalTermCreateRequest */
+        IpRenewalTermCreateRequest: {
+            /** Fee Cost Item Id */
+            fee_cost_item_id?: string | null;
+            /** Grace Deadline Id */
+            grace_deadline_id?: string | null;
+            /** Registration Event Id */
+            registration_event_id: string;
+            /** Renewal Deadline Id */
+            renewal_deadline_id: string;
+        };
+        /** IpRenewalTermListResponse */
+        IpRenewalTermListResponse: {
+            /** Items */
+            items: components["schemas"]["IpRenewalTermRecord"][];
+            /** Total */
+            total: number;
+        };
+        /** IpRenewalTermRecord */
+        IpRenewalTermRecord: {
+            /** Acceptance Event Id */
+            acceptance_event_id: string | null;
+            /** Certificate Document Id */
+            certificate_document_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Fee Cost Item Id */
+            fee_cost_item_id: string | null;
+            /** Filing Event Id */
+            filing_event_id: string | null;
+            /** Filing Initiated Reference */
+            filing_initiated_reference: string | null;
+            /** Grace Deadline Id */
+            grace_deadline_id: string | null;
+            /** Id */
+            id: string;
+            /** Instructions */
+            instructions?: components["schemas"]["IpClientInstructionRecord"][];
+            /** Next Term Deadline Id */
+            next_term_deadline_id: string | null;
+            /** Registration Event Id */
+            registration_event_id: string;
+            /** Renewal Deadline Id */
+            renewal_deadline_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
+            /** Term Sequence */
+            term_sequence: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
+        /** IpRenewalTermTransitionRequest */
+        IpRenewalTermTransitionRequest: {
+            /** Acceptance Event Id */
+            acceptance_event_id?: string | null;
+            /** Certificate Document Id */
+            certificate_document_id?: string | null;
+            /**
+             * Expected State
+             * @enum {string}
+             */
+            expected_state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Fee Cost Item Id */
+            fee_cost_item_id?: string | null;
+            /** Filing Event Id */
+            filing_event_id?: string | null;
+            /** Filing Initiated Reference */
+            filing_initiated_reference?: string | null;
+            /** Next Term Deadline Id */
+            next_term_deadline_id?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Target State
+             * @enum {string}
+             */
+            target_state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
         };
         /** IpResponsibilityInput */
         IpResponsibilityInput: {
@@ -44614,6 +44992,181 @@ export interface operations {
             };
         };
     };
+    get_ip_renewal_terms_api_ip_dockets__docket_id__renewal_terms_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTermListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_renewal_term_api_ip_dockets__docket_id__renewal_terms_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRenewalTermCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTermRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_client_instruction_api_ip_dockets__docket_id__renewal_terms__term_id__instructions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpClientInstructionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTermRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_client_instruction_acknowledgement_api_ip_dockets__docket_id__renewal_terms__term_id__instructions__instruction_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                instruction_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpClientInstructionAcknowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTermRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_renewal_term_transition_api_ip_dockets__docket_id__renewal_terms__term_id__transition_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRenewalTermTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTermRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_title_interest_api_ip_dockets__docket_id__title_interests_post: {
         parameters: {
             query?: never;
@@ -46144,6 +46697,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpWorkspaceReadinessResponse"];
+                };
+            };
+        };
+    };
+    get_ip_renewal_foundation_contract_api_ip_renewals_foundation_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalFoundationContract"];
                 };
             };
         };

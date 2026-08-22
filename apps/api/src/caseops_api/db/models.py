@@ -16287,6 +16287,260 @@ class IpDeadline(Base):
     )
 
 
+class IpRenewalTerm(Base):
+    """Canonical renewal state linked to existing legal and platform owners."""
+
+    __tablename__ = "ip_renewal_terms"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_renewal_term_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["registration_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_renewal_term_registration_event_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["renewal_deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_renewal_term_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["grace_deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_renewal_term_grace_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["filing_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_renewal_term_filing_event_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["acceptance_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_renewal_term_acceptance_event_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["next_term_deadline_id", "company_id"],
+            ["ip_deadlines.id", "ip_deadlines.company_id"],
+            name="fk_ip_renewal_term_next_deadline_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["certificate_document_id", "company_id"],
+            ["ip_documents.id", "ip_documents.company_id"],
+            name="fk_ip_renewal_term_certificate_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_renewal_term_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_renewal_term_updater_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_renewal_term_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "docket_id",
+            "registration_event_id",
+            "renewal_deadline_id",
+            name="uq_ip_renewal_term_legal_basis",
+        ),
+        CheckConstraint("term_sequence > 0", name="ck_ip_renewal_term_sequence_positive"),
+        CheckConstraint("version > 0", name="ck_ip_renewal_term_version_positive"),
+        CheckConstraint(
+            "state IN ('due', 'instructed', 'filing_in_progress', 'filed', "
+            "'accepted', 'grace', 'overdue', 'completed', 'cancelled')",
+            name="ck_ip_renewal_term_state",
+        ),
+        CheckConstraint(
+            "state NOT IN ('filed', 'accepted', 'completed') OR filing_event_id IS NOT NULL",
+            name="ck_ip_renewal_term_filed_evidence",
+        ),
+        CheckConstraint(
+            "state NOT IN ('accepted', 'completed') OR acceptance_event_id IS NOT NULL",
+            name="ck_ip_renewal_term_acceptance_evidence",
+        ),
+        CheckConstraint(
+            "state <> 'completed' OR (certificate_document_id IS NOT NULL "
+            "AND next_term_deadline_id IS NOT NULL AND completed_at IS NOT NULL)",
+            name="ck_ip_renewal_term_completion_evidence",
+        ),
+        Index(
+            "ix_ip_renewal_terms_company_state_deadline",
+            "company_id",
+            "state",
+            "renewal_deadline_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    term_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    registration_event_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    renewal_deadline_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    grace_deadline_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    fee_cost_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_cost_items.id", ondelete="RESTRICT"), nullable=True
+    )
+    filing_initiated_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    filing_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    acceptance_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    certificate_document_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    next_term_deadline_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="due")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    updated_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpClientInstruction(Base):
+    """Versioned client authorization; channel evidence stays on Communication."""
+
+    __tablename__ = "ip_client_instructions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_client_instruction_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["renewal_term_id", "company_id"],
+            ["ip_renewal_terms.id", "ip_renewal_terms.company_id"],
+            name="fk_ip_client_instruction_renewal_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_instruction_id", "company_id"],
+            ["ip_client_instructions.id", "ip_client_instructions.company_id"],
+            name="fk_ip_client_instruction_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["resulting_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_client_instruction_result_event_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_client_instruction_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["acknowledged_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_client_instruction_acknowledger_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_client_instruction_id_company"),
+        UniqueConstraint(
+            "renewal_term_id",
+            "instruction_version",
+            name="uq_ip_client_instruction_term_version",
+        ),
+        CheckConstraint(
+            "instruction_version > 0",
+            name="ck_ip_client_instruction_version_positive",
+        ),
+        CheckConstraint("row_version > 0", name="ck_ip_client_instruction_row_version_positive"),
+        CheckConstraint(
+            "decision IN ('renew', 'do_not_renew', 'defer', 'clarification_required')",
+            name="ck_ip_client_instruction_decision",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'clarification_required', "
+            "'superseded')",
+            name="ck_ip_client_instruction_status",
+        ),
+        CheckConstraint(
+            "supersedes_instruction_id IS NULL OR supersedes_instruction_id <> id",
+            name="ck_ip_client_instruction_supersedes_not_self",
+        ),
+        CheckConstraint(
+            "status NOT IN ('accepted', 'rejected', 'clarification_required') OR "
+            "(acknowledged_at IS NOT NULL AND acknowledged_by_membership_id IS NOT NULL)",
+            name="ck_ip_client_instruction_acknowledged",
+        ),
+        CheckConstraint(
+            "resulting_event_id IS NULL OR status = 'accepted'",
+            name="ck_ip_client_instruction_result_requires_acceptance",
+        ),
+        Index(
+            "ix_ip_client_instructions_company_term_status",
+            "company_id",
+            "renewal_term_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    renewal_term_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    instruction_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    scope_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    options_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)
+    instruction_deadline_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_communication_id: Mapped[str | None] = mapped_column(
+        ForeignKey("communications.id", ondelete="RESTRICT"), nullable=True
+    )
+    authority_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    authority_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    acknowledgement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    supersedes_instruction_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    resulting_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class IpResponsibilityAssignment(Base):
     """Effective-dated legal responsibility and acknowledgement evidence."""
 
