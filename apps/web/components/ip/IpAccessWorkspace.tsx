@@ -139,7 +139,8 @@ export function IpAccessWorkspace({
       <CardContent className="flex min-w-0 flex-col gap-5">
         <p className="text-sm text-[var(--color-mute)]">
           IP access is independent from a linked Matter. Every change is previewed, version
-          checked, step-up protected, and audited; portal access is managed separately.
+          checked, step-up protected, and audited; portal access is managed separately. Linked
+          Matter permissions are never copied.
         </p>
         {panel.isPending ? <p className="text-sm">Loading access policy…</p> : null}
         {panel.isError ? (
@@ -171,7 +172,7 @@ export function IpAccessWorkspace({
 
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
               Portal grants, access-review campaigns, and emergency access are not created by
-              this workflow. Linked Matter permissions are never copied.
+              this workflow. Matter and portal access remain separate.
             </div>
 
             <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">

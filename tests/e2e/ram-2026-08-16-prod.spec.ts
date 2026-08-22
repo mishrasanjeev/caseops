@@ -236,6 +236,11 @@ const NAV_GROUPS: ReadonlyArray<{
         href: "/app/ip/docket",
         capability: "ip:read",
       },
+      {
+        label: "Trademark renewals",
+        href: "/app/ip/renewals",
+        capability: "ip:read",
+      },
     ],
   },
   {
