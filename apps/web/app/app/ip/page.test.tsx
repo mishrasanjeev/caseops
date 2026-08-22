@@ -457,7 +457,29 @@ describe("IpDocketPage", () => {
 
     expect(await screen.findByTestId("ip-access-workspace")).toBeVisible();
     expect(fetchIpDocketMock).toHaveBeenCalledWith("ip-1");
-    expect(screen.getByText("Loading the rest of the portfolio…")).toBeVisible();
+    expect(
+      await screen.findByText("Loading the rest of the portfolio…"),
+    ).toBeVisible();
+  });
+
+  it("prioritizes a deep-linked docket before portfolio and document requests", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+    fetchIpDocketMock.mockReturnValue(new Promise(() => {}));
+
+    render(withClient(<IpDocketPage />));
+
+    const workspace = await screen.findByTestId("ip-access-workspace");
+    expect(
+      within(workspace).getByRole("heading", {
+        name: "Internal access and ethical walls",
+      }),
+    ).toBeVisible();
+    expect(workspace).toHaveTextContent(/Linked Matter permissions are never copied/i);
+    expect(workspace).toHaveTextContent(/Loading the selected docket/i);
+    expect(fetchIpDocketMock).toHaveBeenCalledWith("ip-1");
+    expect(fetchIpDocketsMock).not.toHaveBeenCalled();
+    expect(fetchIpDocumentsMock).not.toHaveBeenCalled();
+    expect(fetchIpDocumentTaxonomyMock).not.toHaveBeenCalled();
   });
 
   it("creates a pre-filing application through one canonical command", async () => {
