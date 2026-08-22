@@ -320,17 +320,207 @@ def test_datagov05_review_routes_are_tenant_isolated(client: TestClient) -> None
     assert other.status_code == 200, other.text
     other_token = str(other.json()["access_token"])
 
-    for route, payload in (
-        ("review/request", None),
-        ("review/reject", {"reason": "not mine to refuse"}),
-        ("review/approve", {"approver_label": "Records Partner"}),
+    for route, payload, expected in (
+        ("review/request", None, {404}),
+        ("review/reject", {"reason": "not mine to refuse"}, {404}),
+        # Approve refuses at 403 rather than 404, because the step-up gate runs
+        # before the operation is loaded: a caller without a recent step-up is
+        # turned away before the system considers whether the row exists. That
+        # order discloses less, so it is kept rather than reordered to make the
+        # three routes look uniform.
+        ("review/approve", {"approver_label": "Records Partner"}, {403, 404}),
     ):
         response = client.post(
             f"{BASE}/operations/{manifest['id']}/{route}",
             headers=auth_headers(other_token),
             json=payload,
         )
-        assert response.status_code == 404, f"{route}: {response.text}"
+        assert response.status_code in expected, f"{route}: {response.text}"
+
+    # The status code matters less than this: nothing crossed the boundary.
+    with get_session_factory()() as session:
+        untouched = session.get(TenantDataOperation, manifest["id"])
+        assert untouched is not None
+        assert untouched.approval_status == "not_requested"
+        assert untouched.rejection_reason is None
+        assert (
+            session.scalar(
+                select(TenantDataOperation).where(
+                    TenantDataOperation.approves_operation_id == manifest["id"]
+                )
+            )
+            is None
+        )
+
+
+def test_datagov05_an_approved_manifest_cannot_then_be_rejected(client: TestClient) -> None:
+    """Two contradictory records of one review, with the dangerous one silent.
+
+    An approved manifest KEEPS ``approval_status = 'requested'`` - the execute
+    row is the record of the outcome - so the "only a submitted manifest may be
+    rejected" check passes on an already-approved one. Without this guard the
+    manifest would read `rejected` beside a live authorised execution still in
+    `planned`.
+
+    Refusing is the right answer rather than neutralising the execution:
+    withdrawing an authorisation someone signed is a revocation, and a
+    revocation needs its own actor, reason and audit rather than being a side
+    effect of a reject call.
+    """
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    manifest = _create_dry_run(client, owner_token)
+    assert (
+        client.post(
+            f"{BASE}/operations/{manifest['id']}/review/request",
+            headers=auth_headers(owner_token),
+        ).status_code
+        == 200
+    )
+    admin_membership_id, admin_token = _invite(
+        client, owner_token, role="admin", email="approve-then-reject@asterlegal.in"
+    )
+    _complete_step_up(admin_membership_id)
+    approved = client.post(
+        f"{BASE}/operations/{manifest['id']}/review/approve",
+        headers=auth_headers(admin_token),
+        json={"approver_label": "Records Partner"},
+    )
+    assert approved.status_code == 200, approved.text
+    authorised_id = approved.json()["approved_operation_id"]
+
+    late_rejection = client.post(
+        f"{BASE}/operations/{manifest['id']}/review/reject",
+        headers=auth_headers(admin_token),
+        json={"reason": "changed my mind after approving"},
+    )
+    assert late_rejection.status_code == 409, late_rejection.text
+    assert late_rejection.json()["type"].endswith("data_operation_already_approved")
+
+    # Both records still agree: the manifest was never marked rejected, and the
+    # authorised execution is untouched.
+    with get_session_factory()() as session:
+        dry_run = session.get(TenantDataOperation, manifest["id"])
+        assert dry_run is not None
+        assert dry_run.approval_status == "requested"
+        assert dry_run.rejection_reason is None
+        authorised = session.get(TenantDataOperation, authorised_id)
+        assert authorised is not None
+        assert authorised.status == "planned"
+
+
+def test_datagov05_approval_requires_step_up_even_without_mfa_enrolment(
+    client: TestClient,
+) -> None:
+    """The second factor must not be satisfied by never having one.
+
+    ``require_recent_step_up`` is conditional by design: it demands a step-up
+    only when the caller already has MFA enrolled or tenant policy mandates it.
+    For an ordinary sensitive action that is right. For authorising an export,
+    purge or offboarding it is a fail-open - an approver with no enrolment
+    satisfied the control by not having one - and the service's own tests did
+    not catch it because each enrols MFA on the approver first.
+    """
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    manifest = _create_dry_run(client, owner_token)
+    assert (
+        client.post(
+            f"{BASE}/operations/{manifest['id']}/review/request",
+            headers=auth_headers(owner_token),
+        ).status_code
+        == 200
+    )
+
+    # This admin has no MFA setting at all, and no step-up is completed.
+    _admin_membership_id, admin_token = _invite(
+        client, owner_token, role="admin", email="unenrolled-approver@asterlegal.in"
+    )
+    refused = client.post(
+        f"{BASE}/operations/{manifest['id']}/review/approve",
+        headers=auth_headers(admin_token),
+        json={"approver_label": "Records Partner"},
+    )
+    assert refused.status_code == 403, refused.text
+
+    # ...and nothing was authorised on the way out.
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(TenantDataOperation).where(
+                    TenantDataOperation.approves_operation_id == manifest["id"]
+                )
+            )
+            is None
+        )
+
+    # Refusal stays ungated: an approver who cannot complete MFA must still be
+    # able to STOP a pending export.
+    stopped = client.post(
+        f"{BASE}/operations/{manifest['id']}/review/reject",
+        headers=auth_headers(admin_token),
+        json={"reason": "Cannot complete MFA, but this must not proceed."},
+    )
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["approval_status"] == "rejected"
+
+
+def test_datagov05_the_approval_outcome_survives_losing_the_response(
+    client: TestClient,
+) -> None:
+    """A client that reloads must be able to tell approved from pending.
+
+    The approve response was previously the only place the authorised
+    operation's id appeared: the dry-run read and list both report
+    ``approval_status = 'requested'`` for an approved manifest, because that is
+    genuinely what the row holds. Losing the POST response meant losing the
+    outcome.
+    """
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    manifest = _create_dry_run(client, owner_token)
+    assert (
+        client.post(
+            f"{BASE}/operations/{manifest['id']}/review/request",
+            headers=auth_headers(owner_token),
+        ).status_code
+        == 200
+    )
+
+    pending = client.get(
+        f"{BASE}/operations/dry-runs/{manifest['id']}", headers=auth_headers(owner_token)
+    ).json()
+    assert pending["approval_status"] == "requested"
+    assert pending["approved_operation_id"] is None
+
+    admin_membership_id, admin_token = _invite(
+        client, owner_token, role="admin", email="outcome-approver@asterlegal.in"
+    )
+    _complete_step_up(admin_membership_id)
+    approved = client.post(
+        f"{BASE}/operations/{manifest['id']}/review/approve",
+        headers=auth_headers(admin_token),
+        json={"approver_label": "Records Partner"},
+    )
+    assert approved.status_code == 200, approved.text
+    authorised_id = approved.json()["approved_operation_id"]
+
+    # Fresh GET, as though the POST response were never seen.
+    reloaded = client.get(
+        f"{BASE}/operations/dry-runs/{manifest['id']}", headers=auth_headers(owner_token)
+    ).json()
+    assert reloaded["approved_operation_id"] == authorised_id, (
+        "an approved manifest must be distinguishable from a pending one after a reload"
+    )
+
+    listed = client.get(
+        f"{BASE}/operations/dry-runs", headers=auth_headers(owner_token)
+    ).json()
+    row = next(item for item in listed["operations"] if item["id"] == manifest["id"])
+    assert row["approved_operation_id"] == authorised_id
 
 
 def test_datagov05_an_unsubmitted_manifest_cannot_be_approved(client: TestClient) -> None:

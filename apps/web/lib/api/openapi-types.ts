@@ -33428,6 +33428,8 @@ export interface components {
              * @enum {string}
              */
             approval_status: "not_requested" | "requested" | "rejected";
+            /** Approved Operation Id */
+            approved_operation_id?: string | null;
             /**
              * As Of
              * Format: date-time
@@ -33505,6 +33507,8 @@ export interface components {
              * @enum {string}
              */
             approval_status: "not_requested" | "requested" | "rejected";
+            /** Approved Operation Id */
+            approved_operation_id?: string | null;
             /**
              * As Of
              * Format: date-time

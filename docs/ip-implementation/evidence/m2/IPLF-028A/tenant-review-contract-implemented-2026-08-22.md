@@ -107,3 +107,70 @@ Also not delivered, and worth naming rather than implying:
 - **No deployed acceptance.** No build, deploy, or production probe was run for
   these routes, so `verification_status` stays `not_run` and `release_status`
   stays `blocked`.
+
+## Three defects found in review, and what they say about the design
+
+Automated review of `7c9616f6` raised three findings. All three were real, and
+two of them were **pre-existing in the service** — unreachable until this PR
+routed it, and therefore mine to fix.
+
+### The step-up was fail-open, and the tests concealed it (P1)
+
+`require_recent_step_up` is conditional by design: it demands a step-up only
+when the caller already has MFA *enrolled*, or when tenant policy mandates it.
+For an ordinary sensitive action that is right — it cannot lock out a tenant
+that has not adopted MFA.
+
+For authorising an export, purge or offboarding it is a fail-open. **An approver
+with no MFA enrolment satisfied the second factor by not having one.**
+
+The service's own tests did not catch it because every step-up test calls
+`_enrol_mfa` on the approver first, so the un-enrolled path was never exercised
+— a fixture shaped so the guard fires, which hides that it otherwise does not.
+`approve_execution` now fails closed through `_require_step_up_unconditionally`.
+Rejection stays ungated on purpose: refusing is the safe direction, and an
+approver who cannot complete MFA must still be able to stop a pending export.
+
+Updating the nine tests this broke was not incidental. They were green *because*
+of the hole, so the correct fix was to make the approver satisfy the factor by
+default (`_colleague(step_up=True)`) and have the tests that are *about* step-up
+opt out and arrange it themselves.
+
+Two four-eyes tests needed a step-up added for a subtler reason: without it they
+still passed, but on the **wrong error** — refused at the step-up gate before
+the distinct-approver rule was ever reached, silently ceasing to test four eyes.
+
+### An approved manifest could then be rejected (P1)
+
+An approved manifest keeps `approval_status = 'requested'` — the execute row is
+the record of the outcome — so "only a submitted manifest may be rejected"
+passed on an already-approved one. The manifest would read `rejected` beside a
+live authorised execution still in `planned`: two contradictory records of one
+review, with the dangerous one silent.
+
+`reject_execution` now refuses when an execute row exists. **Refusing rather
+than neutralising** is deliberate: withdrawing an authorisation someone signed
+is a revocation, and a revocation needs its own actor, reason and audit rather
+than being a side effect of a reject call.
+
+### The approval outcome did not survive a reload (P2)
+
+The approve response was the only place the authorised operation's id appeared.
+Dry-run GET and list both report `requested` for an approved manifest, because
+that is genuinely what the row holds, and no route returned the execute row — so
+losing the POST response meant losing the outcome. Both read paths now carry
+`approved_operation_id`, derived from the persisted execute row, with the list
+resolving a page in one query rather than N.
+
+### One behaviour change worth naming
+
+Cross-tenant `review/approve` now answers **403 rather than 404**, because the
+step-up gate runs before the operation is loaded: a caller without a recent
+step-up is turned away before the system considers whether the row exists. That
+order discloses less, so it was kept rather than reordered to make the three
+routes look uniform. The isolation test now asserts the property that actually
+matters — that nothing crossed the boundary — alongside the status.
+
+Verification after these fixes: **66 passed** across the review, approval,
+governance-service, role-guard and capability-catalog suites; five contract
+validators `OK`; `tsc` clean; OpenAPI client regenerated.

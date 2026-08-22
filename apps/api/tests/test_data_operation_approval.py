@@ -68,7 +68,25 @@ def requester(client: TestClient) -> SessionContext:
     return SessionContext(company=company, user=user, membership=membership)
 
 
-def _colleague(session: Session, company: Company, *, label: str = "Approver") -> SessionContext:
+def _colleague(
+    session: Session,
+    company: Company,
+    *,
+    label: str = "Approver",
+    step_up: bool = True,
+) -> SessionContext:
+    """A second person in the same company.
+
+    ``step_up`` defaults to True because approving a data operation now requires
+    a recent step-up unconditionally, enrolled in MFA or not. Before that, an
+    approver with no MFA enrolment satisfied the control by not having one, and
+    every test here passed through that hole without noticing - each step-up
+    test enrols MFA first, so the un-enrolled path was never exercised.
+
+    The tests that are ABOUT step-up pass ``step_up=False`` and arrange the
+    factor themselves, which is what keeps them meaningful.
+    """
+
     user = User(
         email=f"{label.lower().replace(' ', '-')}-{uuid4().hex[:8]}@fixture.example",
         full_name=label,
@@ -79,7 +97,10 @@ def _colleague(session: Session, company: Company, *, label: str = "Approver") -
     membership = CompanyMembership(company_id=company.id, user_id=user.id, role="admin")
     session.add(membership)
     session.flush()
-    return SessionContext(company=company, user=user, membership=membership)
+    context = SessionContext(company=company, user=user, membership=membership)
+    if step_up:
+        _complete_step_up(session, context, purpose=STEP_UP_PURPOSE)
+    return context
 
 
 def _dry_run(
@@ -236,6 +257,9 @@ class TestSubmitting:
 
         assert operation.requested_by_membership_id == requester.membership.id
 
+        # Satisfy step-up so the refusal below is the FOUR-EYES rule and not the
+        # step-up gate, which now fires first and unconditionally.
+        _complete_step_up(session, requester, purpose=STEP_UP_PURPOSE)
         with pytest.raises(HTTPException) as excinfo:
             approve_execution(
                 session,
@@ -282,6 +306,11 @@ class TestApproving:
     ) -> None:
         reviewed = _dry_run(session, requester, approval_status="requested")
 
+        # Satisfy step-up so the refusal below is the FOUR-EYES rule and not the
+        # step-up gate, which now fires first and unconditionally. Without this
+        # the test would still pass, on the wrong error, and stop proving that
+        # the requester is barred from approving.
+        _complete_step_up(session, requester, purpose=STEP_UP_PURPOSE)
         with pytest.raises(HTTPException) as excinfo:
             approve_execution(
                 session,
@@ -444,7 +473,7 @@ class TestStepUp:
         # The deliberate asymmetry. An approver who cannot complete MFA must
         # still be able to STOP a pending export; only authorising it is gated.
         reviewed = _dry_run(session, requester, approval_status="requested")
-        approver = _colleague(session, requester.company)
+        approver = _colleague(session, requester.company, step_up=False)
         _enrol_mfa(session, approver)
 
         with pytest.raises(HTTPException) as excinfo:

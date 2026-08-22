@@ -840,6 +840,46 @@ def create_dry_run_manifest(
     )
 
 
+def _approved_execution_id(
+    session: Session, *, company_id: str, dry_run_id: str
+) -> str | None:
+    """The execute row a manifest's approval created, if one exists.
+
+    The read paths have to ask this rather than read the manifest's own status:
+    an approved dry run deliberately keeps ``approval_status = 'requested'``,
+    because it may never hold 'approved' and the execute row IS the record of
+    the outcome. Without this, a client that lost the approve response could not
+    tell a pending manifest from an approved one, and nothing else in the API
+    returns the authorised operation's id.
+    """
+
+    return session.scalar(
+        select(TenantDataOperation.id).where(
+            TenantDataOperation.company_id == company_id,
+            TenantDataOperation.approves_operation_id == dry_run_id,
+        )
+    )
+
+
+def _approved_execution_ids(
+    session: Session, *, company_id: str, dry_run_ids: list[str]
+) -> dict[str, str]:
+    """The same lookup for a page of manifests, in one query rather than N."""
+
+    if not dry_run_ids:
+        return {}
+    rows = session.execute(
+        select(
+            TenantDataOperation.approves_operation_id,
+            TenantDataOperation.id,
+        ).where(
+            TenantDataOperation.company_id == company_id,
+            TenantDataOperation.approves_operation_id.in_(dry_run_ids),
+        )
+    ).all()
+    return {approves: execution_id for approves, execution_id in rows}
+
+
 def get_dry_run_manifest(
     session: Session,
     *,
@@ -877,6 +917,9 @@ def get_dry_run_manifest(
         status="dry_run_complete",
         approval_status=operation.approval_status,
         rejection_reason=operation.rejection_reason,
+        approved_operation_id=_approved_execution_id(
+            session, company_id=operation.company_id, dry_run_id=operation.id
+        ),
         request_scope_hash=operation.request_scope_hash,
         manifest_hash=operation.manifest_hash,
         request_evidence_ref=operation.request_evidence_ref,
@@ -941,6 +984,11 @@ def list_dry_run_manifests(
             .limit(limit)
         ).all()
     )
+    approved_by_dry_run = _approved_execution_ids(
+        session,
+        company_id=context.company.id,
+        dry_run_ids=[operation.id for operation in operations],
+    )
     summaries: list[TenantDataOperationDryRunSummary] = []
     for operation in operations:
         completed_at = operation.dry_run_completed_at
@@ -959,6 +1007,7 @@ def list_dry_run_manifests(
                 status="dry_run_complete",
                 approval_status=operation.approval_status,
                 rejection_reason=operation.rejection_reason,
+                approved_operation_id=approved_by_dry_run.get(operation.id),
                 request_scope_hash=operation.request_scope_hash,
                 manifest_hash=operation.manifest_hash,
                 request_evidence_ref=operation.request_evidence_ref,

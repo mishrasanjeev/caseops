@@ -120,6 +120,11 @@ class TenantDataOperationDryRunRecord(BaseModel):
     status: Literal["dry_run_complete"]
     approval_status: DataOperationDryRunApprovalStatus
     rejection_reason: str | None
+    #: Set once the manifest has been approved. The dry run itself may never
+    #: hold 'approved' - the separate execute row IS the record of the
+    #: outcome - so without this a reader that lost the approve response
+    #: cannot tell a pending manifest from an approved one.
+    approved_operation_id: str | None = None
     request_scope_hash: str
     manifest_hash: str
     request_evidence_ref: str
@@ -185,6 +190,11 @@ class TenantDataOperationDryRunSummary(BaseModel):
     status: Literal["dry_run_complete"]
     approval_status: DataOperationDryRunApprovalStatus
     rejection_reason: str | None
+    #: Set once the manifest has been approved. The dry run itself may never
+    #: hold 'approved' - the separate execute row IS the record of the
+    #: outcome - so without this a reader that lost the approve response
+    #: cannot tell a pending manifest from an approved one.
+    approved_operation_id: str | None = None
     request_scope_hash: str
     manifest_hash: str
     request_evidence_ref: str
