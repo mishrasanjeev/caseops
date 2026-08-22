@@ -141,11 +141,6 @@ export default function IpDocketPage() {
     queryFn: fetchIpWorkspaceReadiness,
     enabled: canView,
   });
-  const listing = useQuery({
-    queryKey: ["ip", "dockets"],
-    queryFn: fetchIpDockets,
-    enabled: canView && readiness.data?.workspace_available === true,
-  });
   const requestedDocket = useQuery({
     queryKey: ["ip", "dockets", requestedDocketId],
     queryFn: () => fetchIpDocket(requestedDocketId!),
@@ -153,6 +148,15 @@ export default function IpDocketPage() {
       canView &&
       readiness.data?.workspace_available === true &&
       Boolean(requestedDocketId),
+  });
+  const deepLinkDocketPending = Boolean(requestedDocketId) && requestedDocket.isPending;
+  const listing = useQuery({
+    queryKey: ["ip", "dockets"],
+    queryFn: fetchIpDockets,
+    enabled:
+      canView &&
+      readiness.data?.workspace_available === true &&
+      !deepLinkDocketPending,
   });
   const dockets = listing.data?.dockets ?? [];
   const selected = useMemo(
@@ -249,15 +253,19 @@ export default function IpDocketPage() {
         />
       ) : null}
 
-      <IpDocumentWorkspace
-        dockets={dockets}
-        canUpload={canWrite && canUploadDocuments}
-        canManage={canWrite && canManageDocuments}
-        canReview={canReview}
-        canConfigure={canConfigure}
-      />
+      {!deepLinkDocketPending ? (
+        <IpDocumentWorkspace
+          dockets={dockets}
+          canUpload={canWrite && canUploadDocuments}
+          canManage={canWrite && canManageDocuments}
+          canReview={canReview}
+          canConfigure={canConfigure}
+        />
+      ) : null}
 
-      {listing.isPending && !selected ? (
+      {deepLinkDocketPending && canManageAccess ? (
+        <IpAccessWorkspaceLoading />
+      ) : listing.isPending && !selected ? (
         <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
       ) : listing.isError && !selected ? (
         <EmptyState
@@ -324,6 +332,25 @@ export default function IpDocketPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IpAccessWorkspaceLoading() {
+  return (
+    <Card className="min-w-0" data-testid="ip-access-workspace">
+      <CardHeader>
+        <CardTitle as="h3">Internal access and ethical walls</CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <p className="text-sm text-[var(--color-mute)]">
+          IP access is independent from a linked Matter. Linked Matter permissions are never
+          copied.
+        </p>
+        <p className="text-sm" role="status">
+          Loading the selected docket and its access policy…
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
