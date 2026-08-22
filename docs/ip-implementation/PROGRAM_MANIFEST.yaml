@@ -9912,6 +9912,7 @@
         "apps/api/src/caseops_api/schemas/ip_renewals.py",
         "apps/api/src/caseops_api/services/ip_renewals.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
         "apps/web/lib/api/openapi-types.ts",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -9927,11 +9928,11 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-037A/local-2026-08-22.md",
-          "revision": "a058265dcb8b214f9cd57e1b16adea316707eb4d",
+          "revision": "3a62cfc936748a98c598dd2d3a6f2b60642ce918",
           "recorded_at": "2026-08-22T09:45:00+05:30",
           "environment": "Windows 11 local branch on integrated main 1a1ee0effb640d2c91238b2f917021de2b4297b4; CPython 3.13 isolated SQLite fixtures; generated OpenAPI TypeScript client; Next.js 16 typecheck. No PostgreSQL CI, deployment, production verification, frontend workflow or browser E2E.",
           "fixtures": "Synthetic law-firm and foreign tenant, trademark docket, candidate/confirmed registration event, confirmed filing and registry-acceptance events, active legal rule/calendar versions, renewal/grace/next-term deadlines, official-fee estimate, accepted immutable certificate document and two client-instruction revisions.",
-          "assertions": "Tenant isolation; verified registration/deadline prerequisites; instruction supersession and acknowledgement CAS; term state/version/timestamp CAS; payment/filing initiation not accepted or completed; immutable filing evidence; registry acceptance; accepted docket-linked certificate; next-term deadline triggered by the acceptance event; additive downgrade/re-upgrade; governance inventory; OpenAPI and TypeScript compatibility. Counts: source-wide Ruff passed, 20 focused/governance tests passed, governance map valid, web typecheck passed.",
+          "assertions": "Tenant isolation; verified registration/deadline prerequisites; instruction supersession and acknowledgement CAS; term state/version/timestamp CAS; payment/filing initiation not accepted or completed; immutable filing evidence; registry acceptance; accepted docket-linked certificate; next-term deadline triggered by the acceptance event; additive downgrade/re-upgrade; populated-downgrade refusal; governance inventory and runtime projection; OpenAPI and TypeScript compatibility. Counts: source-wide Ruff passed, 21 focused/governance tests passed, governance map and data-class projection valid, web typecheck passed.",
           "result": "passed"
         }
       ],
@@ -9961,6 +9962,7 @@
         "docs/ip-implementation/evidence/m3/IPLF-037A/local-2026-08-22.md",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
         "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
         "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
         "docs/ip-implementation/generated/IMPLEMENTATION.md"
       ],
