@@ -29,6 +29,8 @@ These tests pin:
 """
 from __future__ import annotations
 
+import asyncio
+import inspect
 from unittest.mock import patch
 
 import pytest
@@ -40,6 +42,7 @@ from caseops_api.db.models import Company, CompanyType
 from caseops_api.db.session import (
     _ENGINE_CACHE,
     clear_engine_cache,
+    get_db_session,
     get_engine,
     get_session_factory,
 )
@@ -260,6 +263,49 @@ def test_sqlite_session_serializes_write_until_commit(
         assert events == ["acquire", "release"]
     finally:
         session.close()
+
+
+def test_request_session_finalizer_releases_sqlite_writer_on_event_loop(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prevent the async-route/worker-finalizer SQLite deadlock from returning."""
+
+    db_path = tmp_path / "caseops-request-finalizer.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    engine = get_engine(database_url)
+    Base.metadata.create_all(bind=engine)
+    events: list[str] = []
+
+    class _FakeLock:
+        def acquire(self) -> None:
+            events.append("acquire")
+
+        def release(self) -> None:
+            events.append("release")
+
+    monkeypatch.setattr("caseops_api.db.session._SQLITE_WRITE_LOCK", _FakeLock())
+
+    async def _exercise_dependency() -> None:
+        dependency = get_db_session()
+        session = await anext(dependency)
+        session.add(
+            Company(
+                name="E2E Request Finalizer",
+                slug="e2e-request-finalizer",
+                company_type=CompanyType.LAW_FIRM,
+                tenant_key="e2e-request-finalizer",
+            )
+        )
+        session.flush()
+        assert events == ["acquire"]
+        await dependency.aclose()
+
+    assert inspect.isasyncgenfunction(get_db_session)
+    asyncio.run(_exercise_dependency())
+    assert events == ["acquire", "release"]
 
 
 # ---------- engine cache invalidation on pool-setting change ------

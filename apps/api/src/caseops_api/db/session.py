@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from threading import Lock
 
 from sqlalchemy import create_engine, event
@@ -203,7 +203,17 @@ def serialize_sqlite_writer(session: Session) -> None:
     session.serialize_sqlite_writer()
 
 
-def get_db_session() -> Generator[Session]:
+async def get_db_session() -> AsyncGenerator[Session]:
+    """Yield a request session and finalize it on the event-loop thread.
+
+    Most API handlers are async functions that perform synchronous SQLAlchemy
+    work. A synchronous generator dependency is entered and exited through
+    Starlette's worker pool; between the response and that queued exit, another
+    handler can block the event loop acquiring CaseOps' process-wide SQLite
+    writer lock. Keeping this dependency async makes ``close()`` release the
+    transaction-scoped lock before another request can enter that window.
+    """
+
     session_factory = get_session_factory()
     session = session_factory()
     try:
