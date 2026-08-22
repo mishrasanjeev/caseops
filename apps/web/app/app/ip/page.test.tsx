@@ -3,11 +3,16 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 const {
   enableIpWorkspaceMock,
   fetchIpDeadlineDependenciesMock,
   fetchIpDeadlineWorkspaceMock,
   fetchIpCoreRecordsMock,
+  fetchIpDocketMock,
   fetchIpDocketsMock,
   fetchIpDocumentsMock,
   fetchIpDocumentTaxonomyMock,
@@ -49,6 +54,7 @@ const {
   fetchIpDeadlineDependenciesMock: vi.fn(),
   fetchIpDeadlineWorkspaceMock: vi.fn(),
   fetchIpCoreRecordsMock: vi.fn(),
+  fetchIpDocketMock: vi.fn(),
   fetchIpDocketsMock: vi.fn(),
   fetchIpDocumentsMock: vi.fn(),
   fetchIpDocumentTaxonomyMock: vi.fn(),
@@ -88,6 +94,7 @@ const {
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  fetchIpDocket: fetchIpDocketMock,
   fetchIpDockets: fetchIpDocketsMock,
   fetchIpDocuments: fetchIpDocumentsMock,
   fetchIpDocumentTaxonomy: fetchIpDocumentTaxonomyMock,
@@ -275,6 +282,7 @@ function unknownTimeHearing() {
 describe("IpDocketPage", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/app/ip");
+    fetchIpDocketMock.mockReset();
     fetchIpDocketsMock.mockReset();
     fetchIpDocumentsMock.mockReset();
     fetchIpDocumentTaxonomyMock.mockReset();
@@ -325,6 +333,7 @@ describe("IpDocketPage", () => {
       features: [],
     });
     fetchIpDocketsMock.mockResolvedValue({ dockets: [], count: 0 });
+    fetchIpDocketMock.mockResolvedValue(activeDocket());
     fetchIpDocumentsMock.mockResolvedValue({ items: [], total: 0 });
     fetchIpDocumentTaxonomyMock.mockResolvedValue({
       taxonomy_version: "ip-document-taxonomy-v1",
@@ -438,6 +447,17 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("heading", { name: "New trademark application" })).toBeVisible();
     expect(screen.getByLabelText("Word mark")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
+  });
+
+  it("renders a deep-linked docket without waiting for the full portfolio", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+    fetchIpDocketsMock.mockReturnValue(new Promise(() => {}));
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByTestId("ip-access-workspace")).toBeVisible();
+    expect(fetchIpDocketMock).toHaveBeenCalledWith("ip-1");
+    expect(screen.getByText("Loading the rest of the portfolio…")).toBeVisible();
   });
 
   it("creates a pre-filing application through one canonical command", async () => {
