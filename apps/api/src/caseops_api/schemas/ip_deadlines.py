@@ -12,6 +12,7 @@ DeadlineKind = Literal[
     "task_date",
     "hearing",
     "renewal",
+    "renewal_grace",
     "client_instruction",
     "reminder",
 ]
