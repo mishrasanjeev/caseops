@@ -1813,7 +1813,7 @@
         "IPLF-038A",
         "IPLF-038B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -10118,28 +10118,64 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-038 canonical scope: Portfolio/deadline/renewal/data-quality report definitions using existing synchronous export patterns; introduce the neutral `report_jobs`/`report_artifacts` contract only for measured large/background needs, with no IP-only scheduler or storage policy.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
+          "canonical_writer": "apps/api/src/caseops_api/services/ip_reports.py is a schema-free synchronous adapter. Existing portfolio, docket-control, renewal, record-access, notification and audit services remain the canonical readers/writers for their data and effects.",
+          "compatibility_path": "Existing Matter/platform routes, IpPortfolioExportJob, signed docket-control report and renewal portfolio remain canonical; the additive preview adapter delegates to those readers and creates only a shared audit event.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_reports.py",
+        "apps/api/src/caseops_api/services/ip_reports.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_report_foundation.py::test_iplf038a_contract_refuses_a_duplicate_report_control_plane",
+        "apps/api/tests/test_ip_report_foundation.py::test_iplf038a_portfolio_and_quality_previews_delegate_to_canonical_readers",
+        "apps/api/tests/test_ip_report_foundation.py::test_iplf038a_deadline_and_renewal_empty_states_are_honest",
+        "apps/api/tests/test_ip_report_foundation.py::test_iplf038a_report_contract_fails_closed_on_unapproved_shape",
+        "apps/api/tests/test_ip_report_foundation.py::test_iplf038a_preview_omits_restricted_records_without_count_or_probe_leaks"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md",
+          "revision": "31a2c87639efefb07264e45ca6a5142ec8a60519",
+          "environment": "local SQLite API fixtures and generated OpenAPI/web type checks",
+          "fixtures": "isolated law-firm owner and associate with open and restricted IP portfolio records plus empty deadline and renewal states",
+          "assertions": "four synchronous definitions, no duplicate control plane, truthful freshness, strict request shape, tenant/access scoping, hidden-count policy, audit digest and adjacent canonical-reader regressions",
+          "result": "passed",
+          "recorded_at": "2026-08-23T00:45:00+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-038A-RELEASE-VERIFY",
+          "state": "active",
+          "summary": "Repository verification passed; exact-head CI, merged-main recheck, deployment and dated production contract verification remain pending.",
+          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health and authenticated production foundation-contract verification.",
+          "owner": "CaseOps release workflow",
+          "milestone_impact": "Blocks release_status only; repository implementation and local verification are complete.",
+          "next_independent_slice": "IPLF-038B"
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run the exact-head CI/PostgreSQL/security/CodeQL matrix, merge only when green, deploy through the canonical release workflow, and attach dated production identity, health and authenticated contract evidence.",
+        "Proceed to IPLF-038B without adding report_jobs/report_artifacts unless representative-volume evidence proves the synchronous ceiling is insufficient."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change. Reads existing portfolio, docket-control and renewal projections under their canonical tenant/access predicates; writes only ip.report.previewed through the shared audit service."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md"
+      ],
+      "allocation_review": "2026-08-23 current-main reconciliation: IPLF-030A/030B already own portfolio reads and export jobs, IPLF-039C owns signed docket-control reporting, IPLF-037 owns renewal reporting, and shared services own access, notifications and audit. IPLF-038A therefore adds only strict internal synchronous definitions and previews over those owners. It creates no schema, queue, artifact, scheduler, delivery, legal-date copy, portal route or UI. Local verification passed at exact implementation revision 31a2c87639efefb07264e45ca6a5142ec8a60519. REPORT-01..03 and every UJ-27/UJ-59 path remain allocated to IPLF-038B.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -10194,8 +10230,8 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-038 canonical scope: Portfolio/deadline/renewal/data-quality report definitions using existing synchronous export patterns; introduce the neutral `report_jobs`/`report_artifacts` contract only for measured large/background needs, with no IP-only scheduler or storage policy.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
+          "canonical_writer": "apps/api/src/caseops_api/services/ip_reports.py is a schema-free synchronous adapter. Existing portfolio, docket-control, renewal, record-access, notification and audit services remain the canonical readers/writers for their data and effects.",
+          "compatibility_path": "Existing Matter/platform routes, IpPortfolioExportJob, signed docket-control report and renewal portfolio remain canonical; the additive preview adapter delegates to those readers and creates only a shared audit event.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }
       ],
