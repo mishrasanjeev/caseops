@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,9 @@ class IpImportRowRecord(BaseModel):
     commit_error_code: str | None = None
     created_docket_id: str | None = None
     normalized: dict[str, Any] = Field(default_factory=dict)
+    duplicate_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    reconciliation_decision: Literal["create_separate", "link_existing", "skip"] | None = None
+    reconciled_target_docket_id: str | None = None
 
 
 class IpImportJobRecord(BaseModel):
@@ -65,3 +68,18 @@ class IpImportCommitResponse(BaseModel):
     job: IpImportJobRecord
     rows: list[IpImportRowRecord]
     replayed: bool = False
+
+
+class IpImportReconciliationDecision(BaseModel):
+    row_id: str
+    decision: Literal["create_separate", "link_existing", "skip"]
+    target_docket_id: str | None = None
+
+
+class IpImportReconciliationRequest(BaseModel):
+    expected_job_version: int = Field(ge=1)
+    decisions: list[IpImportReconciliationDecision] = Field(min_length=1, max_length=1000)
+
+
+class IpImportJobListResponse(BaseModel):
+    jobs: list[IpImportJobRecord] = Field(default_factory=list)

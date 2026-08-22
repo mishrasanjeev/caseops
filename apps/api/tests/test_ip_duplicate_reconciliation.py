@@ -183,6 +183,28 @@ def test_uj05_normal_detect_and_resolve_duplicate(client: TestClient) -> None:
     assert "awaiting review" in again.json()["detail"].lower()
 
 
+def test_portfolio_projects_duplicate_numbers_from_application_owner(
+    client: TestClient,
+) -> None:
+    """A collision remains visible without violating docket identity uniqueness."""
+
+    headers, _first, _second, original, collision = _setup(client)
+
+    response = client.get(
+        "/api/ip/portfolio",
+        headers=headers,
+        params={"query": "TM-1234567"},
+    )
+    assert response.status_code == 200, response.text
+    rows = response.json()["rows"]
+    assert {row["application_id"] for row in rows} == {
+        original["application"]["id"],
+        collision["application"]["id"],
+    }
+    assert {row["primary_identifier"] for row in rows} == {"TM 1234567"}
+    assert all(row["application_numbers"] == ["TM 1234567"] for row in rows)
+
+
 def test_uj05_normal_supersede_preserves_prior_value(client: TestClient) -> None:
     """IPLF-UJ-05-NORMAL — supersession retires the duplicate without deleting it."""
 

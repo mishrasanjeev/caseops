@@ -349,30 +349,34 @@ async function seedDeadlineWorkflow(
   };
 }
 
-async function signIn(page: Page, slug: string): Promise<void> {
-  await page.goto("/sign-in");
-  await page.locator("#company-slug").fill(slug);
-  await page.locator("#email").fill(`owner-${slug}@example.com`);
-  await page.locator("#password").fill(PASSWORD);
-  const login = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/auth/login" &&
-      response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: /^Sign in$/ }).click();
-  const response = await login;
-  expect(response.status(), await response.text()).toBe(200);
-  await page.waitForURL(/\/app(?:[/?]|$)/);
+async function installSession(page: Page, slug: string): Promise<void> {
+  const login = await page.request.post(`${apiBaseUrl}/api/auth/login`, {
+    data: {
+      company_slug: slug,
+      email: `owner-${slug}@example.com`,
+      password: PASSWORD,
+    },
+  });
+  expect(login.status(), await login.text()).toBe(200);
+  const session = (await login.json()) as Record<string, unknown>;
+  await page.addInitScript((context) => {
+    window.localStorage.setItem("caseops.session.context", JSON.stringify(context));
+  }, {
+    company: session.company,
+    user: session.user,
+    membership: session.membership,
+    capabilities: session.capabilities,
+  });
 }
 
 test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const api = await request.newContext();
   const { slug, ownerToken, ownerMembershipId } = await bootstrap(api);
   const seeded = await seedDeadlineWorkflow(api, ownerToken, ownerMembershipId, slug);
-  await signIn(page, slug);
+  await installSession(page, slug);
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/app/ip");
 
@@ -382,7 +386,18 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
   await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
   await expect(deadlineWorkspace.getByText("2026-08-18 Â· candidate Â· v1")).toBeVisible();
+  await expect(
+    deadlineWorkspace.getByRole("link", { name: /Open verified rule source/ }),
+  ).toHaveAttribute("href", "https://official.example/ip-india/tm-rules");
+  await deadlineWorkspace.getByRole("button", { name: "View calculation provenance" }).click();
+  const provenance = deadlineWorkspace.getByTestId(
+    `ip-deadline-provenance-${seeded.deadlineId}`,
+  );
+  await expect(provenance).toContainText("Manual base date");
+  await expect(provenance).toContainText("No approved extension is included");
+  await expect(provenance).toContainText("calendar v1");
   await deadlineWorkspace.getByLabel("Backup").selectOption(seeded.backupMembershipId);
+  await deadlineWorkspace.getByLabel("Internal target").fill("2026-08-16");
 
   for (const name of ["Calculate deadline proposal", "Confirm legal deadline"]) {
     const control = deadlineWorkspace.getByRole("button", { name });
@@ -405,6 +420,47 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   const confirmedDeadline = (await confirmedWorkspace.json()).deadlines.find(
     (row: { id: string }) => row.id === seeded.deadlineId,
   );
+  const calendarResponse = await api.get(
+    `${apiBaseUrl}/api/calendar/events?from=2026-08-16&to=2026-08-18`,
+    { headers: { Authorization: `Bearer ${ownerToken}` } },
+  );
+  expect(calendarResponse.status(), await calendarResponse.text()).toBe(200);
+  const calendarEvents = (await calendarResponse.json()).events as Array<{
+    id: string;
+    display_type: string;
+    ip_docket_id: string | null;
+  }>;
+  const filingEvent = calendarEvents.find(
+    (event) => event.display_type === "filing_deadline",
+  );
+  const targetEvent = calendarEvents.find(
+    (event) => event.display_type === "internal_target",
+  );
+  expect(filingEvent).toMatchObject({ ip_docket_id: seeded.docketId });
+  expect(targetEvent).toMatchObject({ ip_docket_id: seeded.docketId });
+
+  await page.goto("/app/calendar");
+  await page.getByTestId("calendar-view-day").click();
+  const now = new Date();
+  const currentDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const filingDay = Date.UTC(2026, 7, 18);
+  const filingOffset = Math.round((filingDay - currentDay) / 86_400_000);
+  const direction = filingOffset < 0 ? "calendar-prev-month" : "calendar-next-month";
+  for (let index = 0; index < Math.abs(filingOffset); index += 1) {
+    await page.getByTestId(direction).click();
+  }
+  const filingLink = page.getByTestId(`calendar-event-${filingEvent!.id}`);
+  await expect(filingLink).toContainText("Legal filing deadline");
+  await expect(filingLink).toContainText("Respond to examination report");
+  await expect(
+    filingLink,
+  ).toHaveAttribute("href", `/app/ip?docket=${seeded.docketId}`);
+  await page.getByTestId("calendar-prev-month").click();
+  await page.getByTestId("calendar-prev-month").click();
+  const targetLink = page.getByTestId(`calendar-event-${targetEvent!.id}`);
+  await expect(targetLink).toContainText("Internal target");
+  await expect(targetLink).toContainText("Respond to examination report");
+  await expect(targetLink).toHaveAttribute("href", `/app/ip?docket=${seeded.docketId}`);
   const operationalBypass = await api.patch(
     `${apiBaseUrl}/api/matters/${seeded.matterId}/deadlines/${confirmedDeadline.matter_deadline_id}`,
     {
@@ -415,7 +471,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   const operationalBypassBody = await operationalBypass.json();
   expect(operationalBypass.status(), JSON.stringify(operationalBypassBody)).toBe(409);
   expect(operationalBypassBody.code).toBe("ip_deadline_workflow_required");
-  await page.reload();
+  await page.goto(`/app/ip?docket=${seeded.docketId}`);
   await expect(page.getByTestId(`ip-legal-deadline-${seeded.deadlineId}`)).toContainText(
     "confirmed",
   );

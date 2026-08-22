@@ -12,6 +12,14 @@ which is the only moment they are cheap to find. The other two exception paths
 are runtime conditions - EXC-03 backfill mismatch and EXC-04 canary/SLO failure -
 and belong to the deploy path. This module does not pretend to cover them.
 
+It also checks the shape of the revision graph, which is not a UJ-67 exception
+path and is not labelled as one. Two parallel lanes each adding a migration from
+the same parent produce two alembic heads, and `alembic upgrade head` then
+refuses to run. Neither lane's branch shows it - each holds only its own file -
+so the collision is invisible until both have landed on the trunk, which is the
+worst possible moment to find it. Evaluating the graph over every migration
+present catches it in the pull-request merge commit instead.
+
 Why a marker rather than a blanket refusal. Some of these operations are correct
 and necessary: a unique index on a table that is still small, a column drop on a
 revision that never reached an environment holding real rows. This gate cannot
@@ -48,6 +56,13 @@ _REWRITE_OPS = {"alter_column"}
 # because the answer to a bad migration is roll forward or restore, not a
 # downgrade that deletes the rows the incident is about.
 _DESTRUCTIVE_OPS = {"drop_column", "drop_table"}
+
+# Codes for defects in the revision graph itself rather than in one migration's
+# operations. These are not UJ-67 exception paths and are deliberately not
+# labelled as though they were.
+MULTIPLE_HEADS_CODE = "MIGRATION-MULTIPLE-HEADS"
+DUPLICATE_REVISION_CODE = "MIGRATION-DUPLICATE-REVISION"
+REVISION_CYCLE_CODE = "MIGRATION-REVISION-CYCLE"
 
 
 @dataclass(frozen=True)
@@ -165,6 +180,171 @@ def analyze(path: Path) -> list[Finding]:
     return findings
 
 
+def _module_assignments(tree: ast.Module) -> dict[str, ast.expr]:
+    """Module-level ``name = value`` bindings, which is how alembic declares
+    ``revision`` and ``down_revision``."""
+    values: dict[str, ast.expr] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    values[target.id] = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.value is not None
+        ):
+            values[node.target.id] = node.value
+    return values
+
+
+def _literal(node: ast.expr | None) -> object:
+    if node is None:
+        return None
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, SyntaxError, TypeError):
+        return None
+
+
+def _ungrounded_revisions(down_map: dict[str, tuple[str, ...]]) -> set[str]:
+    """Revisions that cannot be traced back to a base, i.e. cycle members.
+
+    A revision is *grounded* when every parent it names is either a base
+    (``down_revision = None``), a revision outside this file set, or itself
+    grounded. Anything still ungrounded once that reaches a fixpoint is inside a
+    cycle or sits behind one, and can never be upgraded through.
+
+    ``all()`` rather than ``any()`` for a merge revision with several parents:
+    alembic has to walk every branch, so one poisoned parent is enough to make
+    the merge unreachable.
+    """
+
+    grounded: set[str] = set()
+    pending = set(down_map)
+    changed = True
+    while changed:
+        changed = False
+        for revision in sorted(pending):
+            parents = down_map[revision]
+            if all(parent not in down_map or parent in grounded for parent in parents):
+                grounded.add(revision)
+                pending.discard(revision)
+                changed = True
+    return pending
+
+
+def revision_graph(paths: list[Path]) -> tuple[dict[str, Path], list[str], list[Finding]]:
+    """Read the revision graph statically and report defects in its shape.
+
+    Static parsing rather than ``ScriptDirectory``: this module is a preflight
+    that must run before anything imports the application or touches a
+    database, and every other check here already works from the AST.
+
+    Two defects are decidable here and nowhere cheaper:
+
+    **Multiple heads.** ``alembic upgrade head`` refuses to run when more than
+    one revision is a head, so a deploy fails at the migration step rather than
+    at review. Two lanes each adding a migration from the same parent is the
+    ordinary way this happens, and neither lane's own branch shows it - each
+    contains only its own file. It appears in the merge commit, which is what
+    CI builds for a pull request, so this check catches it on the second lane's
+    next CI run rather than after both have landed on the trunk.
+
+    **Duplicate revision ids.** Two files claiming the same id silently make
+    one of them unreachable; alembic resolves the collision rather than
+    reporting it.
+    """
+    revisions: dict[str, Path] = {}
+    parents: set[str] = set()
+    down_map: dict[str, tuple[str, ...]] = {}
+    findings: list[Finding] = []
+
+    for path in sorted(paths):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError:
+            # analyze() reports the syntax error against this file already;
+            # a graph defect derived from an unparseable file would be noise.
+            continue
+        assignments = _module_assignments(tree)
+        revision = _literal(assignments.get("revision"))
+        if not isinstance(revision, str):
+            continue
+        previous = revisions.get(revision)
+        if previous is not None:
+            findings.append(
+                Finding(
+                    _display_path(path),
+                    1,
+                    DUPLICATE_REVISION_CODE,
+                    "revision",
+                    (
+                        f"revision id {revision!r} is already declared by "
+                        f"{_display_path(previous)}. Two files with one id make one "
+                        f"of them unreachable. Give this revision its own id."
+                    ),
+                )
+            )
+        else:
+            revisions[revision] = path
+        down = _literal(assignments.get("down_revision"))
+        if isinstance(down, str):
+            parents.add(down)
+            down_map[revision] = (down,)
+        elif isinstance(down, (list, tuple)):
+            named = tuple(item for item in down if isinstance(item, str))
+            parents.update(named)
+            down_map[revision] = named
+        else:
+            down_map[revision] = ()
+
+    # Cycles are checked independently of the head count, not as a special case
+    # of it. A graph that is *only* a cycle has zero heads, and a healthy chain
+    # beside a disconnected cycle has exactly one - so neither "more than one
+    # head" nor "exactly one head" sees it. Only walking the parents does.
+    ungrounded = _ungrounded_revisions(down_map)
+    if ungrounded:
+        listed = ", ".join(
+            f"{revision} ({_display_path(revisions[revision])})"
+            for revision in sorted(ungrounded)
+            if revision in revisions
+        )
+        findings.append(
+            Finding(
+                _display_path(revisions[sorted(ungrounded)[0]]),
+                1,
+                REVISION_CYCLE_CODE,
+                "down_revision",
+                (
+                    f"{len(ungrounded)} revision(s) cannot be traced back to a base, "
+                    f"so they are inside a cycle or behind one and can never be "
+                    f"upgraded through: {listed}. Break the loop so every revision "
+                    f"reaches a base by following down_revision."
+                ),
+            )
+        )
+
+    heads = sorted(set(revisions) - parents)
+    if len(heads) > 1:
+        listed = ", ".join(f"{head} ({_display_path(revisions[head])})" for head in heads)
+        findings.append(
+            Finding(
+                _display_path(revisions[heads[-1]]),
+                1,
+                MULTIPLE_HEADS_CODE,
+                "down_revision",
+                (
+                    f"the revision graph has {len(heads)} heads: {listed}. "
+                    f"`alembic upgrade head` is ambiguous and will refuse to run. "
+                    f"Re-chain the later migration's down_revision onto the other "
+                    f"head, or add an explicit merge revision."
+                ),
+            )
+        )
+    return revisions, heads, findings
+
+
 def _changed_migrations(base: str) -> list[Path]:
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base}...HEAD"],
@@ -201,6 +381,23 @@ def main(argv: list[str] | None = None) -> int:
             f"migration preflight: {len(paths)} migrations, "
             f"{len(findings)} unacknowledged risks {by_code or ''}"
         )
+        # The risk findings above are advisory - they name a judgement the
+        # author is asked to record. A broken revision graph is not a
+        # judgement: the deploy cannot run at all, so it fails here.
+        _revisions, heads, graph_findings = revision_graph(paths)
+        if graph_findings:
+            for finding in graph_findings:
+                print(f"ERROR [{finding.code}] {finding.path}:{finding.line} {finding.detail}")
+            return 1
+        # Reaching here means the graph checks found nothing, so an empty head
+        # set can only mean there are no migrations at all - not a cycle, which
+        # is now its own finding above. Say which it is rather than printing
+        # "single head (none)", a sentence that contradicts itself.
+        print(
+            f"migration graph: single head {heads[0]}"
+            if heads
+            else "migration graph: no migrations found"
+        )
         return 0
 
     targets = _changed_migrations(args.base)
@@ -208,6 +405,11 @@ def main(argv: list[str] | None = None) -> int:
         print("migration preflight: no migration changed")
         return 0
     findings = [finding for path in targets for finding in analyze(path)]
+    # The graph is evaluated over every migration, not only the changed ones:
+    # a new head is created by the relationship between this migration and the
+    # ones already present, so the changed file alone cannot show it.
+    _revisions, _heads, graph_findings = revision_graph(sorted(VERSIONS_DIR.glob("*.py")))
+    findings.extend(graph_findings)
     if not findings:
         print(f"migration preflight valid: {len(targets)} changed migration(s)")
         return 0

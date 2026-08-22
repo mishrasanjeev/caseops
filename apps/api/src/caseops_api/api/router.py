@@ -7,6 +7,7 @@ from caseops_api.api.routes import (
     authorities,
     billing,
     bootstrap,
+    bulk_imports,
     calendar,
     case_tracking,
     cause_lists,
@@ -49,6 +50,7 @@ api_router.include_router(meta.router, tags=["meta"])
 api_router.include_router(bootstrap.router, prefix="/bootstrap", tags=["bootstrap"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
+api_router.include_router(bulk_imports.router, prefix="/imports", tags=["bulk-imports"])
 api_router.include_router(companies.router, prefix="/companies", tags=["companies"])
 api_router.include_router(ip_operations.router, prefix="/ip", tags=["ip-operations"])
 api_router.include_router(matters.router, prefix="/matters", tags=["matters"])

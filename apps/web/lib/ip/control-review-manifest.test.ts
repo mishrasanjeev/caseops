@@ -52,6 +52,7 @@ const REVIEW: IpControlReview = {
     unprojected_calendar_count: 2,
     inactive_coverage_count: 1,
     total_cost_minor_by_currency: {},
+    withheld_cost_item_count: 0,
   },
   snapshot: {
     schema_version: 1,
@@ -73,6 +74,7 @@ const REVIEW: IpControlReview = {
       unprojected_calendar_count: 2,
       inactive_coverage_count: 1,
       total_cost_minor_by_currency: {},
+      withheld_cost_item_count: 0,
     },
     mandatory_exceptions: [
       { docket_id: "ip-9", kind: "uncovered", critical: true },

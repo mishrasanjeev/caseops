@@ -146,7 +146,7 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-ink-2)]">Updated</span>{" "}
-                9 August 2026
+                22 August 2026
               </span>
             </div>
           </Container>
@@ -204,7 +204,7 @@ export default function GuidePage() {
                     documents, notices, drafting, hearings, contracts, outside counsel,
                     billing, and the audit trail that ties them together. After sign in,
                     use the left navigation to open the Home dashboard, Today queue, matters,
-                    research, or the workspace administration surfaces your role permits.
+                    import activity, research, or the workspace administration surfaces your role permits.
                   </p>
                   <Steps
                     items={[
@@ -302,8 +302,16 @@ export default function GuidePage() {
                     <li>
                       <strong>Use Calendar for date work.</strong>{" "}
                       <a className="underline" href="/app/calendar">Calendar</a> combines
-                      visible hearings, tasks, and matter deadlines. Provider sync conflicts
-                      stay reviewable rather than overwriting manually protected dates.
+                      visible legal filing deadlines, internal targets, hearings/listings,
+                      renewals, and task dates with distinct labels. IP legal dates link back
+                      to their docket. Provider sync conflicts stay reviewable rather than
+                      overwriting manually protected dates.
+                    </li>
+                    <li>
+                      <strong>Inspect an IP deadline before relying on it.</strong> In the IP
+                      workspace, open calculation provenance to see the stored trigger, rule,
+                      working calendar, approved extension input, override, and predecessor
+                      chain. An extension application alone does not move the legal date.
                     </li>
                     <li>
                       <strong>Use Portfolio for the roll-up.</strong>{" "}
@@ -520,6 +528,35 @@ export default function GuidePage() {
                     coordinates, and pass bounded archive checks before parsing.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Import activity across the workspace
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/imports">Import activity</a>{" "}
+                    to review accessible trademark, matter, and employee import jobs in one
+                    status view. Filter by workflow, inspect the input manifest, download a
+                    normalized row-error report, or follow the row action back to the
+                    canonical import screen. The activity view is read-only: matter and
+                    employee history stays in its existing owner and is never copied or
+                    rewritten. Older employee jobs may show <strong>checksum not recorded</strong>{" "}
+                    because that legacy workflow did not persist one.
+                  </p>
+                  <p>
+                    Trademark files continue through{" "}
+                    <a className="underline" href="/app/ip/portfolio/imports">
+                      Trademark portfolio import
+                    </a>
+                    , matter files through{" "}
+                    <a className="underline" href="/app/matters/imports">
+                      Bulk upload matters
+                    </a>
+                    , and employee files through{" "}
+                    <a className="underline" href="/app/admin/employees">
+                      Admin → Employees
+                    </a>
+                    . Access to each history and its manifest/error report follows the same
+                    capability and tenant boundary as its canonical workflow.
+                  </p>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     The matter cockpit
                   </h3>
                   <p>
@@ -616,6 +653,42 @@ export default function GuidePage() {
                     stays in the document store and is served over a short-lived signed URL
                     when a user opens it.
                   </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Manual trademark applications
+                  </h3>
+                  <p>
+                    In <a className="underline" href="/app/ip">IP docket</a>, select{" "}
+                    <strong>New trademark</strong> to create the docket, trademark asset,
+                    application, class scope, representation, parties, and any application
+                    number as one controlled operation. A draft or pre-filing record does
+                    not require an application number. A filed record requires either a
+                    confirmed application number or an explicit registry-source statement
+                    that allocation is pending.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Application, registration, opposition, rectification, appeal, and
+                      court identifiers retain separate labels and legal owners. An
+                      opposition number is never displayed or stored as the trademark
+                      application number.
+                    </li>
+                    <li>
+                      Punctuation and spacing variants are normalized for matching while
+                      the source form remains visible. A possible duplicate is saved for
+                      review and cannot silently merge records or enter filed phase.
+                    </li>
+                    <li>
+                      Duplicate review shows the accessible candidates and blocking reasons
+                      before a decision. Confirming a separate filing or superseding a number
+                      requires a current preview and a written reason; supersession does not
+                      delete or merge either docket.
+                    </li>
+                    <li>
+                      Correcting a number creates a new identifier version. The prior source
+                      value, effective range, correction reason, and audit evidence remain in
+                      history.
+                    </li>
+                  </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     IP document workflow
                   </h3>
@@ -820,6 +893,14 @@ export default function GuidePage() {
                     cause-list entries linked to the matter. Open the next hearing and
                     press <strong>Compile pack</strong>. CaseOps stitches a pack in under a
                     minute, from the matter record and the authority corpus:
+                  </p>
+                  <p className="mt-3">
+                    In an IP docket, record an exact time, a named session, or
+                    <strong> time not published</strong>. CaseOps keeps date-based reminders
+                    active for an unpublished time and asks for the published time later;
+                    it never inserts a default hearing time. Rescheduling or confirming the
+                    time preserves the cancelled reminder generation and labels the current
+                    replacement, so the team can inspect what changed before relying on it.
                   </p>
                   <ul className="mt-3 list-disc space-y-2 pl-6 text-[15px]">
                     <li>

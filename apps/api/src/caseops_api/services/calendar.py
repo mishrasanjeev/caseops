@@ -21,10 +21,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    IpDeadline,
     Matter,
     MatterDeadline,
     MatterDeadlineStatus,
@@ -110,6 +111,7 @@ def _collect_hearings(
             CalendarEventRecord(
                 id=f"hearing:{hearing.id}",
                 kind="hearing",
+                display_type="hearing",
                 occurs_on=hearing.hearing_on,
                 title=display_title[:400],
                 matter_id=matter.id,
@@ -151,6 +153,7 @@ def _collect_tasks(
             CalendarEventRecord(
                 id=f"task:{task.id}",
                 kind="task",
+                display_type="task_date",
                 occurs_on=task.due_on,
                 title=task.title[:400],
                 matter_id=matter.id,
@@ -170,8 +173,18 @@ def _collect_deadlines(
     range_to: date,
 ) -> list[CalendarEventRecord]:
     rows = session.execute(
-        select(MatterDeadline, Matter)
+        select(MatterDeadline, Matter, IpDeadline.docket_id)
         .join(Matter, Matter.id == MatterDeadline.matter_id)
+        .outerjoin(
+            IpDeadline,
+            and_(
+                IpDeadline.id == MatterDeadline.source_ref_id,
+                IpDeadline.company_id == MatterDeadline.company_id,
+                MatterDeadline.source_ref_type.in_(
+                    ("ip_deadline", "ip_deadline_internal_target")
+                ),
+            ),
+        )
         .where(
             Matter.company_id == context.company.id,
             Matter.is_active.is_(True),
@@ -185,7 +198,7 @@ def _collect_deadlines(
         )
     ).all()
     out: list[CalendarEventRecord] = []
-    for deadline, matter in rows:
+    for deadline, matter, ip_docket_id in rows:
         # Deadlines carry source + kind metadata that's useful in the
         # detail line ("draft · filing", "contract · renewal").
         detail_parts = [p for p in (deadline.source, deadline.kind) if p]
@@ -193,16 +206,41 @@ def _collect_deadlines(
             CalendarEventRecord(
                 id=f"deadline:{deadline.id}",
                 kind="deadline",
+                display_type=_deadline_display_type(deadline.kind),
                 occurs_on=deadline.due_on,
                 title=deadline.title[:400],
                 matter_id=matter.id,
                 matter_title=matter.title,
                 matter_code=matter.matter_code,
                 status=deadline.status,
+                ip_docket_id=ip_docket_id,
                 detail=" · ".join(detail_parts) or None,
             )
         )
     return out
+
+
+def _deadline_display_type(kind: str) -> str:
+    """Map legacy deadline kinds to stable user-facing calendar semantics."""
+
+    normalized = kind.strip().lower()
+    if normalized == "internal_target":
+        return "internal_target"
+    if normalized in {"renewal", "renewal_due"}:
+        return "renewal"
+    if normalized in {"client_instruction", "client_instruction_date"}:
+        return "client_instruction"
+    if normalized == "reminder":
+        return "reminder"
+    if normalized in {
+        "legal_deadline",
+        "filing",
+        "filing_deadline",
+        "filing_due",
+        "reply_due",
+    }:
+        return "filing_deadline"
+    return "deadline"
 
 
 def render_events_as_ical(

@@ -56,12 +56,33 @@ async function bootstrap(api: APIRequestContext) {
 }
 
 async function signIn(page: Page, slug: string, email: string): Promise<void> {
-  await page.goto("/sign-in");
-  await page.locator("#company-slug").fill(slug);
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(PASSWORD);
-  await page.getByRole("button", { name: /^Sign in$/ }).click();
-  await page.waitForURL(/\/app(?:[/?]|$)/);
+  const login = await page.request.post(`${apiBaseUrl}/api/auth/login`, {
+    data: { company_slug: slug, email, password: PASSWORD },
+  });
+  expect(login.status(), await login.text()).toBe(200);
+  const session = (await login.json()) as {
+    access_token: string;
+    company: unknown;
+    user: unknown;
+    membership: unknown;
+    capabilities?: unknown;
+  };
+  await page.context().addCookies([{
+    name: "caseops_session",
+    value: session.access_token,
+    url: apiBaseUrl,
+    httpOnly: true,
+    secure: false,
+    sameSite: "Lax",
+  }]);
+  await page.addInitScript((context) => {
+    window.localStorage.setItem("caseops.session.context", JSON.stringify(context));
+  }, {
+    company: session.company,
+    user: session.user,
+    membership: session.membership,
+    capabilities: session.capabilities,
+  });
 }
 
 test("IPLF-025B schedules unknown-time reminders, exposes outcomes, and supersedes on 360px", async ({
@@ -167,6 +188,8 @@ test("IPLF-025B schedules unknown-time reminders, exposes outcomes, and supersed
   expect(listed.status(), await listed.text()).toBe(200);
   const initial = (await listed.json()).hearings[0];
   expect(initial.hearing_time).toBeNull();
+  expect(initial.time_confirmation_required).toBe(true);
+  expect(initial.current_schedule_generation).toBe(1);
   expect(initial.reminders).toHaveLength(4);
   expect(new Set(initial.reminders.map((row: { channel: string }) => row.channel))).toEqual(
     new Set(["email", "in_app"]),
@@ -203,6 +226,50 @@ test("IPLF-025B schedules unknown-time reminders, exposes outcomes, and supersed
         .map((row) => row.schedule_generation),
     ),
   ).toEqual(new Set([2]));
+
+  // IPLF-UJ-10-EXC-01/02: uncertainty remains explicit, and the user can
+  // inspect the immutable replacement chain before recording a published time.
+  await expect(page.getByText(/Time confirmation pending/)).toBeVisible();
+  await expect(page.getByText("Superseded by generation 2")).toBeVisible();
+  await expect(page.getByText("Current schedule")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+  ).toBeLessThanOrEqual(1);
+  const confirmTime = page.getByRole("button", { name: "Confirm published time" });
+  await expect(confirmTime).toBeDisabled();
+  await page.getByLabel("Published time for Hearing").fill("14:30");
+  const timeConfirmation = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api/ip/hearings/${initial.id}` &&
+      response.request().method() === "PATCH",
+  );
+  await confirmTime.click();
+  expect((await timeConfirmation).status()).toBe(200);
+
+  const afterTimeConfirmation = await api.get(
+    `${apiBaseUrl}/api/ip/hearings?docket_id=${docketId}`,
+    { headers },
+  );
+  expect(afterTimeConfirmation.status(), await afterTimeConfirmation.text()).toBe(200);
+  const confirmed = (await afterTimeConfirmation.json()).hearings[0];
+  expect(confirmed.time_status).toBe("exact");
+  expect(confirmed.hearing_time).toBe("14:30:00");
+  expect(confirmed.time_confirmation_required).toBe(false);
+  expect(confirmed.current_schedule_generation).toBe(3);
+  expect(
+    confirmed.reminders.filter(
+      (row: { schedule_generation: number; is_superseded: boolean }) =>
+        row.schedule_generation < 3 && row.is_superseded,
+    ),
+  ).toHaveLength(8);
+  expect(
+    confirmed.reminders.filter(
+      (row: { schedule_generation: number; status: string }) =>
+        row.schedule_generation === 3 && row.status === "queued",
+    ),
+  ).toHaveLength(4);
 
   await api.dispose();
 });

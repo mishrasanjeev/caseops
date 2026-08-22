@@ -1247,6 +1247,16 @@ function ControlReviewCard({
       toast.error(apiErrorMessage(error, "Could not sign off this review.")),
   });
 
+  // Every review write uses an optimistic-lock version. Keep actions serial so
+  // a fast follow-up cannot submit the stale version while another audit write
+  // (notably the export record) is still completing.
+  const reviewWritePending =
+    generate.isPending ||
+    decideException.isPending ||
+    recordSample.isPending ||
+    exportManifest.isPending ||
+    sign.isPending;
+
   const blockedBy = !review
     ? null
     : review.completeness_status !== "complete"
@@ -1393,6 +1403,7 @@ function ControlReviewCard({
                         <Button
                           size="sm"
                           variant="secondary"
+                          disabled={reviewWritePending}
                           onClick={() =>
                             setDecisionKey(
                               `${exception.docket_id}:${exception.kind}`,
@@ -1459,7 +1470,7 @@ function ControlReviewCard({
                         disabled={
                           decisionAnnotation.trim().length < 5 ||
                           decisionEvidence.trim().length < 3 ||
-                          decideException.isPending
+                          reviewWritePending
                         }
                         onClick={() => decideException.mutate()}
                       >
@@ -1468,6 +1479,7 @@ function ControlReviewCard({
                       <Button
                         size="sm"
                         variant="ghost"
+                        disabled={reviewWritePending}
                         onClick={() => setDecisionKey("")}
                       >
                         Cancel
@@ -1593,7 +1605,7 @@ function ControlReviewCard({
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={!sampleComplete || recordSample.isPending}
+                        disabled={!sampleComplete || reviewWritePending}
                         onClick={() => recordSample.mutate()}
                       >
                         Record sample
@@ -1616,7 +1628,7 @@ function ControlReviewCard({
                       <Button
                         size="sm"
                         disabled={
-                          attestation.trim().length < 5 || sign.isPending
+                          attestation.trim().length < 5 || reviewWritePending
                         }
                         onClick={() => sign.mutate()}
                       >
@@ -1637,7 +1649,7 @@ function ControlReviewCard({
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={exportManifest.isPending}
+                  disabled={reviewWritePending}
                   onClick={() => exportManifest.mutate()}
                   data-testid="ip-docket-review-export"
                 >
@@ -1657,7 +1669,7 @@ function ControlReviewCard({
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={generate.isPending}
+                disabled={reviewWritePending}
                 onClick={() => generate.mutate()}
               >
                 Regenerate

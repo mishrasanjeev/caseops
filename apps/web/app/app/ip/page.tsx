@@ -4,11 +4,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BadgeIndianRupee,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
   FileCheck2,
   Plus,
   Scale,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,9 +40,10 @@ import {
   completeIpLegalDeadline,
   completeIpRelatedRightObligation,
   confirmIpLegalDeadline,
-  createIpDocket,
   createIpDeadlineIncident,
+  createManualTrademarkApplication,
   createIpSharedHearing,
+  correctIpIdentifier,
   decideIpCoverageTransfer,
   decideIpDeadlineIncidentNotification,
   discoverIpEvidence,
@@ -46,6 +51,7 @@ import {
   fetchIpCoreRecords,
   fetchIpCoverageTransfersAwaitingMe,
   fetchIpDeadlineImpact,
+  fetchIpDeadlineDependencies,
   fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
   fetchIpDockets,
@@ -54,6 +60,7 @@ import {
   fetchIpWorkspaceReadiness,
   listCalendarConnections,
   previewIpDocketEvent,
+  previewIpIdentifierDuplicates,
   previewIpDocketLifecycle,
   proposeIpDeadlineRule,
   proposeIpLegalDeadline,
@@ -62,6 +69,7 @@ import {
   recordIpDeadlineIncidentAction,
   recordIpDeadlineIncidentImpact,
   reconcileIpCosts,
+  resolveIpIdentifierDuplicate,
   reviewIpEvidenceCandidate,
   releaseIpIncidentKillSwitch,
   resolveIpDeadlineIncident,
@@ -72,25 +80,43 @@ import {
   transitionIpDocketLifecycle,
   transitionIpDeadlineRule,
   overrideIpLegalDeadline,
+  type IpCoreRecords,
   type IpDocket,
   type IpDeadlineIncident,
+  type IpDeadlineRuleVersion,
   type IpLegalDeadline,
   type IpSharedHearing,
   type IpResponsibilityAssignmentInput,
   type IpDocketEventInput,
   type IpEvidenceCandidate,
   type IpFeatureReadiness,
+  type IpIdentifier,
   type IpWorkspaceConfigurationStatus,
   type IpWorkspaceTestResult,
+  type IpWorkingCalendarVersion,
   updateIpSharedHearing,
+  updateTrademarkApplicationPhase,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
+const FORM_SELECT_CLASS =
+  "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
+
+function verifiedHttpSource(reference: string | null | undefined): string | null {
+  if (!reference) return null;
+  try {
+    const parsed = new URL(reference);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? reference : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function IpDocketPage() {
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
@@ -103,7 +129,9 @@ export default function IpDocketPage() {
   const canConfigure = useCapability("ip:taxonomy_admin");
   const canManageAccess = useCapability("matter_access:manage");
   const session = useSession();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    searchParams.get("docket"),
+  );
   const [showCreate, setShowCreate] = useState(false);
 
   const readiness = useQuery({
@@ -855,55 +883,321 @@ function IpAutomationReadiness({ features }: { features: IpFeatureReadiness[] })
 
 function CreateTrademarkCard({ onCreated }: { onCreated: (docket: IpDocket) => void }) {
   const [title, setTitle] = useState("");
-  const [identifier, setIdentifier] = useState("");
   const [markText, setMarkText] = useState("");
   const [classNumber, setClassNumber] = useState("9");
   const [specification, setSpecification] = useState("");
   const [applicant, setApplicant] = useState("");
   const [evidence, setEvidence] = useState("");
+  const [matterId, setMatterId] = useState("");
+  const [restricted, setRestricted] = useState(false);
+  const [jurisdiction, setJurisdiction] = useState("IN");
+  const [office, setOffice] = useState("IP India");
+  const [filingPhase, setFilingPhase] = useState<"draft" | "pre_filing" | "filed">(
+    "pre_filing",
+  );
+  const [applicationNumber, setApplicationNumber] = useState("");
+  const [numberSource, setNumberSource] = useState("manual");
+  const [numberEffectiveFrom, setNumberEffectiveFrom] = useState(TODAY);
+  const [pendingAllocation, setPendingAllocation] = useState(false);
   const mutation = useMutation({
     mutationFn: () =>
-      createIpDocket({
+      createManualTrademarkApplication({
         title,
-        primaryIdentifier: identifier || null,
+        matterId: matterId.trim() || null,
+        restricted,
+        assetTitle: markText,
+        jurisdiction,
+        office,
+        filingPhase,
+        sourcePendingIdentifierAllocation:
+          filingPhase === "filed" && !applicationNumber.trim() && pendingAllocation,
+        applicationNumber: applicationNumber.trim() || null,
+        identifierSource: numberSource,
+        identifierEffectiveFrom: numberEffectiveFrom,
         markText,
         classNumber: Number(classNumber),
         specification,
         applicantName: applicant,
         evidenceReference: evidence,
       }),
-    onSuccess: (row) => {
-      toast.success("Trademark docket created and readiness-validated.");
-      onCreated(row);
+    onSuccess: (result) => {
+      toast.success(
+        result.duplicate_candidates.length
+          ? "Draft created. Review the possible duplicate before marking it filed."
+          : "Trademark application created with its canonical identity records.",
+      );
+      onCreated(result.docket);
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not create IP docket.")),
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not create the trademark application.")),
   });
+  const filedAllocationValid =
+    filingPhase !== "filed" || Boolean(applicationNumber.trim()) || pendingAllocation;
   const valid =
     title.trim().length >= 2 &&
     markText.trim().length >= 1 &&
+    jurisdiction.trim().length >= 2 &&
+    office.trim().length >= 2 &&
     specification.trim().length >= 3 &&
     applicant.trim().length >= 2 &&
-    evidence.trim().length >= 3;
+    evidence.trim().length >= 3 &&
+    filedAllocationValid;
 
   return (
     <Card>
-      <CardHeader><CardTitle as="h2">New trademark particulars</CardTitle></CardHeader>
+      <CardHeader><CardTitle as="h2">New trademark application</CardTitle></CardHeader>
       <CardContent>
         <form
           className="grid min-w-0 gap-4 md:grid-cols-2"
           onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}
         >
           <Field label="Docket title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          <Field label="Application / client reference"><Input value={identifier} onChange={(e) => setIdentifier(e.target.value)} /></Field>
+          <Field label="Matter ID (optional)"><Input value={matterId} onChange={(e) => setMatterId(e.target.value)} /></Field>
           <Field label="Word mark"><Input value={markText} onChange={(e) => setMarkText(e.target.value)} /></Field>
           <Field label="Nice class"><Input type="number" min={1} max={45} value={classNumber} onChange={(e) => setClassNumber(e.target.value)} /></Field>
           <Field label="Goods / services specification"><Input value={specification} onChange={(e) => setSpecification(e.target.value)} /></Field>
           <Field label="Applicant"><Input value={applicant} onChange={(e) => setApplicant(e.target.value)} /></Field>
           <Field label="Representation evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="attachment:… or drive:…" /></Field>
-          <div className="flex items-end"><Button type="submit" disabled={!valid || mutation.isPending}>Validate and create</Button></div>
+          <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value.toUpperCase())} /></Field>
+          <Field label="Registry office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
+          <Field label="Filing phase">
+            <select className={FORM_SELECT_CLASS} value={filingPhase} onChange={(event) => setFilingPhase(event.target.value as typeof filingPhase)}>
+              <option value="draft">Draft</option>
+              <option value="pre_filing">Pre-filing</option>
+              <option value="filed">Filed</option>
+            </select>
+          </Field>
+          <Field label="Application number (optional before filing)"><Input value={applicationNumber} onChange={(event) => { setApplicationNumber(event.target.value); if (event.target.value) setPendingAllocation(false); }} /></Field>
+          {applicationNumber ? (
+            <>
+              <Field label="Number source"><Input value={numberSource} onChange={(event) => setNumberSource(event.target.value)} /></Field>
+              <Field label="Effective from"><Input type="date" value={numberEffectiveFrom} onChange={(event) => setNumberEffectiveFrom(event.target.value)} /></Field>
+            </>
+          ) : null}
+          {filingPhase === "filed" && !applicationNumber ? (
+            <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
+              <input type="checkbox" className="mt-1" checked={pendingAllocation} onChange={(event) => setPendingAllocation(event.target.checked)} />
+              Registry source confirms the application number is still pending allocation
+            </label>
+          ) : null}
+          <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
+            <input type="checkbox" className="mt-1" checked={restricted} onChange={(event) => setRestricted(event.target.checked)} />
+            Restrict this pre-engagement record to explicitly granted members
+          </label>
+          <div className="flex items-end md:col-span-2"><Button type="submit" disabled={!valid || mutation.isPending}>Create application</Button></div>
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+const IDENTIFIER_LABEL: Record<IpIdentifier["identifier_kind"], string> = {
+  application: "Application no.",
+  registration: "Registration no.",
+  opposition: "Opposition no.",
+  rectification: "Rectification no.",
+  appeal: "Appeal no.",
+  court: "Court reference",
+};
+
+function IdentityCard({ docket, enabled }: { docket: IpDocket; enabled: boolean }) {
+  const queryClient = useQueryClient();
+  const core = useQuery({
+    queryKey: ["ip", "core-records", docket.id],
+    queryFn: () => fetchIpCoreRecords(docket.id),
+  });
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["ip", "core-records", docket.id] });
+
+  return (
+    <Card className="min-w-0 xl:col-span-2" data-testid="ip-identity-workspace">
+      <CardHeader><CardTitle as="h3">Application identity and duplicate review</CardTitle></CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
+        {core.isPending ? <Skeleton className="h-24 w-full" /> : null}
+        {core.isError ? <QueryErrorState error={core.error} title="Could not load application identity" onRetry={() => core.refetch()} /> : null}
+        {core.data?.applications.map((application) => (
+          <ApplicationPhaseControl
+            key={application.id}
+            application={application}
+            identifiers={core.data.identifiers}
+            enabled={enabled}
+            onChanged={refresh}
+          />
+        ))}
+        {core.data && core.data.identifiers.length === 0 ? (
+          <p className="text-sm text-[var(--color-mute)]">No registry identifier has been allocated yet.</p>
+        ) : null}
+        {core.data?.identifiers.map((identifier) => (
+          <IdentifierControl
+            key={identifier.id}
+            docket={docket}
+            identifier={identifier}
+            enabled={enabled}
+            onChanged={refresh}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ApplicationPhaseControl({ application, identifiers, enabled, onChanged }: {
+  application: IpCoreRecords["applications"][number];
+  identifiers: IpIdentifier[];
+  enabled: boolean;
+  onChanged: () => Promise<unknown>;
+}) {
+  const [phase, setPhase] = useState<"draft" | "pre_filing" | "filed">(
+    application.filing_phase as "draft" | "pre_filing" | "filed",
+  );
+  const [pendingAllocation, setPendingAllocation] = useState(
+    application.source_pending_identifier_allocation,
+  );
+  const confirmedApplicationNumber = identifiers.some(
+    (row) =>
+      row.application_id === application.id &&
+      row.identifier_kind === "application" &&
+      row.reconciliation_status === "confirmed" &&
+      row.effective_until === null,
+  );
+  const mutation = useMutation({
+    mutationFn: () => updateTrademarkApplicationPhase({
+      applicationId: application.id,
+      expectedVersion: application.version,
+      filingPhase: phase,
+      sourcePendingIdentifierAllocation: phase === "filed" && !confirmedApplicationNumber && pendingAllocation,
+    }),
+    onSuccess: async () => { toast.success("Application filing phase updated."); await onChanged(); },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not update the filing phase.")),
+  });
+  const canApply =
+    enabled &&
+    phase !== application.filing_phase &&
+    (phase !== "filed" || confirmedApplicationNumber || pendingAllocation);
+
+  return (
+    <div className="grid min-w-0 gap-3 border-b border-[var(--color-line)] pb-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+      <div className="min-w-0 text-sm">
+        <div className="font-semibold">Trademark application</div>
+        <div className="text-xs text-[var(--color-mute)]">{application.office} · {application.jurisdiction} · v{application.version}</div>
+      </div>
+      <Field label="Filing phase">
+        <select className={FORM_SELECT_CLASS} value={phase} disabled={!enabled} onChange={(event) => setPhase(event.target.value as typeof phase)}>
+          <option value="draft">Draft</option>
+          <option value="pre_filing">Pre-filing</option>
+          <option value="filed">Filed</option>
+        </select>
+      </Field>
+      <Button size="sm" disabled={!canApply || mutation.isPending} onClick={() => mutation.mutate()}>Update phase</Button>
+      {phase === "filed" && !confirmedApplicationNumber ? (
+        <label className="flex min-w-0 items-start gap-2 text-xs md:col-span-3">
+          <input type="checkbox" checked={pendingAllocation} onChange={(event) => setPendingAllocation(event.target.checked)} />
+          Registry source confirms the number is pending allocation
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function IdentifierControl({ docket, identifier, enabled, onChanged }: {
+  docket: IpDocket;
+  identifier: IpIdentifier;
+  enabled: boolean;
+  onChanged: () => Promise<unknown>;
+}) {
+  const [reason, setReason] = useState("");
+  const [candidateId, setCandidateId] = useState("");
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctedValue, setCorrectedValue] = useState(identifier.raw_value);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const preview = useQuery({
+    queryKey: ["ip", "identifier-duplicates", docket.id, identifier.id],
+    queryFn: () => previewIpIdentifierDuplicates(docket.id, identifier.id),
+    enabled: identifier.reconciliation_status === "needs_review",
+  });
+  useEffect(() => {
+    if (!candidateId && preview.data?.candidates[0]) {
+      setCandidateId(preview.data.candidates[0].identifier_id);
+    }
+  }, [candidateId, preview.data]);
+  const resolve = useMutation({
+    mutationFn: (decision: "distinct" | "supersede") => resolveIpIdentifierDuplicate({
+      docketId: docket.id,
+      identifierId: identifier.id,
+      decision,
+      decisionToken: preview.data!.decision_token,
+      reason,
+      supersededByIdentifierId: decision === "supersede" ? candidateId : null,
+    }),
+    onSuccess: async (_result, decision) => {
+      toast.success(decision === "distinct" ? "Identifier confirmed as a separate filing." : "Identifier superseded; both dockets and their evidence remain intact.");
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not resolve the duplicate.")),
+  });
+  const correct = useMutation({
+    mutationFn: () => correctIpIdentifier({
+      docketId: docket.id,
+      identifier,
+      rawValue: correctedValue,
+      reason: correctionReason,
+      effectiveFrom: TODAY,
+    }),
+    onSuccess: async (result) => {
+      toast.success(result.duplicate_candidates.length ? "Correction saved and flagged for duplicate review." : "Correction saved with the prior value retained in history.");
+      setShowCorrection(false);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not correct the identifier.")),
+  });
+
+  return (
+    <div className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-semibold">{IDENTIFIER_LABEL[identifier.identifier_kind]}</div>
+          <div className="break-all font-mono tabular-nums">{identifier.raw_value}</div>
+          <div className="mt-1 text-xs text-[var(--color-mute)]">{identifier.office} · {identifier.jurisdiction} · source {identifier.source}</div>
+        </div>
+        <Badge tone={identifier.reconciliation_status === "confirmed" ? "success" : "warning"}>{identifier.reconciliation_status.replaceAll("_", " ")}</Badge>
+      </div>
+      {identifier.effective_until ? <p className="mt-2 text-xs text-[var(--color-mute)]">Historical value through {identifier.effective_until}</p> : null}
+      {identifier.correction_reason ? <p className="mt-2 text-xs text-[var(--color-mute)]">Correction reason: {identifier.correction_reason}</p> : null}
+
+      {identifier.reconciliation_status === "needs_review" ? (
+        <div className="mt-3 flex min-w-0 flex-col gap-3 border-t border-[var(--color-line)] pt-3">
+          {preview.isPending ? <Skeleton className="h-16 w-full" /> : null}
+          {preview.isError ? <QueryErrorState error={preview.error} title="Could not preview duplicate candidates" onRetry={() => preview.refetch()} /> : null}
+          {preview.data ? (
+            <>
+              <p className="text-xs text-[var(--color-mute)]">This preview changes nothing. Superseding retires this number only; it does not merge or delete either docket.</p>
+              {preview.data.blocking_reasons.length ? <p className="text-xs text-red-700">Automatic supersession blocked: {preview.data.blocking_reasons.join(", ").replaceAll("_", " ")}</p> : null}
+              {preview.data.candidates.map((candidate) => (
+                <label key={candidate.identifier_id} className="flex min-w-0 items-start gap-2 rounded-md bg-[var(--color-bg-2)] p-2">
+                  <input type="radio" name={`candidate-${identifier.id}`} checked={candidateId === candidate.identifier_id} onChange={() => setCandidateId(candidate.identifier_id)} />
+                  <span className="min-w-0"><strong className="break-words">{candidate.docket_title}</strong><span className="block break-all font-mono text-xs">{candidate.raw_value}</span></span>
+                </label>
+              ))}
+              <Field label="Decision reason"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {preview.data.allowed_decisions.includes("distinct") ? <Button size="sm" className="w-full sm:w-auto" disabled={!enabled || reason.trim().length < 5 || resolve.isPending} onClick={() => resolve.mutate("distinct")}>Confirm separate filing</Button> : null}
+                {preview.data.allowed_decisions.includes("supersede") ? <Button size="sm" variant="secondary" className="w-full sm:w-auto" disabled={!enabled || !candidateId || reason.trim().length < 5 || resolve.isPending} onClick={() => resolve.mutate("supersede")}>Supersede this number</Button> : null}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : enabled && !identifier.effective_until ? (
+        <div className="mt-3">
+          {showCorrection ? (
+            <form className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); correct.mutate(); }}>
+              <Field label={`Corrected ${IDENTIFIER_LABEL[identifier.identifier_kind].toLowerCase()}`}><Input value={correctedValue} onChange={(event) => setCorrectedValue(event.target.value)} /></Field>
+              <Field label="Correction reason"><Textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></Field>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row md:col-span-2"><Button size="sm" type="submit" disabled={correctedValue.trim() === identifier.raw_value || correctionReason.trim().length < 5 || correct.isPending}>Save correction</Button><Button size="sm" type="button" variant="ghost" onClick={() => setShowCorrection(false)}>Cancel</Button></div>
+            </form>
+          ) : <Button size="sm" variant="ghost" onClick={() => setShowCorrection(true)}>Correct identifier</Button>}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -952,6 +1246,7 @@ function DocketWorkspace({
       </Card>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <IdentityCard docket={docket} enabled={canWrite} />
         {canManageAccess ? (
           <IpAccessWorkspace docket={docket} onChanged={onChanged} />
         ) : null}
@@ -1037,6 +1332,7 @@ function HearingWorkflowCard({
   const [inAppReminder, setInAppReminder] = useState(true);
   const [previewing, setPreviewing] = useState(false);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const [confirmationTimes, setConfirmationTimes] = useState<Record<string, string>>({});
   const offsetValues = offsets
     .split(",")
     .map((value) => Number(value.trim()))
@@ -1081,9 +1377,17 @@ function HearingWorkflowCard({
     mutationFn: (input: {
       hearingId: string;
       hearingOn?: string;
+      timeStatus?: "exact" | "session" | "time_not_published";
+      hearingTime?: string | null;
+      sessionLabel?: string | null;
       status?: "scheduled" | "completed" | "adjourned" | "cancelled";
     }) => updateIpSharedHearing({ docketId: docket.id, ...input }),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
+      setConfirmationTimes((current) => {
+        const next = { ...current };
+        delete next[variables.hearingId];
+        return next;
+      });
       toast.success("Hearing updated; dependent reminders were superseded.");
       await refresh();
     },
@@ -1173,25 +1477,80 @@ function HearingWorkflowCard({
         {hearings.isError ? <p className="break-words text-sm text-red-700">{apiErrorMessage(hearings.error, "Hearings could not be loaded.")}</p> : null}
         <div className="flex min-w-0 flex-col gap-3">
           {(hearings.data?.hearings ?? []).map((hearing: IpSharedHearing) => {
-            const activeReminders = hearing.reminders.filter((row) => row.status !== "cancelled");
+            const reminderGenerations = [...new Set(
+              hearing.reminders.map((row) => row.schedule_generation),
+            )].sort((left, right) => right - left);
             return (
-              <article key={hearing.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3">
+              <article key={hearing.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <h4 className="break-words font-semibold">{hearing.purpose}</h4>
                     <p className="break-words text-xs text-[var(--color-mute)]">{hearing.hearing_on} · {hearing.time_status === "exact" ? hearing.hearing_time : hearing.session_label ?? "Time not published"} · {hearing.timezone} · {hearing.forum_name} · {hearing.hearing_mode}</p>
+                    {hearing.time_confirmation_required ? (
+                      <p className="mt-1 text-xs font-semibold text-amber-800">Time confirmation pending. Date-based reminders remain active.</p>
+                    ) : null}
                   </div>
                   <span className="text-sm font-semibold">{hearing.status}</span>
                 </div>
-                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label={`Reminder delivery for ${hearing.purpose}`}>
-                  {activeReminders.map((reminder) => (
-                    <div key={reminder.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-2 text-xs">
-                      <strong>{reminder.channel}</strong> · {reminder.status}
-                      <div className="break-words text-[var(--color-mute)]">{new Date(reminder.scheduled_for).toLocaleString()} · attempts {reminder.attempts}{reminder.last_error ? ` · ${reminder.last_error}` : ""}</div>
-                    </div>
-                  ))}
+                <div className="mt-3 min-w-0 space-y-3" aria-label={`Reminder delivery for ${hearing.purpose}`}>
+                  {reminderGenerations.map((generation) => {
+                    const generationRows = hearing.reminders.filter(
+                      (row) => row.schedule_generation === generation,
+                    );
+                    const replacementGeneration = generationRows.find(
+                      (row) => row.replacement_generation !== null,
+                    )?.replacement_generation;
+                    return (
+                      <section key={generation} aria-label={`Reminder generation ${generation}`}>
+                        <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2 text-xs font-semibold">
+                          <span>Reminder generation {generation}</span>
+                          {replacementGeneration ? (
+                            <span className="text-[var(--color-mute)]">Superseded by generation {replacementGeneration}</span>
+                          ) : generation === hearing.current_schedule_generation ? (
+                            <span className="text-emerald-700">Current schedule</span>
+                          ) : null}
+                        </div>
+                        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          {generationRows.map((reminder) => (
+                            <div key={reminder.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-2 text-xs">
+                              <strong>{reminder.channel}</strong> · {reminder.status}
+                              <div className="break-words text-[var(--color-mute)]">{new Date(reminder.scheduled_for).toLocaleString()} · attempts {reminder.attempts}{reminder.last_error ? ` · ${reminder.last_error}` : ""}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
                 </div>
                 <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  {hearing.time_confirmation_required ? (
+                    <>
+                      <Input
+                        aria-label={`Published time for ${hearing.purpose}`}
+                        className="w-full sm:w-auto"
+                        type="time"
+                        value={confirmationTimes[hearing.id] ?? ""}
+                        onChange={(event) => setConfirmationTimes((current) => ({
+                          ...current,
+                          [hearing.id]: event.target.value,
+                        }))}
+                      />
+                      <Button
+                        className="w-full sm:w-auto"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!confirmationTimes[hearing.id] || update.isPending}
+                        onClick={() => update.mutate({
+                          hearingId: hearing.id,
+                          timeStatus: "exact",
+                          hearingTime: confirmationTimes[hearing.id],
+                          sessionLabel: null,
+                        })}
+                      >
+                        Confirm published time
+                      </Button>
+                    </>
+                  ) : null}
                   <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full sm:w-auto" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, hearingOn: rescheduleDates[hearing.id] ?? hearing.hearing_on })}>Reschedule</Button>
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, status: "cancelled" })}>Cancel hearing</Button>
@@ -1204,6 +1563,112 @@ function HearingWorkflowCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DeadlineProvenance({
+  deadline,
+  rule,
+  calendar,
+}: {
+  deadline: IpLegalDeadline;
+  rule: IpDeadlineRuleVersion | undefined;
+  calendar: IpWorkingCalendarVersion | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const dependencies = useQuery({
+    queryKey: ["ip", "deadline-dependencies", deadline.id],
+    queryFn: () => fetchIpDeadlineDependencies(deadline.id),
+    enabled: open,
+  });
+  const ruleSource = verifiedHttpSource(rule?.source_reference);
+  const calendarSource = verifiedHttpSource(calendar?.source_reference);
+
+  return (
+    <div className="mt-2 min-w-0 text-xs">
+      <div className="flex min-w-0 flex-col gap-1 text-[var(--color-mute)] sm:flex-row sm:flex-wrap">
+        <span className="break-words">Governing rule: {deadline.rule_citation}</span>
+        {ruleSource ? (
+          <a
+            className="inline-flex min-w-0 items-center gap-1 break-all font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+            href={ruleSource}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open verified rule source
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+          </a>
+        ) : (
+          <span className="break-words">Source reference: {rule?.source_reference ?? "Unavailable"}</span>
+        )}
+        {calendarSource ? (
+          <a
+            className="inline-flex min-w-0 items-center gap-1 break-all font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+            href={calendarSource}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open verified calendar source
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+          </a>
+        ) : null}
+      </div>
+      <Button
+        className="mt-2 w-full sm:w-auto"
+        type="button"
+        size="sm"
+        variant="secondary"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
+        {open ? "Hide calculation provenance" : "View calculation provenance"}
+      </Button>
+      {open ? (
+        <div
+          className="mt-2 min-w-0 border-l-2 border-[var(--color-line)] pl-3"
+          data-testid={`ip-deadline-provenance-${deadline.id}`}
+        >
+          {dependencies.isPending ? <p>Loading stored calculation evidence…</p> : null}
+          {dependencies.isError ? (
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+              <p className="min-w-0 flex-1 break-words text-red-700">
+                {apiErrorMessage(dependencies.error, "Calculation provenance could not be loaded.")}
+              </p>
+              <Button size="sm" type="button" onClick={() => dependencies.refetch()}>
+                Retry provenance
+              </Button>
+            </div>
+          ) : null}
+          {dependencies.data ? (
+            <>
+              <p className="break-words text-[var(--color-mute)]">
+                Stored by {dependencies.data.engine_version} from source version {dependencies.data.source_version}.
+              </p>
+              <ul className="mt-2 flex min-w-0 flex-col gap-2" aria-label="Deadline calculation inputs">
+                {dependencies.data.nodes.map((node, index) => (
+                  <li key={`${node.kind}-${node.reference_id ?? index}`} className="min-w-0">
+                    <span className="font-semibold">{node.label}</span>
+                    {node.detail ? <span className="break-words"> · {node.detail}</span> : null}
+                    {!node.available ? <span className="font-semibold text-red-700"> · unavailable</span> : null}
+                  </li>
+                ))}
+              </ul>
+              {!dependencies.data.nodes.some((node) => node.kind === "extension") ? (
+                <p className="mt-2 break-words text-[var(--color-mute)]">
+                  No approved extension is included in this calculation. An extension application alone does not move the legal date.
+                </p>
+              ) : null}
+              {dependencies.data.unavailable_inputs.length ? (
+                <p className="mt-2 break-words font-semibold text-red-700">
+                  Incomplete provenance: {dependencies.data.unavailable_inputs.join(", ")}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1306,6 +1771,8 @@ function DeadlineWorkspaceCard({
 
   const confirm = useMutation({
     mutationFn: async (deadline: IpLegalDeadline) => {
+      const requiresSourcedCorrection =
+        deadline.result_on === null || deadline.certainty === "conflicting";
       let impactToken: string | null = null;
       if (deadline.supersedes_deadline_id) {
         impactToken = (
@@ -1319,11 +1786,11 @@ function DeadlineWorkspaceCard({
         internalTargetOn: internalTargetOn || null,
         reminderOffsetsDays: [30, 14, 7, 1, 0],
         correctedResultOn:
-          deadline.result_on === null && actionDate ? actionDate : null,
+          requiresSourcedCorrection && actionDate ? actionDate : null,
         correctionReason:
-          deadline.result_on === null ? actionReason || null : null,
+          requiresSourcedCorrection ? actionReason || null : null,
         correctionEvidenceReference:
-          deadline.result_on === null ? evidenceReference || null : null,
+          requiresSourcedCorrection ? evidenceReference || null : null,
         impactToken,
       });
     },
@@ -1366,6 +1833,8 @@ function DeadlineWorkspaceCard({
       }),
     ...mutationOptions,
   });
+  const deadlineActionPending =
+    confirm.isPending || recalculate.isPending || override.isPending || complete.isPending;
 
   return (
     <Card className="min-w-0 xl:col-span-2" data-testid="ip-deadline-workspace">
@@ -1477,7 +1946,8 @@ function DeadlineWorkspaceCard({
                   !title.trim() ||
                   !selectedRuleId ||
                   !selectedCalendarId ||
-                  proposal.isPending
+                  proposal.isPending ||
+                  deadlineActionPending
                 }
               >
                 Calculate deadline proposal
@@ -1539,12 +2009,19 @@ function DeadlineWorkspaceCard({
         ) : null}
 
         <div className="flex min-w-0 flex-col gap-3">
-          {workspace.data?.deadlines.map((deadline) => (
-            <div
-              key={deadline.id}
-              className="min-w-0 rounded-lg border border-[var(--color-line)] p-3"
-              data-testid={`ip-legal-deadline-${deadline.id}`}
-            >
+          {workspace.data?.deadlines.map((deadline) => {
+            const governingRule = workspace.data.rules.find(
+              (row) => row.id === deadline.rule_version_id,
+            );
+            const governingCalendar = workspace.data.calendars.find(
+              (row) => row.id === deadline.calendar_version_id,
+            );
+            return (
+              <div
+                key={deadline.id}
+                className="min-w-0 rounded-lg border border-[var(--color-line)] p-3"
+                data-testid={`ip-legal-deadline-${deadline.id}`}
+              >
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="break-words font-semibold">{deadline.title}</div>
@@ -1554,9 +2031,28 @@ function DeadlineWorkspaceCard({
                   <div className="mt-2 break-words text-xs text-[var(--color-mute)]">
                     {deadline.explanation}
                   </div>
-                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                    Governing source: {deadline.rule_citation}
-                  </div>
+                  <DeadlineProvenance
+                    deadline={deadline}
+                    rule={governingRule}
+                    calendar={governingCalendar}
+                  />
+                  {deadline.certainty === "conflicting" ? (
+                    <div
+                      className="mt-2 min-w-0 border-l-2 border-amber-400 pl-3 text-xs"
+                      data-testid={`ip-deadline-rule-conflict-${deadline.id}`}
+                    >
+                      <p className="font-semibold text-amber-900">
+                        Conflicting source evidence blocks confirmation until a sourced correction is recorded.
+                      </p>
+                      <ul className="mt-1 flex min-w-0 flex-col gap-1">
+                        {workspace.data.rules.map((row) => (
+                          <li key={row.id} className="break-words">
+                            {row.key} v{row.version} · {row.status} · {row.source_reference}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
                 {deadline.is_critical ? (
                   <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">
@@ -1573,9 +2069,9 @@ function DeadlineWorkspaceCard({
                       disabled={
                         !primaryId.trim() ||
                         (deadline.is_critical && !backupId.trim()) ||
-                        (deadline.result_on === null &&
+                        ((deadline.result_on === null || deadline.certainty === "conflicting") &&
                           (!actionDate || !actionReason.trim() || !evidenceReference.trim())) ||
-                        confirm.isPending
+                        deadlineActionPending
                       }
                       onClick={() => confirm.mutate(deadline)}
                     >
@@ -1589,7 +2085,7 @@ function DeadlineWorkspaceCard({
                         size="sm"
                         variant="secondary"
                         disabled={
-                          !baseDate || !actionReason.trim() || !evidenceReference.trim() || recalculate.isPending
+                          !baseDate || !actionReason.trim() || !evidenceReference.trim() || deadlineActionPending
                         }
                         onClick={() => recalculate.mutate(deadline)}
                       >
@@ -1603,7 +2099,7 @@ function DeadlineWorkspaceCard({
                           !actionDate ||
                           !actionReason.trim() ||
                           !evidenceReference.trim() ||
-                          override.isPending
+                          deadlineActionPending
                         }
                         onClick={() => override.mutate(deadline)}
                       >
@@ -1613,7 +2109,7 @@ function DeadlineWorkspaceCard({
                         className="w-full sm:w-auto"
                         size="sm"
                         disabled={
-                          !evidenceReference.trim() || !attestation.trim() || complete.isPending
+                          !evidenceReference.trim() || !attestation.trim() || deadlineActionPending
                         }
                         onClick={() => complete.mutate(deadline)}
                       >
@@ -1623,8 +2119,9 @@ function DeadlineWorkspaceCard({
                   ) : null}
                 </div>
               ) : null}
-            </div>
-          ))}
+              </div>
+            );
+          })}
           {workspace.data && workspace.data.deadlines.length === 0 ? (
             <p className="text-sm text-[var(--color-mute)]">No legal deadline proposals yet.</p>
           ) : null}
@@ -1917,12 +2414,49 @@ function ProsecutionCard({
     queryKey: ["ip", "core-records", docket.id],
     queryFn: () => fetchIpCoreRecords(docket.id),
   });
-  const application = core.data?.applications[0] ?? null;
+  const [applicationId, setApplicationId] = useState("");
+  const applications = core.data?.applications ?? [];
+  const application =
+    applications.find((candidate) => candidate.id === applicationId) ??
+    applications[0] ??
+    null;
+  useEffect(() => {
+    if (!applicationId && applications[0]) setApplicationId(applications[0].id);
+  }, [applicationId, applications]);
   const [eventKind, setEventKind] = useState<(typeof EVENT_KINDS)[number]>("formalities");
   const [effectiveAt, setEffectiveAt] = useState(localDateTimeValue);
   const [reason, setReason] = useState("");
   const [evidenceRef, setEvidenceRef] = useState("");
   const [documentRef, setDocumentRef] = useState("");
+  const [supersedesEventId, setSupersedesEventId] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [reconcilesEventId, setReconcilesEventId] = useState("");
+  const [reconciliationDecision, setReconciliationDecision] = useState<
+    "" | "same_fact" | "keep_separate" | "reject_candidate"
+  >("");
+  const [eventSource, setEventSource] = useState<"manual" | "registry">("manual");
+  const [sourceReference, setSourceReference] = useState("");
+  const [backdatedAcknowledged, setBackdatedAcknowledged] = useState(false);
+  const [correspondenceDirection, setCorrespondenceDirection] = useState<
+    "none" | "inward" | "outward"
+  >("none");
+  const [receivedAt, setReceivedAt] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [preparedAt, setPreparedAt] = useState("");
+  const [approvedAt, setApprovedAt] = useState("");
+  const [filedAt, setFiledAt] = useState("");
+  const [acceptedAt, setAcceptedAt] = useState("");
+  const correspondence = correspondenceDirection === "none"
+    ? null
+    : {
+        direction: correspondenceDirection,
+        received_at: receivedAt ? new Date(receivedAt).toISOString() : null,
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
+        prepared_at: preparedAt ? new Date(preparedAt).toISOString() : null,
+        approved_at: approvedAt ? new Date(approvedAt).toISOString() : null,
+        filed_at: filedAt ? new Date(filedAt).toISOString() : null,
+        accepted_at: acceptedAt ? new Date(acceptedAt).toISOString() : null,
+      };
   const eventInput: IpDocketEventInput | null = currentMembershipId && effectiveAt
     ? {
         lifecycleVersion: docket.lifecycle_version,
@@ -1934,9 +2468,24 @@ function ProsecutionCard({
         reason,
         evidenceRefs: evidenceRef.trim() ? [evidenceRef.trim()] : [],
         documentRefs: documentRef.trim() ? [documentRef.trim()] : [],
+        source: eventSource,
+        sourceReference: sourceReference.trim() || null,
+        candidateStatus: reconcilesEventId ? "reconciled" : "confirmed",
+        supersedesEventId: supersedesEventId || null,
+        correctionReason: correctionReason.trim() || null,
+        reconcilesEventId: reconcilesEventId || null,
+        reconciliationDecision: reconciliationDecision || null,
+        acknowledgedExceptionCodes: backdatedAcknowledged
+          ? ["backdated_recalculation_review_required"]
+          : [],
+        correspondence,
       }
     : null;
-  const inputSignature = JSON.stringify(eventInput);
+  const inputSignature = JSON.stringify(
+    eventInput
+      ? { ...eventInput, acknowledgedExceptionCodes: [] }
+      : null,
+  );
   const [previewedSignature, setPreviewedSignature] = useState<string | null>(null);
   const preview = useMutation({
     mutationFn: () => previewIpDocketEvent(docket.id, eventInput!),
@@ -1952,6 +2501,20 @@ function ProsecutionCard({
       setReason("");
       setEvidenceRef("");
       setDocumentRef("");
+      setSupersedesEventId("");
+      setCorrectionReason("");
+      setReconcilesEventId("");
+      setReconciliationDecision("");
+      setEventSource("manual");
+      setSourceReference("");
+      setBackdatedAcknowledged(false);
+      setCorrespondenceDirection("none");
+      setReceivedAt("");
+      setDueAt("");
+      setPreparedAt("");
+      setApprovedAt("");
+      setFiledAt("");
+      setAcceptedAt("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ip", "prosecution", docket.id] }),
         queryClient.invalidateQueries({ queryKey: ["ip", "core-records", docket.id] }),
@@ -1960,8 +2523,22 @@ function ProsecutionCard({
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record the prosecution event.")),
   });
-  const valid = Boolean(eventInput && reason.trim().length >= 5 && effectiveAt);
+  const valid = Boolean(
+    eventInput &&
+    effectiveAt &&
+    (eventSource === "registry" || reason.trim().length >= 5) &&
+    (eventSource !== "registry" || sourceReference.trim()) &&
+    (!supersedesEventId || correctionReason.trim().length >= 5) &&
+    (!reconcilesEventId || reconciliationDecision) &&
+    (correspondenceDirection === "none" ||
+      receivedAt || dueAt || preparedAt || approvedAt || filedAt || acceptedAt),
+  );
   const previewCurrent = previewedSignature === inputSignature ? preview.data : undefined;
+  const commitBlocked = Boolean(
+    !previewCurrent ||
+    (previewCurrent.backdated && !backdatedAcknowledged) ||
+    (previewCurrent.duplicate_candidate_ids.length > 0 && !reconcilesEventId),
+  );
 
   return (
     <Card className="min-w-0" data-testid="ip-prosecution-workspace">
@@ -1991,6 +2568,33 @@ function ProsecutionCard({
 
         {enabled ? (
           <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
+            {applications.length ? (
+              <Field label="Application">
+                <select
+                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={application?.id ?? ""}
+                  onChange={(event) => setApplicationId(event.target.value)}
+                >
+                  {applications.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {[candidate.jurisdiction, candidate.office, candidate.filing_phase]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+            {supersedesEventId ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+                Correction will supersede event {supersedesEventId}; the original remains in history.
+              </div>
+            ) : null}
+            {reconcilesEventId ? (
+              <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-xs text-blue-950">
+                Reconciliation will append a decision for event {reconcilesEventId}.
+              </div>
+            ) : null}
             <Field label="Event type">
               <select className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={eventKind} onChange={(event) => setEventKind(event.target.value as typeof eventKind)}>
                 {EVENT_KINDS.map((kind) => <option key={kind} value={kind}>{kind.replaceAll("_", " ")}</option>)}
@@ -1998,12 +2602,77 @@ function ProsecutionCard({
             </Field>
             <Field label="Effective date and time"><Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></Field>
             <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+            {eventSource === "registry" ? (
+              <Field label="Registry source reference">
+                <Input value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} />
+              </Field>
+            ) : null}
+            {supersedesEventId ? (
+              <Field label="Correction reason">
+                <Textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} />
+              </Field>
+            ) : null}
+            {reconcilesEventId ? (
+              <Field label="Reconciliation decision">
+                <select
+                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={reconciliationDecision}
+                  onChange={(event) => setReconciliationDecision(event.target.value as typeof reconciliationDecision)}
+                >
+                  <option value="">Select decision</option>
+                  <option value="same_fact">Same legal fact</option>
+                  <option value="keep_separate">Keep separate</option>
+                  <option value="reject_candidate">Reject candidate</option>
+                </select>
+              </Field>
+            ) : null}
             <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} placeholder="attachment:…" /></Field>
             <Field label="Document reference"><Input value={documentRef} onChange={(event) => setDocumentRef(event.target.value)} placeholder="attachment:…" /></Field>
+            <Field label="Correspondence direction">
+              <select
+                className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={correspondenceDirection}
+                onChange={(event) => setCorrespondenceDirection(event.target.value as typeof correspondenceDirection)}
+              >
+                <option value="none">Not linked</option>
+                <option value="inward">Inward registry communication</option>
+                <option value="outward">Outward response</option>
+              </select>
+            </Field>
+            {correspondenceDirection !== "none" ? (
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <Field label="Received at"><Input type="datetime-local" value={receivedAt} onChange={(event) => setReceivedAt(event.target.value)} /></Field>
+                <Field label="Due at"><Input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></Field>
+                <Field label="Prepared at"><Input type="datetime-local" value={preparedAt} onChange={(event) => setPreparedAt(event.target.value)} /></Field>
+                <Field label="Approved at"><Input type="datetime-local" value={approvedAt} onChange={(event) => setApprovedAt(event.target.value)} /></Field>
+                <Field label="Filed at"><Input type="datetime-local" value={filedAt} onChange={(event) => setFiledAt(event.target.value)} /></Field>
+                <Field label="Accepted at"><Input type="datetime-local" value={acceptedAt} onChange={(event) => setAcceptedAt(event.target.value)} /></Field>
+              </div>
+            ) : null}
             <p className="text-xs text-[var(--color-mute)]">A checklist or operational task is not filing evidence and never proves registry acceptance.</p>
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview prosecution event</Button>
-              <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => commit.mutate()} disabled={!previewCurrent || commit.isPending}>Record prosecution event</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" onClick={() => commit.mutate()} disabled={commitBlocked || commit.isPending}>Record prosecution event</Button>
+              {supersedesEventId || reconcilesEventId ? (
+                <Button
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    setSupersedesEventId("");
+                    setCorrectionReason("");
+                    setReconcilesEventId("");
+                    setReconciliationDecision("");
+                    setEventSource("manual");
+                    setSourceReference("");
+                    setPreviewedSignature(null);
+                    preview.reset();
+                  }}
+                >
+                  Cancel exception flow
+                </Button>
+              ) : null}
             </div>
           </form>
         ) : <p className="text-xs text-[var(--color-mute)]">IP write permission is required to record an event.</p>}
@@ -2012,20 +2681,128 @@ function ProsecutionCard({
           <div className="rounded-md border border-[var(--color-line)] p-3 text-xs" data-testid="ip-event-preview">
             <div className="font-semibold">Preview only · {previewCurrent.current_phase} → {previewCurrent.proposed_phase ?? "unchanged"}</div>
             <div className="mt-1">Backdated recalculation: {previewCurrent.recalculation_required ? "required" : "not required"}</div>
+            {previewCurrent.backdated ? (
+              <label className="mt-2 flex min-h-9 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-950">
+                <input
+                  type="checkbox"
+                  checked={backdatedAcknowledged}
+                  onChange={(event) => setBackdatedAcknowledged(event.target.checked)}
+                />
+                <span>I reviewed the recalculation preview and later accepted events will remain current.</span>
+              </label>
+            ) : null}
+            {previewCurrent.duplicate_candidate_ids.length && !reconcilesEventId ? (
+              <div className="mt-2 grid gap-2 rounded-md border border-blue-300 bg-blue-50 p-2 text-blue-950">
+                <strong>Possible duplicate event</strong>
+                <select
+                  aria-label="Duplicate event"
+                  className="h-9 min-w-0 w-full rounded-md border border-blue-300 bg-white px-2"
+                  value={reconcilesEventId}
+                  onChange={(event) => {
+                    setReconcilesEventId(event.target.value);
+                    setReconciliationDecision(event.target.value ? "keep_separate" : "");
+                  }}
+                >
+                  <option value="">Select the event to reconcile</option>
+                  {previewCurrent.duplicate_candidate_ids.map((id) => <option key={id} value={id}>{id}</option>)}
+                </select>
+              </div>
+            ) : null}
             <ul className="mt-2 grid gap-1">
               {previewCurrent.checklist.map((item) => <li key={item.key}>{item.satisfied ? "✓" : "○"} {item.label}</li>)}
             </ul>
+            {previewCurrent.unresolved_exception_codes.length ? (
+              <div className="mt-2 break-words text-amber-800">
+                Exceptions: {previewCurrent.unresolved_exception_codes.join(", ")}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {prosecution.data?.events.length ? (
           <ol className="grid min-w-0 gap-2" aria-label="Prosecution event timeline">
-            {prosecution.data.events.map((event) => (
-              <li key={event.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-xs">
-                <strong>#{event.sequence} {event.event_kind.replaceAll("_", " ")}</strong>
-                <div className="mt-1 break-words">{event.source} · {new Date(event.effective_at).toLocaleString()} · {event.before_phase ?? "—"} → {event.after_phase ?? "—"}</div>
-              </li>
-            ))}
+            {prosecution.data.events.map((event) => {
+              const eventCorrespondence = event.payload_json.correspondence as
+                | { direction?: string; received_at?: string | null; filed_at?: string | null }
+                | undefined;
+              return (
+                <li key={event.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-xs">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <strong>#{event.sequence} {event.event_kind.replaceAll("_", " ")}</strong>
+                    <Badge tone={event.candidate_status === "candidate" ? "warning" : undefined}>
+                      {event.candidate_status}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 break-words">{event.source} · {new Date(event.effective_at).toLocaleString()} · {event.before_phase ?? "—"} → {event.after_phase ?? "—"}</div>
+                  {event.reason ? <div className="mt-1 break-words">{event.reason}</div> : null}
+                  {event.supersedes_event_id ? <div className="mt-1 break-words text-amber-800">Supersedes {event.supersedes_event_id}</div> : null}
+                  {event.reconciles_event_id ? <div className="mt-1 break-words text-blue-800">{event.reconciliation_decision?.replaceAll("_", " ")} · reconciles {event.reconciles_event_id}</div> : null}
+                  {eventCorrespondence?.direction ? (
+                    <div className="mt-1 break-words text-[var(--color-mute)]">
+                      {eventCorrespondence.direction} correspondence
+                      {eventCorrespondence.received_at ? ` · received ${new Date(eventCorrespondence.received_at).toLocaleString()}` : ""}
+                      {eventCorrespondence.filed_at ? ` · filed ${new Date(eventCorrespondence.filed_at).toLocaleString()}` : ""}
+                    </div>
+                  ) : null}
+                  {event.document_refs_json.length || event.resulting_deadline_refs_json.length ? (
+                    <div className="mt-1 break-words text-[var(--color-mute)]">
+                      {[...event.document_refs_json, ...event.resulting_deadline_refs_json].join(" · ")}
+                    </div>
+                  ) : null}
+                  {enabled ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {EVENT_KINDS.includes(event.event_kind as typeof eventKind) ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() => {
+                            if (event.application_id) setApplicationId(event.application_id);
+                            setEventKind(event.event_kind as typeof eventKind);
+                            setEffectiveAt(localDateTimeValue());
+                            setEventSource("manual");
+                            setSupersedesEventId(event.id);
+                            setCorrectionReason("");
+                            setReconcilesEventId("");
+                            setReconciliationDecision("");
+                            setReason(`Correct event ${event.sequence}.`);
+                            setBackdatedAcknowledged(false);
+                            setPreviewedSignature(null);
+                            preview.reset();
+                          }}
+                        >
+                          Correct event
+                        </Button>
+                      ) : null}
+                      {event.candidate_status === "candidate" ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() => {
+                            if (event.application_id) setApplicationId(event.application_id);
+                            setEventKind(event.event_kind as typeof eventKind);
+                            setEffectiveAt(localDateTimeValue());
+                            setEventSource("registry");
+                            setSourceReference(event.source_reference ?? "");
+                            setReconcilesEventId(event.id);
+                            setReconciliationDecision("same_fact");
+                            setSupersedesEventId("");
+                            setCorrectionReason("");
+                            setReason("");
+                            setBackdatedAcknowledged(false);
+                            setPreviewedSignature(null);
+                            preview.reset();
+                          }}
+                        >
+                          Reconcile candidate
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
         ) : <p className="text-xs text-[var(--color-mute)]">No prosecution events have been recorded.</p>}
       </CardContent>
@@ -2454,24 +3231,91 @@ function ObligationCard({ docket, enabled, onChanged }: { docket: IpDocket; enab
   );
 }
 
+const COST_STATUS_LABEL: Record<string, string> = {
+  matched: "Matched to billing",
+  mismatch: "Differs from billing",
+  missing: "Billing record not found",
+  unlinked: "Awaiting a billing link",
+  estimate: "Estimate — not an expense",
+  nonbillable: "Nonbillable",
+};
+
+function CostAmount({ row }: { row: IpDocket["cost_items"][number] }) {
+  // A withheld rate must read as withheld. Rendering 0.00 would be a lie the
+  // reader has no way to detect.
+  if (row.amount_withheld) {
+    return (
+      <span className="text-[var(--color-mute)]">
+        Amount withheld — requires fee-management access
+      </span>
+    );
+  }
+  const original = `${row.currency} ${((row.amount_minor ?? 0) / 100).toFixed(2)}`;
+  if (row.base_amount_minor === null || row.base_currency === null) {
+    return <span className="tabular-nums">{original}</span>;
+  }
+  return (
+    <span className="tabular-nums">
+      {original}
+      <span className="text-[var(--color-mute)]">
+        {" "}
+        → {row.base_currency} {(row.base_amount_minor / 100).toFixed(2)}
+        {row.fx_rate ? ` at ${row.fx_rate}` : null}
+        {row.fx_rate_source ? ` (${row.fx_rate_source})` : null}
+      </span>
+    </span>
+  );
+}
+
 function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [evidence, setEvidence] = useState("");
   const [billingLinkType, setBillingLinkType] = useState<"" | "invoice" | "invoice_line_item" | "time_entry">("");
   const [billingLinkId, setBillingLinkId] = useState("");
+  const [costNature, setCostNature] = useState<"actual" | "estimate">("actual");
+  const [rateConfidential, setRateConfidential] = useState(false);
+  const [converted, setConverted] = useState(false);
+  const [currency, setCurrency] = useState("INR");
+  const [fxRate, setFxRate] = useState("");
+  const [fxRateSource, setFxRateSource] = useState("");
+  const [fxConvertedAt, setFxConvertedAt] = useState("");
+  const [baseAmount, setBaseAmount] = useState("");
+  const [baseCurrency, setBaseCurrency] = useState("INR");
+
+  // UJ-52-EXC-01: with no billing Matter the cost is still recorded, but only
+  // as nonbillable evidence. The billing decision is deferred, not the fee.
+  const hasBillingOwner = Boolean(docket.matter_id);
+  // An estimate and a nonbillable cost have nothing in the ledger to point at.
+  const canLinkBilling = hasBillingOwner && costNature === "actual";
+
+  const resetForm = () => {
+    setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
+    setFxRate(""); setFxRateSource(""); setFxConvertedAt(""); setBaseAmount("");
+    setConverted(false); setCurrency("INR"); setRateConfidential(false);
+  };
+
   const mutation = useMutation({
     mutationFn: () => addIpCostItem(docket.id, {
       category: "official_fee",
       description,
       amountMinor: Math.round(Number(amount) * 100),
+      currency,
       evidenceReference: evidence,
-      billingLinkType: billingLinkType || null,
-      billingLinkId: billingLinkId || null,
+      billingLinkType: canLinkBilling ? billingLinkType || null : null,
+      billingLinkId: canLinkBilling ? billingLinkId || null : null,
+      billable: hasBillingOwner,
+      costNature,
+      rateConfidential,
+      fxRate: converted ? fxRate : null,
+      fxRateSource: converted ? fxRateSource : null,
+      fxConvertedAt: converted && fxConvertedAt ? new Date(fxConvertedAt).toISOString() : null,
+      baseAmountMinor: converted ? Math.round(Number(baseAmount) * 100) : null,
+      baseCurrency: converted ? baseCurrency : null,
     }),
     onSuccess: async () => {
       toast.success("Immutable cost evidence added.");
-      setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
+      resetForm();
       await onChanged();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not add cost evidence.")),
@@ -2484,37 +3328,92 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not reconcile IP costs.")),
   });
+
+  const conversionIncomplete = converted && (!fxRate || !fxRateSource || !fxConvertedAt || !baseAmount || baseCurrency === currency);
+
   return (
-    <Card className="min-w-0">
+    <Card className="min-w-0" data-testid="ip-cost-workspace">
       <CardHeader><CardTitle as="h3">IP cost evidence</CardTitle></CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {docket.cost_items.map((row) => (
           <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
-            <strong className="break-words">{row.description}</strong> · {row.currency} {(row.amount_minor / 100).toFixed(2)}
+            <strong className="break-words">{row.description}</strong>{" "}
+            <CostAmount row={row} />
+            <div className="mt-1 text-xs text-[var(--color-mute)]">
+              {COST_STATUS_LABEL[row.reconciliation_status] ?? row.reconciliation_status}
+              {row.cost_nature === "estimate" ? " · Provider estimate" : null}
+              {row.rate_confidential ? " · Confidential rate" : null}
+            </div>
           </div>
         ))}
-        {enabled && docket.matter_id ? (
+        {enabled ? (
           <form className="grid min-w-0 gap-2" onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}>
+            {!hasBillingOwner ? (
+              <p className="text-xs text-[var(--color-mute)]">
+                This record has no Matter billing owner, so the cost is captured as
+                nonbillable evidence. Link the record to a Matter to bill it; Matter
+                billing remains the only accounting owner either way.
+              </p>
+            ) : null}
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-            <Field label="Amount (INR)"><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+            <Field label={`Amount (${currency})`}><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>
-            <Field label="Matter billing link type">
-              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
-                <option value="">No billing link</option>
-                <option value="invoice">Invoice</option>
-                <option value="invoice_line_item">Invoice line item</option>
-                <option value="time_entry">Time entry</option>
+            <Field label="Cost nature">
+              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={costNature} onChange={(event) => setCostNature(event.target.value as typeof costNature)}>
+                <option value="actual">Actual expense incurred</option>
+                <option value="estimate">Provider estimate or quote</option>
               </select>
             </Field>
-            {billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={rateConfidential} onChange={(event) => setRateConfidential(event.target.checked)} />
+              Confidential rate — hide the amount from members without fee-management access
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={converted} onChange={(event) => setConverted(event.target.checked)} />
+              This cost was incurred in another currency
+            </label>
+            {converted ? (
+              <div className="grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3">
+                <p className="text-xs text-[var(--color-mute)]">
+                  The amount above stays as originally incurred. Record what it was
+                  converted to, at which rate, from which source, and when.
+                </p>
+                <Field label="Original currency"><Input value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} /></Field>
+                <Field label="Converted amount"><Input type="number" min="0" step="0.01" value={baseAmount} onChange={(event) => setBaseAmount(event.target.value)} /></Field>
+                <Field label="Converted currency"><Input value={baseCurrency} maxLength={3} onChange={(event) => setBaseCurrency(event.target.value.toUpperCase())} /></Field>
+                <Field label="Exchange rate"><Input value={fxRate} onChange={(event) => setFxRate(event.target.value)} /></Field>
+                <Field label="Rate source"><Input value={fxRateSource} onChange={(event) => setFxRateSource(event.target.value)} /></Field>
+                <Field label="Conversion date"><Input type="date" value={fxConvertedAt} onChange={(event) => setFxConvertedAt(event.target.value)} /></Field>
+                {baseCurrency === currency ? (
+                  <p className="text-xs text-[var(--color-mute)]">Choose a converted currency different from the original.</p>
+                ) : null}
+              </div>
+            ) : null}
+            {canLinkBilling ? (
+              <Field label="Matter billing link type">
+                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
+                  <option value="">No billing link</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="invoice_line_item">Invoice line item</option>
+                  <option value="time_entry">Time entry</option>
+                </select>
+              </Field>
+            ) : (
+              <p className="text-xs text-[var(--color-mute)]">
+                {costNature === "estimate"
+                  ? "An estimate is not an expense, so it is not linked to a billing record."
+                  : "A nonbillable cost is not linked to a billing record."}
+              </p>
+            )}
+            {canLinkBilling && billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || Boolean(billingLinkType) !== Boolean(billingLinkId) || mutation.isPending}>Add cost evidence</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
+                {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
+              </Button>
               <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>Reconcile with Matter billing</Button>
             </div>
           </form>
-        ) : (
-          <p className="text-xs text-[var(--color-mute)]">Cost items require a linked Matter so Matter billing remains the accounting owner.</p>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

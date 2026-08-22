@@ -234,6 +234,7 @@ def test_event_commands_reject_stale_registry_and_cross_tenant_targets(
                 payload=_manual_event(
                     membership_id=membership_id,
                     source="registry",
+                    source_reference="ipindia:test-registry-event",
                     reason=None,
                 ),
             )

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `0db1e90a6f953a737d5de5b9d9c61b2a58388d882e7654f1eaf6b695f7907a00`
-- SQL tables: `268`
-- SQL columns: `4136`
-- ORM indexes: `1186`
-- Alembic/raw index declarations: `537`
+- Canonical map SHA-256: `36fd83ff1e6cefafa163fb32902b6d61bb5863685ea25f2d775194c382d94b57`
+- SQL tables: `270`
+- SQL columns: `4174`
+- ORM indexes: `1193`
+- Alembic/raw index declarations: `544`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -129,7 +129,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_control_review_exception_decisions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_control_review_sample_evidence` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_control_review_signatures` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
-| `ip_cost_items` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
+| `ip_cost_items` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
 | `ip_deadline_coverages` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_deadline_incident_actions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_deadline_incident_impacts` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
@@ -147,9 +147,11 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_documents` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_evidence_candidates` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_identifiers` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
-| `ip_import_rows` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
+| `ip_import_rows` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `ip_incident_kill_switches` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `ip_parties_and_roles` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_proceedings` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_related_right_obligations` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_relationships` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |

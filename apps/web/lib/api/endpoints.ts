@@ -1,4 +1,4 @@
-import { apiRequest, getCsrfHeaders } from "./client";
+import { apiBlobRequest, apiRequest, getCsrfHeaders } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import {
   type AuthContext,
@@ -91,6 +91,7 @@ import {
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
   type TenantDataGovernanceIntegrityReport,
+  type TenantLegalHoldSummary,
   type TenantDataOperationDryRunListResponse,
   type TenantDataOperationDryRunInput,
   type TenantDataOperationDryRunRecord,
@@ -208,6 +209,7 @@ import {
   providerOperationActionResponse,
   providerOperationListResponse,
   tenantDataGovernanceIntegrityReport,
+  tenantLegalHoldSummary,
   tenantDataOperationDryRunListResponse,
   tenantDataOperationDryRunInput,
   tenantDataOperationDryRunRecord,
@@ -6832,6 +6834,11 @@ export async function fetchTenantDataGovernanceIntegrity(): Promise<TenantDataGo
   return tenantDataGovernanceIntegrityReport.parse(data);
 }
 
+export async function fetchTenantLegalHoldSummary(): Promise<TenantLegalHoldSummary> {
+  const data = await apiRequest<unknown>("/api/admin/data-governance/holds/summary");
+  return tenantLegalHoldSummary.parse(data);
+}
+
 export async function listTenantDataOperationDryRuns(
   limit = 20,
 ): Promise<TenantDataOperationDryRunListResponse> {
@@ -8076,6 +8083,252 @@ export type IpDeadlineIncident = {
   created_at: string;
 };
 
+export type IpPortfolioFilters = {
+  query?: string | null;
+  matter_id?: string | null;
+  client?: string[];
+  proprietor?: string[];
+  nice_class?: number[];
+  responsible_membership_id?: string[];
+  team_id?: string[];
+  asset_kind?: string[];
+  jurisdiction?: string[];
+  office?: string[];
+  filing_phase?: string[];
+  docket_status?: string[];
+  deadline_state?: string[];
+  opposition_only?: boolean;
+  registry_sync_state?: Array<"current" | "stale" | "failed" | "unavailable">;
+  include_inactive?: boolean;
+};
+
+export type IpPortfolioRow = {
+  application_id: string;
+  docket_id: string;
+  matter_id: string | null;
+  asset_id: string | null;
+  asset_kind: string | null;
+  asset_title: string | null;
+  asset_jurisdiction: string | null;
+  docket_title: string;
+  docket_status: string;
+  primary_identifier: string | null;
+  application_numbers: string[];
+  opposition_numbers: string[];
+  nice_classes: number[];
+  goods_services: string[];
+  representation_kinds: string[];
+  proprietors: string[];
+  agents: string[];
+  client_name: string | null;
+  responsible_lawyer: string | null;
+  responsible_membership_id: string | null;
+  team_name: string | null;
+  team_id: string | null;
+  office: string | null;
+  jurisdiction: string | null;
+  filing_phase: string;
+  is_active: boolean;
+  lifecycle_version: number;
+  pending_identifier_allocation: boolean;
+  record_complete: boolean;
+  incomplete_reasons: string[];
+  open_deadline_count: number;
+  unconfirmed_deadline_count: number;
+  overdue_deadline_count: number;
+  registry_sync_state: "current" | "stale" | "failed" | "unavailable";
+  registry_last_success_at: string | null;
+  provenance: string[];
+  application_created_at: string;
+  updated_at: string;
+};
+
+export type IpPortfolioResponse = {
+  rows: IpPortfolioRow[];
+  counts: {
+    total: number;
+    complete_records: number;
+    incomplete_records: number;
+    unconfirmed_deadline_records: number;
+    overdue_records: number;
+    stale_sync_records: number;
+    sync_failure_records: number | null;
+    registry_sync_state: "available" | "unavailable";
+  };
+  filters: IpPortfolioFilters;
+  limit: number;
+  next_cursor: string | null;
+};
+
+export type IpPortfolioFamilyMember = {
+  application_id: string;
+  docket_id: string;
+  asset_id: string | null;
+  office: string | null;
+  jurisdiction: string | null;
+  filing_phase: string;
+  lifecycle_version: number;
+  primary_identifier: string | null;
+  open_deadline_count: number;
+  overdue_deadline_count: number;
+};
+
+export type IpPortfolioFamily = {
+  grouping: "mark" | "client";
+  family_key: string;
+  label: string;
+  member_count: number;
+  distinct_jurisdictions: string[];
+  distinct_filing_phases: string[];
+  members: IpPortfolioFamilyMember[];
+};
+
+export type IpPortfolioFamilyResponse = {
+  grouping: "mark" | "client";
+  families: IpPortfolioFamily[];
+  ungrouped_member_count: number;
+  limit: number;
+  next_cursor: string | null;
+};
+
+export type IpPortfolioSavedView = {
+  id: string;
+  name: string;
+  filters: IpPortfolioFilters;
+  columns: string[];
+  is_default: boolean;
+  scope: "personal" | "team";
+  team_id: string | null;
+  editable: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpPortfolioExportJob = {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  format: "csv";
+  columns: string[];
+  row_limit: number;
+  row_count: number | null;
+  size_bytes: number | null;
+  error: string | null;
+  download_ready: boolean;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type IpPortfolioExportPreview = {
+  format: "csv";
+  columns: string[];
+  row_limit: number;
+  row_count: number;
+  truncated: boolean;
+  omitted_restricted_count: null;
+  preview_token: string;
+};
+
+export type IpImportRow = {
+  id: string;
+  row_number: number;
+  validation_status: string;
+  errors: Array<{ field?: string; code?: string }>;
+  commit_status: string;
+  commit_error_code: string | null;
+  created_docket_id: string | null;
+  normalized: Record<string, unknown>;
+  duplicate_candidates: Array<{
+    docket_id?: string;
+    staged_row_id?: string;
+    row_number?: number;
+    title?: string;
+    match_reasons?: string[];
+  }>;
+  reconciliation_decision: "create_separate" | "link_existing" | "skip" | null;
+  reconciled_target_docket_id: string | null;
+};
+
+export type IpImportJob = {
+  id: string;
+  domain: string;
+  filename: string;
+  source_sha256: string;
+  status: string;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  committed_rows: number;
+  failed_rows: number;
+  preview_token: string | null;
+  preview_expires_at: string | null;
+  committed_at: string | null;
+  creator_label_snapshot: string;
+  version: number;
+  created_at: string;
+};
+
+export type IpImportPreview = {
+  job: IpImportJob;
+  rows: IpImportRow[];
+  preview_expired: boolean;
+};
+
+export type BulkImportDomain = "ip_trademark" | "matter" | "employee";
+
+export type BulkImportLifecycle =
+  | "staged"
+  | "preview_ready"
+  | "in_progress"
+  | "committed"
+  | "committed_with_errors"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export type BulkImportJobSummary = {
+  id: string;
+  domain: BulkImportDomain;
+  source_owner:
+    | "bulk_import_jobs"
+    | "matter_bulk_import_jobs"
+    | "employee_bulk_import_jobs";
+  read_only_adapter: boolean;
+  filename: string;
+  content_type: string | null;
+  source_sha256: string | null;
+  source_status: string;
+  status: BulkImportLifecycle;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  committed_rows: number;
+  failed_rows: number;
+  created_by_membership_id: string | null;
+  creator_label: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  completed_at: string | null;
+  manifest_url: string;
+  error_report_url: string;
+};
+
+export type BulkImportHistory = {
+  jobs: BulkImportJobSummary[];
+  accessible_domains: BulkImportDomain[];
+};
+
+export type BulkImportManifest = {
+  schema_version: "bulk-import-manifest-v1";
+  compatibility_mode: "canonical" | "read_only_adapter";
+  job: BulkImportJobSummary;
+  file_size_bytes: number | null;
+  manifest_format: string | null;
+  limitations: string[];
+};
+
 export type IpDocket = {
   id: string;
   company_id: string;
@@ -8121,14 +8374,33 @@ export type IpDocket = {
   related_right_obligations: IpRelatedRightObligation[];
   cost_items: Array<{
     id: string;
+    matter_id: string | null;
     category: string;
     description: string;
-    amount_minor: number;
+    /** The amount as originally incurred. `null` when the rate is confidential
+     * and the signed-in member does not hold `ip:fees_manage` — read
+     * `amount_withheld` to tell that apart from an absent cost. */
+    amount_minor: number | null;
     currency: string;
+    billable: boolean;
+    cost_nature: "actual" | "estimate";
+    rate_confidential: boolean;
+    amount_withheld: boolean;
+    fx_rate: string | null;
+    fx_rate_source: string | null;
+    fx_converted_at: string | null;
+    base_amount_minor: number | null;
+    base_currency: string | null;
     evidence_reference: string;
     billing_link_type: "invoice" | "invoice_line_item" | "time_entry" | null;
     billing_link_id: string | null;
-    reconciliation_status: "matched" | "mismatch" | "missing" | "unlinked";
+    reconciliation_status:
+      | "matched"
+      | "mismatch"
+      | "missing"
+      | "unlinked"
+      | "estimate"
+      | "nonbillable";
     canonical_amount_minor: number | null;
     reconciliation_difference_minor: number | null;
     reconciled_at: string | null;
@@ -8143,6 +8415,8 @@ export type IpHearingReminder = {
   channel: "in_app" | "email" | "sms" | "whatsapp";
   scheduled_for: string;
   schedule_generation: number;
+  is_superseded: boolean;
+  replacement_generation: number | null;
   status: "queued" | "sent" | "delivered" | "failed" | "cancelled";
   provider: string | null;
   provider_message_id: string | null;
@@ -8185,6 +8459,8 @@ export type IpSharedHearing = {
     date_reminder_local_time?: string;
     critical?: boolean;
   } | null;
+  time_confirmation_required: boolean;
+  current_schedule_generation: number | null;
   reminders: IpHearingReminder[];
   created_at: string;
 };
@@ -8204,11 +8480,76 @@ export type TrademarkApplication = {
   updated_at: string;
 };
 
+export type IpAsset = {
+  id: string;
+  docket_id: string;
+  asset_kind: string;
+  jurisdiction: string;
+  title: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpIdentifier = {
+  id: string;
+  docket_id: string;
+  application_id: string | null;
+  proceeding_id: string | null;
+  identifier_kind:
+    | "application"
+    | "registration"
+    | "opposition"
+    | "rectification"
+    | "appeal"
+    | "court";
+  raw_value: string;
+  normalized_value: string;
+  office: string;
+  jurisdiction: string;
+  source: string;
+  effective_from: string;
+  effective_until: string | null;
+  is_primary: boolean;
+  reconciliation_status: string;
+  supersedes_identifier_id: string | null;
+  superseded_by_identifier_id: string | null;
+  correction_reason: string | null;
+  created_at: string;
+};
+
+export type IpDuplicateCandidate = {
+  identifier_id: string;
+  docket_id: string;
+  application_id: string | null;
+  proceeding_id: string | null;
+  matter_id: string | null;
+  raw_value: string;
+  normalized_value: string;
+  source: string;
+  is_primary: boolean;
+  reconciliation_status: string;
+  docket_title: string;
+  docket_status: string;
+  docket_restricted: boolean;
+  docket_is_active: boolean;
+};
+
+export type IpDuplicatePreview = {
+  identifier_id: string;
+  identifier: IpDuplicateCandidate;
+  candidates: IpDuplicateCandidate[];
+  decision_token: string;
+  automatic_merge_blocked: boolean;
+  blocking_reasons: string[];
+  allowed_decisions: Array<"distinct" | "supersede">;
+};
+
 export type IpCoreRecords = {
-  assets: Array<Record<string, unknown>>;
+  assets: IpAsset[];
   applications: TrademarkApplication[];
   proceedings: Array<Record<string, unknown>>;
-  identifiers: Array<Record<string, unknown>>;
+  identifiers: IpIdentifier[];
 };
 
 export type IpDocketEvent = {
@@ -8251,6 +8592,23 @@ export type IpDocketEventInput = {
   reason: string;
   evidenceRefs: string[];
   documentRefs: string[];
+  source?: "manual" | "registry";
+  sourceReference?: string | null;
+  candidateStatus?: "candidate" | "confirmed" | "reconciled" | "rejected";
+  supersedesEventId?: string | null;
+  correctionReason?: string | null;
+  reconcilesEventId?: string | null;
+  reconciliationDecision?: "same_fact" | "keep_separate" | "reject_candidate" | null;
+  acknowledgedExceptionCodes?: string[];
+  correspondence?: {
+    direction: "inward" | "outward";
+    received_at?: string | null;
+    due_at?: string | null;
+    prepared_at?: string | null;
+    approved_at?: string | null;
+    filed_at?: string | null;
+    accepted_at?: string | null;
+  } | null;
 };
 
 export type IpDocketEventPreview = {
@@ -8371,12 +8729,24 @@ export type IpCostReconciliationReport = {
     canonical_amount_minor: number | null;
     difference_minor: number | null;
     currency: string;
-    status: "matched" | "mismatch" | "missing" | "unlinked";
+    /** What was actually compared against the ledger: the converted amount
+     * when the cost preserves a conversion, otherwise the original. */
+    comparison_amount_minor: number;
+    comparison_currency: string;
+    status:
+      | "matched"
+      | "mismatch"
+      | "missing"
+      | "unlinked"
+      | "estimate"
+      | "nonbillable";
   }>;
   matched_count: number;
   mismatch_count: number;
   missing_count: number;
   unlinked_count: number;
+  estimate_count: number;
+  nonbillable_count: number;
   checksum_sha256: string;
 };
 
@@ -8594,6 +8964,37 @@ export type IpDeadlineImpact = {
   notification_intent_ids: string[];
   active_responsibility_ids: string[];
   unrelated_work_preserved: true;
+};
+
+export type IpDeadlineDependencyNode = {
+  kind:
+    | "trigger_event"
+    | "rule_version"
+    | "calendar_version"
+    | "predecessor_deadline"
+    | "extension"
+    | "override";
+  reference_id: string | null;
+  label: string;
+  detail: string | null;
+  available: boolean;
+};
+
+export type IpDeadlineDependencies = {
+  deadline_id: string;
+  docket_id: string;
+  state: string;
+  result_on: string | null;
+  certainty: string;
+  is_critical: boolean;
+  engine_version: string;
+  source_version: string;
+  rule_citation: string;
+  explanation: string;
+  nodes: IpDeadlineDependencyNode[];
+  calculation_trace: Array<Record<string, unknown>>;
+  unavailable_inputs: string[];
+  superseded_chain: string[];
 };
 
 export type IpDocumentState =
@@ -8969,6 +9370,262 @@ export async function enableIpWorkspace(input: {
   });
 }
 
+function ipPortfolioParams(
+  filters: IpPortfolioFilters,
+  input?: { limit?: number; cursor?: string | null },
+) {
+  const params = new URLSearchParams();
+  if (filters.query?.trim()) params.set("query", filters.query.trim());
+  if (filters.matter_id) params.set("matter_id", filters.matter_id);
+  for (const key of [
+    "asset_kind",
+    "client",
+    "proprietor",
+    "responsible_membership_id",
+    "team_id",
+    "jurisdiction",
+    "office",
+    "filing_phase",
+    "docket_status",
+    "deadline_state",
+    "registry_sync_state",
+  ] as const) {
+    for (const value of filters[key] ?? []) params.append(key, value);
+  }
+  for (const value of filters.nice_class ?? []) params.append("nice_class", String(value));
+  if (filters.opposition_only) params.set("opposition_only", "true");
+  if (filters.include_inactive) params.set("include_inactive", "true");
+  if (input?.limit) params.set("limit", String(input.limit));
+  if (input?.cursor) params.set("cursor", input.cursor);
+  return params;
+}
+
+export async function fetchIpPortfolio(
+  filters: IpPortfolioFilters,
+  input?: { limit?: number; cursor?: string | null },
+): Promise<IpPortfolioResponse> {
+  const params = ipPortfolioParams(filters, input);
+  return apiRequest(`/api/ip/portfolio?${params.toString()}`);
+}
+
+export async function fetchIpPortfolioFamilies(
+  filters: IpPortfolioFilters,
+  input: {
+    grouping: "mark" | "client";
+    limit?: number;
+    cursor?: string | null;
+  },
+): Promise<IpPortfolioFamilyResponse> {
+  const params = ipPortfolioParams(filters, input);
+  params.set("grouping", input.grouping);
+  return apiRequest(`/api/ip/portfolio/families?${params.toString()}`);
+}
+
+export async function listIpPortfolioSavedViews(): Promise<{
+  views: IpPortfolioSavedView[];
+}> {
+  return apiRequest("/api/ip/portfolio/views");
+}
+
+export async function createIpPortfolioSavedView(input: {
+  name: string;
+  filters: IpPortfolioFilters;
+  columns: string[];
+  isDefault?: boolean;
+  scope?: "personal" | "team";
+  teamId?: string | null;
+}): Promise<IpPortfolioSavedView> {
+  return apiRequest("/api/ip/portfolio/views", {
+    method: "POST",
+    body: {
+      name: input.name,
+      filters: input.filters,
+      columns: input.columns,
+      is_default: input.isDefault ?? false,
+      scope: input.scope ?? "personal",
+      team_id: input.teamId ?? null,
+    },
+  });
+}
+
+export async function updateIpPortfolioSavedView(input: {
+  id: string;
+  name: string;
+  filters: IpPortfolioFilters;
+  columns: string[];
+  isDefault: boolean;
+  expectedVersion: number;
+  scope?: "personal" | "team";
+  teamId?: string | null;
+}): Promise<IpPortfolioSavedView> {
+  return apiRequest(`/api/ip/portfolio/views/${encodeURIComponent(input.id)}`, {
+    method: "PUT",
+    body: {
+      name: input.name,
+      filters: input.filters,
+      columns: input.columns,
+      is_default: input.isDefault,
+      expected_version: input.expectedVersion,
+      scope: input.scope ?? "personal",
+      team_id: input.teamId ?? null,
+    },
+  });
+}
+
+export async function deleteIpPortfolioSavedView(id: string): Promise<void> {
+  return apiRequest(`/api/ip/portfolio/views/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function createIpPortfolioExport(input: {
+  filters: IpPortfolioFilters;
+  columns: string[];
+  rowLimit?: number;
+  previewToken: string;
+}): Promise<IpPortfolioExportJob> {
+  return apiRequest("/api/ip/portfolio/exports", {
+    method: "POST",
+    body: {
+      format: "csv",
+      filters: input.filters,
+      columns: input.columns,
+      row_limit: input.rowLimit ?? 10000,
+      preview_token: input.previewToken,
+    },
+  });
+}
+
+export async function previewIpPortfolioExport(input: {
+  filters: IpPortfolioFilters;
+  columns: string[];
+  rowLimit?: number;
+}): Promise<IpPortfolioExportPreview> {
+  return apiRequest("/api/ip/portfolio/exports/preview", {
+    method: "POST",
+    body: {
+      format: "csv",
+      filters: input.filters,
+      columns: input.columns,
+      row_limit: input.rowLimit ?? 10000,
+    },
+  });
+}
+
+export async function listIpPortfolioExports(): Promise<{
+  jobs: IpPortfolioExportJob[];
+}> {
+  return apiRequest("/api/ip/portfolio/exports");
+}
+
+export async function getIpPortfolioExport(id: string): Promise<IpPortfolioExportJob> {
+  return apiRequest(`/api/ip/portfolio/exports/${encodeURIComponent(id)}`);
+}
+
+export async function retryIpPortfolioExport(id: string): Promise<IpPortfolioExportJob> {
+  return apiRequest(`/api/ip/portfolio/exports/${encodeURIComponent(id)}/retry`, {
+    method: "POST",
+  });
+}
+
+export async function downloadIpPortfolioExport(id: string): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/ip/portfolio/exports/${encodeURIComponent(id)}/download`,
+  );
+  return response.blob();
+}
+
+export async function uploadIpPortfolioImport(file: File): Promise<IpImportPreview> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest("/api/ip/imports/upload", { method: "POST", body });
+}
+
+export async function listIpPortfolioImports(): Promise<{ jobs: IpImportJob[] }> {
+  return apiRequest("/api/ip/imports/history");
+}
+
+export async function getIpPortfolioImport(id: string): Promise<IpImportPreview> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(id)}`);
+}
+
+export async function revalidateIpPortfolioImport(id: string): Promise<IpImportPreview> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(id)}/revalidate`, {
+    method: "POST",
+  });
+}
+
+export async function reconcileIpPortfolioImport(input: {
+  jobId: string;
+  expectedJobVersion: number;
+  decisions: Array<{
+    rowId: string;
+    decision: "create_separate" | "link_existing" | "skip";
+    targetDocketId?: string | null;
+  }>;
+}): Promise<IpImportPreview> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(input.jobId)}/reconcile`, {
+    method: "POST",
+    body: {
+      expected_job_version: input.expectedJobVersion,
+      decisions: input.decisions.map((decision) => ({
+        row_id: decision.rowId,
+        decision: decision.decision,
+        target_docket_id: decision.targetDocketId ?? null,
+      })),
+    },
+  });
+}
+
+export async function commitIpPortfolioImport(input: {
+  jobId: string;
+  previewToken: string;
+  idempotencyKey: string;
+}): Promise<IpImportPreview & { replayed: boolean }> {
+  return apiRequest(`/api/ip/imports/${encodeURIComponent(input.jobId)}/commit`, {
+    method: "POST",
+    body: {
+      preview_token: input.previewToken,
+      idempotency_key: input.idempotencyKey,
+    },
+  });
+}
+
+export async function downloadIpPortfolioImportErrors(id: string): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/ip/imports/${encodeURIComponent(id)}/errors`,
+  );
+  return response.blob();
+}
+
+export async function listBulkImportJobs(
+  domain?: BulkImportDomain,
+  limit = 50,
+): Promise<BulkImportHistory> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (domain) params.set("domain", domain);
+  return apiRequest(`/api/imports/history?${params.toString()}`);
+}
+
+export async function getBulkImportManifest(
+  domain: BulkImportDomain,
+  jobId: string,
+): Promise<BulkImportManifest> {
+  return apiRequest(
+    `/api/imports/${encodeURIComponent(domain)}/${encodeURIComponent(jobId)}/manifest`,
+  );
+}
+
+export async function downloadBulkImportErrors(
+  domain: BulkImportDomain,
+  jobId: string,
+): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/imports/${encodeURIComponent(domain)}/${encodeURIComponent(jobId)}/errors`,
+  );
+  return response.blob();
+}
+
 export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
   return apiRequest("/api/ip/dockets");
 }
@@ -9038,6 +9695,9 @@ export async function updateIpSharedHearing(input: {
   docketId: string;
   hearingId: string;
   hearingOn?: string;
+  timeStatus?: "exact" | "session" | "time_not_published";
+  hearingTime?: string | null;
+  sessionLabel?: string | null;
   status?: "scheduled" | "completed" | "adjourned" | "cancelled";
 }): Promise<IpSharedHearing> {
   return apiRequest(`/api/ip/hearings/${encodeURIComponent(input.hearingId)}`, {
@@ -9045,6 +9705,9 @@ export async function updateIpSharedHearing(input: {
     body: {
       docket_id: input.docketId,
       ...(input.hearingOn ? { hearing_on: input.hearingOn } : {}),
+      ...(input.timeStatus ? { time_status: input.timeStatus } : {}),
+      ...(input.hearingTime !== undefined ? { hearing_time: input.hearingTime } : {}),
+      ...(input.sessionLabel !== undefined ? { session_label: input.sessionLabel } : {}),
       ...(input.status ? { status: input.status } : {}),
     },
   });
@@ -9250,6 +9913,14 @@ export async function fetchIpDeadlineImpact(
   return apiRequest(`/api/ip/deadlines/${encodeURIComponent(deadlineId)}/impact`);
 }
 
+export async function fetchIpDeadlineDependencies(
+  deadlineId: string,
+): Promise<IpDeadlineDependencies> {
+  return apiRequest(
+    `/api/ip/deadlines/${encodeURIComponent(deadlineId)}/dependencies`,
+  );
+}
+
 export type IpResponsibilityAssignmentInput = {
   membership_id: string;
   role: "primary" | "backup" | "supervisor" | "docketing";
@@ -9352,6 +10023,158 @@ export async function fetchIpCoreRecords(docketId: string): Promise<IpCoreRecord
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/core-records`);
 }
 
+export async function createManualTrademarkApplication(input: {
+  title: string;
+  matterId?: string | null;
+  restricted: boolean;
+  assetTitle: string;
+  jurisdiction: string;
+  office: string;
+  filingPhase: "draft" | "pre_filing" | "filed";
+  sourcePendingIdentifierAllocation: boolean;
+  applicationNumber?: string | null;
+  identifierSource: string;
+  identifierEffectiveFrom: string;
+  markText: string;
+  classNumber: number;
+  specification: string;
+  applicantName: string;
+  evidenceReference: string;
+}): Promise<{
+  docket: IpDocket;
+  asset: IpAsset;
+  application: TrademarkApplication;
+  identifier: IpIdentifier | null;
+  duplicate_candidates: IpIdentifier[];
+}> {
+  return apiRequest("/api/ip/trademark-applications/manual", {
+    method: "POST",
+    body: {
+      title: input.title,
+      matter_id: input.matterId ?? null,
+      restricted: input.restricted,
+      asset_title: input.assetTitle,
+      jurisdiction: input.jurisdiction,
+      office: input.office,
+      filing_phase: input.filingPhase,
+      source_pending_identifier_allocation: input.sourcePendingIdentifierAllocation,
+      application_number: input.applicationNumber
+        ? {
+            raw_value: input.applicationNumber,
+            source: input.identifierSource,
+            effective_from: input.identifierEffectiveFrom,
+            is_primary: true,
+          }
+        : null,
+      particulars: {
+        form_key: "TM-A",
+        form_version: "2026.1",
+        mark_kind: "word",
+        representation: {
+          text: input.markText,
+          evidence_reference: input.evidenceReference,
+        },
+        classes: [
+          { class_number: input.classNumber, specification: input.specification },
+        ],
+        use_priority: null,
+        parties: [{ role: "applicant", name: input.applicantName }],
+        agent: null,
+        filing_manifest: [
+          {
+            key: "representation",
+            label: "Mark representation",
+            required: true,
+            evidence_reference: input.evidenceReference,
+          },
+        ],
+      },
+    },
+  });
+}
+
+export async function previewIpIdentifierDuplicates(
+  docketId: string,
+  identifierId: string,
+): Promise<IpDuplicatePreview> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/identifiers/${encodeURIComponent(identifierId)}/duplicates`,
+  );
+}
+
+export async function resolveIpIdentifierDuplicate(input: {
+  docketId: string;
+  identifierId: string;
+  decision: "distinct" | "supersede";
+  decisionToken: string;
+  reason: string;
+  supersededByIdentifierId?: string | null;
+}): Promise<{
+  identifier: IpIdentifier;
+  decision: string;
+  resolved_candidate_ids: string[];
+}> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/identifiers/${encodeURIComponent(input.identifierId)}/reconcile`,
+    {
+      method: "POST",
+      body: {
+        decision: input.decision,
+        decision_token: input.decisionToken,
+        reason: input.reason,
+        superseded_by_identifier_id: input.supersededByIdentifierId ?? null,
+      },
+    },
+  );
+}
+
+export async function correctIpIdentifier(input: {
+  docketId: string;
+  identifier: IpIdentifier;
+  rawValue: string;
+  reason: string;
+  effectiveFrom: string;
+}): Promise<{ identifier: IpIdentifier; duplicate_candidates: IpIdentifier[] }> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/identifiers/${encodeURIComponent(input.identifier.id)}/corrections`,
+    {
+      method: "POST",
+      body: {
+        identifier_kind: input.identifier.identifier_kind,
+        raw_value: input.rawValue,
+        office: input.identifier.office,
+        jurisdiction: input.identifier.jurisdiction,
+        source: "manual_correction",
+        effective_from: input.effectiveFrom,
+        is_primary: input.identifier.is_primary,
+        application_id: input.identifier.application_id,
+        proceeding_id: input.identifier.proceeding_id,
+        supersedes_identifier_id: input.identifier.id,
+        correction_reason: input.reason,
+      },
+    },
+  );
+}
+
+export async function updateTrademarkApplicationPhase(input: {
+  applicationId: string;
+  expectedVersion: number;
+  filingPhase: "draft" | "pre_filing" | "filed";
+  sourcePendingIdentifierAllocation: boolean;
+}): Promise<TrademarkApplication> {
+  return apiRequest(
+    `/api/ip/applications/${encodeURIComponent(input.applicationId)}/filing-phase`,
+    {
+      method: "PATCH",
+      body: {
+        expected_version: input.expectedVersion,
+        filing_phase: input.filingPhase,
+        source_pending_identifier_allocation: input.sourcePendingIdentifierAllocation,
+      },
+    },
+  );
+}
+
 export async function fetchIpProsecutionWorkspace(
   docketId: string,
 ): Promise<IpProsecutionWorkspace> {
@@ -9364,13 +10187,20 @@ function ipDocketEventBody(input: IpDocketEventInput) {
     expected_application_version: input.applicationVersion ?? null,
     application_id: input.applicationId ?? null,
     event_kind: input.eventKind,
-    source: "manual",
+    source: input.source ?? "manual",
+    source_reference: input.sourceReference ?? null,
     effective_at: input.effectiveAt,
     responsible_membership_id: input.responsibleMembershipId,
     reason: input.reason,
     evidence_refs: input.evidenceRefs,
     document_refs: input.documentRefs,
-    candidate_status: "confirmed",
+    candidate_status: input.candidateStatus ?? "confirmed",
+    supersedes_event_id: input.supersedesEventId ?? null,
+    correction_reason: input.correctionReason ?? null,
+    reconciles_event_id: input.reconcilesEventId ?? null,
+    reconciliation_decision: input.reconciliationDecision ?? null,
+    acknowledged_exception_codes: input.acknowledgedExceptionCodes ?? [],
+    correspondence: input.correspondence ?? null,
     payload: { deadlines_confirmed: false },
   };
 }
@@ -9807,9 +10637,21 @@ export async function addIpCostItem(
     category: "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other";
     description: string;
     amountMinor: number;
+    /** The currency the cost was incurred in. Keep it the original — a
+     * conversion is recorded through the `fx*`/`base*` fields, never by
+     * overwriting this. */
+    currency?: string;
     evidenceReference: string;
     billingLinkType?: "invoice" | "invoice_line_item" | "time_entry" | null;
     billingLinkId?: string | null;
+    billable?: boolean;
+    costNature?: "actual" | "estimate";
+    rateConfidential?: boolean;
+    fxRate?: string | null;
+    fxRateSource?: string | null;
+    fxConvertedAt?: string | null;
+    baseAmountMinor?: number | null;
+    baseCurrency?: string | null;
   },
 ): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/cost-items`, {
@@ -9818,10 +10660,18 @@ export async function addIpCostItem(
       category: input.category,
       description: input.description,
       amount_minor: input.amountMinor,
-      currency: "INR",
+      currency: input.currency ?? "INR",
       evidence_reference: input.evidenceReference,
       billing_link_type: input.billingLinkType ?? null,
       billing_link_id: input.billingLinkId ?? null,
+      billable: input.billable ?? true,
+      cost_nature: input.costNature ?? "actual",
+      rate_confidential: input.rateConfidential ?? false,
+      fx_rate: input.fxRate ?? null,
+      fx_rate_source: input.fxRateSource ?? null,
+      fx_converted_at: input.fxConvertedAt ?? null,
+      base_amount_minor: input.baseAmountMinor ?? null,
+      base_currency: input.baseCurrency ?? null,
     },
   });
 }
@@ -10073,7 +10923,11 @@ export type IpDocketControlReport = {
   open_incident_count: number;
   unprojected_calendar_count: number;
   inactive_coverage_count: number;
+  /** Covers only the costs this reader may see; a confidential rate is
+   * excluded rather than counted as zero. Read `withheld_cost_item_count`
+   * before presenting this as a complete total. */
   total_cost_minor_by_currency: Record<string, number>;
+  withheld_cost_item_count: number;
 };
 
 export type IpControlReviewSnapshot = {
