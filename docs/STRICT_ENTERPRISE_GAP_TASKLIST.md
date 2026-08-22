@@ -1491,3 +1491,44 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   second factor, and the strongest actions are already exempt.
 - **Decision needed from the product/security owner:** whether the conditional
   gate should stop accepting cross-purpose step-ups, accepting the extra prompts.
+
+### Owner decisions on EH-SEC-01 and EH-SEC-02 — 2026-08-22
+
+Both open questions were put to the repository owner and both were answered.
+Recorded here because a security posture chosen deliberately and a security gap
+left by accident look identical in the code six months later.
+
+**EH-SEC-01 — do not extend the unconditional set.** Asked whether
+`role_capability_change` and `destructive_action` should require a second factor
+unconditionally. Answer: **no — avoid MFA.** The conditional,
+progressive-adoption rule stands for those and for the rest of the ~45 sites.
+
+**EH-SEC-02 — keep the cross-purpose fallback.** Asked whether the conditional
+gate should stop accepting a step-up completed for a different purpose. Answer:
+**no — no frequent prompts.** One step-up continues to satisfy any purpose for
+the TTL.
+
+Consequences, stated plainly so nobody has to re-derive them:
+
+- On the ~45 conditional sites, an actor with **no MFA enrolment** has no second
+  factor at all, and an actor with one enrolled needs only a single step-up per
+  15-minute window to authorise anything. That is now a **chosen posture**, not
+  an oversight. Tenants that want more can still set
+  `TenantSecurityPolicy.all_users_mfa_required`, which is the intended lever.
+- The five `require_step_up_always` sites are **out of scope of both answers**
+  and keep their stronger behaviour. The questions asked whether to *extend*
+  hardening to more purposes and whether to *remove* the fallback from the
+  conditional gate; neither asked to weaken protection already shipped for
+  irreversible acts, and reading them that way would silently reverse a merged,
+  owner-accepted control (#296). Those five are: authorising an export/purge
+  execution, approving and activating a retention schedule, and activating and
+  releasing a legal hold.
+- The practical cost of that exemption is **one extra MFA prompt per irreversible
+  act** — releasing a hold or authorising a purge needs a step-up for that exact
+  purpose. If the owner intends "no frequent prompts" to cover these five as
+  well, say so and they revert to the conditional gate; this note exists so that
+  is a decision rather than a discovery.
+
+Status of both entries stays `Partially implemented`: the control is now
+deliberately partial rather than accidentally so, and the tests pin which half
+is which.
