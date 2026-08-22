@@ -6089,6 +6089,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/reports/foundation-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Report Foundation Contract */
+        get: operations["get_ip_report_foundation_contract_api_ip_reports_foundation_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/reports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Report Preview */
+        post: operations["post_ip_report_preview_api_ip_reports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/rule-policies": {
         parameters: {
             query?: never;
@@ -23657,6 +23691,228 @@ export interface components {
             /** State Reconciliation Required */
             state_reconciliation_required: boolean;
             term: components["schemas"]["IpRenewalTermRecord"];
+        };
+        /** IpReportDefinitionRecord */
+        IpReportDefinitionRecord: {
+            /**
+             * Background Execution
+             * @default false
+             */
+            background_execution: boolean;
+            /** Canonical Sources */
+            canonical_sources: string[];
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "portfolio_register" | "deadline_control" | "renewal" | "data_quality";
+            /**
+             * Scheduled Delivery
+             * @default false
+             */
+            scheduled_delivery: boolean;
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Synchronous Preview
+             * @default true
+             */
+            synchronous_preview: boolean;
+        };
+        /** IpReportFoundationContract */
+        IpReportFoundationContract: {
+            /**
+             * Artifact Storage
+             * @default none
+             * @constant
+             */
+            artifact_storage: "none";
+            /**
+             * Audience
+             * @default internal
+             * @constant
+             */
+            audience: "internal";
+            /**
+             * Contract Version
+             * @default iplf-038a-v1
+             * @constant
+             */
+            contract_version: "iplf-038a-v1";
+            /** Definitions */
+            definitions: components["schemas"]["IpReportDefinitionRecord"][];
+            /**
+             * Delivery
+             * @default not_available
+             * @constant
+             */
+            delivery: "not_available";
+            /**
+             * Execution Mode
+             * @default synchronous
+             * @constant
+             */
+            execution_mode: "synchronous";
+            /**
+             * Hidden Restricted Count Policy
+             * @default omit_without_count
+             * @constant
+             */
+            hidden_restricted_count_policy: "omit_without_count";
+            /**
+             * Persistence
+             * @default none
+             * @constant
+             */
+            persistence: "none";
+        };
+        /** IpReportFreshness */
+        IpReportFreshness: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Source Cutoffs */
+            source_cutoffs: {
+                [key: string]: string | null;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "current" | "mixed" | "unavailable";
+            /** Unavailable Sources */
+            unavailable_sources?: string[];
+        };
+        /**
+         * IpReportPortfolioFilters
+         * @description Report filters reject misspellings instead of silently widening scope.
+         */
+        IpReportPortfolioFilters: {
+            /** Asset Kind */
+            asset_kind?: string[];
+            /** Client */
+            client?: string[];
+            /** Deadline State */
+            deadline_state?: string[];
+            /** Docket Status */
+            docket_status?: string[];
+            /** Filing Phase */
+            filing_phase?: string[];
+            /**
+             * Include Inactive
+             * @default false
+             */
+            include_inactive: boolean;
+            /** Jurisdiction */
+            jurisdiction?: string[];
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Nice Class */
+            nice_class?: number[];
+            /** Office */
+            office?: string[];
+            /**
+             * Opposition Only
+             * @default false
+             */
+            opposition_only: boolean;
+            /** Proprietor */
+            proprietor?: string[];
+            /** Query */
+            query?: string | null;
+            /** Registry Sync State */
+            registry_sync_state?: ("current" | "stale" | "failed" | "unavailable")[];
+            /** Responsible Membership Id */
+            responsible_membership_id?: string[];
+            /** Team Id */
+            team_id?: string[];
+        };
+        /** IpReportPreviewRequest */
+        IpReportPreviewRequest: {
+            /**
+             * Audience
+             * @default internal
+             * @constant
+             */
+            audience: "internal";
+            /**
+             * Confidentiality
+             * @default internal
+             * @enum {string}
+             */
+            confidentiality: "internal" | "restricted";
+            filters?: components["schemas"]["IpReportPortfolioFilters"];
+            /** Renewal States */
+            renewal_states?: ("due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled")[];
+            /**
+             * Report Kind
+             * @enum {string}
+             */
+            report_kind: "portfolio_register" | "deadline_control" | "renewal" | "data_quality";
+            /**
+             * Row Limit
+             * @default 200
+             */
+            row_limit: number;
+        };
+        /** IpReportPreviewResponse */
+        IpReportPreviewResponse: {
+            /**
+             * Audience
+             * @default internal
+             * @constant
+             */
+            audience: "internal";
+            /**
+             * Confidentiality
+             * @enum {string}
+             */
+            confidentiality: "internal" | "restricted";
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            freshness: components["schemas"]["IpReportFreshness"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Hidden Restricted Count Policy
+             * @default omit_without_count
+             * @constant
+             */
+            hidden_restricted_count_policy: "omit_without_count";
+            /**
+             * Report Kind
+             * @enum {string}
+             */
+            report_kind: "portfolio_register" | "deadline_control" | "renewal" | "data_quality";
+            /** Row Count */
+            row_count: number;
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+            /** Schema Version */
+            schema_version: string;
+            /** Snapshot Sha256 */
+            snapshot_sha256: string;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+            /**
+             * Timezone
+             * @default UTC
+             * @constant
+             */
+            timezone: "UTC";
+            /** Truncated */
+            truncated: boolean;
         };
         /** IpResponsibilityInput */
         IpResponsibilityInput: {
@@ -47273,6 +47529,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketControlReport"];
+                };
+            };
+        };
+    };
+    get_ip_report_foundation_contract_api_ip_reports_foundation_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpReportFoundationContract"];
+                };
+            };
+        };
+    };
+    post_ip_report_preview_api_ip_reports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpReportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpReportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

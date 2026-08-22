@@ -194,6 +194,11 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalTermRecord,
     IpRenewalTermTransitionRequest,
 )
+from caseops_api.schemas.ip_reports import (
+    IpReportFoundationContract,
+    IpReportPreviewRequest,
+    IpReportPreviewResponse,
+)
 from caseops_api.schemas.shared_work import (
     IpOperationalDeadlineCreateRequest,
     IpOperationalDeadlineListResponse,
@@ -356,6 +361,10 @@ from caseops_api.services.ip_renewals import (
     renewal_foundation_contract,
     schedule_renewal_instruction_reminders,
     transition_renewal_term,
+)
+from caseops_api.services.ip_reports import (
+    ip_report_foundation_contract,
+    preview_ip_report,
 )
 from caseops_api.services.ip_workspace import (
     enable_ip_workspace,
@@ -2776,3 +2785,23 @@ async def get_ip_docket_control_report(
     session: DbSession,
 ) -> IpDocketControlReport:
     return ip_docket_control_report(session, context=context)
+
+
+@router.get(
+    "/reports/foundation-contract",
+    response_model=IpReportFoundationContract,
+)
+async def get_ip_report_foundation_contract(
+    context: IpViewer,
+) -> IpReportFoundationContract:
+    del context
+    return ip_report_foundation_contract()
+
+
+@router.post("/reports/preview", response_model=IpReportPreviewResponse)
+async def post_ip_report_preview(
+    payload: IpReportPreviewRequest,
+    context: IpViewer,
+    session: DbSession,
+) -> IpReportPreviewResponse:
+    return preview_ip_report(session, context=context, payload=payload)
