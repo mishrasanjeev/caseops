@@ -95,6 +95,8 @@ import {
   type TenantDataOperationDryRunListResponse,
   type TenantDataOperationDryRunInput,
   type TenantDataOperationDryRunRecord,
+  tenantDataOperationReviewRecord,
+  type TenantDataOperationReviewRecord,
   type ProviderOperationReplayBatchResponse,
   type ProviderOperationReplayPreviewResponse,
   type ProviderCostProfileListResponse,
@@ -6882,6 +6884,44 @@ export async function fetchTenantDataOperationDryRun(
     `/api/admin/data-governance/operations/dry-runs/${encodeURIComponent(operationId)}`,
   );
   return tenantDataOperationDryRunRecord.parse(data);
+}
+
+/** The three DATA-GOV-05 review transitions.
+ *
+ * Approving authorises an execution and performs none: the execute route still
+ * refuses unconditionally, and the response carries `executed: false` so a
+ * success here cannot be read as "it ran".
+ */
+export async function requestTenantDataOperationReview(
+  operationId: string,
+): Promise<TenantDataOperationReviewRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/${encodeURIComponent(operationId)}/review/request`,
+    { method: "POST" },
+  );
+  return tenantDataOperationReviewRecord.parse(data);
+}
+
+export async function approveTenantDataOperationReview(
+  operationId: string,
+  approverLabel: string,
+): Promise<TenantDataOperationReviewRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/${encodeURIComponent(operationId)}/review/approve`,
+    { method: "POST", body: { approver_label: approverLabel } },
+  );
+  return tenantDataOperationReviewRecord.parse(data);
+}
+
+export async function rejectTenantDataOperationReview(
+  operationId: string,
+  reason: string,
+): Promise<TenantDataOperationReviewRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/data-governance/operations/${encodeURIComponent(operationId)}/review/reject`,
+    { method: "POST", body: { reason } },
+  );
+  return tenantDataOperationReviewRecord.parse(data);
 }
 
 export async function fetchProviderReadiness(): Promise<ProviderReadinessListResponse> {

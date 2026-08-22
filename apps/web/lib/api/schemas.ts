@@ -2467,6 +2467,10 @@ export const tenantDataOperationDryRunSummary = z.object({
   request_evidence_ref: z.string(),
   completed_at: z.string(),
   as_of: z.string(),
+  // Set once approved. The manifest itself keeps `approval_status: "requested"`
+  // because the separate execute row is the record of the outcome, so this is
+  // the only field that distinguishes an approved manifest from a pending one.
+  approved_operation_id: z.string().nullable().default(null),
 });
 
 export const tenantDataOperationDryRunListResponse = z.object({
@@ -2491,6 +2495,18 @@ export const tenantDataOperationDryRunRecord = tenantDataOperationDryRunSummary.
   exclusions: z.array(z.unknown()),
   offboarding_plan: z.array(z.unknown()),
   dependency_plan: z.unknown().nullable(),
+});
+
+export const tenantDataOperationReviewRecord = z.object({
+  id: z.string(),
+  operation_type: tenantDataOperationType,
+  approval_status: tenantDataOperationApprovalStatus,
+  rejection_reason: z.string().nullable(),
+  manifest_hash: z.string(),
+  request_scope_hash: z.string(),
+  approved_operation_id: z.string().nullable().default(null),
+  // Always false. Approving authorises an execution; it never performs one.
+  executed: z.literal(false),
 });
 
 export const providerOperationActionResponse = z.object({
@@ -3428,6 +3444,8 @@ export type TenantDataOperationDryRunListResponse =
   z.infer<typeof tenantDataOperationDryRunListResponse>;
 export type TenantDataOperationDryRunRecord =
   z.infer<typeof tenantDataOperationDryRunRecord>;
+export type TenantDataOperationReviewRecord =
+  z.infer<typeof tenantDataOperationReviewRecord>;
 export type ProviderOperationActionResponse =
   z.infer<typeof providerOperationActionResponse>;
 export type ProviderOperationReplayPreviewResponse =

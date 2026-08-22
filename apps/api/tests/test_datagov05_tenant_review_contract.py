@@ -523,6 +523,55 @@ def test_datagov05_the_approval_outcome_survives_losing_the_response(
     assert row["approved_operation_id"] == authorised_id
 
 
+def test_datagov05_the_approver_can_read_what_they_are_asked_to_sign(
+    client: TestClient,
+) -> None:
+    """A blind approver is not a second pair of eyes.
+
+    The review routes were gated on ``data_operations:review`` (owner+admin) so
+    a four-eyes control would be satisfiable, but the manifest LIST and DETAIL
+    stayed on the owner-only ``audit:export``. An admin could therefore approve
+    an export they were unable to list or read - a signature with nothing behind
+    it, and the same unsatisfiable shape one layer down.
+
+    Creating a manifest stays owner-only: reading what you are signing is not
+    the same permission as starting a tenant data operation.
+    """
+
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    manifest = _create_dry_run(client, owner_token)
+    _admin_membership_id, admin_token = _invite(
+        client, owner_token, role="admin", email="reading-approver@asterlegal.in"
+    )
+
+    listed = client.get(f"{BASE}/operations/dry-runs", headers=auth_headers(admin_token))
+    assert listed.status_code == 200, listed.text
+    assert any(row["id"] == manifest["id"] for row in listed.json()["operations"]), (
+        "the approver must be able to discover which manifests await review"
+    )
+
+    detail = client.get(
+        f"{BASE}/operations/dry-runs/{manifest['id']}", headers=auth_headers(admin_token)
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["manifest_hash"] == manifest["manifest_hash"]
+
+    # Reading is not creating. Starting a tenant data operation stays with the
+    # owner, so widening the read did not widen the write.
+    created = client.post(
+        f"{BASE}/operations/dry-runs",
+        headers=auth_headers(admin_token),
+        json=_payload().model_dump(mode="json"),
+    )
+    assert created.status_code == 403, created.text
+
+    # ...and neither did it widen tenant-wide oversight.
+    for route in ("integrity", "holds/summary"):
+        response = client.get(f"{BASE}/{route}", headers=auth_headers(admin_token))
+        assert response.status_code == 403, f"{route}: {response.text}"
+
+
 def test_datagov05_an_unsubmitted_manifest_cannot_be_approved(client: TestClient) -> None:
     """Approval has to follow a submission, not replace it."""
 
