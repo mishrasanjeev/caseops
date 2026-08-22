@@ -526,6 +526,10 @@ class TestARealPurgeNeedsAnActiveSchedule:
     ) -> None:
         operation = self._submitted_purge(session, proposer, None)
         approver = _colleague(session, proposer.company, "Approver")
+        # Approving a data operation now requires a recent step-up
+        # unconditionally, so arrange it or the refusal below is the step-up
+        # gate rather than the retention rule this test is about.
+        _step_up(session, approver, purpose="data_operation_execution")
 
         with pytest.raises(HTTPException) as excinfo:
             approve_execution(
@@ -568,6 +572,10 @@ class TestARealPurgeNeedsAnActiveSchedule:
             reason="withdrawn before execution",
         )
 
+        # Approving a data operation now requires a recent step-up
+        # unconditionally, so arrange it or the refusal below is the step-up
+        # gate rather than the retired-schedule rule this test is about.
+        _step_up(session, reviewer, purpose="data_operation_execution")
         with pytest.raises(HTTPException) as excinfo:
             approve_execution(
                 session,
@@ -599,6 +607,10 @@ class TestARealPurgeNeedsAnActiveSchedule:
         )
         activate_version(session, context=reviewer, version_id=version.id)
         operation = self._submitted_purge(session, proposer, version.id)
+        # Approving a data operation now requires a recent step-up
+        # unconditionally, so arrange it or the refusal below is the step-up
+        # gate rather than the retention rule this test is about.
+        _step_up(session, reviewer, purpose="data_operation_execution")
 
         execution = approve_execution(
             session,
