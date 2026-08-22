@@ -3332,7 +3332,7 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const conversionIncomplete = converted && (!fxRate || !fxRateSource || !fxConvertedAt || !baseAmount || baseCurrency === currency);
 
   return (
-    <Card className="min-w-0">
+    <Card className="min-w-0" data-testid="ip-cost-workspace">
       <CardHeader><CardTitle as="h3">IP cost evidence</CardTitle></CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {docket.cost_items.map((row) => (

@@ -10742,7 +10742,9 @@
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc05_confidential_rates_are_permissioned#IPLF-UJ-52-EXC-05",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model",
-        "apps/web/app/app/ip/page.test.tsx"
+        "apps/web/app/app/ip/page.test.tsx",
+        "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F records a nonbillable cost on a record with no billing Matter",
+        "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F shows an estimate as an estimate and withholds a confidential rate"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
