@@ -214,3 +214,72 @@ def test_verified_citations_required_has_specific_slug(client: TestClient) -> No
     assert body["type"] == "verified_citations_required"
     assert body["title"] == "Unprocessable content"
     assert "verified citations" in body["detail"].lower()
+
+
+def test_a_dict_detail_type_becomes_the_machine_readable_slug() -> None:
+    # Services across this codebase raise `detail={"type": "some_slug", ...}`.
+    # That slug was listed as a reserved problem member and therefore DROPPED,
+    # so the refusal arrived over HTTP as a generic https://httpstatuses.com/409
+    # and a client could not tell one 409 from another. Service-level tests
+    # never noticed, because they read exc.detail["type"] directly.
+    body = _problem_payload(
+        status_code=409,
+        detail={
+            "type": "data_class_registered_but_not_reviewed",
+            "detail": "This table is inventoried but not reviewed.",
+            "data_class_id": "matters",
+        },
+        instance="/api/admin/x",
+    )
+
+    assert body["type"] == "data_class_registered_but_not_reviewed"
+    assert body["detail"] == "This table is inventoried but not reviewed."
+    # The slug is promoted, not duplicated into the extensions.
+    assert "data_class_id" in body
+    assert body["status"] == 409
+
+
+def test_the_substring_map_still_outranks_a_dict_slug() -> None:
+    # The change is additive on purpose: a response that already resolved to a
+    # mapped slug must keep it, or existing clients switching on that value
+    # break. PROBLEM_TYPE_MAP maps 404 + "Matter not found" -> matter_not_found.
+    body = _problem_payload(
+        status_code=404,
+        detail={"type": "something_else", "detail": "Matter not found"},
+        instance="/api/matters/m-1",
+    )
+
+    assert body["type"] == "matter_not_found"
+
+
+def test_an_explicit_problem_type_still_outranks_everything() -> None:
+    body = _problem_payload(
+        status_code=409,
+        detail={"type": "from_the_dict", "detail": "Conflict."},
+        instance="/api/x",
+        problem_type="explicitly_passed",
+    )
+
+    assert body["type"] == "explicitly_passed"
+
+
+def test_a_uri_valued_dict_type_is_not_treated_as_a_slug() -> None:
+    # A caller passing a full URI already means it as the problem type; only a
+    # bare slug is promoted, so a stray URL cannot silently become the type.
+    body = _problem_payload(
+        status_code=409,
+        detail={"type": "https://example.test/errors/x", "detail": "Conflict."},
+        instance="/api/x",
+    )
+
+    assert body["type"] == "https://httpstatuses.com/409"
+
+
+def test_a_dict_detail_without_a_type_still_falls_back() -> None:
+    body = _problem_payload(
+        status_code=409,
+        detail={"detail": "Nothing mapped here."},
+        instance="/api/x",
+    )
+
+    assert body["type"] == "https://httpstatuses.com/409"
