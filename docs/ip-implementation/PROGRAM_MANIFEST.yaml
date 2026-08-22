@@ -10143,7 +10143,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md",
-          "revision": "31a2c87639efefb07264e45ca6a5142ec8a60519",
+          "revision": "3ab8518ef11b4ed58fe1e3f26d13e4fb07670b4c",
           "environment": "local SQLite API fixtures and generated OpenAPI/web type checks",
           "fixtures": "isolated law-firm owner and associate with open and restricted IP portfolio records plus empty deadline and renewal states",
           "assertions": "four synchronous definitions, no duplicate control plane, truthful freshness, strict request shape, tenant/access scoping, hidden-count policy, audit digest and adjacent canonical-reader regressions",
@@ -10173,7 +10173,7 @@
       "documentation_impact": [
         "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md"
       ],
-      "allocation_review": "2026-08-23 current-main reconciliation: IPLF-030A/030B already own portfolio reads and export jobs, IPLF-039C owns signed docket-control reporting, IPLF-037 owns renewal reporting, and shared services own access, notifications and audit. IPLF-038A therefore adds only strict internal synchronous definitions and previews over those owners. It creates no schema, queue, artifact, scheduler, delivery, legal-date copy, portal route or UI. Local verification passed at exact implementation revision 31a2c87639efefb07264e45ca6a5142ec8a60519. REPORT-01..03 and every UJ-27/UJ-59 path remain allocated to IPLF-038B.",
+      "allocation_review": "2026-08-23 current-main reconciliation: IPLF-030A/030B already own portfolio reads and export jobs, IPLF-039C owns signed docket-control reporting, IPLF-037 owns renewal reporting, and shared services own access, notifications and audit. IPLF-038A therefore adds only strict internal synchronous definitions and previews over those owners. It creates no schema, queue, artifact, scheduler, delivery, legal-date copy, portal route or UI. Local verification passed at exact integrated implementation revision 3ab8518ef11b4ed58fe1e3f26d13e4fb07670b4c. REPORT-01..03 and every UJ-27/UJ-59 path remain allocated to IPLF-038B.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
