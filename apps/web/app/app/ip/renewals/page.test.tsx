@@ -103,6 +103,18 @@ const RESPONSE = {
         source_version: "registry-rules-2026-v1",
         explanation: "Verified grace period",
       },
+      fee: {
+        id: "fee-1",
+        category: "official_fee",
+        description: "Renewal official fee quote",
+        cost_nature: "estimate",
+        billable: false,
+        evidence_reference: "registry://fees/renewal-v1",
+        billing_link_type: null,
+        billing_link_id: null,
+        reconciliation_status: "unlinked",
+        reconciled_at: null,
+      },
       reporting_state: "due" as const,
       calendar_phase: "due" as const,
       action_required: "request_instruction" as const,
@@ -147,6 +159,8 @@ describe("IpRenewalsPage", () => {
     expect((await screen.findAllByText("ASTER device mark")).length).toBeGreaterThan(0);
     expect(screen.getByText("Trade Marks Act and applicable rules")).toBeInTheDocument();
     expect(screen.getByText("registry-rules-2026-v1")).toBeInTheDocument();
+    expect(screen.getByText(/Renewal official fee quote/)).toBeInTheDocument();
+    expect(screen.getByText("Reconciliation: unlinked")).toBeInTheDocument();
     expect(screen.getByText("Request client instruction")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open IP docket" })).toHaveAttribute(
       "href",
@@ -256,6 +270,47 @@ describe("IpRenewalsPage", () => {
       ),
     );
     expect(transitionMock).not.toHaveBeenCalled();
+  });
+
+  it("records a versioned revision without replacing the current instruction in place", async () => {
+    const acceptedInstruction = {
+      id: "instruction-1",
+      instruction_version: 1,
+      row_version: 2,
+      decision: "renew" as const,
+      status: "accepted" as const,
+      scope_json: { description: "All classes" },
+      options_json: [],
+      instruction_deadline_at: null,
+      source_channel: "client_portal",
+      authority_name: "Authorized client contact",
+      authority_reference: "BOARD-2026-08",
+      evidence_refs_json: ["portal://instruction/1"],
+      received_at: "2026-08-22T04:30:00Z",
+      acknowledgement_reason: "Authority verified",
+      updated_at: "2026-08-22T04:35:00Z",
+    };
+    fetchPortfolioMock.mockResolvedValue({
+      ...RESPONSE,
+      items: [
+        {
+          ...RESPONSE.items[0],
+          term: { ...TERM, state: "instructed", version: 2, instructions: [acceptedInstruction] },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(withClient(<IpRenewalsPage />));
+    await user.click(await screen.findByRole("button", { name: "Record revised instruction" }));
+    await user.type(screen.getByLabelText("Revised authority name"), "Revised authority");
+    await user.type(screen.getByLabelText("Revised evidence reference"), "portal://instruction/2");
+    await user.click(screen.getByRole("button", { name: "Record revision" }));
+
+    await waitFor(() =>
+      expect(createInstructionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ currentInstruction: acceptedInstruction }),
+      ),
+    );
   });
 
   it("fails closed when the member lacks IP read access", () => {

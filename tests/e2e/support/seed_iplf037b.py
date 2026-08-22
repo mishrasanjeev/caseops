@@ -295,6 +295,21 @@ def main() -> None:
                     created_by_membership_id=membership_id,
                     creator_label_snapshot="Renewal Partner",
                 ),
+                IpResponsibilityAssignment(
+                    company_id=company_id,
+                    docket_id=docket.id,
+                    deadline_id=renewal.id,
+                    membership_id=membership_id,
+                    membership_label_snapshot="Supervising renewal partner",
+                    role="supervisor",
+                    effective_from=now - timedelta(days=1),
+                    accepted_at=now,
+                    replacement_source="iplf-037b-e2e",
+                    escalation_policy_json={"supervisor_after_days": 0},
+                    version=1,
+                    created_by_membership_id=membership_id,
+                    creator_label_snapshot="Renewal Partner",
+                ),
             ]
         )
         session.commit()

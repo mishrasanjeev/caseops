@@ -244,6 +244,19 @@ class IpRenewalReminderSummary(BaseModel):
     last_delivered_at: datetime | None = None
 
 
+class IpRenewalFeeSummary(BaseModel):
+    id: str
+    category: str
+    description: str
+    cost_nature: str
+    billable: bool
+    evidence_reference: str
+    billing_link_type: str | None
+    billing_link_id: str | None
+    reconciliation_status: str
+    reconciled_at: datetime | None
+
+
 class IpRenewalWorkflowRecord(BaseModel):
     docket_id: str
     docket_title: str
@@ -252,6 +265,7 @@ class IpRenewalWorkflowRecord(BaseModel):
     term: IpRenewalTermRecord
     renewal_deadline: IpRenewalDeadlineSummary
     grace_deadline: IpRenewalDeadlineSummary | None
+    fee: IpRenewalFeeSummary | None
     reporting_state: RenewalState
     calendar_phase: RenewalCalendarPhase
     action_required: RenewalAction

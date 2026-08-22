@@ -30,6 +30,7 @@ from caseops_api.schemas.ip_renewals import (
     IpClientInstructionCreateRequest,
     IpClientInstructionRecord,
     IpRenewalDeadlineSummary,
+    IpRenewalFeeSummary,
     IpRenewalFoundationContract,
     IpRenewalPortfolioCounts,
     IpRenewalPortfolioResponse,
@@ -382,12 +383,30 @@ def _reminder_summary(intents: list[NotificationDeliveryIntent]) -> IpRenewalRem
     )
 
 
+def _fee_summary(row: IpCostItem | None) -> IpRenewalFeeSummary | None:
+    if row is None:
+        return None
+    return IpRenewalFeeSummary(
+        id=row.id,
+        category=row.category,
+        description=row.description,
+        cost_nature=row.cost_nature,
+        billable=row.billable,
+        evidence_reference=row.evidence_reference,
+        billing_link_type=row.billing_link_type,
+        billing_link_id=row.billing_link_id,
+        reconciliation_status=row.reconciliation_status,
+        reconciled_at=row.reconciled_at,
+    )
+
+
 def _workflow_record(
     session: Session,
     *,
     docket: IpDocketRecord,
     term: IpRenewalTerm,
     deadline_by_id: dict[str, IpDeadline],
+    cost_by_id: dict[str, IpCostItem],
     reminders_by_term: dict[str, list[NotificationDeliveryIntent]],
     today: date,
 ) -> IpRenewalWorkflowRecord:
@@ -416,6 +435,7 @@ def _workflow_record(
         term=_record(session, term),
         renewal_deadline=_deadline_summary(renewal_deadline),
         grace_deadline=_deadline_summary(grace_deadline) if grace_deadline else None,
+        fee=_fee_summary(cost_by_id.get(term.fee_cost_item_id or "")),
         reporting_state=reporting_state,
         calendar_phase=phase,
         action_required=_action_required(
@@ -475,6 +495,16 @@ def list_renewal_portfolio(
         ).all()
     )
     deadline_by_id = {row.id: row for row in deadlines}
+    cost_ids = {term.fee_cost_item_id for term in terms if term.fee_cost_item_id}
+    costs = list(
+        session.scalars(
+            select(IpCostItem).where(
+                IpCostItem.company_id == context.company.id,
+                IpCostItem.id.in_(sorted(cost_ids)),
+            )
+        ).all()
+    ) if cost_ids else []
+    cost_by_id = {row.id: row for row in costs}
     intents = list(
         session.scalars(
             select(NotificationDeliveryIntent).where(
@@ -496,6 +526,7 @@ def list_renewal_portfolio(
             docket=docket_by_id[term.docket_id],
             term=term,
             deadline_by_id=deadline_by_id,
+            cost_by_id=cost_by_id,
             reminders_by_term=reminders_by_term,
             today=today,
         )
@@ -1051,7 +1082,11 @@ def acknowledge_client_instruction(
     instruction.acknowledgement_reason = payload.reason.strip()
     instruction.resulting_event_id = payload.resulting_event_id
     instruction.updated_at = now
-    if payload.status == "accepted" and instruction.decision == "renew":
+    if (
+        payload.status == "accepted"
+        and instruction.decision == "renew"
+        and term.state == "due"
+    ):
         term.state = "instructed"
         term.version += 1
         term.updated_by_membership_id = context.membership.id

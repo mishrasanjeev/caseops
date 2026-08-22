@@ -341,6 +341,22 @@ function RenewalWorkspace({ row, canWrite }: { row: IpRenewalWorkflow; canWrite:
             <Datum label="Rule citation" value={row.renewal_deadline.rule_citation} wide />
             <Datum label="Source version" value={row.renewal_deadline.source_version} wide />
             <Datum label="Calculation" value={row.renewal_deadline.explanation} wide />
+            <Datum
+              label="Fee / quote evidence"
+              value={row.fee ? `${row.fee.description} · ${row.fee.evidence_reference}` : "Not linked"}
+              wide
+            />
+            <Datum
+              label="Payment / billing link"
+              value={
+                row.fee?.billing_link_type && row.fee.billing_link_id
+                  ? `${row.fee.billing_link_type}: ${row.fee.billing_link_id}`
+                  : row.fee
+                    ? `Reconciliation: ${row.fee.reconciliation_status}`
+                    : "Not linked"
+              }
+              wide
+            />
             {row.state_reconciliation_required ? (
               <div className="sm:col-span-2 flex gap-2 border-l-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-900">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -402,6 +418,7 @@ function InstructionPanel({
   const [evidenceReference, setEvidenceReference] = useState("");
   const [scope, setScope] = useState("All registered classes");
   const [ackReason, setAckReason] = useState("");
+  const [revising, setRevising] = useState(false);
   const create = useMutation({
     mutationFn: () =>
       createIpRenewalInstruction({
@@ -418,6 +435,7 @@ function InstructionPanel({
       }),
     onSuccess: async () => {
       toast.success("Client instruction recorded; pending reminders were cancelled.");
+      setRevising(false);
       await onChanged();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record client instruction.")),
@@ -466,6 +484,39 @@ function InstructionPanel({
                   <Button size="sm" variant="ghost" disabled={ackReason.trim().length < 5 || acknowledge.isPending} onClick={() => acknowledge.mutate("rejected")}>Reject</Button>
                 </div>
               </div>
+            ) : null}
+            {canWrite && current.status !== "pending" && !revising ? (
+              <div>
+                <Button size="sm" variant="outline" onClick={() => setRevising(true)}>
+                  Record revised instruction
+                </Button>
+              </div>
+            ) : null}
+            {canWrite && revising ? (
+              <form
+                className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 sm:grid-cols-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  create.mutate();
+                }}
+              >
+                <Field label="Revised decision">
+                  <select className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={decision} onChange={(event) => setDecision(event.target.value as IpRenewalInstruction["decision"])}>
+                    <option value="renew">Renew</option>
+                    <option value="do_not_renew">Do not renew</option>
+                    <option value="defer">Defer</option>
+                    <option value="clarification_required">Clarification required</option>
+                  </select>
+                </Field>
+                <Field label="Revised authority name"><Input value={authorityName} onChange={(event) => setAuthorityName(event.target.value)} /></Field>
+                <Field label="Revised authority reference"><Input value={authorityReference} onChange={(event) => setAuthorityReference(event.target.value)} /></Field>
+                <Field label="Revised evidence reference"><Input value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} /></Field>
+                <div className="sm:col-span-2"><Field label="Revised instruction scope"><Textarea value={scope} onChange={(event) => setScope(event.target.value)} /></Field></div>
+                <div className="flex flex-wrap gap-2 sm:col-span-2">
+                  <Button size="sm" type="submit" disabled={!createReady || create.isPending}>Record revision</Button>
+                  <Button size="sm" type="button" variant="ghost" onClick={() => setRevising(false)}>Cancel</Button>
+                </div>
+              </form>
             ) : null}
           </>
         ) : canWrite ? (

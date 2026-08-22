@@ -23285,6 +23285,29 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** IpRenewalFeeSummary */
+        IpRenewalFeeSummary: {
+            /** Billable */
+            billable: boolean;
+            /** Billing Link Id */
+            billing_link_id: string | null;
+            /** Billing Link Type */
+            billing_link_type: string | null;
+            /** Category */
+            category: string;
+            /** Cost Nature */
+            cost_nature: string;
+            /** Description */
+            description: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
+            /** Reconciled At */
+            reconciled_at: string | null;
+            /** Reconciliation Status */
+            reconciliation_status: string;
+        };
         /** IpRenewalFoundationContract */
         IpRenewalFoundationContract: {
             /**
@@ -23618,6 +23641,7 @@ export interface components {
             docket_id: string;
             /** Docket Title */
             docket_title: string;
+            fee: components["schemas"]["IpRenewalFeeSummary"] | null;
             grace_deadline: components["schemas"]["IpRenewalDeadlineSummary"] | null;
             /** Primary Identifier */
             primary_identifier: string | null;

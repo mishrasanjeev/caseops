@@ -8520,6 +8520,18 @@ export type IpRenewalWorkflow = {
   term: IpRenewalTerm;
   renewal_deadline: IpRenewalDeadline;
   grace_deadline: IpRenewalDeadline | null;
+  fee: {
+    id: string;
+    category: string;
+    description: string;
+    cost_nature: string;
+    billable: boolean;
+    evidence_reference: string;
+    billing_link_type: string | null;
+    billing_link_id: string | null;
+    reconciliation_status: string;
+    reconciled_at: string | null;
+  } | null;
   reporting_state: IpRenewalState;
   calendar_phase: "due" | "grace" | "overdue" | "closed";
   action_required:
