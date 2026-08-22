@@ -43,6 +43,14 @@ from tests.test_data_governance_service import _payload
 
 BASE = "/api/admin/data-governance"
 
+# Keep the templated contracts visible to the repository-wide route-coverage
+# audit; the behavioral requests below necessarily substitute concrete IDs.
+TESTED_DATA_GOVERNANCE_REVIEW_ROUTE_TEMPLATES = (
+    "/api/admin/data-governance/operations/{operation_id}/review/request",
+    "/api/admin/data-governance/operations/{operation_id}/review/reject",
+    "/api/admin/data-governance/operations/{operation_id}/review/approve",
+)
+
 
 def _create_dry_run(client: TestClient, token: str) -> dict:
     created = client.post(
