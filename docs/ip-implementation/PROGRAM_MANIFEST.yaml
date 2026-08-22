@@ -10052,7 +10052,8 @@
         "apps/web/app/app/ip/renewals/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md",
+        "docs/ip-implementation/evidence/release-2026-08-23-bc171a43-checkpoint.md"
       ],
       "evidence_metadata": [
         {
@@ -10063,6 +10064,15 @@
           "assertions": "UJ-26 normal, no-instruction notification, grace reconciliation, initiation-not-acceptance, access isolation, source provenance and responsive UI",
           "result": "passed",
           "recorded_at": "2026-08-22T17:51:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/release-2026-08-23-bc171a43-checkpoint.md",
+          "revision": "bc171a43f9f67917fef3eb1afcfad5ff765721ec",
+          "environment": "production exact-release workflow",
+          "fixtures": "CaseOps QA production tenant; governed renewal calendar/rule IDs absent",
+          "assertions": "exact deployment identity, health, A0 and notice checks passed; UJ-26 correctly refused to invent missing legal-rule fixture IDs",
+          "result": "passed",
+          "recorded_at": "2026-08-23T02:25:00+05:30"
         }
       ],
       "approvals": [],
@@ -10070,16 +10080,16 @@
         {
           "id": "IPLF-037B-RELEASE-VERIFY",
           "state": "active",
-          "summary": "Repository verification passed; exact-head CI, merged-main recheck, deployment and dated production verification remain pending.",
-          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health, migration boundary and production UJ-26 acceptance evidence.",
+          "summary": "Exact-head/main CI and deployment identity passed at bc171a43; production UJ-26 acceptance remains blocked because the four approved renewal calendar/rule version variables are absent.",
+          "evidence_needed": "Approved existing values for CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID, CASEOPS_IP_RENEWAL_RULE_VERSION_ID, CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID and CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID, followed by exact-release production UJ-26 acceptance.",
           "owner": "CaseOps release workflow",
           "milestone_impact": "Blocks release_status only; repository implementation and local verification are complete.",
           "next_independent_slice": "IPLF-038A"
         }
       ],
       "next_actions": [
-        "Run the exact-head CI/PostgreSQL/security/CodeQL matrix, merge only when green, deploy through the canonical release workflow, and attach dated production identity/health/UJ-26 evidence.",
-        "After production verification, remove IPLF-037B-RELEASE-VERIFY and set release_status to deployment_verified on the exact deployed revision."
+        "Identify approved existing renewal calendar/rule versions without enabling rule governance or creating substitute legal rules, set the four protected acceptance variables, and rerun exact-release UJ-26 production acceptance.",
+        "After UJ-26 production verification, remove IPLF-037B-RELEASE-VERIFY and set release_status to deployment_verified on the exact deployed revision."
       ],
       "data_impact": [
         "No schema change. Reads IPLF-037A renewal/instruction rows and existing legal evidence owners; writes instructions and term transitions only through the canonical renewal writer and reminder intents only through notification_delivery_intents."
@@ -10087,7 +10097,8 @@
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
+        "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md",
+        "docs/ip-implementation/evidence/release-2026-08-23-bc171a43-checkpoint.md"
       ],
       "allocation_review": "2026-08-22 current-main reconciliation: IPLF-037A already owned renewal and instruction persistence plus every evidence gate. IPLF-037B therefore adds only the operational portfolio projection, responsibility-based notification lifecycle, responsive user workflow, exception handling and release proof. It creates no renewal, deadline, event, document, cost, communication, task, calendar, notification, provider, report or audit duplicate. All four UJ-26 paths have concrete API/UI/browser tests; repository verification passed at exact implementation revision 15b9dc6c4034c8982609af789dd3c7e7507babec, including supervisor no-instruction escalation, append-only instruction revision behavior, and existing fee/payment reconciliation visibility. Release remains fail-closed until exact-head CI, merge, deployment and production verification.",
       "implementation_status": "implemented",
@@ -10138,7 +10149,8 @@
         "apps/api/tests/test_ip_report_foundation.py::test_iplf038a_preview_omits_restricted_records_without_count_or_probe_leaks"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/release-2026-08-23-bc171a43-checkpoint.md"
       ],
       "evidence_metadata": [
         {
@@ -10149,6 +10161,15 @@
           "assertions": "four synchronous definitions, no duplicate control plane, truthful freshness, strict request shape, tenant/access scoping, hidden-count policy, audit digest and adjacent canonical-reader regressions",
           "result": "passed",
           "recorded_at": "2026-08-23T00:45:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/release-2026-08-23-bc171a43-checkpoint.md",
+          "revision": "bc171a43f9f67917fef3eb1afcfad5ff765721ec",
+          "environment": "production API/web exact release and GitHub exact-main/release workflows",
+          "fixtures": "CaseOps QA production tenant; no dedicated authenticated IPLF-038 contract journey",
+          "assertions": "exact-main CI/security/CodeQL, migration, immutable API/web identity, health, A0 quiescence and notice regression; records unrelated IPLF-026B failure and absent renewal rule fixtures",
+          "result": "passed",
+          "recorded_at": "2026-08-23T02:25:00+05:30"
         }
       ],
       "approvals": [],
@@ -10156,22 +10177,23 @@
         {
           "id": "IPLF-038A-RELEASE-VERIFY",
           "state": "active",
-          "summary": "Repository verification passed; exact-head CI, merged-main recheck, deployment and dated production contract verification remain pending.",
-          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health and authenticated production foundation-contract verification.",
+          "summary": "Exact-head/main CI, deployment identity, migration and health passed at bc171a43; authenticated production foundation-contract verification remains pending.",
+          "evidence_needed": "An exact-release authenticated GET /api/ip/reports/foundation-contract and POST /api/ip/reports/preview check using an approved production QA identity, plus browser evidence when the IPLF-038B UI is deployed.",
           "owner": "CaseOps release workflow",
           "milestone_impact": "Blocks release_status only; repository implementation and local verification are complete.",
           "next_independent_slice": "IPLF-038B"
         }
       ],
       "next_actions": [
-        "Run the exact-head CI/PostgreSQL/security/CodeQL matrix, merge only when green, deploy through the canonical release workflow, and attach dated production identity, health and authenticated contract evidence.",
+        "Add the authenticated report contract/browser path to the exact-release production workflow and capture dated evidence using the approved QA identity.",
         "Proceed to IPLF-038B without adding report_jobs/report_artifacts unless representative-volume evidence proves the synchronous ceiling is insufficient."
       ],
       "data_impact": [
         "No schema change. Reads existing portfolio, docket-control and renewal projections under their canonical tenant/access predicates; writes only ip.report.previewed through the shared audit service."
       ],
       "documentation_impact": [
-        "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m3/IPLF-038A/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/release-2026-08-23-bc171a43-checkpoint.md"
       ],
       "allocation_review": "2026-08-23 current-main reconciliation: IPLF-030A/030B already own portfolio reads and export jobs, IPLF-039C owns signed docket-control reporting, IPLF-037 owns renewal reporting, and shared services own access, notifications and audit. IPLF-038A therefore adds only strict internal synchronous definitions and previews over those owners. It creates no schema, queue, artifact, scheduler, delivery, legal-date copy, portal route or UI. Local verification passed at exact integrated implementation revision 3ab8518ef11b4ed58fe1e3f26d13e4fb07670b4c. REPORT-01..03 and every UJ-27/UJ-59 path remain allocated to IPLF-038B.",
       "implementation_status": "implemented",
@@ -10238,8 +10260,22 @@
       "dependencies": [
         "IPLF-038A"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_reports.py",
+        "apps/api/src/caseops_api/services/ip_reports.py",
+        "apps/api/src/caseops_api/services/connector_health.py",
+        "apps/web/app/app/ip/reports/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_status_reports_preserve_registry_identifiers#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_operational_reports_are_honest#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_02_rejects_filters_that_cannot_be_applied#IPLF-REQ-REPORT-02",
+        "apps/web/app/app/ip/reports/page.test.tsx",
+        "tests/e2e/iplf-038b-reports-2026-08-23.spec.ts",
         "planned:IPLF-UJ-27-EXC-01",
         "planned:IPLF-UJ-27-EXC-02",
         "planned:IPLF-UJ-27-EXC-03",
@@ -10249,19 +10285,65 @@
         "planned:IPLF-UJ-59-EXC-03",
         "planned:IPLF-UJ-59-NORMAL"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md",
+          "revision": "09aeb25ef85966064c15b806789067b70cee1bbe",
+          "environment": "local SQLite API fixtures, Vitest, generated OpenAPI/type checks, and Chromium desktop/mobile browser journey",
+          "fixtures": "isolated law-firm tenants with application/opposition registry identifiers, restricted records, empty operational queues, unavailable watch provider, and persisted connector-health boundary",
+          "assertions": "nine strict report definitions; canonical-reader reuse; separate application/opposition identifiers; truthful freshness/unavailability; read-only connector-health projection; relevant-filter enforcement; hidden-count policy; audit digest; responsive internal UI",
+          "result": "passed",
+          "recorded_at": "2026-08-23T02:20:00+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-038B-M5-CLIENT-DELIVERY",
+          "state": "active",
+          "summary": "UJ-27 client publication and REPORT-03 scheduled delivery are not authorized in M3 and have no active portal-publication or neutral scheduled-report contract.",
+          "evidence_needed": "M5 portal grant/publication contract, neutral notification-delivery integration, delivery-result UI, exception tests, and exact deployed client UAT.",
+          "owner": "IPLF-100B and M5 portal/report activation owners",
+          "milestone_impact": "Keeps UJ-27 and REPORT-03 open; it does not block the locally verified internal synchronous workspace.",
+          "next_independent_slice": "Continue the next unblocked M3 manifest node."
+        },
+        {
+          "id": "IPLF-038B-WATCH-PROVIDER",
+          "state": "active",
+          "summary": "IP watch operations are an M5 provider capability and are intentionally returned as unavailable rather than inferred from legal-update watchlists.",
+          "evidence_needed": "Activated lawful IP watch provider, provider/freshness contract, tenant capability gate, monitored operations, and dated acceptance data.",
+          "owner": "M5 watch/provider activation owner",
+          "milestone_impact": "Keeps the active watch-report path in REPORT-01 open while preserving an honest unavailable-source result.",
+          "next_independent_slice": "Continue the next unblocked M3 manifest node."
+        },
+        {
+          "id": "IPLF-038B-RELEASE-VERIFY",
+          "state": "active",
+          "summary": "The internal reporting subset is locally verified; exact-head CI, merged-main recheck, deployment and authenticated production acceptance remain pending.",
+          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health, and authenticated production report-contract/browser evidence.",
+          "owner": "CaseOps release workflow",
+          "milestone_impact": "Blocks release_status for the implemented subset only.",
+          "next_independent_slice": "Open and merge the exact implementation candidate before starting another release lane."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run exact-head CI/PostgreSQL/security/CodeQL, merge only when green, rerun on merged main, deploy the exact revision, and attach authenticated production contract/browser evidence.",
+        "Leave report_jobs/report_artifacts absent until representative-volume evidence proves the synchronous 200-row ceiling is insufficient.",
+        "Leave client publication, scheduled delivery and active watch reporting to their named M5 owners; do not substitute the outside-counsel portal, existing portfolio export job, signed docket-control review, renewal notifications, or legal-update watchlists."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, queue, artifact, scheduler or delivery change. Report adapters read existing access-filtered portfolio, docket-control, renewal, daily-docket and persisted connector-health projections; preview writes only ip.report.previewed through the shared audit service."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+      ],
+      "allocation_review": "2026-08-23 current-main reconciliation and two-pass implementation review: IPLF-030A/030B remain the portfolio and export owners, IPLF-039C remains the signed docket-control/UJ-59 owner, IPLF-037 remains the renewal owner, daily docket remains the workload owner, connector health remains the freshness owner, and shared access/audit services remain canonical. IPLF-038B adds only nine strict synchronous internal definitions and a responsive internal workspace. Application and opposition status preserve separate registry identifiers. The watch definition is fail-closed unavailable until M5. No report job, artifact, scheduler, delivery, portal, notification, legal-date, watchlist, docket, renewal, export or connector-health duplicate was added. Local verification passed at exact implementation revision 09aeb25ef85966064c15b806789067b70cee1bbe. The slice stays in progress because UJ-27, REPORT-03 and activated watch reporting remain legitimately blocked, while UJ-59 implementation remains credited only to IPLF-039C.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25451,8 +25533,15 @@
         "UJ-27",
         "UJ-59"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_reports.py",
+        "apps/api/src/caseops_api/services/ip_reports.py",
+        "apps/web/app/app/ip/reports/page.tsx"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_status_reports_preserve_registry_identifiers#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_operational_reports_are_honest#IPLF-REQ-REPORT-01",
+        "tests/e2e/iplf-038b-reports-2026-08-23.spec.ts",
         "planned:IPLF-REQ-REPORT-01",
         "planned:IPLF-UJ-27-EXC-01",
         "planned:IPLF-UJ-27-EXC-02",
@@ -25463,9 +25552,11 @@
         "planned:IPLF-UJ-59-EXC-03",
         "planned:IPLF-UJ-59-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25491,8 +25582,15 @@
         "UJ-27",
         "UJ-59"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_reports.py",
+        "apps/api/src/caseops_api/services/ip_reports.py",
+        "apps/web/app/app/ip/reports/page.tsx"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_02_rejects_filters_that_cannot_be_applied#IPLF-REQ-REPORT-02",
+        "apps/web/app/app/ip/reports/page.test.tsx",
+        "tests/e2e/iplf-038b-reports-2026-08-23.spec.ts",
         "planned:IPLF-REQ-REPORT-02",
         "planned:IPLF-UJ-27-EXC-01",
         "planned:IPLF-UJ-27-EXC-02",
@@ -25503,9 +25601,11 @@
         "planned:IPLF-UJ-59-EXC-03",
         "planned:IPLF-UJ-59-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -44788,7 +44888,7 @@
         "planned:IPLF-UJ-27-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53222,7 +53322,7 @@
         "planned:IPLF-UJ-27-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53267,7 +53367,7 @@
         "planned:IPLF-UJ-27-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53312,7 +53412,7 @@
         "planned:IPLF-UJ-27-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53357,7 +53457,7 @@
         "planned:IPLF-UJ-27-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
