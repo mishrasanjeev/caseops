@@ -1443,3 +1443,51 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   approval, review-contract and hold suites — 81 passed. Every test that had to
   change was green *because* of the hole, which is the clearest evidence that
   the hole was load-bearing.
+
+### EH-SEC-02 - Step-up purposes are audit labels, not enforcement boundaries
+
+- **Status:** Partially implemented. True for the five `require_step_up_always`
+  sites, which match the purpose exactly. Not true for the ~45 sites on
+  `require_recent_step_up`.
+- **Gap found:** `require_recent_step_up` falls back to *any* purpose:
+
+  ```python
+  if recent_step_up_expires_at(session, context=context, purpose=purpose):
+      return
+  if purpose != "step_up" and recent_step_up_expires_at(session, context=context):
+      return
+  ```
+
+  The second call passes no purpose, so it matches any unexpired step-up row.
+  **Verified empirically**, not read off the source: a step-up completed for
+  `matter_summary` satisfies a later requirement for `legal_hold_change`
+  (`conditional=True`), while `require_step_up_always` refuses it
+  (`always=False`).
+- **Why it matters:** `STEP_UP_PURPOSES` reads as a set of separately-governed
+  controls, and its own comment says purposes are named apart "so the two can be
+  governed independently later". At enforcement time they are interchangeable
+  for the whole TTL — `mfa_step_up_ttl_minutes`, default **15**. So one MFA
+  prompt accepted for the mildest reason currently authorises the strongest one
+  within that window, on every conditional site.
+- **Not changed here, deliberately.** Removing the fallback re-prompts users on
+  every distinct purpose within a working session, which has a real usability
+  cost and reaches ~45 call sites outside the records-governance lane. That is a
+  product decision. What is not acceptable is for the current behaviour to be
+  true *by accident*, so it is now pinned by
+  `apps/api/tests/test_step_up_purpose_semantics.py`, whose failure message says
+  to update this entry deliberately rather than let code and ledger diverge.
+- **Interaction with EH-SEC-01:** the five hardened sites gain a second property
+  beyond unconditionality — a cross-purpose step-up cannot authorise them
+  either. That was a consequence of matching the purpose exactly rather than a
+  separately argued decision, and it is asserted so it cannot regress silently.
+- **A related sharp edge, safe but undiagnosable:** `complete_step_up` records
+  `purpose if purpose in STEP_UP_PURPOSES else "step_up"`. A typo in a caller's
+  purpose string therefore produces a row labelled `step_up`, which
+  `require_step_up_always` would never accept — the control would refuse
+  *forever* rather than fail open. That is the safe direction, but the 403 says
+  nothing about the cause. The test asserts every purpose used with the
+  unconditional gate is registered.
+- **Severity:** not stop-ship. It narrows, but does not remove, the value of a
+  second factor, and the strongest actions are already exempt.
+- **Decision needed from the product/security owner:** whether the conditional
+  gate should stop accepting cross-purpose step-ups, accepting the extra prompts.
