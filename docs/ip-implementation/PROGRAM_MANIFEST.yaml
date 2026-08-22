@@ -10047,7 +10047,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md",
-          "revision": "b96bbeff2496b0ebdddc86889e1499cc873a1048",
+          "revision": "15b9dc6c4034c8982609af789dd3c7e7507babec",
           "environment": "local SQLite API, component, production-build and Playwright fixtures",
           "fixtures": "deterministic isolated law-firm tenant with verified registration, deadlines, responsibility, filing, acceptance, certificate and next-term evidence",
           "assertions": "UJ-26 normal, no-instruction notification, grace reconciliation, initiation-not-acceptance, access isolation, source provenance and responsive UI",
@@ -10079,7 +10079,7 @@
         "apps/web/app/law-firms/page.tsx",
         "docs/ip-implementation/evidence/m3/IPLF-037B/local-2026-08-22.md"
       ],
-      "allocation_review": "2026-08-22 current-main reconciliation: IPLF-037A already owned renewal and instruction persistence plus every evidence gate. IPLF-037B therefore adds only the operational portfolio projection, responsibility-based notification lifecycle, responsive user workflow, exception handling and release proof. It creates no renewal, deadline, event, document, cost, communication, task, calendar, notification, provider, report or audit duplicate. All four UJ-26 paths have concrete API/UI/browser tests; repository verification passed at exact implementation revision b96bbeff2496b0ebdddc86889e1499cc873a1048, including supervisor no-instruction escalation, append-only instruction revision behavior, and existing fee/payment reconciliation visibility. Release remains fail-closed until exact-head CI, merge, deployment and production verification.",
+      "allocation_review": "2026-08-22 current-main reconciliation: IPLF-037A already owned renewal and instruction persistence plus every evidence gate. IPLF-037B therefore adds only the operational portfolio projection, responsibility-based notification lifecycle, responsive user workflow, exception handling and release proof. It creates no renewal, deadline, event, document, cost, communication, task, calendar, notification, provider, report or audit duplicate. All four UJ-26 paths have concrete API/UI/browser tests; repository verification passed at exact implementation revision 15b9dc6c4034c8982609af789dd3c7e7507babec, including supervisor no-instruction escalation, append-only instruction revision behavior, and existing fee/payment reconciliation visibility. Release remains fail-closed until exact-head CI, merge, deployment and production verification.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
