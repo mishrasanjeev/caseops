@@ -730,6 +730,38 @@ export default function GuidePage() {
                     canonical term.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    IP reports
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/reports">IP reports</a>{" "}
+                    for internal portfolio register, application status, opposition status,
+                    deadline control, renewal, watch, workload, data-quality, and
+                    integration-freshness snapshots. Every result shows its generated time,
+                    applied scope, audience, confidentiality, source freshness, row limit,
+                    and snapshot hash.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Application and opposition reports retain their separate registry
+                      identifiers and use the same permission-filtered portfolio reader.
+                    </li>
+                    <li>
+                      Workload, deadline, renewal, and integration results are read from their
+                      existing operational owners; generating a report does not create a second
+                      docket, deadline, renewal, export, or connector record.
+                    </li>
+                    <li>
+                      Sources that are stale, unavailable, or not activated appear as such.
+                      Restricted records outside the user&apos;s access are omitted without a
+                      count.
+                    </li>
+                  </ul>
+                  <Callout tone="warn" title="Current delivery boundary">
+                    IP reports are synchronous internal snapshots. Scheduled delivery,
+                    stored report artifacts, client publication, and automated IP watch
+                    operations are not available on this screen.
+                  </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     IP document workflow
                   </h3>
                   <p>

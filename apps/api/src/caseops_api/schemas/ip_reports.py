@@ -12,9 +12,14 @@ from caseops_api.schemas.ip_renewals import RenewalState
 
 IpReportKind = Literal[
     "portfolio_register",
+    "application_status",
+    "opposition_status",
     "deadline_control",
     "renewal",
+    "watch",
+    "workload",
     "data_quality",
+    "integration_freshness",
 ]
 IpReportFreshnessStatus = Literal["current", "mixed", "unavailable"]
 
@@ -35,7 +40,7 @@ class IpReportDefinitionRecord(BaseModel):
 
 
 class IpReportFoundationContract(BaseModel):
-    contract_version: Literal["iplf-038a-v1"] = "iplf-038a-v1"
+    contract_version: Literal["iplf-038b-v1"] = "iplf-038b-v1"
     persistence: Literal["none"] = "none"
     execution_mode: Literal["synchronous"] = "synchronous"
     artifact_storage: Literal["none"] = "none"
@@ -58,7 +63,13 @@ class IpReportPreviewRequest(BaseModel):
     @model_validator(mode="after")
     def validate_report_filter_scope(self) -> IpReportPreviewRequest:
         portfolio_filter_values = self.filters.model_dump(exclude_defaults=True)
-        if self.report_kind in {"deadline_control", "renewal"} and portfolio_filter_values:
+        if self.report_kind in {
+            "deadline_control",
+            "renewal",
+            "watch",
+            "workload",
+            "integration_freshness",
+        } and portfolio_filter_values:
             raise ValueError(f"portfolio filters are not supported for {self.report_kind}")
         if self.report_kind != "renewal" and self.renewal_states:
             raise ValueError(f"renewal_states is not supported for {self.report_kind}")

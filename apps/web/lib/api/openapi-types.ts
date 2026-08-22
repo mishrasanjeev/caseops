@@ -23705,7 +23705,7 @@ export interface components {
              * Key
              * @enum {string}
              */
-            key: "portfolio_register" | "deadline_control" | "renewal" | "data_quality";
+            key: "portfolio_register" | "application_status" | "opposition_status" | "deadline_control" | "renewal" | "watch" | "workload" | "data_quality" | "integration_freshness";
             /**
              * Scheduled Delivery
              * @default false
@@ -23735,10 +23735,10 @@ export interface components {
             audience: "internal";
             /**
              * Contract Version
-             * @default iplf-038a-v1
+             * @default iplf-038b-v1
              * @constant
              */
-            contract_version: "iplf-038a-v1";
+            contract_version: "iplf-038b-v1";
             /** Definitions */
             definitions: components["schemas"]["IpReportDefinitionRecord"][];
             /**
@@ -23850,7 +23850,7 @@ export interface components {
              * Report Kind
              * @enum {string}
              */
-            report_kind: "portfolio_register" | "deadline_control" | "renewal" | "data_quality";
+            report_kind: "portfolio_register" | "application_status" | "opposition_status" | "deadline_control" | "renewal" | "watch" | "workload" | "data_quality" | "integration_freshness";
             /**
              * Row Limit
              * @default 200
@@ -23890,7 +23890,7 @@ export interface components {
              * Report Kind
              * @enum {string}
              */
-            report_kind: "portfolio_register" | "deadline_control" | "renewal" | "data_quality";
+            report_kind: "portfolio_register" | "application_status" | "opposition_status" | "deadline_control" | "renewal" | "watch" | "workload" | "data_quality" | "integration_freshness";
             /** Row Count */
             row_count: number;
             /** Rows */

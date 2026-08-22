@@ -213,8 +213,8 @@ Generated; do not edit.
 | CLIENT-02 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
 | CLIENT-03 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
 | CLIENT-04 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
-| REPORT-01 | REPORT | IPLF-038B, IPLF-100B | 9 | 0 | not_started | not_run | blocked | false |
-| REPORT-02 | REPORT | IPLF-038B, IPLF-100B | 9 | 0 | not_started | not_run | blocked | false |
+| REPORT-01 | REPORT | IPLF-038B, IPLF-100B | 12 | 1 | in_progress | not_run | blocked | false |
+| REPORT-02 | REPORT | IPLF-038B, IPLF-100B | 12 | 1 | in_progress | not_run | blocked | false |
 | REPORT-03 | REPORT | IPLF-038B, IPLF-039F, IPLF-100B | 19 | 1 | in_progress | not_run | blocked | false |
 | PAT-01 | PAT | IPLF-080B | 15 | 0 | not_started | not_run | blocked | false |
 | PAT-02 | PAT | IPLF-080B | 15 | 0 | not_started | not_run | blocked | false |

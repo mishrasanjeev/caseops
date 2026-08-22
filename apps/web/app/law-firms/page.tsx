@@ -6,6 +6,7 @@ import {
   Briefcase,
   Building2,
   Clock3,
+  FileChartColumn,
   FileText,
   Gavel,
   Landmark,
@@ -115,6 +116,11 @@ const platformMoves = [
     icon: Clock3,
     title: "Trademark renewal control",
     body: "Track each verified renewal term from client instruction and fee evidence through filing, registry acceptance, certificate and the next confirmed term. Date-derived grace and overdue queues remain distinct from recorded legal state, with responsibility-based notifications and source citations.",
+  },
+  {
+    icon: FileChartColumn,
+    title: "IP operational reports",
+    body: "Generate permission-scoped internal snapshots for portfolio, application, opposition, deadline, renewal, workload, data quality and integration freshness. Each result carries its filters, confidentiality, generated time, source availability and snapshot hash; unavailable watch-provider data is identified instead of inferred.",
   },
   {
     icon: FileText,
