@@ -468,7 +468,7 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
-    const workspace = await screen.findByTestId("ip-access-workspace");
+    const workspace = await screen.findByTestId("ip-access-workspace-loading");
     expect(
       within(workspace).getByRole("heading", {
         name: "Internal access and ethical walls",

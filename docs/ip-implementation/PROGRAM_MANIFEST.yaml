@@ -7179,7 +7179,8 @@
       "evidence_refs": [
         "docs/ip-implementation/IP_ACCESS_WORKFLOW.md",
         "docs/ip-implementation/evidence/m2/IPLF-026B/local-2026-08-11.md",
-        "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md"
+        "docs/ip-implementation/evidence/m2/IPLF-026B/release-attempt-2026-08-12.md",
+        "docs/ip-implementation/evidence/m2/IPLF-026B/mobile-regression-2026-08-23.md"
       ],
       "evidence_metadata": [
         {
@@ -7231,6 +7232,12 @@
           "disposition": "created",
           "owner": "Program control plane",
           "evidence": "Independent exact-head gates, canonical merge, immutable production identity, focused dated journey pass, complete-suite provider-quota failure, safe fallback, and resolving evidence needed"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-026B/mobile-regression-2026-08-23.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Exact-release mobile timing diagnosis, separate loading/resolved workspace identities, failure-safe synthetic-user teardown, bounded cleanup, local regression gates, and unchanged external blockers"
         },
         {
           "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",

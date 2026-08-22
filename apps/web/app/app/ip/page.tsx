@@ -337,7 +337,7 @@ export default function IpDocketPage() {
 
 function IpAccessWorkspaceLoading() {
   return (
-    <Card className="min-w-0" data-testid="ip-access-workspace">
+    <Card className="min-w-0" data-testid="ip-access-workspace-loading">
       <CardHeader>
         <CardTitle as="h3">Internal access and ethical walls</CardTitle>
       </CardHeader>

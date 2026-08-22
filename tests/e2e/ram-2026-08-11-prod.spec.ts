@@ -339,11 +339,15 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
   const memberPassword = "AccessCanary2026!";
   const memberEmail = `ip-access-prod-${canary}@example.com`;
   const memberApi = await request.newContext();
+  let ownerHeaders: Record<string, string> | null = null;
+  let cleanupMembershipId: string | null = null;
+  let memberDeactivated = false;
 
   try {
     await page.setViewportSize({ width: 360, height: 820 });
     await signInIpQa(page);
     const headers = await csrfHeaders(page);
+    ownerHeaders = headers;
 
     const member = await page.request.post(
       `${PROD_API_BASE_URL}/api/companies/current/users`,
@@ -360,6 +364,7 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
     expect(member.status(), await member.text()).toBe(200);
     const membershipId = ((await member.json()) as { membership_id: string })
       .membership_id;
+    cleanupMembershipId = membershipId;
     const memberHeaders = await signInIpQaMember(
       memberApi,
       memberEmail,
@@ -440,7 +445,7 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
 
     await page.goto(`/app/ip?docket=${encodeURIComponent(docket.id)}`);
     const workspace = page.getByTestId("ip-access-workspace");
-    await expect(workspace).toBeVisible();
+    await expect(workspace).toBeVisible({ timeout: 45_000 });
     await expect(
       workspace.getByRole("heading", {
         name: "Internal access and ethical walls",
@@ -574,11 +579,34 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       { headers, data: { is_active: false } },
     );
     expect(deactivated.status(), await deactivated.text()).toBe(200);
+    memberDeactivated = true;
     expect(await deactivated.json()).toMatchObject({
       membership_active: false,
       user_active: false,
     });
   } finally {
+    const cleanupFailures: string[] = [];
+    if (ownerHeaders && cleanupMembershipId && !memberDeactivated) {
+      try {
+        const cleanup = await page.request.patch(
+          `${PROD_API_BASE_URL}/api/companies/current/users/${cleanupMembershipId}`,
+          { headers: ownerHeaders, data: { is_active: false } },
+        );
+        if (cleanup.status() !== 200) {
+          cleanupFailures.push(
+            `temporary admin deactivation returned ${cleanup.status()}: ${await cleanup.text()}`,
+          );
+        }
+      } catch (error) {
+        cleanupFailures.push(
+          `temporary admin deactivation threw: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     await memberApi.dispose();
+    expect(
+      cleanupFailures,
+      "IPLF-026B production teardown must deactivate its temporary admin",
+    ).toEqual([]);
   }
 });
