@@ -8855,6 +8855,36 @@ export type IpOppositionOpponentWorkflow = {
     | "await_hearing_or_later_stage";
 };
 
+export type IpOppositionSharedWorkflow = {
+  proceeding_id: string;
+  represented_side: "applicant" | "opponent";
+  current_stage: string;
+  shared_actions: IpDocketEvent[];
+  active_deadlines: IpLegalDeadline[];
+  shared_hearings: Array<{
+    id: string;
+    hearing_on: string;
+    time_status: string;
+    forum_name: string;
+    purpose: string;
+    status: string;
+  }>;
+  next_required_action:
+    | "complete_role_workflow"
+    | "record_evidence_package"
+    | "advance_to_hearing"
+    | "schedule_hearing"
+    | "record_hearing_preparation"
+    | "await_hearing"
+    | "record_post_hearing_note"
+    | "advance_to_order"
+    | "record_order"
+    | "review_appeal_or_close"
+    | "link_appeal"
+    | "complete_appeal_or_close"
+    | "closed";
+};
+
 export type IpDocketEvent = {
   id: string;
   company_id: string;
@@ -10512,6 +10542,73 @@ export async function fetchIpOppositionOpponentWorkflow(input: {
 }): Promise<IpOppositionOpponentWorkflow> {
   return apiRequest(
     `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opponent-workflow`,
+  );
+}
+
+export async function fetchIpOppositionSharedWorkflow(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<IpOppositionSharedWorkflow> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-shared-workflow`,
+  );
+}
+
+export async function recordIpOppositionSharedAction(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  responsibleMembershipId: string;
+  actionKind:
+    | "deadline_extended"
+    | "further_evidence_leave_recorded"
+    | "evidence_package_recorded"
+    | "hearing_preparation_recorded"
+    | "post_hearing_note_recorded"
+    | "order_recorded"
+    | "appeal_linked";
+  sourceReference: string;
+  effectiveAt: string;
+  reason: string;
+  authorizedConfirmation: string;
+  evidenceRefs: string[];
+  documentRefs?: string[];
+  acknowledgeBackdated?: boolean;
+  deadlineExtension?: Record<string, unknown> | null;
+  furtherEvidenceLeave?: Record<string, unknown> | null;
+  evidencePackage?: Record<string, unknown> | null;
+  hearingPreparation?: Record<string, unknown> | null;
+  orderDetails?: Record<string, unknown> | null;
+  appealLink?: Record<string, unknown> | null;
+}): Promise<IpOppositionSharedWorkflow> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-shared-actions`,
+    {
+      method: "POST",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        action_kind: input.actionKind,
+        source: "manual",
+        source_reference: input.sourceReference,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        authorized_confirmation: input.authorizedConfirmation,
+        evidence_refs: input.evidenceRefs,
+        document_refs: input.documentRefs ?? [],
+        acknowledged_exception_codes: input.acknowledgeBackdated
+          ? ["backdated_recalculation_review_required"]
+          : [],
+        deadline_extension: input.deadlineExtension ?? null,
+        further_evidence_leave: input.furtherEvidenceLeave ?? null,
+        evidence_package: input.evidencePackage ?? null,
+        hearing_preparation: input.hearingPreparation ?? null,
+        order_details: input.orderDetails ?? null,
+        appeal_link: input.appealLink ?? null,
+      },
+    },
   );
 }
 

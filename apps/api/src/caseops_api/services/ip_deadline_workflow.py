@@ -1968,6 +1968,7 @@ def override_deadline(
     context: SessionContext,
     deadline_id: str,
     payload: IpDeadlineOverrideRequest,
+    commit: bool = True,
 ) -> IpDeadlineRecord:
     _lock_responsibility_memberships(
         session,
@@ -2037,8 +2038,11 @@ def override_deadline(
             "evidence_reference": payload.evidence_reference,
         },
     )
-    session.commit()
-    session.refresh(replacement)
+    if commit:
+        session.commit()
+        session.refresh(replacement)
+    else:
+        session.flush()
     return _deadline_record(session, replacement)
 
 

@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { IpOppositionApplicantWorkflow } from "@/components/ip/IpOppositionApplicantWorkflow";
 import { IpOppositionOpponentWorkflow } from "@/components/ip/IpOppositionOpponentWorkflow";
+import { IpOppositionSharedWorkflow } from "@/components/ip/IpOppositionSharedWorkflow";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpOppositionProceeding,
@@ -142,6 +143,7 @@ export function IpOppositionWorkspace({
   const refreshWorkspace = () => queryClient.invalidateQueries({ queryKey: ["ip", "opposition-workspace", docket.id, selectedId] });
   const refreshApplicantWorkflow = () => queryClient.invalidateQueries({ queryKey: ["ip", "opposition-applicant-workflow", docket.id, selectedId] });
   const refreshOpponentWorkflow = () => queryClient.invalidateQueries({ queryKey: ["ip", "opposition-opponent-workflow", docket.id, selectedId] });
+  const refreshSharedWorkflow = () => queryClient.invalidateQueries({ queryKey: ["ip", "opposition-shared-workflow", docket.id, selectedId] });
   const create = useMutation({
     mutationFn: createIpOppositionProceeding,
     onSuccess: async (row) => {
@@ -284,6 +286,7 @@ export function IpOppositionWorkspace({
         refreshWorkspace(),
         refreshApplicantWorkflow(),
         refreshOpponentWorkflow(),
+        refreshSharedWorkflow(),
       ]);
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not update the opposition stage.")),
@@ -391,6 +394,7 @@ export function IpOppositionWorkspace({
 
             {workspace.data.proceeding.side === "applicant" && workspace.data.profile ? <IpOppositionApplicantWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.proceeding.side === "opponent" && workspace.data.profile ? <IpOppositionOpponentWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
+            {workspace.data.profile ? <IpOppositionSharedWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
 
             <form data-testid="ip-opposition-stage-form" className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); if (transitionInput) transition.mutate(transitionInput); }}>
               <div className="md:col-span-2 xl:col-span-4"><h4 className="flex items-center gap-2 font-semibold"><Scale className="h-4 w-4" /> Stage transition</h4></div>

@@ -110,7 +110,7 @@ const platformMoves = [
   {
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
-    body: "Search distinct application and opposition numbers. Run applicant counterstatement and Rule 46 work, or opponent notice, filing-correction, service, Rule 45 and Rule 47 work, with governed deadlines, signed TM-O evidence, dual ownership and explicit elections.",
+    body: "Search distinct application and opposition numbers. Run applicant and opponent TM-O work, Rules 45-47 evidence packages, governed extensions, shared hearing preparation, orders, compliance directions and order-linked appeals with source evidence, immutable history and dual deadline ownership.",
   },
   {
     icon: Clock3,

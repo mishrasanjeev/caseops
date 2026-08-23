@@ -154,6 +154,8 @@ from caseops_api.schemas.ip_oppositions import (
     IpOppositionOpponentDeadlineProposalRequest,
     IpOppositionOpponentDeadlineRecord,
     IpOppositionOpponentWorkflowResponse,
+    IpOppositionSharedActionRequest,
+    IpOppositionSharedWorkflowResponse,
     IpOppositionWorkspaceResponse,
     IpOppositionWorkspaceUpsertRequest,
 )
@@ -345,6 +347,10 @@ from caseops_api.services.ip_opposition_opponent import (
     get_opponent_workflow,
     propose_opponent_deadline,
     record_opponent_action,
+)
+from caseops_api.services.ip_opposition_shared import (
+    get_shared_workflow,
+    record_shared_action,
 )
 from caseops_api.services.ip_opposition_workspace import (
     get_opposition_workspace,
@@ -2587,6 +2593,45 @@ def post_ip_opposition_opponent_deadline(
     session: DbSession,
 ) -> IpOppositionOpponentDeadlineRecord:
     return propose_opponent_deadline(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-workflow",
+    response_model=IpOppositionSharedWorkflowResponse,
+)
+async def get_ip_opposition_shared_workflow(
+    docket_id: str,
+    proceeding_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpOppositionSharedWorkflowResponse:
+    return get_shared_workflow(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-actions",
+    response_model=IpOppositionSharedWorkflowResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_ip_opposition_shared_action(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionSharedActionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionSharedWorkflowResponse:
+    return record_shared_action(
         session,
         context=context,
         docket_id=docket_id,
