@@ -90,8 +90,8 @@ Generated; do not edit.
 | IPLF-045B | derived | IPLF-045 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | deployment_verified | not_required |
 | IPLF-046A | derived | IPLF-046 | M4 |  |  | implemented | passed | blocked | not_required |
 | IPLF-046B | derived | IPLF-046 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | blocked | not_required |
-| IPLF-047A | derived | IPLF-047 | M4 |  |  | not_started | not_run | blocked | not_required |
-| IPLF-047B | derived | IPLF-047 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 |  | not_started | not_run | blocked | not_required |
+| IPLF-047A | derived | IPLF-047 | M4 |  |  | implemented | passed | blocked | not_required |
+| IPLF-047B | derived | IPLF-047 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-048A | derived | IPLF-048 | M4 |  |  | not_started | not_run | blocked | not_required |
 | IPLF-048B | derived | IPLF-048 | M4 | IP-OPP-01, IP-OPP-02, IP-OPP-03, IP-OPP-04, IP-OPP-05, IP-OPP-06, IP-OPP-07, IP-OPP-08, IP-OPP-09, IP-OPP-10, IP-OPP-11, IP-OPP-12, IP-OPP-13, IP-OPP-14, IP-OPP-15, IP-OPP-16, IP-OPP-17, IP-OPP-18, IP-OPP-19, IP-OPP-20, IP-OPP-21, IP-OPP-22, IP-OPP-23, IP-OPP-24 | UJ-34-EXC-01, UJ-34-EXC-02, UJ-34-EXC-03, UJ-34-NORMAL | not_started | not_run | blocked | not_required |
 | IPLF-049A | derived | IPLF-049 | M4 |  |  | not_started | not_run | blocked | not_required |
