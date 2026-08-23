@@ -2172,11 +2172,13 @@
         "IPLF-044A",
         "IPLF-044B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -12317,8 +12319,8 @@
       "source_kind": "derived",
       "scope_source": "IPLF-044",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "Migration 20260823_0003 adds effective-dated ip_matter_links, deterministically backfills the existing operational Matter pointer without updating parent rows, enforces active-role and single-operational uniqueness, and refuses destructive downgrade after governed history exists.",
+      "release_boundary": "Pass migration round-trip/refusal, lifecycle independence, timeline effective-window, access non-disclosure, OpenAPI, governance, full web/build and responsive browser proof; then require hosted CI/security/CodeQL, exact-main CI, immutable deployment, and dated production identity/health proof.",
       "requirement_ids": [],
       "journey_path_ids": [],
       "ownership": [
@@ -12331,22 +12333,68 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0003_ip_matter_links.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_matter_links.py",
+        "apps/api/src/caseops_api/services/ip_matter_links.py",
+        "apps/api/src/caseops_api/services/matter_timeline.py",
+        "apps/api/src/caseops_api/services/matters.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/api/routes/matters.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260823_ip_matter_links_migration.py",
+        "apps/api/tests/test_ip_prd_slices.py::test_matter_disposal_preserves_independent_ip_docket_lifecycle",
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_matter_links_are_effective_dated_many_to_many_and_timeline_is_referenced",
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_matter_links_omit_inaccessible_side_without_link_metadata_leak",
+        "apps/api/tests/test_matter_timeline.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_route_coverage_matrix.py",
+        "apps/api/tests/test_openapi_quality.py",
+        "apps/api/tests/test_ip_data_governance_map.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
+          "revision": "a9c9962450ec8c7eb0dbd026ad2152002fccec45",
+          "environment": "local SQLite API and Alembic tests plus generated OpenAPI and data-governance validation",
+          "fixtures": "deterministic synthetic active/disposed Matters, unrestricted and restricted IP dockets, operational and advisory relationships, pre-link and in-window IP events, cross-membership access, migration backfill and retained-history downgrade; no live legal or production fact",
+          "assertions": "effective history, one operational Matter, separate retirement rationale, lifecycle independence, temporal timeline pagination, two-sided access non-disclosure, tenant foreign keys, migration round trip/refusal, route and OpenAPI coverage",
+          "result": "passed",
+          "recorded_at": "2026-08-23T18:46:31+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-044A-HOSTED-RELEASE",
+          "state": "open",
+          "summary": "Local backend and migration proof passed on implementation revision a9c99624; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact-candidate PR, require CI/security/CodeQL, merge only that green head, verify exact main, deploy one immutable revision, and record dated production identity/health evidence.",
+        "Proceed to IPLF-045 only after the IPLF-044 hosted merge gate is satisfied."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds ip_matter_links as the relationship-history owner and backfills each existing non-null ip_docket_records.matter_id as a deterministic migration-sourced operational relationship without changing either parent.",
+        "Matter disposal/reopen and IP lifecycle writes no longer mutate the other aggregate; existing shared task, deadline, hearing, document, notification, billing, opposition, and audit owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+      ],
+      "allocation_review": "2026-08-23 duplicate-work review confirms ip_matter_links owns only effective relationship history. IP dockets and Matters retain independent lifecycle writers; Matter timeline reads IP events by reference; no task, deadline, hearing, document, notification, billing, opposition, audit, or activity owner is duplicated.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -12372,8 +12420,8 @@
       "source_kind": "derived",
       "scope_source": "IPLF-044",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "No additional schema change beyond IPLF-044A. The UI and Matter timeline call the one relationship writer/reader and retain the compatibility pointer only for the operational role.",
+      "release_boundary": "Pass searchable create/retire UI, two-sided state and access warnings, source-linked timeline navigation, full web/typecheck/build, and one real API/UI/database desktop/mobile journey; then require hosted CI/security/CodeQL, exact-main CI, immutable deployment, and dated production proof.",
       "requirement_ids": [],
       "journey_path_ids": [],
       "ownership": [
@@ -12388,22 +12436,67 @@
       "dependencies": [
         "IPLF-044A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/web/components/ip/IpMatterLinksPanel.tsx",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/app/matters/[id]/page.tsx",
+        "apps/web/app/app/matters/[id]/timeline/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/schemas.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "apps/web/app/llms.txt/route.ts",
+        "apps/web/app/llms-full.txt/route.ts"
+      ],
+      "test_refs": [
+        "apps/web/components/ip/IpMatterLinksPanel.test.tsx",
+        "apps/web/app/app/matters/[id]/timeline/page.test.tsx",
+        "tests/e2e/iplf-044b-matter-linkage-2026-08-23.spec.ts",
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_matter_links_are_effective_dated_many_to_many_and_timeline_is_referenced",
+        "apps/api/tests/test_ip_prd_slices.py::test_ip_matter_links_omit_inaccessible_side_without_link_metadata_leak"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
+          "revision": "a9c9962450ec8c7eb0dbd026ad2152002fccec45",
+          "environment": "local production Next.js build plus fresh SQLite API and web Playwright servers at desktop and 390px viewports",
+          "fixtures": "deterministic synthetic operational and litigation Matters, manually created trademark application, system operational relationship, UI-created litigation relationship, Registry candidate event and UI retirement; no live filing or fabricated production legal fact",
+          "assertions": "searchable relationship creation, independent side-by-side lifecycle display, Matter-side IP navigation, effective source-linked timeline composition, retirement persistence and counts, responsive no-overflow layout",
+          "result": "passed",
+          "recorded_at": "2026-08-23T18:46:31+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-044B-HOSTED-RELEASE",
+          "state": "open",
+          "summary": "The local API/UI/browser journey passed on implementation revision a9c99624; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact-candidate PR, require every hosted gate, merge only the verified head, verify exact main, deploy one immutable revision, and record production identity/health evidence.",
+        "Continue IPLF-045 next without introducing a parallel drafting engine."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "The UI writes only through IPLF-044A and reads existing Matter and IP lifecycle owners side by side; timeline events remain source references and are never copied to matter_activities.",
+        "Readers without access to both records receive no relationship rows, counts, or hidden identifiers; authorized readers see access-policy mismatch warnings."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "apps/web/app/llms.txt/route.ts",
+        "apps/web/app/llms-full.txt/route.ts",
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+      ],
+      "allocation_review": "2026-08-23 workflow review confirms this slice exposes IPLF-044A through existing IP and Matter workspaces and the existing Matter timeline. It adds no parallel lifecycle, activity, task, deadline, hearing, document, notification, billing, opposition, access, or audit writer.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
