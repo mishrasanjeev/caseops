@@ -2110,7 +2110,7 @@ async def patch_current_company_matter(
     response_model=MatterRecord,
     summary="Dispose or reopen a matter with concurrency guards",
 )
-async def patch_current_company_matter_lifecycle_status(
+def patch_current_company_matter_lifecycle_status(
     matter_id: str,
     payload: MatterLifecycleStatusRequest,
     context: MatterArchiver,

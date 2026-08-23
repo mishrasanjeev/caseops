@@ -89,6 +89,21 @@ def sanitize_filename(filename: str) -> str:
     return sanitized[:255] or "document"
 
 
+def _storage_object_name(attachment_id: str, filename: str) -> str:
+    """Build a portable object name without duplicating the display filename.
+
+    Attachment records retain the sanitized original filename. Embedding that
+    value again in the storage key can exceed Windows' 260-character path
+    boundary once tenant and workspace identifiers are included.
+    """
+
+    raw_suffix = Path(Path(filename).name.strip()).suffix
+    suffix = _FILENAME_SANITIZER.sub("_", raw_suffix)[:16]
+    if suffix and not suffix.startswith("."):
+        suffix = f".{suffix.lstrip('_')}"
+    return f"{attachment_id}{suffix}"
+
+
 def _safe_storage_segment(value: str, label: str) -> str:
     segment = str(value or "").strip()
     if (
@@ -192,16 +207,16 @@ def persist_workspace_attachment(
     before_store: Callable[[int], None] | None = None,
     validate_temp_file: Callable[[Path], None] | None = None,
 ) -> StoredDocument:
-    safe_filename = sanitize_filename(filename)
     safe_company_id = _safe_storage_segment(company_id, "company id")
     safe_namespace = _safe_storage_segment(namespace, "storage namespace")
     safe_workspace_id = _safe_storage_segment(workspace_id, "workspace id")
     safe_attachment_id = _safe_storage_segment(attachment_id, "attachment id")
+    object_name = _storage_object_name(safe_attachment_id, filename)
     relative_path = (
         Path(safe_company_id)
         / safe_namespace
         / safe_workspace_id
-        / f"{safe_attachment_id}-{safe_filename}"
+        / object_name
     )
     storage_key = relative_path.as_posix()
     temp_path, size_bytes, sha256_hex = _write_stream_to_temp_file(stream)
