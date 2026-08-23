@@ -170,8 +170,16 @@ def validate_opposition_stage_event(
         from caseops_api.services.ip_opposition_applicant import (
             assert_applicant_stage_prerequisites,
         )
+        from caseops_api.services.ip_opposition_opponent import (
+            assert_opponent_stage_prerequisites,
+        )
 
         assert_applicant_stage_prerequisites(
+            session,
+            proceeding=proceeding,
+            to_stage=to_stage,
+        )
+        assert_opponent_stage_prerequisites(
             session,
             proceeding=proceeding,
             to_stage=to_stage,

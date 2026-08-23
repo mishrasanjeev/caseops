@@ -21,6 +21,7 @@ IpEventKind = Literal[
     "lifecycle_transition",
     "opposition_profile",
     "opposition_applicant_action",
+    "opposition_opponent_action",
 ]
 IpEventSource = Literal["manual", "registry", "integration", "system"]
 IpCandidateStatus = Literal["candidate", "confirmed", "reconciled", "rejected"]
@@ -57,9 +58,7 @@ class IpCorrespondenceMilestones(BaseModel):
             if value is not None
         ]
         if any(later < earlier for earlier, later in zip(outward, outward[1:], strict=False)):
-            raise ValueError(
-                "Outward correspondence milestones must remain chronological."
-            )
+            raise ValueError("Outward correspondence milestones must remain chronological.")
         return self
 
 

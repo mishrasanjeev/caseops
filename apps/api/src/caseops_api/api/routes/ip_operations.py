@@ -150,6 +150,10 @@ from caseops_api.schemas.ip_oppositions import (
     IpOppositionApplicantDeadlineProposalRequest,
     IpOppositionApplicantDeadlineRecord,
     IpOppositionApplicantWorkflowResponse,
+    IpOppositionOpponentActionRequest,
+    IpOppositionOpponentDeadlineProposalRequest,
+    IpOppositionOpponentDeadlineRecord,
+    IpOppositionOpponentWorkflowResponse,
     IpOppositionWorkspaceResponse,
     IpOppositionWorkspaceUpsertRequest,
 )
@@ -336,6 +340,11 @@ from caseops_api.services.ip_opposition_applicant import (
     get_applicant_workflow,
     propose_applicant_deadline,
     record_applicant_action,
+)
+from caseops_api.services.ip_opposition_opponent import (
+    get_opponent_workflow,
+    propose_opponent_deadline,
+    record_opponent_action,
 )
 from caseops_api.services.ip_opposition_workspace import (
     get_opposition_workspace,
@@ -2518,6 +2527,66 @@ def post_ip_opposition_applicant_deadline(
     session: DbSession,
 ) -> IpOppositionApplicantDeadlineRecord:
     return propose_applicant_deadline(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opponent-workflow",
+    response_model=IpOppositionOpponentWorkflowResponse,
+)
+async def get_ip_opposition_opponent_workflow(
+    docket_id: str,
+    proceeding_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpOppositionOpponentWorkflowResponse:
+    return get_opponent_workflow(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opponent-actions",
+    response_model=IpOppositionOpponentWorkflowResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_ip_opposition_opponent_action(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionOpponentActionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionOpponentWorkflowResponse:
+    return record_opponent_action(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opponent-deadlines",
+    response_model=IpOppositionOpponentDeadlineRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_ip_opposition_opponent_deadline(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionOpponentDeadlineProposalRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionOpponentDeadlineRecord:
+    return propose_opponent_deadline(
         session,
         context=context,
         docket_id=docket_id,

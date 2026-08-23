@@ -511,7 +511,8 @@ def preview_ip_docket_event(
             or row.resulting_stage == payload.resulting_stage
         )
         and (
-            payload.event_kind != "opposition_applicant_action"
+            payload.event_kind
+            not in {"opposition_applicant_action", "opposition_opponent_action"}
             or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
         )
         and row.candidate_status != "rejected"
@@ -595,7 +596,8 @@ def _append_locked_event(
             or row.resulting_stage == payload.resulting_stage
         )
         and (
-            payload.event_kind != "opposition_applicant_action"
+            payload.event_kind
+            not in {"opposition_applicant_action", "opposition_opponent_action"}
             or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
         )
         and row.candidate_status != "rejected"

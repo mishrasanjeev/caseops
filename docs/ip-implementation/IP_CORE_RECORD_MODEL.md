@@ -254,3 +254,36 @@ number handling, sourced extension control, and linked-Matter preservation.
 Rules 47, further-evidence leave, hearing, order, appeal, settlement detail,
 translations, security for costs, and downstream application disposition remain
 with IPLF-043 and later allocated slices.
+
+## IPLF-042 opponent opposition workflow
+
+IPLF-042 composes the same IPLF-040 proceeding aggregate, append-only
+`ip_docket_events`, governed `ip_deadlines`, shared Matter task writer, and
+identifier owner. It adds no parallel opposition, deadline, task, document,
+notification, or audit table. Opponent work product is recorded as typed
+`opposition_opponent_action` facts with immutable source, evidence, document,
+responsible-lawyer, time, and reason data.
+
+The opponent workflow selects only active rules whose immutable rule-set scope
+is exactly `opposition` / `opponent` and one of `notice_filing_due`,
+`opponent_evidence_due`, or `reply_evidence_due`. Critical deadlines retain the
+existing Matter projection, reminder policy, and distinct primary/backup
+responsibility. Pending Registry opposition-number allocation remains explicit
+and separate from the application number.
+
+An accepted TM-O notice records the filing reference/date, final signed
+document, filing evidence, and verification facts. Registry rejection does not
+mark the notice filed: it appends the rejection fact and atomically opens an
+urgent corrective shared task. Notice service remains a separate sourced fact.
+Rule 45 requires an explicit `file_evidence` or `rely_on_pleaded_facts`
+election, and Rule 47 requires `file_reply_evidence` or `no_reply_evidence`;
+filed-evidence elections require both document and filing evidence references.
+A watch hit can be closed without creating a filed opposition, while missing
+client instruction stays in intake and opens an urgent limitation-aware shared
+task.
+
+Normal stage entry into `notice_filed`, `opponent_evidence_filed`, and
+`reply_evidence_filed` is blocked until the corresponding opponent action
+exists. Shared further-evidence leave, extensions, hearing, order, appeal,
+settlement, translations, security for costs, and downstream application
+disposition remain allocated to IPLF-043 and later slices.
