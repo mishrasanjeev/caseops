@@ -139,6 +139,15 @@
   },
   "table_policy_profile_overrides": {},
   "column_category_overrides": {
+    "draft_versions": {
+      "context_manifest_json": "privileged_or_raw_content",
+      "source_manifest_json": "privileged_or_raw_content",
+      "template_manifest_json": "privileged_or_raw_content"
+    },
+    "drafting_data_extraction_fields": {
+      "source_ip_document_id": "tenant_or_access_identifier",
+      "source_ip_document_version_id": "tenant_or_access_identifier"
+    },
     "ip_docket_control_reviews": {
       "manifest_sha256": "lifecycle_or_audit_evidence",
       "report_snapshot_json": "lifecycle_or_audit_evidence"
@@ -7399,6 +7408,11 @@
           "sql_type": "TEXT",
           "nullable": false
         },
+        "context_manifest_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
         "created_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
@@ -7429,10 +7443,20 @@
           "sql_type": "INTEGER",
           "nullable": false
         },
+        "source_manifest_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
         "summary": {
           "category_id": "domain_attribute",
           "sql_type": "TEXT",
           "nullable": true
+        },
+        "template_manifest_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": false
         },
         "verified_citation_count": {
           "category_id": "domain_attribute",
@@ -7478,6 +7502,11 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "ip_docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "label": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(120)",
@@ -7486,7 +7515,7 @@
         "matter_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
-          "nullable": false
+          "nullable": true
         },
         "proposed_value": {
           "category_id": "domain_attribute",
@@ -7523,6 +7552,16 @@
           "sql_type": "INTEGER",
           "nullable": true
         },
+        "source_ip_document_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "source_ip_document_version_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "source_snippet": {
           "category_id": "external_or_provider_identifier",
           "sql_type": "VARCHAR(280)",
@@ -7557,6 +7596,11 @@
       "policy_profile_id": "tenant_restricted_legal_content",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
         "created_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
@@ -7587,10 +7631,20 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "ip_docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "ip_proceeding_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "matter_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
-          "nullable": false
+          "nullable": true
         },
         "review_required": {
           "category_id": "domain_attribute",
@@ -18841,6 +18895,16 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "ip_docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "ip_proceeding_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "latency_ms": {
           "category_id": "domain_attribute",
           "sql_type": "INTEGER",
@@ -24042,10 +24106,10 @@
       }
     }
   ],
-  "schema_fingerprint": "5b3c98b597bc3a2b44235529af0898e43b82a6a910bb5022f03658d1ddcfa7d7",
+  "schema_fingerprint": "e1b00596a226a7acaf6698647753b76914ac5064d9918ffcaf8975c1508c5fb8",
   "index_inventory": {
-    "orm_index_count": 1221,
-    "orm_index_fingerprint": "517620127ba1347e35085f6c7e3c13a3366cb921d81928a9cd0af081f9420065",
+    "orm_index_count": 1229,
+    "orm_index_fingerprint": "aaaf02cfa10bee5bb2789f70a04eb34d96d0842223c657ac1e3e0c0a3af9e968",
     "migration_index_count": 550,
     "migration_index_fingerprint": "e58136211d629b5cbf8da525716079ee8abafa764b1444af7c8e40c400893848",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."

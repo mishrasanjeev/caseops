@@ -6,10 +6,10 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `d712f5ceb41f9c4b3f9702467192362b953cfd0638c95d12afabbdc79d2de501`
+- Canonical map SHA-256: `d8aa886b0d0c52bcf39169825a34612b3417935f64e542425b769ee79505f9b4`
 - SQL tables: `273`
-- SQL columns: `4238`
-- ORM indexes: `1221`
+- SQL columns: `4249`
+- ORM indexes: `1229`
 - Alembic/raw index declarations: `550`
 - Non-SQL data classes: `11`
 
@@ -103,9 +103,9 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `domain_consumer_effects` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `domain_outbox_events` | `tenant_operational_record` | 36 | `registry_fail_closed` |
 | `draft_reviews` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
-| `draft_versions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
-| `drafting_data_extraction_fields` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
-| `drafts` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
+| `draft_versions` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
+| `drafting_data_extraction_fields` | `tenant_restricted_legal_content` | 23 | `registry_fail_closed` |
+| `drafts` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `drive_file_candidates` | `tenant_operational_record` | 22 | `registry_fail_closed` |
 | `drive_sync_controls` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `email_calendar_candidates` | `tenant_operational_record` | 20 | `registry_fail_closed` |
@@ -231,7 +231,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `mock_hearing_questions` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `mock_hearing_responses` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `mock_hearing_sessions` | `tenant_operational_record` | 21 | `registry_fail_closed` |
-| `model_runs` | `tenant_operational_record` | 14 | `registry_fail_closed` |
+| `model_runs` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `notification_delivery_events` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `notification_delivery_intents` | `tenant_operational_record` | 46 | `registry_fail_closed` |
 | `notification_rules` | `tenant_operational_record` | 11 | `registry_fail_closed` |

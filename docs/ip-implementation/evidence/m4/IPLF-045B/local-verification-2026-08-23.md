@@ -24,7 +24,13 @@ No human legal/provider/UAT acceptance is inferred.
 
 ## Local verification
 
-- API Ruff: passed over `src`, the IPLF-045 migration, and focused tests.
+- API Ruff: passed over the exact CI scope, `apps/api/src` and
+  `apps/api/tests`.
+- Program manifest, ownership, ARCH-OPS, data-class registry,
+  data-governance registry/map/projection, migration preflight, and M2
+  ownership validators: passed. The new drafting fields and index
+  fingerprints are registered in the repository-wide governance map; runtime
+  data operations remain fail closed.
 - API regression: 50 passed, covering IPLF-045, existing drafting studio,
   OpenAPI quality, and migration-order checks.
 - Web typecheck: passed (`next typegen` plus `tsc --noEmit`).
