@@ -12356,6 +12356,7 @@
         "apps/api/tests/test_ip_lifecycle_service.py",
         "apps/api/tests/test_postgres_validation.py::test_matter_disposal_wins_bulk_ip_coverage_reassignment_race",
         "apps/api/tests/test_postgres_validation.py::test_matter_disposal_wins_ip_coverage_proposal_race",
+        "apps/api/tests/test_today_ip_coverage_actions.py::test_today_ip_06_matter_disposal_suppresses_actions_without_mutating_coverage",
         "apps/api/tests/test_route_coverage_matrix.py",
         "apps/api/tests/test_openapi_quality.py",
         "apps/api/tests/test_ip_data_governance_map.py"
