@@ -14644,6 +14644,38 @@ class IpProceeding(Base):
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_proceeding_id_company"),
         Index("ix_ip_proceedings_company_kind", "company_id", "proceeding_kind"),
+        CheckConstraint(
+            "origin_kind IN ('linked_application', 'registry_event', 'watch_hit', "
+            "'manual_intake')",
+            name="ck_ip_proceeding_origin_kind",
+        ),
+        CheckConstraint(
+            "proceeding_kind <> 'opposition' OR side IN ('applicant', 'opponent')",
+            name="ck_ip_opposition_represented_side",
+        ),
+        CheckConstraint(
+            "proceeding_kind <> 'opposition' OR stage IN ("
+            "'draft', 'notice_filed', 'service_pending', 'counterstatement_due', "
+            "'counterstatement_filed', 'opponent_evidence_due', "
+            "'opponent_evidence_filed', 'applicant_evidence_due', "
+            "'applicant_evidence_filed', 'reply_evidence_due', "
+            "'reply_evidence_filed', 'hearing_pending', 'hearing_scheduled', "
+            "'reserved_for_order', 'decided', 'appeal_pending', 'appealed', "
+            "'withdrawn', 'closed')",
+            name="ck_ip_opposition_canonical_stage",
+        ),
+        CheckConstraint(
+            "length(trim(stage_template_version)) > 0",
+            name="ck_ip_proceeding_stage_template_version",
+        ),
+        CheckConstraint(
+            "proceeding_kind <> 'opposition' OR "
+            "(side = 'applicant' AND "
+            "stage_template_version = 'opposition-applicant-v1') OR "
+            "(side = 'opponent' AND "
+            "stage_template_version = 'opposition-opponent-v1')",
+            name="ck_ip_opposition_role_stage_template",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -14655,6 +14687,15 @@ class IpProceeding(Base):
     office: Mapped[str] = mapped_column(String(80), nullable=False)
     jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
     stage: Mapped[str] = mapped_column(String(40), nullable=False, default="draft")
+    origin_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="manual_intake", server_default="manual_intake"
+    )
+    stage_template_version: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="generic-v1", server_default="generic-v1"
+    )
+    source_pending_identifier_allocation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False

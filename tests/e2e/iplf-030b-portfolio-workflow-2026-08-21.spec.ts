@@ -151,7 +151,7 @@ async function seedPortfolio(api: APIRequestContext, headers: Record<string, str
         side: "applicant",
         office: "Trade Marks Registry Mumbai",
         jurisdiction: "IN",
-        stage: "evidence",
+        stage: "draft",
       },
     },
   );

@@ -5165,6 +5165,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Opposition Stage Transition */
+        post: operations["post_ip_opposition_stage_transition_api_ip_dockets__docket_id__proceedings__proceeding_id__stage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/prosecution": {
         parameters: {
             query?: never;
@@ -22700,6 +22717,74 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** IpOppositionNumberCreate */
+        IpOppositionNumberCreate: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /**
+             * Is Primary
+             * @default true
+             */
+            is_primary: boolean;
+            /** Raw Value */
+            raw_value: string;
+            /** Source */
+            source: string;
+        };
+        /** IpOppositionStageTransitionRequest */
+        IpOppositionStageTransitionRequest: {
+            /** Authority Reference */
+            authority_reference?: string | null;
+            /** Authorized Confirmation */
+            authorized_confirmation?: string | null;
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            /** Outcome */
+            outcome?: string | null;
+            /** Outcome Effective Date */
+            outcome_effective_date?: string | null;
+            /** Reason */
+            reason: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "registry" | "integration" | "system";
+            /** Source Reference */
+            source_reference?: string | null;
+            /**
+             * To Stage
+             * @enum {string}
+             */
+            to_stage: "draft" | "notice_filed" | "service_pending" | "counterstatement_due" | "counterstatement_filed" | "opponent_evidence_due" | "opponent_evidence_filed" | "applicant_evidence_due" | "applicant_evidence_filed" | "reply_evidence_due" | "reply_evidence_filed" | "hearing_pending" | "hearing_scheduled" | "reserved_for_order" | "decided" | "appeal_pending" | "appealed" | "withdrawn" | "closed";
+            /**
+             * Transition Kind
+             * @default normal
+             * @enum {string}
+             */
+            transition_kind: "normal" | "skipped" | "waived" | "extended" | "superseded";
+        };
+        /** IpOppositionStageTransitionResponse */
+        IpOppositionStageTransitionResponse: {
+            event: components["schemas"]["IpDocketEventResponse"];
+            proceeding: components["schemas"]["IpProceedingResponse"];
+        };
         /**
          * IpPortfolioCounts
          * @description Data-quality split for the current filter scope.
@@ -23149,6 +23234,13 @@ export interface components {
             jurisdiction: string;
             /** Office */
             office: string;
+            opposition_number?: components["schemas"]["IpOppositionNumberCreate"] | null;
+            /**
+             * Origin Kind
+             * @default manual_intake
+             * @enum {string}
+             */
+            origin_kind: "linked_application" | "registry_event" | "watch_hit" | "manual_intake";
             /**
              * Proceeding Kind
              * @enum {string}
@@ -23160,10 +23252,17 @@ export interface components {
              */
             side: "applicant" | "opponent" | "claimant" | "respondent" | "other";
             /**
+             * Source Pending Identifier Allocation
+             * @default false
+             */
+            source_pending_identifier_allocation: boolean;
+            /**
              * Stage
              * @default draft
              */
             stage: string;
+            /** Stage Template Version */
+            stage_template_version?: string | null;
         };
         /** IpProceedingResponse */
         IpProceedingResponse: {
@@ -23182,12 +23281,18 @@ export interface components {
             jurisdiction: string;
             /** Office */
             office: string;
+            /** Origin Kind */
+            origin_kind: string;
             /** Proceeding Kind */
             proceeding_kind: string;
             /** Side */
             side: string;
+            /** Source Pending Identifier Allocation */
+            source_pending_identifier_allocation: boolean;
             /** Stage */
             stage: string;
+            /** Stage Template Version */
+            stage_template_version: string;
             /**
              * Updated At
              * Format: date-time
@@ -45613,6 +45718,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpProceedingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_opposition_stage_transition_api_ip_dockets__docket_id__proceedings__proceeding_id__stage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOppositionStageTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionStageTransitionResponse"];
                 };
             };
             /** @description Validation Error */

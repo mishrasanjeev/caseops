@@ -2760,23 +2760,26 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
         )
         seed.commit()
 
-    with pytest.raises(RuntimeError, match="roll application code forward"):
-        command.downgrade(config, "20260811_0005")
+    try:
+        with pytest.raises(RuntimeError, match="roll application code forward"):
+            command.downgrade(config, "20260811_0005")
 
-    with pg_engine.connect() as connection:
-        revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-        assert revision is not None
-        remaining_lineage = {
-            candidate.revision
-            for candidate in ScriptDirectory.from_config(config).walk_revisions(
-                base="base", head=revision
-            )
-        }
-        assert "20260812_0001" in remaining_lineage
-        assert connection.scalar(
-            text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
-            {"id": record_id},
-        ) == 1
+        with pg_engine.connect() as connection:
+            revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+            assert revision is not None
+            remaining_lineage = {
+                candidate.revision
+                for candidate in ScriptDirectory.from_config(config).walk_revisions(
+                    base="base", head=revision
+                )
+            }
+            assert "20260812_0001" in remaining_lineage
+            assert connection.scalar(
+                text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+                {"id": record_id},
+            ) == 1
+    finally:
+        command.upgrade(config, "head")
 
 
 def test_shared_outbox_fence_rejects_stale_worker_on_postgres(pg_engine):
@@ -7902,3 +7905,61 @@ def test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on
     with Session(pg_engine) as session:
         assert session.get(IpDeadlineIncident, incident_id) is not None
         assert session.get(IpDeadlineIncidentImpact, impact_id) is not None
+
+
+@pytest.mark.postgres
+def test_iplf040a_opposition_stage_events_are_append_only_on_postgres(pg_engine):
+    from caseops_api.db.models import IpDocketEvent, IpProceeding
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        fixture = _seed_ip_coverage_lifecycle_fixture(session)
+        proceeding = IpProceeding(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            proceeding_kind="opposition",
+            side="applicant",
+            office="Trade Marks Registry Delhi",
+            jurisdiction="IN",
+            stage="draft",
+            origin_kind="manual_intake",
+            stage_template_version="opposition-applicant-v1",
+        )
+        session.add(proceeding)
+        session.flush()
+        event = IpDocketEvent(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            sequence=1,
+            proceeding_id=proceeding.id,
+            event_kind="lifecycle_transition",
+            source="manual",
+            effective_at=now,
+            responsible_membership_id=fixture["owner_id"],
+            entered_by_membership_id=fixture["owner_id"],
+            reason="PostgreSQL opposition transition evidence.",
+            evidence_refs_json=["postgres:opposition:evidence"],
+            document_refs_json=[],
+            resulting_stage="notice_filed",
+            resulting_deadline_refs_json=[],
+            before_phase="draft",
+            after_phase="notice_filed",
+            candidate_status="confirmed",
+            payload_json={
+                "opposition_stage_transition": True,
+                "expected_proceeding_version": 1,
+            },
+        )
+        session.add(event)
+        session.commit()
+        event_id = event.id
+
+    for statement in (
+        "UPDATE ip_docket_events SET reason = 'rewritten' WHERE id = :id",
+        "DELETE FROM ip_docket_events WHERE id = :id",
+    ):
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError, match="append-only"):
+                session.execute(text(statement), {"id": event_id})
+                session.commit()
+            session.rollback()

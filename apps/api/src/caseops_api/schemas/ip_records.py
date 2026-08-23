@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
 from caseops_api.services.ip_identifier_rules import (
     normalize_ip_identifier,
     validate_identifier_owner,
@@ -68,6 +69,10 @@ class IpApplicationNumberCreate(BaseModel):
         return self
 
 
+class IpOppositionNumberCreate(IpApplicationNumberCreate):
+    pass
+
+
 class TrademarkApplicationCreateRequest(BaseModel):
     asset_id: str
     office: str = Field(min_length=2, max_length=80)
@@ -84,6 +89,103 @@ class IpProceedingCreateRequest(BaseModel):
     office: str = Field(min_length=2, max_length=80)
     jurisdiction: str = Field(min_length=2, max_length=40)
     stage: str = Field(default="draft", min_length=2, max_length=40)
+    origin_kind: Literal["linked_application", "registry_event", "watch_hit", "manual_intake"] = (
+        "manual_intake"
+    )
+    stage_template_version: str | None = Field(default=None, min_length=2, max_length=80)
+    source_pending_identifier_allocation: bool = False
+    opposition_number: IpOppositionNumberCreate | None = None
+
+    @model_validator(mode="after")
+    def validate_opposition_contract(self) -> IpProceedingCreateRequest:
+        if self.proceeding_kind != "opposition":
+            if self.opposition_number is not None:
+                raise ValueError("Opposition numbers can only belong to opposition proceedings.")
+            return self
+        if self.side not in {"applicant", "opponent"}:
+            raise ValueError("Opposition represented side must be applicant or opponent.")
+        if self.stage != "draft":
+            raise ValueError("Opposition proceedings must be created in draft stage.")
+        expected_template = f"opposition-{self.side}-v1"
+        if self.stage_template_version not in {None, expected_template}:
+            raise ValueError(
+                f"Opposition represented side requires {expected_template!r}."
+            )
+        if self.application_id is None and self.origin_kind == "linked_application":
+            raise ValueError("Linked-application opposition intake requires an application.")
+        if self.opposition_number is not None and self.source_pending_identifier_allocation:
+            raise ValueError(
+                "A supplied opposition number cannot also be marked pending allocation."
+            )
+        return self
+
+
+class IpOppositionStageTransitionRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=0)
+    expected_proceeding_version: int = Field(ge=1)
+    to_stage: Literal[
+        "draft",
+        "notice_filed",
+        "service_pending",
+        "counterstatement_due",
+        "counterstatement_filed",
+        "opponent_evidence_due",
+        "opponent_evidence_filed",
+        "applicant_evidence_due",
+        "applicant_evidence_filed",
+        "reply_evidence_due",
+        "reply_evidence_filed",
+        "hearing_pending",
+        "hearing_scheduled",
+        "reserved_for_order",
+        "decided",
+        "appeal_pending",
+        "appealed",
+        "withdrawn",
+        "closed",
+    ]
+    transition_kind: Literal["normal", "skipped", "waived", "extended", "superseded"] = (
+        "normal"
+    )
+    source: Literal["manual", "registry", "integration", "system"]
+    source_reference: str | None = Field(default=None, max_length=255)
+    effective_at: datetime
+    responsible_membership_id: str
+    reason: str = Field(min_length=5, max_length=2000)
+    authority_reference: str | None = Field(default=None, max_length=500)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=100)
+    document_refs: list[str] = Field(default_factory=list, max_length=100)
+    outcome: str | None = Field(default=None, max_length=120)
+    outcome_effective_date: date | None = None
+    authorized_confirmation: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_transition_evidence(self) -> IpOppositionStageTransitionRequest:
+        if self.effective_at.utcoffset() is None:
+            raise ValueError("Opposition transition time must include a timezone.")
+        if self.source == "registry" and not (self.source_reference or "").strip():
+            raise ValueError("Registry transitions require a source reference.")
+        if self.transition_kind != "normal" and not (
+            self.authority_reference or ""
+        ).strip():
+            raise ValueError(
+                "Skipped, waived, extended, or superseded stages require authority."
+            )
+        if self.to_stage == "closed":
+            if not all(
+                (
+                    (self.outcome or "").strip(),
+                    self.outcome_effective_date,
+                    (self.source_reference or "").strip(),
+                    self.evidence_refs or self.document_refs,
+                    (self.authorized_confirmation or "").strip(),
+                )
+            ):
+                raise ValueError(
+                    "Closure requires outcome, effective date, source, evidence, and "
+                    "authorized confirmation."
+                )
+        return self
 
 
 class TrademarkApplicationPhaseUpdateRequest(BaseModel):
@@ -167,9 +269,17 @@ class IpProceedingResponse(BaseModel):
     office: str
     jurisdiction: str
     stage: str
+    origin_kind: str
+    stage_template_version: str
+    source_pending_identifier_allocation: bool
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class IpOppositionStageTransitionResponse(BaseModel):
+    proceeding: IpProceedingResponse
+    event: IpDocketEventResponse
 
 
 class IpCoreRecordResponse(BaseModel):

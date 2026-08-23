@@ -8677,6 +8677,23 @@ export type IpIdentifier = {
   created_at: string;
 };
 
+export type IpProceeding = {
+  id: string;
+  docket_id: string;
+  application_id: string | null;
+  proceeding_kind: "opposition" | "rectification" | "appeal" | "court";
+  side: "applicant" | "opponent" | "claimant" | "respondent" | "other";
+  office: string;
+  jurisdiction: string;
+  stage: string;
+  origin_kind: "linked_application" | "registry_event" | "watch_hit" | "manual_intake";
+  stage_template_version: string;
+  source_pending_identifier_allocation: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type IpDuplicateCandidate = {
   identifier_id: string;
   docket_id: string;
@@ -8707,7 +8724,7 @@ export type IpDuplicatePreview = {
 export type IpCoreRecords = {
   assets: IpAsset[];
   applications: TrademarkApplication[];
-  proceedings: Array<Record<string, unknown>>;
+  proceedings: IpProceeding[];
   identifiers: IpIdentifier[];
 };
 
@@ -10308,6 +10325,50 @@ export async function completeIpLegalDeadline(input: {
 
 export async function fetchIpCoreRecords(docketId: string): Promise<IpCoreRecords> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/core-records`);
+}
+
+export async function transitionIpOppositionStage(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  toStage: string;
+  transitionKind?: "normal" | "skipped" | "waived" | "extended" | "superseded";
+  source?: "manual" | "registry" | "integration" | "system";
+  sourceReference?: string | null;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  reason: string;
+  authorityReference?: string | null;
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+  outcome?: string | null;
+  outcomeEffectiveDate?: string | null;
+  authorizedConfirmation?: string | null;
+}): Promise<{ proceeding: IpProceeding; event: IpDocketEvent }> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/stage`,
+    {
+      method: "POST",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        to_stage: input.toStage,
+        transition_kind: input.transitionKind ?? "normal",
+        source: input.source ?? "manual",
+        source_reference: input.sourceReference ?? null,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        authority_reference: input.authorityReference ?? null,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+        outcome: input.outcome ?? null,
+        outcome_effective_date: input.outcomeEffectiveDate ?? null,
+        authorized_confirmation: input.authorizedConfirmation ?? null,
+      },
+    },
+  );
 }
 
 export async function createManualTrademarkApplication(input: {

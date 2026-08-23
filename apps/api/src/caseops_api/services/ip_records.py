@@ -411,6 +411,8 @@ def create_ip_proceeding(
     docket_id: str,
     payload: IpProceedingCreateRequest,
 ) -> IpProceeding:
+    from caseops_api.schemas.ip_records import IpIdentifierCreate
+
     docket = _docket(session, context, docket_id)
     if payload.application_id is not None:
         application = session.scalar(
@@ -431,9 +433,41 @@ def create_ip_proceeding(
         office=payload.office,
         jurisdiction=payload.jurisdiction,
         stage=payload.stage,
+        origin_kind=payload.origin_kind,
+        stage_template_version=(
+            payload.stage_template_version
+            or (
+                f"opposition-{payload.side}-v1"
+                if payload.proceeding_kind == "opposition"
+                else "generic-v1"
+            )
+        ),
+        source_pending_identifier_allocation=(
+            payload.source_pending_identifier_allocation
+        ),
     )
     session.add(row)
     session.flush()
+    duplicate_ids: list[str] = []
+    if payload.opposition_number is not None:
+        identifier, duplicates = create_ip_identifier(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=IpIdentifierCreate(
+                identifier_kind="opposition",
+                raw_value=payload.opposition_number.raw_value,
+                office=payload.office,
+                jurisdiction=payload.jurisdiction,
+                source=payload.opposition_number.source,
+                effective_from=payload.opposition_number.effective_from,
+                is_primary=payload.opposition_number.is_primary,
+                proceeding_id=row.id,
+            ),
+            commit=False,
+        )
+        duplicate_ids = [candidate.id for candidate in duplicates]
+        row.source_pending_identifier_allocation = False
     record_from_context(
         session,
         context,
@@ -442,7 +476,14 @@ def create_ip_proceeding(
         target_id=row.id,
         matter_id=docket.matter_id,
         ip_docket_id=docket.id,
-        metadata={"docket_id": docket.id, "proceeding_kind": row.proceeding_kind},
+        metadata={
+            "docket_id": docket.id,
+            "proceeding_kind": row.proceeding_kind,
+            "origin_kind": row.origin_kind,
+            "stage_template_version": row.stage_template_version,
+            "opposition_number_supplied": payload.opposition_number is not None,
+            "identifier_duplicate_candidate_ids": duplicate_ids,
+        },
     )
     session.commit()
     session.refresh(row)
@@ -455,15 +496,23 @@ def create_ip_identifier(
     context: SessionContext,
     docket_id: str,
     payload: IpIdentifierCreate,
+    commit: bool = True,
 ) -> tuple[IpIdentifier, list[IpIdentifier]]:
     docket = _docket(session, context, docket_id)
-    _assert_identifier_owner_exists(
+    owner = _assert_identifier_owner_exists(
         session,
         company_id=context.company.id,
         docket_id=docket.id,
         application_id=payload.application_id,
         proceeding_id=payload.proceeding_id,
     )
+    if payload.identifier_kind == "opposition":
+        if not isinstance(owner, IpProceeding) or owner.proceeding_kind != "opposition":
+            raise HTTPException(
+                status_code=422,
+                detail="Opposition numbers must belong to an opposition proceeding.",
+            )
+        owner.source_pending_identifier_allocation = False
     duplicates = _duplicate_identifiers(
         session,
         company_id=context.company.id,
@@ -514,8 +563,9 @@ def create_ip_identifier(
             "duplicate_candidate_ids": [candidate.id for candidate in duplicates],
         },
     )
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row, duplicates
 
 
@@ -526,10 +576,10 @@ def _assert_identifier_owner_exists(
     docket_id: str,
     application_id: str | None,
     proceeding_id: str | None,
-) -> None:
+) -> TrademarkApplication | IpProceeding:
     if application_id is not None:
         owner = session.scalar(
-            select(TrademarkApplication.id).where(
+            select(TrademarkApplication).where(
                 TrademarkApplication.id == application_id,
                 TrademarkApplication.company_id == company_id,
                 TrademarkApplication.docket_id == docket_id,
@@ -537,14 +587,16 @@ def _assert_identifier_owner_exists(
         )
     else:
         owner = session.scalar(
-            select(IpProceeding.id).where(
+            select(IpProceeding).where(
                 IpProceeding.id == proceeding_id,
                 IpProceeding.company_id == company_id,
                 IpProceeding.docket_id == docket_id,
             )
+            .with_for_update()
         )
     if owner is None:
         raise HTTPException(status_code=404, detail="Identifier owner not found.")
+    return owner
 
 
 def _clear_current_primary(
