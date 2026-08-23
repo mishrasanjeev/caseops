@@ -8728,6 +8728,77 @@ export type IpCoreRecords = {
   identifiers: IpIdentifier[];
 };
 
+export type IpOppositionParty = {
+  id: string;
+  role: "applicant" | "opponent" | "agent" | "counsel";
+  party_name: string;
+  source: string;
+  effective_from: string;
+  effective_until: string | null;
+};
+
+export type IpOppositionGround = {
+  category:
+    | "earlier_mark"
+    | "passing_off"
+    | "well_known_mark"
+    | "descriptiveness"
+    | "non_distinctive"
+    | "prohibited_mark"
+    | "bad_faith"
+    | "other";
+  lawyer_detail: string;
+  classification_source: "manual" | "ai_assisted";
+};
+
+export type IpOppositionProfile = {
+  applicable_rule_version: string;
+  forum: string;
+  client_instruction_state: "pending" | "confirmed" | "not_required";
+  client_instruction_reference: string | null;
+  limitation_date: string | null;
+  source_notice_reference: string | null;
+  source_notice_document_ref: string | null;
+  grounds: IpOppositionGround[];
+  challenged_scope: Array<{ class_number: number; goods_services_segment: string }>;
+  relied_on_rights: Array<{
+    mark_or_right: string;
+    jurisdiction: string;
+    identifier: string | null;
+    status: string;
+    owner: string;
+    goods_services: string;
+    reputation_claim: string | null;
+    use_claim: string | null;
+    evidence_refs: string[];
+  }>;
+  service: {
+    method: string;
+    destination: string;
+    served_on: string;
+    acknowledgement: string | null;
+    defect: string | null;
+    reservice_on: string | null;
+    starts_response_period: boolean;
+    evidence_refs: string[];
+  } | null;
+  lawyer_confirmed_by_membership_id: string;
+};
+
+export type IpOppositionWorkspace = {
+  proceeding: IpProceeding;
+  profile: IpOppositionProfile | null;
+  profile_event: IpDocketEvent | null;
+  profile_revision_count: number;
+  parties: IpOppositionParty[];
+  application_identifiers: IpIdentifier[];
+  opposition_identifiers: IpIdentifier[];
+  linked_matter_id: string | null;
+  stage_events: IpDocketEvent[];
+  ready_for_stage_progression: boolean;
+  readiness_gaps: string[];
+};
+
 export type IpDocketEvent = {
   id: string;
   company_id: string;
@@ -10325,6 +10396,111 @@ export async function completeIpLegalDeadline(input: {
 
 export async function fetchIpCoreRecords(docketId: string): Promise<IpCoreRecords> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/core-records`);
+}
+
+export async function createIpOppositionProceeding(input: {
+  docketId: string;
+  applicationId: string;
+  side: "applicant" | "opponent";
+  office: string;
+  jurisdiction: string;
+  originKind: "linked_application" | "registry_event" | "watch_hit" | "manual_intake";
+  oppositionNumber?: string | null;
+  identifierSource: string;
+  identifierEffectiveFrom: string;
+}): Promise<IpProceeding> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings`, {
+    method: "POST",
+    body: {
+      application_id: input.applicationId,
+      proceeding_kind: "opposition",
+      side: input.side,
+      office: input.office,
+      jurisdiction: input.jurisdiction,
+      stage: "draft",
+      origin_kind: input.originKind,
+      source_pending_identifier_allocation: !input.oppositionNumber?.trim(),
+      opposition_number: input.oppositionNumber?.trim()
+        ? {
+            raw_value: input.oppositionNumber.trim(),
+            source: input.identifierSource,
+            effective_from: input.identifierEffectiveFrom,
+            is_primary: true,
+          }
+        : null,
+    },
+  });
+}
+
+export async function fetchIpOppositionWorkspace(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<IpOppositionWorkspace> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-workspace`,
+  );
+}
+
+export async function saveIpOppositionWorkspace(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  expectedProfileEventId?: string | null;
+  source: "manual" | "registry" | "integration" | "system";
+  sourceReference?: string | null;
+  sourceNoticeReference?: string | null;
+  sourceNoticeDocumentRef?: string | null;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  reason: string;
+  applicableRuleVersion: string;
+  forum: string;
+  clientInstructionState: "pending" | "confirmed" | "not_required";
+  clientInstructionReference?: string | null;
+  limitationDate?: string | null;
+  parties: Array<{
+    role: "applicant" | "opponent" | "agent" | "counsel";
+    party_name: string;
+    source: string;
+  }>;
+  grounds: IpOppositionGround[];
+  challengedScope: Array<{ class_number: number; goods_services_segment: string }>;
+  reliedOnRights: IpOppositionProfile["relied_on_rights"];
+  service: IpOppositionProfile["service"];
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+}): Promise<IpOppositionWorkspace> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-workspace`,
+    {
+      method: "PUT",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        expected_profile_event_id: input.expectedProfileEventId ?? null,
+        source: input.source,
+        source_reference: input.sourceReference ?? null,
+        source_notice_reference: input.sourceNoticeReference ?? null,
+        source_notice_document_ref: input.sourceNoticeDocumentRef ?? null,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        applicable_rule_version: input.applicableRuleVersion,
+        forum: input.forum,
+        client_instruction_state: input.clientInstructionState,
+        client_instruction_reference: input.clientInstructionReference ?? null,
+        limitation_date: input.limitationDate ?? null,
+        parties: input.parties,
+        grounds: input.grounds,
+        challenged_scope: input.challengedScope,
+        relied_on_rights: input.reliedOnRights,
+        service: input.service,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+      },
+    },
+  );
 }
 
 export async function transitionIpOppositionStage(input: {

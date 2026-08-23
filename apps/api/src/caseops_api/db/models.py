@@ -14808,16 +14808,24 @@ class IpPartyAndRole(Base):
             name="fk_ip_party_client_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["proceeding_id", "company_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id"],
+            name="fk_ip_party_proceeding_company",
+            ondelete="CASCADE",
+        ),
         CheckConstraint(
             "effective_until IS NULL OR effective_until >= effective_from",
             name="ck_ip_party_effective_range",
         ),
         Index("ix_ip_parties_company_docket", "company_id", "docket_id"),
+        Index("ix_ip_parties_company_proceeding", "company_id", "proceeding_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     client_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     party_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role_kind: Mapped[str] = mapped_column(String(40), nullable=False)

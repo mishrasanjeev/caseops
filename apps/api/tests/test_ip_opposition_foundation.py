@@ -11,16 +11,36 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_record_workflow import _application, _asset, _docket
 
 
-def _fixture(client: TestClient, *, with_number: bool) -> tuple[dict, dict, dict]:
+def _fixture(
+    client: TestClient,
+    *,
+    with_number: bool,
+    side: str = "applicant",
+) -> tuple[dict, dict, dict]:
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     docket = _docket(client, headers, "OPPOSITION FOUNDATION")
     asset = _asset(client, headers, docket["id"], "OPPOSITION FOUNDATION")
     application = _application(client, headers, docket["id"], asset["id"])
+    application_number = client.post(
+        f"/api/ip/dockets/{docket['id']}/identifiers",
+        headers=headers,
+        json={
+            "identifier_kind": "application",
+            "raw_value": "TM-APP-040A-2026",
+            "office": "Trade Marks Registry Delhi",
+            "jurisdiction": "IN",
+            "source": "registry_application_fixture",
+            "effective_from": "2026-08-23",
+            "is_primary": True,
+            "application_id": application["id"],
+        },
+    )
+    assert application_number.status_code == 201, application_number.text
     body: dict[str, object] = {
         "application_id": application["id"],
         "proceeding_kind": "opposition",
-        "side": "applicant",
+        "side": side,
         "office": "Trade Marks Registry Delhi",
         "jurisdiction": "IN",
         "stage": "draft",
@@ -65,6 +85,72 @@ def _transition(
     }
     payload.update(overrides)
     return payload
+
+
+def _complete_workspace(
+    client: TestClient,
+    *,
+    bootstrap: dict,
+    docket: dict,
+    proceeding: dict,
+    expected_status: int = 200,
+    **overrides: object,
+) -> dict:
+    body: dict[str, object] = {
+        "expected_lifecycle_version": 0,
+        "expected_proceeding_version": proceeding["version"],
+        "source": "manual",
+        "source_reference": "registry:opposition:040b",
+        "source_notice_reference": "notice:opposition:040b",
+        "effective_at": "2026-08-23T07:00:00Z",
+        "responsible_membership_id": bootstrap["membership"]["id"],
+        "reason": "Confirmed the baseline opposition profile from the source notice.",
+        "applicable_rule_version": "trade-marks-rules-2017@2026-08-23",
+        "forum": "Trade Marks Registry Delhi",
+        "client_instruction_state": "not_required",
+        "parties": [
+            {
+                "role": "applicant",
+                "party_name": "Applicant Industries Pvt Ltd",
+                "source": "opposition notice",
+            },
+            {
+                "role": "opponent",
+                "party_name": "Opponent Brands LLP",
+                "source": "opposition notice",
+            },
+        ],
+        "grounds": [
+            {
+                "category": "earlier_mark",
+                "lawyer_detail": "Earlier registered mark asserted against the application.",
+                "classification_source": "manual",
+            }
+        ],
+        "challenged_scope": [
+            {
+                "class_number": 9,
+                "goods_services_segment": "Recorded computer software",
+            }
+        ],
+        "service": {
+            "method": "registry email",
+            "destination": "applicant@example.test",
+            "served_on": "2026-08-20",
+            "starts_response_period": True,
+            "evidence_refs": ["evidence:service:040b"],
+        },
+        "evidence_refs": ["evidence:notice:040b"],
+    }
+    body.update(overrides)
+    response = client.put(
+        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
+        "/opposition-workspace",
+        headers=auth_headers(str(bootstrap["access_token"])),
+        json=body,
+    )
+    assert response.status_code == expected_status, response.text
+    return response.json()
 
 
 def test_opposition_creation_allocates_separate_number_and_role_template(
@@ -147,6 +233,13 @@ def test_later_opposition_number_clears_pending_state_and_allows_progression(
     finally:
         session.close()
 
+    _complete_workspace(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+
     progressed = client.post(
         f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}/stage",
         headers=headers,
@@ -195,6 +288,12 @@ def test_role_aware_stage_transitions_are_versioned_and_append_only(
 ) -> None:
     bootstrap, docket, proceeding = _fixture(client, with_number=True)
     headers = auth_headers(str(bootstrap["access_token"]))
+    _complete_workspace(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
     url = f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}/stage"
 
     filed = client.post(
@@ -215,7 +314,7 @@ def test_role_aware_stage_transitions_are_versioned_and_append_only(
         json=_transition(bootstrap=bootstrap, version=2, to_stage="service_pending"),
     )
     assert served.status_code == 200, served.text
-    assert served.json()["event"]["sequence"] == 2
+    assert served.json()["event"]["sequence"] == 3
 
     stale = client.post(
         url,
@@ -243,7 +342,10 @@ def test_role_aware_stage_transitions_are_versioned_and_append_only(
         events = list(
             session.scalars(
                 select(IpDocketEvent)
-                .where(IpDocketEvent.proceeding_id == proceeding["id"])
+                .where(
+                    IpDocketEvent.proceeding_id == proceeding["id"],
+                    IpDocketEvent.event_kind == "lifecycle_transition",
+                )
                 .order_by(IpDocketEvent.sequence)
             )
         )
@@ -259,6 +361,12 @@ def test_exception_and_closure_paths_require_authority_and_complete_evidence(
 ) -> None:
     bootstrap, docket, proceeding = _fixture(client, with_number=True)
     headers = auth_headers(str(bootstrap["access_token"]))
+    _complete_workspace(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
     url = f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}/stage"
 
     missing_authority = client.post(

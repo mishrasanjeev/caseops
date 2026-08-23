@@ -288,7 +288,8 @@
       ],
       "gate_ids": [],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-040A/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040A/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-040A/release-2026-08-23.md"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -11443,24 +11444,22 @@
           "assertions": "atomic opposition-number ownership, pending-allocation convergence, role-template enforcement, canonical stage state machine, optimistic versioning, exceptional authority, closure evidence, generic-route bypass refusal, append-only persistence, migration refusal, governance drift, typed web contract, and existing IP browser regressions",
           "result": "passed",
           "recorded_at": "2026-08-23T05:58:22+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-040A/release-2026-08-23.md",
+          "revision": "99b568df05456a6a0a327c1af124132da9ef8cf2",
+          "environment": "hosted CI and production API/web/migration/schedulers",
+          "fixtures": "production-safe exact-identity, RAM, IPLF-027B A0 and notice acceptance; no live legal filing or fabricated governed renewal IDs",
+          "assertions": "31 exact-candidate checks; exact-main CI, security and CodeQL; migration success; immutable image digests; 100 percent API/web traffic; health; scheduler reconciliation; governance default off; stable production identity",
+          "result": "passed; unrelated renewal acceptance remains fail-closed on four externally governed IDs",
+          "recorded_at": "2026-08-23T08:06:08+05:30"
         }
       ],
       "approvals": [],
-      "blockers": [
-        {
-          "id": "IPLF-040A-RELEASE-PROOF-PENDING",
-          "summary": "Repository implementation and local verification are complete at cc9542c3; hosted exact-candidate CI, merge, exact deployment, and dated production-safe proof are not yet recorded.",
-          "owner": "Codex release lane",
-          "evidence_needed": "Green hosted CI/security/CodeQL on the exact PR head, merge-SHA main CI, exact migration/API/web deployment identity, health, governance-default-off, and dated production-safe backend contract proof.",
-          "safe_fallback": "No provider automation, legal filing, obligation calculation, external communication, or rule governance is activated by this foundation; failed migration or verification halts rollout.",
-          "milestone_impact": "Blocks IPLF-040A release closure and keeps IPLF-040B dependent work distinct; does not invalidate repository implementation.",
-          "next_independent_slice": "After exact deployment proof, start IPLF-040B user workspace, pleadings, evidence, hearing, order, appeal and UJ-12/UJ-13 completion."
-        }
-      ],
+      "blockers": [],
       "next_actions": [
-        "Push cc9542c3 plus this manifest evidence, open the PR, and require all hosted checks on the exact head.",
-        "Merge with a head-SHA fence, require exact-main CI, then deploy migration, API and web as one revision and record production-safe proof.",
-        "Keep IPLF-040B not started until this foundation is merged; then implement its complete applicant/opponent workspace without duplicating identifiers, events, documents, deadlines, hearings, tasks, billing, communications or audit owners."
+        "Proceed with IPLF-040B from deployed foundation revision 99b568df while retaining all existing canonical owners.",
+        "Keep the unrelated renewal acceptance flow fail-closed until genuine governed calendar and rule version IDs are supplied."
       ],
       "data_impact": [
         "Adds origin_kind, stage_template_version and source_pending_identifier_allocation to existing ip_proceedings; legacy opposition role templates are deterministically classified without changing legal stage or identifier values.",
@@ -11475,7 +11474,7 @@
       "allocation_review": "Phase 0 allocation reviewed against PRD Sections 11, 12.2, 23 and 25. 2026-08-23 implementation audit confirms a bounded backend foundation only: existing ip_proceedings, ip_identifiers, ip_docket_events, record access and audit owners are extended rather than duplicated. IPLF-040B retains every complete user workspace, pleading, challenged-scope, relied-on-right, service, deadline, hearing, order, appeal, report and UJ-12/UJ-13 flow.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
