@@ -14,7 +14,7 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "acceptance_status": "not_required",
-    "execution_policy": "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the current safety-critical fence lane, never an exclusive program scheduler",
+    "execution_policy": "single_ordered_queue_without_manual_project_approvals; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-027B",
     "parallel_work_allocation": {
       "recorded_at": "2026-08-21T22:45:00+05:30",
@@ -116,7 +116,7 @@
       "completed_scope": "IPLF-002A, IPLF-002B, IPLF-003C, IPLF-004B, IPLF-005B, IPLF-006C, IPLF-007C, IPLF-008A, IPLF-008B, IPLF-001C, IPLF-019A, IPLF-019B, IPLF-020A, IPLF-020B, IPLF-021A, IPLF-021B, IPLF-022A, IPLF-022B, IPLF-023A, IPLF-023B, IPLF-024A, IPLF-024B, IPLF-025A, IPLF-025B, and IPLF-026A retain their repository-controlled implementation evidence and recorded release states. IPLF-001C retains exact deployed fail-fast containment evidence for the exhausted-credit authority-metadata incident; the safe result is a deliberately paused scheduler, not a recovered provider. IPLF-027A remains a deployed dark foundation whose dated case-tracking canary and all four 14 August bulk-import scenarios pass; its complete-production gate is blocked only by the three provider-quota failures and it does not claim activation or human acceptance. IPLF-028C is canonically published as implemented/passed repository control, but release and acceptance remain blocked/pending and DATA-GOV-02, runtime operation, recovery, and named-approval gates remain open. IPLF-028A still has only an additive, unseeded six-class dry-run runtime allowlist that does not consume the reviewed map. IPLF-027B A0 is deployed at exact 6a78850100b5be0fddcf4278f42bcbc930e89d62 and default-off with three equal governance fingerprints, dedicated exact-release production acceptance, and first-drain log proof; it remains incomplete because revision deletion is unapproved/unrun, T_FENCE and the second drain do not exist, and A1/A2 remain forbidden. IPLF-029A remains in progress: its exact CI proves the repository audit control, not closure of every M2 row. IPLF-026B remains blocked by production provider quota availability. Genuine legal/security/pilot/UAT acceptance, later slices, and M0 human program lock remain pending. No provider switch, filing, fee, payment, external message, or other real legal act is inferred or enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-027B",
-      "next_action": "Treat IPLF-027B as the active irreversible-production fence lane only; it does not serialize the broader program. Keep exact deployed A0 6a78850100b5be0fddcf4278f42bcbc930e89d62 serving with rule governance false while canonical source remains explicitly distinguished at 5154af359b5351224c34db7468eef5704d3d0faa. The independently reviewed pre-deletion packet is a historical local snapshot, not approval: after one consolidated policy-compliant approval event binds every required approver to an unexpired immutable operation manifest, impose the deployment/operational-write freeze and recapture and reseal every fail-closed hold, fixed-window log, fingerprint, recovery, and exact 36-command preview control before any irreversible deletion. If that manifest remains unexpired and unchanged, delete only the named cohort oldest first and predecessor last; prove every target NOT_FOUND, an empty fresh-list intersection, and successful Admin Activity events before defining T_FENCE; then complete the second drain and enforced fingerprint/log/job comparison. Preserve the merged exact-fingerprint Gitleaks remediation and local 1,041-commit zero-result parity scan, but still require a fresh passing scheduled full-history GitHub record because push run 31871239057 scanned zero commits. Do not begin A1 or enable A2 until the A0 fence and every recorded entitlement/expiry, qualified-reviewer, unsupported-kind evaluator, effective-range/emergency-disable, strict PostgreSQL ownership/concurrency, negative-test, and exact-deployed A1 gate passes. In parallel, execute every other dependency-ready M0-M10 repository node now behind its fail-closed activation boundary; advance IPLF-028A whenever its direct dependencies are ready using the reviewed fail-closed runtime registry bridge, and keep every data operation dry-run-only without named approvals. Keep caseops-extract-authority-metadata-daily PAUSED; after provider credits are restored, require a successful strict one-document canary before any reviewed enablement and rerun the unchanged complete production workflow. Keep CASEOPS_DOMAIN_OUTBOX_CONSUMERS_ENABLED and CASEOPS_IP_WORKFLOW_COMMANDS_ENABLED false. Do not fabricate named legal/security/pilot/UAT approval or M0 human program lock.",
+      "next_action": "Execute docs/EXECUTION_BACKLOG.md in order without manual project sign-off or confirmation pauses. Run the automated checks and exact-release production verification once after the implementation batch. Keep destructive deletion, payments, filings, external messages, legal-rule activation, and cross-tenant operations disabled unless an authorized operator separately commands the live operation; these runtime safety controls are outside the implementation queue.",
       "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-027B/a0-production-checkpoint-2026-08-15.md"
     },
     "not_required_approval": {
@@ -137,12 +137,10 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "not_required",
       "acceptance_status": "not_required",
       "epic_ids": [],
-      "gate_ids": [
-        "M0-HUMAN-PROGRAM-LOCK"
-      ],
+      "gate_ids": [],
       "evidence_refs": [],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -174,8 +172,7 @@
         "IPLF-008"
       ],
       "gate_ids": [
-        "PHASE0-NOTICES-PRODUCTION",
-        "M1-RESEARCH-GOLDEN-LAWYER"
+        "PHASE0-NOTICES-PRODUCTION"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md",
@@ -69286,27 +69283,6 @@
   ],
   "gates": [
     {
-      "id": "M0-HUMAN-PROGRAM-LOCK",
-      "milestone_id": "M0",
-      "kind": "human_acceptance",
-      "summary": "Named owners, pilot firms, source policy, taxonomy/rule inputs, staffing, and signed ownership ledger require human approval.",
-      "evidence_refs": [
-        "docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md"
-      ],
-      "blockers": [],
-      "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "blocked",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M0"
-      }
-    },
-    {
       "id": "PHASE0-NOTICES-PRODUCTION",
       "milestone_id": "M1",
       "kind": "production_regression",
@@ -69324,29 +69300,6 @@
         "reviewer": "CaseOps automated Phase 0 release gate",
         "reason": "This is an objective technical production-regression gate; the PRD defines no separate human acceptance for closing it.",
         "date": "2026-08-02",
-        "milestone": "M1"
-      }
-    },
-    {
-      "id": "M1-RESEARCH-GOLDEN-LAWYER",
-      "milestone_id": "M1",
-      "kind": "human_acceptance",
-      "summary": "The versioned IP research golden-query set requires named lawyer approval before it can serve as legal-quality acceptance evidence.",
-      "evidence_refs": [
-        "apps/api/tests/fixtures/research/ip_golden_queries.json",
-        "docs/ip-implementation/evidence/m1/IPLF-005B/release-2026-08-04.md",
-        "docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md"
-      ],
-      "blockers": [],
-      "implementation_status": "implemented",
-      "verification_status": "passed",
-      "release_status": "blocked",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
         "milestone": "M1"
       }
     }

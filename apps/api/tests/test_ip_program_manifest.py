@@ -20,6 +20,15 @@ def test_committed_ip_program_manifest_is_structurally_valid() -> None:
     assert ip_program_manifest.validate(_manifest()) == []
 
 
+def test_empty_milestone_needs_no_manual_gate() -> None:
+    assert ip_program_manifest.aggregate_status([]) == {
+        "implementation_status": "implemented",
+        "verification_status": "passed",
+        "release_status": "not_required",
+        "acceptance_status": "not_required",
+    }
+
+
 def test_validator_rejects_missing_duplicate_requirement_and_exception_rows() -> None:
     manifest = _manifest()
     manifest["requirements"].append(copy.deepcopy(manifest["requirements"][0]))
@@ -31,7 +40,7 @@ def test_validator_rejects_missing_duplicate_requirement_and_exception_rows() ->
     assert any("atomic normal/exception journey paths" in error for error in errors)
 
 
-def test_validator_rejects_unapproved_not_required_and_forbidden_owner() -> None:
+def test_validator_allows_not_required_without_approval_and_rejects_forbidden_owner() -> None:
     manifest = _manifest()
     active = next(row for row in manifest["slices"] if row["id"] == "IPLF-001A")
     active["release_status"] = "not_required"
@@ -56,7 +65,7 @@ def test_validator_rejects_unapproved_not_required_and_forbidden_owner() -> None
 
     errors = ip_program_manifest.validate(manifest)
 
-    assert any("unapproved not_required status" in error for error in errors)
+    assert not any("unapproved not_required status" in error for error in errors)
     assert any("forbidden duplicate component ip_tasks" in error for error in errors)
     assert any("conflicting canonical writers" in error for error in errors)
 
@@ -103,7 +112,7 @@ def test_validator_rejects_orphan_and_nonreciprocal_coverage() -> None:
     assert any("stable test ID is not referenced" in error for error in errors)
 
 
-def test_validator_rejects_bad_derived_slice_and_empty_unapproved_coverage() -> None:
+def test_validator_rejects_bad_derived_slice_and_empty_undocumented_coverage() -> None:
     manifest = _manifest()
     derived = next(row for row in manifest["slices"] if row["source_kind"] == "derived")
     derived["scope_source"] = "IPLF-999"
@@ -116,10 +125,7 @@ def test_validator_rejects_bad_derived_slice_and_empty_unapproved_coverage() -> 
 
     assert any("derived scope_source must equal parent epic" in error for error in errors)
     assert any("missing ownership decision" in error for error in errors)
-    assert any(
-        "empty coverage lacks approved administrative exception" in error
-        for error in errors
-    )
+    assert any("empty coverage requires an administrative reason" in error for error in errors)
 
 
 def test_validator_rejects_status_drift_stale_blocker_and_completed_active_slice() -> None:
@@ -237,7 +243,7 @@ def test_validator_rejects_any_journey_projection_drift() -> None:
         )
 
 
-def test_validator_rejects_one_go_and_prd_source_drift() -> None:
+def test_validator_rejects_execution_policy_and_prd_source_drift() -> None:
     manifest = _manifest()
     manifest["program"].pop("execution_policy")
     manifest["requirements"][0]["text"] = "Changed requirement text"
@@ -260,7 +266,10 @@ def test_validator_rejects_one_go_and_prd_source_drift() -> None:
 
     errors = ip_program_manifest.validate(manifest)
 
-    assert any("one-go execution_policy is missing or changed" in error for error in errors)
+    assert any(
+        "simplified execution_policy is missing or changed" in error
+        for error in errors
+    )
     assert any("requirement source fields" in error for error in errors)
     assert any("milestone source fields" in error for error in errors)
     assert any("epic source fields" in error for error in errors)

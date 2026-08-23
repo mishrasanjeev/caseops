@@ -9,158 +9,64 @@ Living document — no date in the filename, updated in place.
 
 ## How this works
 
-1. **One queue, one owner per item.** Ownership is exclusive: two agents never
-   hold the same item.
-2. **Detail lives elsewhere.** Each row points at the document that carries the
-   analysis. Do not restate it here.
-3. **No new backlog documents.** New findings append a row here and, if they need
-   analysis, a section in an existing reference doc. The proliferation this file
-   replaces (100 docs, 16 ID namespaces, 369 ids) is what it exists to stop.
-4. **Status is one word:** `queued`, `active`, `blocked`, `done`.
+1. Work through the final list below in order. Each package has one owner.
+2. There are no manual project approvals, sign-offs, or confirmation pauses
+   between packages. The owner proceeds when the preceding dependency is done.
+3. Run the required automated checks once after the implementation batch, then
+   run exact-release production verification before marking the batch done.
+4. Do not create another backlog. New findings are merged into an existing
+   package or appended to this list.
+5. Status is one word: `queued`, `active`, or `done`.
 
 ### Ownership split
 
 | Owner | Scope | Exclusive paths / collision rule |
 |---|---|---|
-| **Claude** | Non-IP billing/payments, trust predicates, retrieval, notifications, security and observability | Exact `EH-SGR` path groups below. |
+| **Claude** | Non-IP billing/payments, trust predicates, retrieval, notifications, security and observability | Owns the non-IP packages in the final list. |
 | **Codex** | The IP subsystem end to end, IPLF program slices | `apps/api/src/caseops_api/services/ip_*.py`, `apps/api/src/caseops_api/api/routes/ip_operations.py`, `apps/api/src/caseops_api/schemas/ip_*.py`, `apps/web/app/app/ip/**`, `docs/ip-implementation/**`. |
-| **Serialised shared** | Cross-scope persistence and generated artifacts | `apps/api/src/caseops_api/db/models.py`, `apps/api/alembic/versions/**`, shared Matter/form files, and `apps/web/lib/api/{endpoints,openapi-types}.ts`. The active queue row names one claimant before editing; these paths are never edited concurrently. |
+| **Shared files** | Persistence, migrations, Matter/form files, and generated API artifacts | The active package owner edits them. Migrations remain serialised to prevent revision collisions. |
 
-**The one hard rule: migrations are serialised.** Only one agent may add an
-Alembic revision at a time. Claim it by putting `MIGRATION` in the Owner cell
-here before writing the file. A branch deploy carrying an unclaimed migration
-broke a peer deploy on 2026-08-14; that is the failure this rule prevents.
+**The one coordination rule:** only one package may add an Alembic migration at
+a time. This is file coordination, not an approval gate.
 
 Frontend files follow their owning subsystem. Where a change spans both scopes,
 the owner of the **backend** side owns the whole item. The ownership rule
 coordinates parallel implementation; it is not a review or confirmation gate.
 
-Exact `EH-SGR` collision map:
+## Final work list
 
-- **Claude — `EH-SGR-01..04`:**
-  `services/matter_billing.py`, `services/matters.py`,
-  `services/payments.py`, `services/portal_outside_counsel.py`,
-  `services/pine_labs.py`, `api/routes/matter_billing.py`,
-  `api/routes/matters.py`, `api/routes/payments.py`, `api/routes/portal.py`,
-  `schemas/matter_billing.py`, `schemas/billing.py`,
-  `apps/web/app/app/matters/[id]/billing/**`,
-  `apps/web/app/app/admin/matter-billing/**`, `apps/web/app/portal/**`, and
-  `apps/web/lib/api/portal.ts`.
-- **Claude — `EH-SGR-05..09`, `EH-SGR-15..17`:**
-  `core/rate_limit.py`, `core/csrf.py`, `core/observability.py`,
-  `services/inbound_email.py`, `services/citations.py`,
-  `services/recommendations.py`, `services/litigation_strategy.py`,
-  `services/drafting.py`, `services/llm.py`, `services/source_actions.py`,
-  `services/authorities.py`, `services/text_chunking.py`,
-  `services/reranker.py`, `services/court_sync_sources.py`,
-  `services/hearing_reminders.py`, `services/notification_delivery.py`,
-  `services/saas_billing.py`, `services/data_governance.py`,
-  `services/document_storage.py`, `schemas/data_governance.py`, their
-  corresponding routes/UI, the API image/deploy configuration for `EH-SGR-09`,
-  and `apps/web/components/marketing/Security.tsx`.
-- **Codex — `EH-SGR-10..14`:** `services/ip_documents.py`,
-  `services/ip_records.py`, `services/ip_identifier_rules.py`,
-  `services/ip_operations.py`, `services/ip_lifecycle.py`, their IP routes,
-  schemas and UI.
+The four completed billing/payment defects (`EH-SGR-01..04`) are closed and are
+not repeated in the pending list.
 
-All service paths above are relative to
-`apps/api/src/caseops_api/`. Shared persistence/generated paths remain subject
-to the serialised-shared row in the table; they are not implicitly owned by both
-agents.
+| Order | IDs | Required outcome | Owner | Status |
+|---:|---|---|---|---|
+| 1 | `EH-SGR-07`, `FMB-01`, `FMB-02` | Make citations and source links use real production trust checks. | Claude | active |
+| 2 | `FMB-03` | Add indexed full-text candidate selection so search uses the query, not recency. | Claude MIGRATION | queued |
+| 3 | `FMB-14`, `FMB-13`, `EH-SGR-12` | Seed registry catalogs and use one normalized office/jurisdiction value for duplicate detection. | Codex | queued |
+| 4 | `EH-SGR-13`, `EH-SGR-14` | Use one primary-identifier rule and one terminal-status definition across IP. | Codex MIGRATION | queued |
+| 5 | `EH-SGR-16`, `EH-SGR-15` | Remove unsupported messaging choices and add compliant crawler identity/rate behavior. | Claude | queued |
+| 6 | `EH-SGR-05`, `EH-SGR-06`, `EH-SGR-08` | Finish shared rate limiting, fail-closed security controls, log redaction, and product-claim cleanup. | Claude | queued |
+| 7 | `FMB-08`, `FMB-10`, `FMB-12` | Link every IP record to a Matter and make Matter creation/conflict checks IP-aware. | Codex MIGRATION | queued |
+| 8 | `FMB-04`, `EH-SGR-10` | Add IP document filtering and pagination, with batched access checks and no N+1 loading. | Codex | queued |
+| 9 | `EH-SGR-09`, `EH-SGR-17` | Turn on useful observability and enforce legal holds/retention in storage operations. | Claude | queued |
+| 10 | `FMB-05`, `FMB-06`, `FMB-07`, `FMB-09` | Finish contextual help, structured errors, hearing-calendar bridging, and QA test mapping. | Claude | queued |
+| 11 | `FMB-11` | Build provider-neutral clearance search using available public/licensed registries; vendor adapters are optional extensions. | Codex | queued |
+| 12 | `T0-4` | Expand the corpus only from public or already licensed sources; unsupported publishers are skipped. | Claude | queued |
 
 ---
 
-## P0 — defects in production-capable paths
+## Execution rules
 
-These rows block activation or pilot use of the affected workflow until fixed;
-they do not block unrelated repository implementation.
-
-| ID | Work | Owner | Status | Detail |
-|---|---|---|---|---|
-| `EH-SGR-01` | Intra-state invoices issued with IGST instead of CGST+SGST; place of supply never reaches the tax engine | Claude | done | gap review §2.1 |
-| `EH-SGR-02` | Matter permanently unopenable — OC-portal invoice and refund webhook write a status the read schema rejects; `GET /api/matters/{id}` 500s forever | Claude | done | gap review §2.2 |
-| `EH-SGR-03` | Payments under-credited — multi-attempt invoices credit only the largest attempt; webhook reads amount as 0 from the nested payload | Claude | done | gap review §2.3 |
-| `EH-SGR-04` | Invoice numbering not gapless, not concurrency-safe, not immutable | Claude | done | gap review §2.4 |
-| `EH-SGR-07` + `FMB-01` + `FMB-02` | Trust predicates. **One fix, not three** — citation verifier and source links are the same failure class: green in tests, hollow in production | Claude | active | gap review §2.7, backlog §3.1 |
-| `FMB-03` | Keyword search selects candidates by recency, not by the query — topical queries fall through to the 180 most recent of >800K docs. Needs an FTS index; **blocked behind `EH-SGR-04`'s migration** | Claude | blocked | backlog §3.2 (corrected) |
-
-## P1 — decided, cheap, unblocked
-
-| ID | Work | Owner | Status | Detail |
-|---|---|---|---|---|
-| `FMB-14` | Seed all registries, Indian and foreign | Codex | queued | resolutions §5 |
-| `FMB-13` | Duplicate detection keyed on `jurisdiction`, not `office` | Codex | queued | resolutions §5a |
-| `EH-SGR-12` | Normalise `office`/`jurisdiction` before duplicate-detection use | Codex | queued | ledger |
-| `EH-SGR-13` | One identifier normalisation — derive `primary_identifier` from the ledger row | Codex MIGRATION | queued | resolutions §3 |
-| `EH-SGR-14` | One terminal-status constant shared by the IP modules | Codex | queued | ledger |
-| `EH-SGR-16` | Remove SMS/WhatsApp from every selector; mark `roadmap` | Claude | queued | resolutions §6 |
-| `EH-SGR-15` | Identifying user-agent, `robots.txt`, per-host interval on ingest | Claude | queued | resolutions §9 |
-| `EH-SGR-05` | Shared limiter store; extend beyond 3.7% of endpoints | Claude | queued | gap review §2.5 |
-| `EH-SGR-06` | Close the two fail-open controls; add log redaction | Claude | queued | gap review §2.6 |
-| `EH-SGR-08` | Withdraw or implement the two sold-but-absent claims | Claude | queued | gap review §2.8 |
-
-## P2 — IP foundation and the rest
-
-| ID | Work | Owner | Status | Detail |
-|---|---|---|---|---|
-| `FMB-08` | Always-linked `matter_id`, backfill, then `NOT NULL` | Codex MIGRATION | queued | backlog §2.3 |
-| `FMB-10` | Conditional IP Details section on the New Matter form | Codex | queued | backlog §2.3 |
-| `FMB-12` | Matter conflict check becomes IP-aware | Codex | queued | resolutions §5a |
-| `FMB-04` | IP document filter/search by type + pagination | Codex | queued | backlog §4 |
-| `EH-SGR-10` | `/api/ip/documents` unpaginated with N+1 access check | Codex | queued | ledger |
-| `EH-SGR-09` | Observability that actually runs; at least one alert policy | Claude | queued | ledger EH-SGR-09; gap review §5 item 7 |
-| `EH-SGR-17` | Enforce legal holds in storage deletion and execute retention decisions | Claude | queued | gap review §2.9; T1-7; §5 item 13 |
-| `FMB-05` `FMB-06` | Contextual help; structured validation errors | Claude | queued | backlog §4 |
-| `FMB-07` | Bridge tracked-case hearing changes into calendar | Claude | queued | backlog §4 |
-| `FMB-09` | Map the 27 QA cases onto the repo test-ID convention | Claude | queued | backlog §7 |
-
-## Blocked
-
-| ID | Work | Blocked by |
-|---|---|---|
-| `FMB-11` | External clearance search across registries | Registry data access — vendor decision parked |
-| `T0-4` | Corpus expansion shape | Consequence of the no-publisher-licence decision; needs a separate call |
-
----
-
-## Gates reviewed 2026-08-16
-
-Procedural gates were removed where they cost time without protecting product or
-data integrity. Enforcement gates that catch real failures remain:
-
-1. **Waiting for unrelated runtime checks on a docs-only PR.** A documentation
-   change can affect focused documentation-contract tests (including
-   `test_gap_review_factual_contract.py`), links, secret scan and data-governance
-   checks, so those still run. It need not wait on unrelated runtime shards when
-   repository policy can distinguish them.
-2. ~~The duplicate `API (ruff + pytest)` aggregate job.~~ **Withdrawn — it is not
-   a duplicate.** It looks like a redundant gate on the shards, but it is also the
-   only place that combines the 16 shard coverage artifacts and runs
-   `scripts/coverage_gate.py`. Removing it would silently delete the coverage
-   gate. Left in place.
-3. **Asking for confirmation on reversible documentation decisions.** Decide,
-   record the reasoning, mark it reversible, move on.
-4. **Multi-pass verification workflows for small factual questions.** Reserve
-   the fan-out-plus-critic pattern for whole-repo audits, not single lookups.
-5. **Release sign-off ceremony for docs-only changes.**
-6. **Workflow-definition approval is retained.** No active workflow definition
-   or version is seeded. Version 1 must first be seeded as `candidate`, then a
-   real approval must run through the approval path so the approver identity,
-   authority and timestamp snapshots are persisted. Naming Sanjeev Kumar in a
-   document resolves who may approve; it does not perform that runtime act.
-
-### Kept, deliberately
-
-Four, each because it caught something real this session:
-
-- **Fail-closed product controls** — citation verification, conflict checks,
-  terminal lifecycle guards, tenant isolation. Three of these are *already broken*
-  and are the P0 work above. Removing them would delete the thing we are fixing.
-- **Secret scan and the data-governance change gate** — both caught genuine
-  omissions in this branch.
-- **Prod verification before marking a bug fixed** — this is the rule that
-  stopped the reopen cycle. It is the reason the Ram batch closed.
-- **Serialised migrations** — a peer deploy has already been broken once.
+- No manual project approval or sign-off gates.
+- No confirmation pauses for reversible implementation decisions.
+- Implement the list in order and run checks/tests once at the end of the batch.
+- A batch is done only after automated CI and exact-release production checks pass.
+- Machine-enforced runtime controls remain for destructive data operations,
+  payments, filings, legal-rule activation, tenant isolation, and terminal Matter
+  lifecycle changes. These controls protect live data; they do not pause ordinary
+  implementation work.
+- The IP manifest records coverage and evidence. It is not a second queue and its
+  historical human-acceptance fields do not gate this final list.
 
 ---
 
