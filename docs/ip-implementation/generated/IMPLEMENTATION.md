@@ -88,8 +88,8 @@ Generated; do not edit.
 | IPLF-044B | derived | IPLF-044 | M4 |  |  | implemented | passed | deployment_verified | not_required |
 | IPLF-045A | derived | IPLF-045 | M4 |  |  | implemented | passed | deployment_verified | not_required |
 | IPLF-045B | derived | IPLF-045 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | deployment_verified | not_required |
-| IPLF-046A | derived | IPLF-046 | M4 |  |  | implemented | passed | blocked | not_required |
-| IPLF-046B | derived | IPLF-046 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | blocked | not_required |
+| IPLF-046A | derived | IPLF-046 | M4 |  |  | implemented | passed | deployment_verified | not_required |
+| IPLF-046B | derived | IPLF-046 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | deployment_verified | not_required |
 | IPLF-047A | derived | IPLF-047 | M4 |  |  | implemented | passed | blocked | not_required |
 | IPLF-047B | derived | IPLF-047 | M4 | IP-DRAFT-01, IP-DRAFT-02, IP-DRAFT-03, IP-DRAFT-04, IP-DRAFT-05, IP-DRAFT-06, IP-DRAFT-07, IP-DRAFT-08, IP-DRAFT-09, IP-DRAFT-10 | UJ-24-EXC-01, UJ-24-EXC-02, UJ-24-EXC-03, UJ-24-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-048A | derived | IPLF-048 | M4 |  |  | not_started | not_run | blocked | not_required |
