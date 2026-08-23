@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, ValidationError
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import Matter
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.ip_oppositions import (
+    IpOppositionApplicantActionRequest,
+    IpOppositionServiceFact,
+    IpOppositionWorkspaceUpsertRequest,
+)
+from caseops_api.schemas.ip_records import IpOppositionStageTransitionRequest
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -30,6 +37,78 @@ _APPLICANT_DEADLINES_ROUTE = (
 
 def _applicant_route(template: str, *, docket_id: str, proceeding_id: str) -> str:
     return template.format(docket_id=docket_id, proceeding_id=proceeding_id)
+
+
+def _assert_model_error(model: type[BaseModel], payload: dict[str, object], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        model.model_validate(payload)
+
+
+def _workspace_validation_payload() -> dict[str, object]:
+    return {
+        "expected_lifecycle_version": 0,
+        "expected_proceeding_version": 1,
+        "source": "manual",
+        "source_reference": "registry:opposition:041",
+        "effective_at": "2026-08-23T08:00:00Z",
+        "responsible_membership_id": "membership:041",
+        "reason": "Validated the opposition workspace source facts.",
+        "applicable_rule_version": "trade-marks-rules-2017@2026-08-23",
+        "forum": "Trade Marks Registry Delhi",
+        "client_instruction_state": "not_required",
+        "parties": [
+            {"role": "applicant", "party_name": "Applicant One", "source": "notice"},
+            {"role": "opponent", "party_name": "Opponent One", "source": "notice"},
+        ],
+        "grounds": [
+            {
+                "category": "earlier_mark",
+                "lawyer_detail": "Earlier registered mark relied upon in the notice.",
+            }
+        ],
+        "challenged_scope": [{"class_number": 9, "goods_services_segment": "Computer software"}],
+    }
+
+
+def _applicant_action_validation_payload() -> dict[str, object]:
+    return {
+        "expected_lifecycle_version": 0,
+        "expected_proceeding_version": 1,
+        "action_kind": "counterstatement_filed",
+        "source": "manual",
+        "source_reference": "filing:counterstatement:041",
+        "effective_at": "2026-08-23T08:00:00Z",
+        "responsible_membership_id": "membership:041",
+        "reason": "Recorded the signed counterstatement filing facts.",
+        "filing_reference": "TM-O:041",
+        "filed_on": "2026-08-23",
+        "verification": {
+            "signatory": "Applicant Counsel",
+            "authority": "Authorized counsel for the applicant",
+            "place": "New Delhi",
+            "verified_on": "2026-08-23",
+            "verified_paragraph_ranges": ["1-12"],
+            "knowledge_basis": "Records and instructions supplied by the applicant.",
+            "signed_document_ref": "document:signed-counterstatement:041",
+        },
+        "evidence_refs": ["filing-receipt:041"],
+        "document_refs": ["document:counterstatement:041"],
+    }
+
+
+def _transition_validation_payload() -> dict[str, object]:
+    return {
+        "expected_lifecycle_version": 0,
+        "expected_proceeding_version": 1,
+        "to_stage": "counterstatement_due",
+        "transition_kind": "normal",
+        "source": "manual",
+        "source_reference": "registry:opposition:041",
+        "effective_at": "2026-08-23T08:00:00Z",
+        "responsible_membership_id": "membership:041",
+        "reason": "Validated the source and authorized the stage transition.",
+        "evidence_refs": ["evidence:transition:041"],
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -155,9 +234,9 @@ def _governed_deadline_rule(
         if workflow_stage == "counterstatement_due"
         else "opponent_evidence_filed"
     )
-    rule_payload["fixtures"][0]["calculation"]["trigger_kind"] = rule_payload[
-        "definition"
-    ]["trigger_kind"]
+    rule_payload["fixtures"][0]["calculation"]["trigger_kind"] = rule_payload["definition"][
+        "trigger_kind"
+    ]
     rule = client.post(
         "/api/ip/deadline-rules",
         headers=owner_headers,
@@ -377,9 +456,10 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
         },
     )
     assert filed.status_code == 201, filed.text
-    assert filed.json()["applicant_actions"][0]["payload_json"][
-        "document_classification"
-    ] == "tm_o_counterstatement"
+    assert (
+        filed.json()["applicant_actions"][0]["payload_json"]["document_classification"]
+        == "tm_o_counterstatement"
+    )
     _stage(
         client,
         bootstrap=bootstrap,
@@ -441,13 +521,11 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
         version=7,
         to_stage="applicant_evidence_due",
     )
-    evidence_rule, evidence_calendar, evidence_primary, evidence_backup = (
-        _governed_deadline_rule(
-            client,
-            bootstrap=bootstrap,
-            workflow_stage="applicant_evidence_due",
-            suffix="evidence",
-        )
+    evidence_rule, evidence_calendar, evidence_primary, evidence_backup = _governed_deadline_rule(
+        client,
+        bootstrap=bootstrap,
+        workflow_stage="applicant_evidence_due",
+        suffix="evidence",
     )
     _propose_and_confirm(
         client,
@@ -646,3 +724,154 @@ def test_applicant_workflow_enforces_capability_and_tenant_boundaries(
         headers=auth_headers(str(second.json()["access_token"])),
     )
     assert hidden.status_code == 404, hidden.text
+
+
+def test_opposition_workspace_schema_rejects_incomplete_or_ambiguous_facts() -> None:
+    invalid_reservice = {
+        "method": "email",
+        "destination": "opponent@example.test",
+        "served_on": "2026-08-23",
+        "reservice_on": "2026-08-22",
+        "evidence_refs": ["service-receipt:041"],
+    }
+    _assert_model_error(
+        IpOppositionServiceFact,
+        invalid_reservice,
+        "Re-service date cannot precede",
+    )
+
+    cases: list[tuple[dict[str, object], str]] = []
+
+    payload = _workspace_validation_payload()
+    payload["effective_at"] = "2026-08-23T08:00:00"
+    cases.append((payload, "Opposition profile time must include a timezone"))
+
+    payload = _workspace_validation_payload()
+    payload.update({"source": "registry", "source_reference": None})
+    cases.append((payload, "Registry opposition profiles require a source reference"))
+
+    payload = _workspace_validation_payload()
+    payload["parties"] = [
+        {"role": "applicant", "party_name": "Applicant One", "source": "notice"},
+        {"role": "agent", "party_name": "Applicant Agent", "source": "notice"},
+    ]
+    cases.append((payload, "requires both applicant and opponent parties"))
+
+    payload = _workspace_validation_payload()
+    payload["parties"] = [
+        {"role": "applicant", "party_name": "Applicant One", "source": "notice"},
+        {"role": "applicant", "party_name": " applicant one ", "source": "notice"},
+        {"role": "opponent", "party_name": "Opponent One", "source": "notice"},
+    ]
+    cases.append((payload, "Duplicate opposition party and role entries"))
+
+    payload = _workspace_validation_payload()
+    payload["challenged_scope"] = [
+        {"class_number": 9, "goods_services_segment": "Computer software"},
+        {"class_number": 9, "goods_services_segment": " computer software "},
+    ]
+    cases.append((payload, "Duplicate challenged class segments"))
+
+    payload = _workspace_validation_payload()
+    payload["client_instruction_state"] = "confirmed"
+    cases.append((payload, "Confirmed client instruction requires a reference"))
+
+    for invalid_payload, message in cases:
+        _assert_model_error(
+            IpOppositionWorkspaceUpsertRequest,
+            invalid_payload,
+            message,
+        )
+
+
+def test_applicant_action_schema_rejects_incomplete_or_misplaced_evidence() -> None:
+    cases: list[tuple[dict[str, object], str]] = []
+
+    payload = _applicant_action_validation_payload()
+    payload["effective_at"] = "2026-08-23T08:00:00"
+    cases.append((payload, "Applicant action time must include a timezone"))
+
+    payload = _applicant_action_validation_payload()
+    payload.pop("filing_reference")
+    cases.append((payload, "A filed counterstatement requires filing facts"))
+
+    payload = _applicant_action_validation_payload()
+    payload["action_kind"] = "counterstatement_served"
+    cases.append((payload, "Counterstatement service requires complete service facts"))
+
+    payload = _applicant_action_validation_payload()
+    payload["action_kind"] = "applicant_evidence_decision"
+    cases.append((payload, "Applicant evidence requires an explicit"))
+
+    payload = _applicant_action_validation_payload()
+    payload.update(
+        {
+            "action_kind": "counterstatement_served",
+            "evidence_election": "rely_on_pleaded_facts",
+            "service": {
+                "method": "email",
+                "destination": "opponent@example.test",
+                "served_on": "2026-08-23",
+                "evidence_refs": ["service-receipt:041"],
+            },
+        }
+    )
+    cases.append((payload, "An evidence election is only valid for applicant evidence"))
+
+    payload = _applicant_action_validation_payload()
+    payload.update(
+        {
+            "action_kind": "applicant_evidence_decision",
+            "evidence_election": "file_evidence",
+            "evidence_refs": [],
+            "document_refs": [],
+        }
+    )
+    cases.append((payload, "Filed applicant evidence requires document and filing evidence"))
+
+    for invalid_payload, message in cases:
+        _assert_model_error(
+            IpOppositionApplicantActionRequest,
+            invalid_payload,
+            message,
+        )
+
+
+def test_opposition_transition_schema_requires_governed_source_evidence() -> None:
+    cases: list[tuple[dict[str, object], str]] = []
+
+    payload = _transition_validation_payload()
+    payload["effective_at"] = "2026-08-23T08:00:00"
+    cases.append((payload, "Opposition transition time must include a timezone"))
+
+    payload = _transition_validation_payload()
+    payload.update({"source": "registry", "source_reference": None})
+    cases.append((payload, "Registry transitions require a source reference"))
+
+    payload = _transition_validation_payload()
+    payload.update(
+        {
+            "transition_kind": "extended",
+            "authority_reference": "registry-order:extension:041",
+            "authorized_confirmation": "membership:approver:041",
+            "evidence_refs": [],
+        }
+    )
+    cases.append((payload, "Exceptional opposition stages require source evidence"))
+
+    payload = _transition_validation_payload()
+    payload.update(
+        {
+            "transition_kind": "extended",
+            "authority_reference": "registry-order:extension:041",
+            "authorized_confirmation": None,
+        }
+    )
+    cases.append((payload, "Exceptional opposition stages require authorized confirmation"))
+
+    for invalid_payload, message in cases:
+        _assert_model_error(
+            IpOppositionStageTransitionRequest,
+            invalid_payload,
+            message,
+        )
