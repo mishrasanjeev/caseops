@@ -36,6 +36,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
+from caseops_api.api.routes.matters import patch_current_company_matter_lifecycle_status
 from caseops_api.core.settings import get_settings
 from caseops_api.db.base import Base
 from caseops_api.db.models import Company, CompanyType
@@ -45,6 +46,7 @@ from caseops_api.db.session import (
     get_db_session,
     get_engine,
     get_session_factory,
+    serialize_sqlite_writer,
 )
 
 
@@ -227,7 +229,7 @@ def test_sqlite_engine_enables_wal_and_busy_timeout(tmp_path) -> None:
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
 
 
-def test_sqlite_session_serializes_write_until_commit(
+def test_sqlite_session_ordinary_write_does_not_acquire_process_lock(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -254,6 +256,45 @@ def test_sqlite_session_serializes_write_until_commit(
                 slug="e2e-lock-test",
                 company_type=CompanyType.LAW_FIRM,
                 tenant_key="e2e-lock-test",
+            )
+        )
+        session.flush()
+        session.commit()
+        assert events == []
+    finally:
+        session.close()
+
+
+def test_sqlite_session_explicit_writer_lock_is_held_until_commit(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "caseops-reliability-claim.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    engine = get_engine(database_url)
+    Base.metadata.create_all(bind=engine)
+    events: list[str] = []
+
+    class _FakeLock:
+        def acquire(self) -> None:
+            events.append("acquire")
+
+        def release(self) -> None:
+            events.append("release")
+
+    monkeypatch.setattr("caseops_api.db.session._SQLITE_WRITE_LOCK", _FakeLock())
+
+    session = get_session_factory(database_url)()
+    try:
+        serialize_sqlite_writer(session)
+        assert events == ["acquire"]
+
+        session.add(
+            Company(
+                name="E2E Reliability Lock Test",
+                slug="e2e-reliability-lock-test",
+                company_type=CompanyType.LAW_FIRM,
+                tenant_key="e2e-reliability-lock-test",
             )
         )
         session.flush()
@@ -291,6 +332,8 @@ def test_request_session_finalizer_releases_sqlite_writer_on_event_loop(
     async def _exercise_dependency() -> None:
         dependency = get_db_session()
         session = await anext(dependency)
+        serialize_sqlite_writer(session)
+        assert events == ["acquire"]
         session.add(
             Company(
                 name="E2E Request Finalizer",
@@ -306,6 +349,12 @@ def test_request_session_finalizer_releases_sqlite_writer_on_event_loop(
     assert inspect.isasyncgenfunction(get_db_session)
     asyncio.run(_exercise_dependency())
     assert events == ["acquire", "release"]
+
+
+def test_matter_lifecycle_writer_runs_outside_the_event_loop() -> None:
+    """A contended SQLite lifecycle write must not pin every API request."""
+
+    assert not inspect.iscoroutinefunction(patch_current_company_matter_lifecycle_status)
 
 
 # ---------- engine cache invalidation on pool-setting change ------

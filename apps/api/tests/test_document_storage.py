@@ -81,17 +81,14 @@ def test_gcs_backend_persists_and_materializes_cached_download(
         stream=io.BytesIO(b"matter evidence"),
     )
 
-    assert stored.storage_key == "company-1/matters/matter-1/attachment-1-Proof_Bundle.pdf"
-    assert (
-        objects["tenant-docs/company-1/matters/matter-1/attachment-1-Proof_Bundle.pdf"]
-        == b"matter evidence"
-    )
+    assert stored.storage_key == "company-1/matters/matter-1/attachment-1.pdf"
+    assert objects["tenant-docs/company-1/matters/matter-1/attachment-1.pdf"] == b"matter evidence"
 
     resolved_path = resolve_storage_path(stored.storage_key)
     assert resolved_path.exists()
     assert resolved_path.read_bytes() == b"matter evidence"
 
-    del objects["tenant-docs/company-1/matters/matter-1/attachment-1-Proof_Bundle.pdf"]
+    del objects["tenant-docs/company-1/matters/matter-1/attachment-1.pdf"]
     cached_path = resolve_storage_path(stored.storage_key)
     assert cached_path == resolved_path
     assert cached_path.read_bytes() == b"matter evidence"
@@ -221,6 +218,26 @@ def test_persist_rejects_unsafe_storage_segments(
 
     assert exc_info.value.status_code == 400
     assert "company id" in exc_info.value.detail.lower()
+
+
+def test_local_storage_key_does_not_embed_a_long_original_filename(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", (tmp_path / "documents").as_posix())
+
+    stored = persist_workspace_attachment(
+        company_id="company-1",
+        workspace_id="matter-1",
+        attachment_id="attachment-1",
+        filename=f"{'payment-recovery-notice-' * 12}.txt",
+        stream=io.BytesIO(b"portable local storage path"),
+    )
+
+    assert stored.storage_key == "company-1/matters/matter-1/attachment-1.txt"
+    assert resolve_storage_path(stored.storage_key).read_bytes() == b"portable local storage path"
 
 
 def test_resolve_storage_path_rejects_path_traversal(

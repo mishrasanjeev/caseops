@@ -55,11 +55,6 @@ class CaseOpsSession(Session):
             return
         _SQLITE_WRITE_LOCK.release()
 
-    def flush(self, objects: object | None = None) -> None:
-        if self.new or self.dirty or self.deleted:
-            self._acquire_sqlite_write_lock()
-        super().flush(objects)
-
     def commit(self) -> None:
         try:
             super().commit()
@@ -206,12 +201,12 @@ def serialize_sqlite_writer(session: Session) -> None:
 async def get_db_session() -> AsyncGenerator[Session]:
     """Yield a request session and finalize it on the event-loop thread.
 
-    Most API handlers are async functions that perform synchronous SQLAlchemy
-    work. A synchronous generator dependency is entered and exited through
-    Starlette's worker pool; between the response and that queued exit, another
-    handler can block the event loop acquiring CaseOps' process-wide SQLite
-    writer lock. Keeping this dependency async makes ``close()`` release the
-    transaction-scoped lock before another request can enter that window.
+    Reliability workflows can explicitly hold CaseOps' process-wide SQLite
+    writer lock. Keeping this dependency async ensures ``close()`` releases
+    that transaction-scoped lock without waiting for Starlette's worker pool.
+    Ordinary writes use SQLite WAL and ``busy_timeout`` directly; acquiring a
+    Python mutex from every synchronous ``flush()`` can pin the event loop while
+    a preceding request is still completing its dependency teardown.
     """
 
     session_factory = get_session_factory()
