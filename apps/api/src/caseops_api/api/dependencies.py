@@ -120,9 +120,7 @@ def require_capability(
     `capability`. Capability table lives in `CAPABILITY_ROLES` above."""
     roles = CAPABILITY_ROLES.get(capability)
     if roles is None:
-        raise RuntimeError(
-            f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES."
-        )
+        raise RuntimeError(f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES.")
 
     def _dep(
         context: Annotated[SessionContext, Depends(get_current_context)],
@@ -161,9 +159,7 @@ def require_any_capability(*capabilities: str) -> Callable[..., SessionContext]:
         raise RuntimeError("require_any_capability needs at least one capability")
     for capability in capabilities:
         if CAPABILITY_ROLES.get(capability) is None:
-            raise RuntimeError(
-                f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES."
-            )
+            raise RuntimeError(f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES.")
 
     def _dep(
         context: Annotated[SessionContext, Depends(get_current_context)],
@@ -177,10 +173,38 @@ def require_any_capability(*capabilities: str) -> Callable[..., SessionContext]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                f"Requires one of {sorted(capabilities)}; you are "
-                f"{context.membership.role!r}."
+                f"Requires one of {sorted(capabilities)}; you are {context.membership.role!r}."
             ),
         )
+
+    return _dep
+
+
+def require_all_capabilities(*capabilities: str) -> Callable[..., SessionContext]:
+    """FastAPI dependency requiring every listed capability."""
+    if not capabilities:
+        raise RuntimeError("require_all_capabilities needs at least one capability")
+    for capability in capabilities:
+        if CAPABILITY_ROLES.get(capability) is None:
+            raise RuntimeError(f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES.")
+
+    def _dep(
+        context: Annotated[SessionContext, Depends(get_current_context)],
+        session: DbSession,
+    ) -> SessionContext:
+        missing = [
+            capability
+            for capability in capabilities
+            if not membership_has_capability(session, context.membership, capability)
+        ]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Requires all capabilities {sorted(capabilities)}; missing {sorted(missing)}."
+                ),
+            )
+        return context
 
     return _dep
 

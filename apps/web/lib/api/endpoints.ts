@@ -37,6 +37,7 @@ import {
   type DraftingDataField,
   type DraftList,
   type DraftType,
+  type IpPleadingTemplateList,
   type EmailRenderResponse,
   type EmailTemplateListResponse,
   type EmailTemplateRecord,
@@ -171,6 +172,7 @@ import {
   draftingDataExtractionResponse,
   draftingDataField,
   draftList,
+  ipPleadingTemplateList,
   emailRenderResponse,
   emailTemplateListResponse,
   emailTemplateRecord,
@@ -2067,6 +2069,101 @@ export const finalizeDraft = (matterId: string, draftId: string, notes?: string)
 
 export function draftDocxUrl(matterId: string, draftId: string): string {
   return `${API_BASE_URL}/api/matters/${matterId}/drafts/${draftId}/export.docx`;
+}
+
+function ipPleadingBase(docketId: string, proceedingId: string): string {
+  return `/api/ip/dockets/${encodeURIComponent(docketId)}/proceedings/${encodeURIComponent(proceedingId)}`;
+}
+
+export async function listIpPleadingTemplates(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<IpPleadingTemplateList> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/pleading-templates`,
+  );
+  return ipPleadingTemplateList.parse(data);
+}
+
+export async function listIpPleadingDrafts(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<DraftList> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts`,
+  );
+  return draftList.parse(data);
+}
+
+export async function createIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  title: string;
+  templateKey: string;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts`,
+    {
+      method: "POST",
+      body: {
+        title: input.title,
+        template_key: input.templateKey,
+        facts: null,
+      },
+    },
+  );
+  return draft.parse(data);
+}
+
+export async function generateIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+  focusNote?: string | null;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/generate`,
+    { method: "POST", body: { focus_note: input.focusNote ?? null } },
+  );
+  return draft.parse(data);
+}
+
+export async function saveIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+  body: string;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}`,
+    { method: "PATCH", body: { body: input.body } },
+  );
+  return draft.parse(data);
+}
+
+export async function transitionIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+  action: Transition;
+  notes?: string | null;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/${input.action}`,
+    { method: "POST", body: { notes: input.notes ?? null } },
+  );
+  return draft.parse(data);
+}
+
+export async function downloadIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+}): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/export.docx`,
+  );
+  return response.blob();
 }
 
 // PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.

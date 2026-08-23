@@ -1921,6 +1921,9 @@ export const draftVersion = z.object({
   summary: z.string().nullable(),
   generated_by_membership_id: z.string().nullable(),
   model_run_id: z.string().nullable(),
+  template_manifest: z.record(z.string(), z.unknown()),
+  context_manifest: z.record(z.string(), z.unknown()),
+  source_manifest: z.array(z.record(z.string(), z.unknown())),
   created_at: z.string(),
 });
 
@@ -1936,7 +1939,10 @@ export const draftReview = z.object({
 
 export const draft = z.object({
   id: z.string(),
-  matter_id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string().nullable(),
+  ip_docket_id: z.string().nullable(),
+  ip_proceeding_id: z.string().nullable(),
   created_by_membership_id: z.string().nullable(),
   title: z.string(),
   draft_type: draftType,
@@ -1953,6 +1959,21 @@ export const draft = z.object({
 export const draftList = z.object({
   drafts: z.array(draft),
   next_cursor: z.string().nullable().optional(),
+});
+
+export const ipPleadingTemplate = z.object({
+  key: z.string(),
+  label: z.string(),
+  version: z.string(),
+  draft_type: draftType,
+  allowed_sides: z.array(z.string()),
+  allowed_stages: z.array(z.string()),
+  jurisdictions: z.array(z.string()),
+  format_profile: z.string(),
+});
+
+export const ipPleadingTemplateList = z.object({
+  templates: z.array(ipPleadingTemplate),
 });
 
 export const draftingDataFieldStatus = z.enum([
@@ -2004,6 +2025,8 @@ export type DraftVersion = z.infer<typeof draftVersion>;
 export type DraftReview = z.infer<typeof draftReview>;
 export type Draft = z.infer<typeof draft>;
 export type DraftList = z.infer<typeof draftList>;
+export type IpPleadingTemplate = z.infer<typeof ipPleadingTemplate>;
+export type IpPleadingTemplateList = z.infer<typeof ipPleadingTemplateList>;
 export type DraftingDataFieldStatus = z.infer<typeof draftingDataFieldStatus>;
 export type DraftingDataConfidenceBand = z.infer<typeof draftingDataConfidenceBand>;
 export type DraftingDataField = z.infer<typeof draftingDataField>;

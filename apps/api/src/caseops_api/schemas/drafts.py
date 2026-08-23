@@ -80,6 +80,9 @@ class DraftVersionRecord(BaseModel):
     summary: str | None
     generated_by_membership_id: str | None
     model_run_id: str | None
+    template_manifest: dict
+    context_manifest: dict
+    source_manifest: list[dict]
     created_at: datetime
 
 
@@ -99,7 +102,10 @@ class DraftRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    matter_id: str
+    company_id: str
+    matter_id: str | None
+    ip_docket_id: str | None
+    ip_proceeding_id: str | None
     created_by_membership_id: str | None
     title: str
     draft_type: DraftTypeLiteral
@@ -116,3 +122,24 @@ class DraftRecord(BaseModel):
 class DraftListResponse(BaseModel):
     drafts: list[DraftRecord]
     next_cursor: str | None = None
+
+
+class IpPleadingTemplateRecord(BaseModel):
+    key: str
+    label: str
+    version: str
+    draft_type: DraftTypeLiteral
+    allowed_sides: list[str]
+    allowed_stages: list[str]
+    jurisdictions: list[str]
+    format_profile: str
+
+
+class IpPleadingTemplateListResponse(BaseModel):
+    templates: list[IpPleadingTemplateRecord]
+
+
+class IpPleadingDraftCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    template_key: str = Field(min_length=3, max_length=60)
+    facts: dict | None = None
