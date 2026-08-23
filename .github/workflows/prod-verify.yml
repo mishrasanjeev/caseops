@@ -150,8 +150,41 @@ jobs:
           CASEOPS_IP_A0_PROD_MODE: verify
         run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list
 
-      - name: Run IPLF-037B renewal acceptance
+      - name: Check IPLF-037B renewal acceptance configuration
+        id: renewal-prerequisites
         if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        env:
+          CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
+          CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
+          CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
+          CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID }}
+        run: |
+          fixture_names=(
+            CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID
+            CASEOPS_IP_RENEWAL_RULE_VERSION_ID
+            CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID
+            CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID
+          )
+          configured=0
+          for fixture_name in "${fixture_names[@]}"; do
+            if [[ -n "${!fixture_name}" ]]; then
+              configured=$((configured + 1))
+            fi
+          done
+          if [[ "$configured" -eq 0 ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=IPLF-037B governed acceptance pending::No approved renewal fixture IDs are configured; the external legal-governance activation blocker remains open."
+            echo "### IPLF-037B renewal acceptance" >> "$GITHUB_STEP_SUMMARY"
+            echo "Not run: all four approved renewal fixture IDs remain unconfigured. The documented legal-governance activation blocker remains open." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$configured" -ne 4 ]]; then
+            echo "::error title=Incomplete IPLF-037B configuration::Renewal acceptance is fail-closed because only $configured of 4 governed fixture IDs are configured."
+            exit 1
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run IPLF-037B renewal acceptance
+        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
