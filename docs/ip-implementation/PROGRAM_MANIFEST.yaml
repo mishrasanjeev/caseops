@@ -11588,7 +11588,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-040B/local-2026-08-23.md",
-          "revision": "74488b00b519095b42c09450ac73e5b48bd5b210",
+          "revision": "961cd6085e0b4bf9d701aad34198aea130bb8c76",
           "environment": "local SQLite, ephemeral PostgreSQL 17/pgvector, and fresh production-build API/web Playwright servers",
           "fixtures": "deterministic synthetic applicant-side and opponent-side trademark records; no live registry filing, legal conclusion, provider credential, or fabricated production identifier",
           "assertions": "canonical-owner composition, append-only profile history, strict identifier types, role/readiness gates, optimistic fences, tenant/capability isolation, applicant and opponent UI workflows, accessibility, responsiveness, migration refusal, and governance drift",
