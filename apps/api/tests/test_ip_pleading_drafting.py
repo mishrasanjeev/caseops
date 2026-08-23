@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import io
+import json
+import zipfile
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -43,6 +47,30 @@ IP_PLEADING_ROUTE_CONTRACTS = {
         "get",
         "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/export.docx",
     ),
+    (
+        "get",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/validate",
+    ),
+    (
+        "get",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/compare",
+    ),
+    (
+        "get",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/filing-bundle.zip",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/file",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/reject-filing",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/serve",
+    ),
 }
 
 
@@ -68,6 +96,29 @@ def _create_notice_draft(
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def _generate_grounded_notice(
+    client: TestClient,
+    *,
+    bootstrap: dict,
+    docket: dict,
+    proceeding: dict,
+) -> dict:
+    draft = _create_notice_draft(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+    _seed_authority(neutral_citation="2026 SCC OnLine Del 450")
+    generated = client.post(
+        f"{_base(docket, proceeding)}/drafts/{draft['id']}/generate",
+        headers=auth_headers(str(bootstrap["access_token"])),
+        json={},
+    )
+    assert generated.status_code == 200, generated.text
+    return generated.json()
 
 
 def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
@@ -280,3 +331,243 @@ def test_ip_pleading_database_rejects_cross_docket_proceeding_target(
         row.ip_docket_id = other_docket["id"]
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_ip_pleading_validation_compare_bundle_and_service_lifecycle(
+    client: TestClient,
+) -> None:
+    bootstrap, _matter, docket, proceeding = _fixture(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    base = _base(docket, proceeding)
+    generated = _generate_grounded_notice(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+    draft_id = generated["id"]
+    revision_one = generated["versions"][0]
+
+    placeholder_body = revision_one["body"] + "\n\nFiling date: [DATE]. See Annexure A."
+    edited = client.patch(
+        f"{base}/drafts/{draft_id}",
+        headers=headers,
+        json={"body": placeholder_body},
+    )
+    assert edited.status_code == 200, edited.text
+    validation = client.get(f"{base}/drafts/{draft_id}/validate", headers=headers)
+    assert validation.status_code == 200, validation.text
+    report = validation.json()
+    assert report["can_approve"] is False
+    assert report["placeholder_count"] == 1
+    assert "placeholder.unresolved" in {row["code"] for row in report["findings"]}
+    assert "exhibit.unmapped_reference" in {row["code"] for row in report["findings"]}
+
+    submitted = client.post(
+        f"{base}/drafts/{draft_id}/submit",
+        headers=headers,
+        json={"notes": "Validate before approval."},
+    )
+    assert submitted.status_code == 200, submitted.text
+    blocked_approval = client.post(
+        f"{base}/drafts/{draft_id}/approve",
+        headers=headers,
+        json={"notes": "This must fail closed."},
+    )
+    assert blocked_approval.status_code == 422
+    assert "placeholder.unresolved" in blocked_approval.text
+
+    corrected_body = placeholder_body.replace("[DATE]", "24 August 2026").replace(
+        " See Annexure A.",
+        "",
+    )
+    corrected = client.patch(
+        f"{base}/drafts/{draft_id}",
+        headers=headers,
+        json={"body": corrected_body},
+    )
+    assert corrected.status_code == 200, corrected.text
+    compare = client.get(
+        f"{base}/drafts/{draft_id}/compare",
+        headers=headers,
+        params={"prev_revision": 1, "next_revision": 3},
+    )
+    assert compare.status_code == 200, compare.text
+    assert compare.json()["lines_added"] >= 1
+    assert compare.json()["prev_version_id"] == revision_one["id"]
+
+    for action in ("submit", "approve", "finalize"):
+        response = client.post(
+            f"{base}/drafts/{draft_id}/{action}",
+            headers=headers,
+            json={"notes": f"Human-controlled {action}."},
+        )
+        assert response.status_code == 200, response.text
+    bundle = client.get(f"{base}/drafts/{draft_id}/filing-bundle.zip", headers=headers)
+    assert bundle.status_code == 200, bundle.text
+    with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+        names = set(archive.namelist())
+        assert "internal/generation-manifest.json" in names
+        assert "internal/filing-checklist.json" in names
+        assert any(name.startswith("filed-document/") and name.endswith(".docx") for name in names)
+        manifest = json.loads(archive.read("internal/generation-manifest.json"))
+        assert manifest["version_id"] == response.json()["current_version_id"]
+        assert manifest["template_manifest"]["format_profile"] == (
+            "india-trade-marks-registry-v1"
+        )
+
+    filed = client.post(
+        f"{base}/drafts/{draft_id}/file",
+        headers=headers,
+        json={"reference": "TM-O/2026/451", "notes": "Registry filing acknowledged."},
+    )
+    assert filed.status_code == 200, filed.text
+    assert filed.json()["status"] == "filed"
+    no_method = client.post(
+        f"{base}/drafts/{draft_id}/serve",
+        headers=headers,
+        json={"reference": "SERVICE/2026/9"},
+    )
+    assert no_method.status_code == 422
+    served = client.post(
+        f"{base}/drafts/{draft_id}/serve",
+        headers=headers,
+        json={
+            "reference": "SERVICE/2026/9",
+            "method": "registered-post",
+            "notes": "Service receipt retained.",
+        },
+    )
+    assert served.status_code == 200, served.text
+    assert served.json()["status"] == "served"
+    assert served.json()["reviews"][-1]["metadata"]["method"] == "registered-post"
+
+
+def test_ip_pleading_rejected_filing_preserves_original_filed_revision(
+    client: TestClient,
+) -> None:
+    bootstrap, _matter, docket, proceeding = _fixture(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    base = _base(docket, proceeding)
+    generated = _generate_grounded_notice(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+    draft_id = generated["id"]
+    original_body = generated["versions"][0]["body"]
+    for action in ("submit", "approve", "finalize"):
+        response = client.post(
+            f"{base}/drafts/{draft_id}/{action}",
+            headers=headers,
+            json={"notes": action},
+        )
+        assert response.status_code == 200, response.text
+    filed = client.post(
+        f"{base}/drafts/{draft_id}/file",
+        headers=headers,
+        json={"reference": "TM-O/FILED/1"},
+    )
+    assert filed.status_code == 200, filed.text
+    filed_version_id = filed.json()["current_version_id"]
+    rejected = client.post(
+        f"{base}/drafts/{draft_id}/reject-filing",
+        headers=headers,
+        json={"reference": "TM-O/REJECTION/1", "notes": "Registry correction required."},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "filing_rejected"
+    corrected = client.patch(
+        f"{base}/drafts/{draft_id}",
+        headers=headers,
+        json={"body": original_body + "\n\nCorrected filing particular."},
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["current_version_id"] != filed_version_id
+    assert corrected.json()["versions"][0]["body"] == original_body
+    file_event = next(row for row in corrected.json()["reviews"] if row["action"] == "file")
+    assert file_event["version_id"] == filed_version_id
+
+
+def test_ip_pleading_source_loss_invalidates_approval(client: TestClient) -> None:
+    bootstrap, _matter, docket, proceeding = _fixture(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    base = _base(docket, proceeding)
+    generated = _generate_grounded_notice(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+    draft_id = generated["id"]
+    with get_session_factory()() as session:
+        version = session.get(DraftVersion, generated["current_version_id"])
+        assert version is not None
+        version.source_manifest_json = json.dumps(
+            [
+                {
+                    "document_version_id": "00000000-0000-0000-0000-000000000046",
+                    "sha256": "0" * 64,
+                    "state": "approved",
+                }
+            ]
+        )
+        session.commit()
+    validation = client.get(f"{base}/drafts/{draft_id}/validate", headers=headers)
+    assert validation.status_code == 200, validation.text
+    assert "source.version_lost" in {row["code"] for row in validation.json()["findings"]}
+    submitted = client.post(
+        f"{base}/drafts/{draft_id}/submit",
+        headers=headers,
+        json={"notes": "Source loss test."},
+    )
+    assert submitted.status_code == 200, submitted.text
+    approval = client.post(
+        f"{base}/drafts/{draft_id}/approve",
+        headers=headers,
+        json={"notes": "Must fail."},
+    )
+    assert approval.status_code == 422
+    assert "source.version_lost" in approval.text
+
+
+def test_ip_pleading_generation_blocks_conflicting_application_numbers(
+    client: TestClient,
+) -> None:
+    bootstrap, _matter, docket, proceeding = _fixture(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    second_number = client.post(
+        f"/api/ip/dockets/{docket['id']}/identifiers",
+        headers=headers,
+        json={
+            "identifier_kind": "application",
+            "raw_value": "TM-CONFLICT-046-2026",
+            "office": "Trade Marks Registry Delhi",
+            "jurisdiction": "IN",
+            "source": "conflict_fixture",
+            "effective_from": "2026-08-24",
+            "is_primary": False,
+            "application_id": proceeding["application_id"],
+        },
+    )
+    assert second_number.status_code == 201, second_number.text
+    assert second_number.json()["identifier"]["reconciliation_status"] == "confirmed"
+    draft = _create_notice_draft(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+    _seed_authority(neutral_citation="2026 SCC OnLine Del 450")
+    generated = client.post(
+        f"{_base(docket, proceeding)}/drafts/{draft['id']}/generate",
+        headers=headers,
+        json={},
+    )
+    assert generated.status_code == 422
+    assert "context.identifier_conflict" in generated.text
+    with get_session_factory()() as session:
+        row = session.get(Draft, draft["id"])
+        assert row is not None
+        assert row.current_version_id is None

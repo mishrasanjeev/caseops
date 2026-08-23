@@ -2213,10 +2213,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -12565,7 +12566,8 @@
         "apps/api/tests/test_migration_order.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md"
       ],
       "evidence_metadata": [
         {
@@ -12576,24 +12578,34 @@
           "assertions": "canonical generalized drafting ownership, tenant and docket target fences, immutable context/source manifests, compatible template selection, atomic generation failure, immutable lawyer edits, review transitions, verified-citation approval gate, DOCX export, OpenAPI generation, and responsive pleading workspace",
           "result": "passed",
           "recorded_at": "2026-08-23T23:16:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+          "revision": "425715f25f2645cd1ae5a464380819e0ac094d67",
+          "environment": "exact-revision GitHub PR/main CI, guarded Cloud Build and Cloud Run production deployment, scheduler reconciliation, release identity verification, and exact-release production Playwright",
+          "fixtures": "production QA tenant RAM batch, IPLF-027B quiescence fixture, notice-module fixture, and fail-closed IPLF-037B renewal configuration gate; no approved renewal legal fixture IDs, Registry filing, legal approval, or named UAT",
+          "assertions": "PR CI, exact-main CI/security/CodeQL, migration-before-traffic, image and release identity, scheduler inventory, production health, RAM batch, quiescence acceptance, and notice workflow",
+          "result": "passed",
+          "recorded_at": "2026-08-24T01:24:10+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Open the exact-head PR, require the full CI/security matrix, merge with a head-SHA fence, deploy the resulting main SHA, and append exact production acceptance."
+        "Proceed to IPLF-046 consistency, placeholder, exhibit, and source validation without introducing a parallel drafting engine."
       ],
       "data_impact": [
         "Additive target columns and immutable manifest fields; existing Matter drafts are backfilled in place and remain on the canonical writer."
       ],
       "documentation_impact": [
         "docs/ip-implementation/IP_TRADEMARK_PLEADING_WORKFLOW.md",
-        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md"
       ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -12668,7 +12680,8 @@
         "IPLF-UJ-24-NORMAL:apps/api/tests/test_ip_pleading_drafting.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md"
       ],
       "evidence_metadata": [
         {
@@ -12679,24 +12692,34 @@
           "assertions": "canonical generalized drafting ownership, tenant and docket target fences, immutable context/source manifests, compatible template selection, atomic generation failure, immutable lawyer edits, review transitions, verified-citation approval gate, DOCX export, OpenAPI generation, and responsive pleading workspace",
           "result": "passed",
           "recorded_at": "2026-08-23T23:16:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+          "revision": "425715f25f2645cd1ae5a464380819e0ac094d67",
+          "environment": "exact-revision GitHub PR/main CI, guarded Cloud Build and Cloud Run production deployment, scheduler reconciliation, release identity verification, and exact-release production Playwright",
+          "fixtures": "production QA tenant RAM batch, IPLF-027B quiescence fixture, notice-module fixture, and fail-closed IPLF-037B renewal configuration gate; no approved renewal legal fixture IDs, Registry filing, legal approval, or named UAT",
+          "assertions": "PR CI, exact-main CI/security/CodeQL, migration-before-traffic, image and release identity, scheduler inventory, production health, RAM batch, quiescence acceptance, and notice workflow",
+          "result": "passed",
+          "recorded_at": "2026-08-24T01:24:10+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Open the exact-head PR, require the full CI/security matrix, merge with a head-SHA fence, deploy the resulting main SHA, and append exact production acceptance. IPLF-046 and IPLF-047 remain independently pending."
+        "Proceed to IPLF-046 consistency, placeholder, exhibit, and source validation. IPLF-047 remains independently pending."
       ],
       "data_impact": [
         "Trademark pleading drafts and immutable revisions use the generalized canonical drafting records; no filing or registry-side mutation is enabled."
       ],
       "documentation_impact": [
         "docs/ip-implementation/IP_TRADEMARK_PLEADING_WORKFLOW.md",
-        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md"
       ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",

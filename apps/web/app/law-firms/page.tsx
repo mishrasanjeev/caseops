@@ -117,7 +117,7 @@ const platformMoves = [
   {
     icon: FileSignature,
     title: "Trademark pleading studio",
-    body: "Draft opposition notices, counterstatements and evidence affidavits from side-and-stage-aware templates. Every revision freezes the registry context, linked document-version hashes, model and prompt identity, then stays under partner review through approval, finalization and DOCX export.",
+    body: "Draft opposition notices, counterstatements and evidence affidavits from side-and-stage-aware templates. Before approval and filing, CaseOps rechecks current identifiers, dates, authority citations, document-version hashes, source and exhibit anchors, and unresolved placeholders. Compare immutable revisions, export a registry-formatted filing bundle, and record filing, rejection, correction and service as separate human events.",
   },
   {
     icon: Link2,

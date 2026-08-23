@@ -1901,6 +1901,9 @@ export const draftStatus = z.enum([
   "changes_requested",
   "approved",
   "finalized",
+  "filed",
+  "filing_rejected",
+  "served",
 ]);
 export const draftType = z.enum(["brief", "notice", "reply", "memo", "other"]);
 export const draftReviewAction = z.enum([
@@ -1909,6 +1912,9 @@ export const draftReviewAction = z.enum([
   "request_changes",
   "approve",
   "finalize",
+  "file",
+  "reject_filing",
+  "serve",
 ]);
 
 export const draftVersion = z.object({
@@ -1934,6 +1940,7 @@ export const draftReview = z.object({
   actor_membership_id: z.string().nullable(),
   action: draftReviewAction,
   notes: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
   created_at: z.string(),
 });
 
@@ -1974,6 +1981,29 @@ export const ipPleadingTemplate = z.object({
 
 export const ipPleadingTemplateList = z.object({
   templates: z.array(ipPleadingTemplate),
+});
+
+export const ipDraftValidationFinding = z.object({
+  code: z.string(),
+  severity: z.enum(["warning", "blocker"]),
+  message: z.string(),
+  references: z.array(z.string()),
+});
+
+export const ipDraftValidationReport = z.object({
+  draft_id: z.string(),
+  version_id: z.string(),
+  revision: z.number().int(),
+  evaluated_at: z.string(),
+  blocker_count: z.number().int(),
+  warning_count: z.number().int(),
+  placeholder_count: z.number().int(),
+  source_count: z.number().int(),
+  source_anchor_count: z.number().int(),
+  exhibit_anchor_count: z.number().int(),
+  can_approve: z.boolean(),
+  can_file: z.boolean(),
+  findings: z.array(ipDraftValidationFinding),
 });
 
 export const draftingDataFieldStatus = z.enum([
@@ -2027,6 +2057,8 @@ export type Draft = z.infer<typeof draft>;
 export type DraftList = z.infer<typeof draftList>;
 export type IpPleadingTemplate = z.infer<typeof ipPleadingTemplate>;
 export type IpPleadingTemplateList = z.infer<typeof ipPleadingTemplateList>;
+export type IpDraftValidationFinding = z.infer<typeof ipDraftValidationFinding>;
+export type IpDraftValidationReport = z.infer<typeof ipDraftValidationReport>;
 export type DraftingDataFieldStatus = z.infer<typeof draftingDataFieldStatus>;
 export type DraftingDataConfidenceBand = z.infer<typeof draftingDataConfidenceBand>;
 export type DraftingDataField = z.infer<typeof draftingDataField>;

@@ -38,6 +38,7 @@ import {
   type DraftList,
   type DraftType,
   type IpPleadingTemplateList,
+  type IpDraftValidationReport,
   type EmailRenderResponse,
   type EmailTemplateListResponse,
   type EmailTemplateRecord,
@@ -173,6 +174,7 @@ import {
   draftingDataField,
   draftList,
   ipPleadingTemplateList,
+  ipDraftValidationReport,
   emailRenderResponse,
   emailTemplateListResponse,
   emailTemplateRecord,
@@ -2164,6 +2166,73 @@ export async function downloadIpPleadingDraft(input: {
     `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/export.docx`,
   );
   return response.blob();
+}
+
+export async function validateIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+  versionId?: string;
+}): Promise<IpDraftValidationReport> {
+  const params = new URLSearchParams();
+  if (input.versionId) params.set("version_id", input.versionId);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/validate${suffix}`,
+  );
+  return ipDraftValidationReport.parse(data);
+}
+
+export async function compareIpPleadingDraftRevisions(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+  prevRevision: number;
+  nextRevision: number;
+}): Promise<DraftCompareResponse> {
+  const params = new URLSearchParams({
+    prev_revision: String(input.prevRevision),
+    next_revision: String(input.nextRevision),
+  });
+  return apiRequest<DraftCompareResponse>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/compare?${params.toString()}`,
+  );
+}
+
+export async function downloadIpPleadingFilingBundle(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+}): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/filing-bundle.zip`,
+  );
+  return response.blob();
+}
+
+export async function transitionIpPleadingLifecycle(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+  action: "file" | "reject-filing" | "serve";
+  reference: string;
+  occurredAt?: string | null;
+  method?: string | null;
+  notes?: string | null;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/${input.action}`,
+    {
+      method: "POST",
+      body: {
+        reference: input.reference,
+        occurred_at: input.occurredAt ?? null,
+        method: input.method ?? null,
+        notes: input.notes ?? null,
+      },
+    },
+  );
+  return draft.parse(data);
 }
 
 // PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.

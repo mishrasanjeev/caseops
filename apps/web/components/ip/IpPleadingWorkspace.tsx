@@ -2,10 +2,16 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
+  Ban,
   CheckCircle2,
   Download,
   FileSignature,
+  FileUp,
+  GitCompareArrows,
   LockKeyhole,
+  MailCheck,
+  PackageCheck,
   Plus,
   RotateCcw,
   Save,
@@ -25,12 +31,16 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpPleadingDraft,
+  compareIpPleadingDraftRevisions,
   downloadIpPleadingDraft,
+  downloadIpPleadingFilingBundle,
   generateIpPleadingDraft,
   listIpPleadingDrafts,
   listIpPleadingTemplates,
   saveIpPleadingDraft,
+  transitionIpPleadingLifecycle,
   transitionIpPleadingDraft,
+  validateIpPleadingDraft,
 } from "@/lib/api/endpoints";
 import type { Draft } from "@/lib/api/schemas";
 
@@ -38,9 +48,9 @@ const SELECT_CLASS =
   "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
 
 function statusTone(status: Draft["status"]): "neutral" | "brand" | "success" | "warning" {
-  if (status === "approved" || status === "finalized") return "success";
+  if (["approved", "finalized", "filed", "served"].includes(status)) return "success";
   if (status === "in_review") return "brand";
-  if (status === "changes_requested") return "warning";
+  if (status === "changes_requested" || status === "filing_rejected") return "warning";
   return "neutral";
 }
 
@@ -85,6 +95,8 @@ export function IpPleadingWorkspace({
   const [selectedId, setSelectedId] = useState("");
   const [focusNote, setFocusNote] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
+  const [lifecycleReference, setLifecycleReference] = useState("");
+  const [serviceMethod, setServiceMethod] = useState("");
   const [body, setBody] = useState("");
 
   useEffect(() => {
@@ -108,9 +120,34 @@ export function IpPleadingWorkspace({
     () => selected?.versions.find((row) => row.id === selected.current_version_id) ?? null,
     [selected],
   );
+  const previousVersion = selected && selected.versions.length > 1
+    ? selected.versions[selected.versions.length - 2]
+    : null;
+  const validation = useQuery({
+    queryKey: ["ip", "pleading-validation", docketId, proceedingId, selectedId, currentVersion?.id],
+    queryFn: () => validateIpPleadingDraft({ docketId, proceedingId, draftId: selectedId }),
+    enabled: Boolean(selectedId && currentVersion),
+  });
+  const comparison = useQuery({
+    queryKey: ["ip", "pleading-comparison", docketId, proceedingId, selectedId, previousVersion?.id, currentVersion?.id],
+    queryFn: () => compareIpPleadingDraftRevisions({
+      docketId,
+      proceedingId,
+      draftId: selectedId,
+      prevRevision: previousVersion!.revision,
+      nextRevision: currentVersion!.revision,
+    }),
+    enabled: Boolean(selectedId && previousVersion && currentVersion),
+  });
   useEffect(() => setBody(currentVersion?.body ?? ""), [currentVersion?.id, currentVersion?.body]);
 
-  const refresh = async () => queryClient.invalidateQueries({ queryKey });
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey }),
+      queryClient.invalidateQueries({ queryKey: ["ip", "pleading-validation", docketId, proceedingId] }),
+      queryClient.invalidateQueries({ queryKey: ["ip", "pleading-comparison", docketId, proceedingId] }),
+    ]);
+  };
   const create = useMutation({
     mutationFn: createIpPleadingDraft,
     onSuccess: async (row) => {
@@ -150,8 +187,24 @@ export function IpPleadingWorkspace({
     onSuccess: (blob) => downloadBlob(blob, `${selected?.title ?? "trademark-pleading"}.docx`),
     onError: (error) => toast.error(apiErrorMessage(error, "Could not export the pleading.")),
   });
-  const busy = create.isPending || generate.isPending || save.isPending || transition.isPending;
+  const bundle = useMutation({
+    mutationFn: downloadIpPleadingFilingBundle,
+    onSuccess: (blob) => downloadBlob(blob, `${selected?.title ?? "trademark-pleading"}-filing-bundle.zip`),
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not create the filing bundle.")),
+  });
+  const lifecycle = useMutation({
+    mutationFn: transitionIpPleadingLifecycle,
+    onSuccess: async () => {
+      toast.success("Pleading lifecycle event recorded.");
+      setLifecycleReference("");
+      setServiceMethod("");
+      await refresh();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not record the lifecycle event.")),
+  });
+  const busy = create.isPending || generate.isPending || save.isPending || transition.isPending || lifecycle.isPending;
   const sourceRows = currentVersion?.source_manifest ?? [];
+  const immutableStatus = selected ? ["finalized", "filed", "served"].includes(selected.status) : false;
 
   return (
     <section className="min-w-0 space-y-4 border-t border-[var(--color-line)] pt-4" data-testid="ip-pleading-workspace">
@@ -218,10 +271,11 @@ export function IpPleadingWorkspace({
             <Textarea value={focusNote} onChange={(event) => setFocusNote(event.target.value)} placeholder="Issues or reliefs to emphasize" />
           </Label>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" type="button" onClick={() => generate.mutate({ docketId, proceedingId, draftId: selected.id, focusNote })} disabled={!canGenerate || selected.status === "finalized" || generate.isPending}>
+            <Button size="sm" type="button" onClick={() => generate.mutate({ docketId, proceedingId, draftId: selected.id, focusNote })} disabled={!canGenerate || immutableStatus || generate.isPending}>
               <WandSparkles className="h-4 w-4" /> Generate revision
             </Button>
             {currentVersion ? <Button size="sm" type="button" variant="outline" onClick={() => download.mutate({ docketId, proceedingId, draftId: selected.id })} disabled={download.isPending}><Download className="h-4 w-4" /> DOCX</Button> : null}
+            {currentVersion && ["finalized", "filed", "filing_rejected", "served"].includes(selected.status) ? <Button size="sm" type="button" variant="outline" onClick={() => bundle.mutate({ docketId, proceedingId, draftId: selected.id })} disabled={bundle.isPending || validation.data?.can_file === false}><PackageCheck className="h-4 w-4" /> Filing bundle</Button> : null}
           </div>
 
           {currentVersion ? (
@@ -233,11 +287,27 @@ export function IpPleadingWorkspace({
               </div>
               <Label className="block min-w-0 space-y-1.5">
                 <span className="block">Pleading body</span>
-                <Textarea className="min-h-80 font-mono" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canEdit || selected.status === "finalized"} />
+                <Textarea className="min-h-80 font-mono" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canEdit || immutableStatus} />
               </Label>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" type="button" onClick={() => save.mutate({ docketId, proceedingId, draftId: selected.id, body })} disabled={!canEdit || selected.status === "finalized" || body.trim() === currentVersion.body.trim() || save.isPending}><Save className="h-4 w-4" /> Save revision</Button>
+                <Button size="sm" type="button" onClick={() => save.mutate({ docketId, proceedingId, draftId: selected.id, body })} disabled={!canEdit || immutableStatus || body.trim() === currentVersion.body.trim() || save.isPending}><Save className="h-4 w-4" /> Save revision</Button>
               </div>
+              {validation.isError ? <QueryErrorState error={validation.error} title="Could not validate this revision" onRetry={() => validation.refetch()} /> : null}
+              {validation.data ? (
+                <div className={`border-l-4 p-3 text-sm ${validation.data.blocker_count ? "border-red-500 bg-red-50" : validation.data.warning_count ? "border-amber-500 bg-amber-50" : "border-emerald-500 bg-emerald-50"}`} data-testid="ip-draft-validation">
+                  <div className="flex flex-wrap items-center gap-2 font-semibold">
+                    {validation.data.blocker_count ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {validation.data.blocker_count} blockers, {validation.data.warning_count} warnings
+                  </div>
+                  {validation.data.findings.length ? <ul className="mt-2 space-y-1">{validation.data.findings.map((finding) => <li key={`${finding.code}-${finding.message}`}>{finding.message}</li>)}</ul> : <p className="mt-1">Current identifiers, sources, citations, exhibits, and placeholders passed.</p>}
+                </div>
+              ) : null}
+              {comparison.data ? (
+                <details className="border-t border-[var(--color-line)] pt-3 text-sm" data-testid="ip-draft-comparison">
+                  <summary className="flex cursor-pointer items-center gap-2 font-semibold"><GitCompareArrows className="h-4 w-4" /> {comparison.data.summary}</summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2"><span>Added: {comparison.data.lines_added} lines, {comparison.data.citations_added.length} citations</span><span>Removed: {comparison.data.lines_removed} lines, {comparison.data.citations_removed.length} citations</span></div>
+                </details>
+              ) : null}
               <Label className="block min-w-0 space-y-1.5">
                 <span className="block">Review notes</span>
                 <Input value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} />
@@ -245,9 +315,26 @@ export function IpPleadingWorkspace({
               <div className="flex flex-wrap gap-2">
                 {(selected.status === "draft" || selected.status === "changes_requested") ? <Button size="sm" type="button" variant="outline" disabled={!canEdit || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "submit", notes: reviewNotes })}><Send className="h-4 w-4" /> Submit</Button> : null}
                 {selected.status === "in_review" ? <Button size="sm" type="button" variant="outline" disabled={!canReview || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "request-changes", notes: reviewNotes })}><RotateCcw className="h-4 w-4" /> Request changes</Button> : null}
-                {selected.status === "in_review" ? <Button size="sm" type="button" disabled={!canReview || currentVersion.verified_citation_count < 1 || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "approve", notes: reviewNotes })}><CheckCircle2 className="h-4 w-4" /> Approve</Button> : null}
+                {selected.status === "in_review" ? <Button size="sm" type="button" disabled={!canReview || currentVersion.verified_citation_count < 1 || validation.data?.can_approve === false || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "approve", notes: reviewNotes })}><CheckCircle2 className="h-4 w-4" /> Approve</Button> : null}
                 {selected.status === "approved" ? <Button size="sm" type="button" disabled={!canFinalize || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "finalize", notes: reviewNotes })}><LockKeyhole className="h-4 w-4" /> Finalize</Button> : null}
               </div>
+              {["finalized", "filed"].includes(selected.status) ? (
+                <div className="grid gap-3 border-t border-[var(--color-line)] pt-3 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto]">
+                  <Label className="space-y-1.5"><span className="block">Registry reference</span><Input value={lifecycleReference} onChange={(event) => setLifecycleReference(event.target.value)} /></Label>
+                  <Label className="space-y-1.5"><span className="block">Service method</span><Input value={serviceMethod} onChange={(event) => setServiceMethod(event.target.value)} disabled={selected.status !== "filed"} /></Label>
+                  <div className="flex flex-wrap items-end gap-2">
+                    {selected.status === "finalized" ? <Button size="sm" type="button" disabled={!canFinalize || !lifecycleReference.trim() || validation.data?.can_file === false || busy} onClick={() => lifecycle.mutate({ docketId, proceedingId, draftId: selected.id, action: "file", reference: lifecycleReference, notes: reviewNotes })}><FileUp className="h-4 w-4" /> Mark filed</Button> : null}
+                    {selected.status === "filed" ? <Button size="sm" type="button" variant="outline" disabled={!canFinalize || !lifecycleReference.trim() || busy} onClick={() => lifecycle.mutate({ docketId, proceedingId, draftId: selected.id, action: "reject-filing", reference: lifecycleReference, notes: reviewNotes })}><Ban className="h-4 w-4" /> Rejected</Button> : null}
+                    {selected.status === "filed" ? <Button size="sm" type="button" disabled={!canFinalize || !lifecycleReference.trim() || !serviceMethod.trim() || busy} onClick={() => lifecycle.mutate({ docketId, proceedingId, draftId: selected.id, action: "serve", reference: lifecycleReference, method: serviceMethod, notes: reviewNotes })}><MailCheck className="h-4 w-4" /> Mark served</Button> : null}
+                  </div>
+                </div>
+              ) : null}
+              {selected.reviews.length ? (
+                <details className="border-t border-[var(--color-line)] pt-3 text-sm">
+                  <summary className="cursor-pointer font-semibold">Review and filing history</summary>
+                  <ol className="mt-2 space-y-2">{selected.reviews.map((event) => <li key={event.id}><strong>{event.action.replaceAll("_", " ")}</strong> on revision {selected.versions.find((row) => row.id === event.version_id)?.revision ?? "-"}{typeof event.metadata.reference === "string" ? ` - ${event.metadata.reference}` : ""}</li>)}</ol>
+                </details>
+              ) : null}
               {sourceRows.length ? (
                 <details className="rounded-md border border-[var(--color-line)] p-3 text-sm">
                   <summary className="cursor-pointer font-semibold">Frozen document versions</summary>

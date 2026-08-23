@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `362b7cfddb0de4604714b6626d7c2cda816ac32ab544336577df4e29d01b0f4f`
+- Canonical map SHA-256: `66c231adc506adf1834a955fe921ff4b80ebe2cb988505df1b3b597979d7e3c6`
 - SQL tables: `273`
-- SQL columns: `4249`
+- SQL columns: `4250`
 - ORM indexes: `1231`
 - Alembic/raw index declarations: `550`
 - Non-SQL data classes: `11`
@@ -102,7 +102,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `document_processing_jobs` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `domain_consumer_effects` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `domain_outbox_events` | `tenant_operational_record` | 36 | `registry_fail_closed` |
-| `draft_reviews` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
+| `draft_reviews` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `draft_versions` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `drafting_data_extraction_fields` | `tenant_restricted_legal_content` | 23 | `registry_fail_closed` |
 | `drafts` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |

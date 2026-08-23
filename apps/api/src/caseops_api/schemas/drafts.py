@@ -11,6 +11,9 @@ DraftStatusLiteral = Literal[
     "changes_requested",
     "approved",
     "finalized",
+    "filed",
+    "filing_rejected",
+    "served",
 ]
 DraftTypeLiteral = Literal["brief", "notice", "reply", "memo", "other"]
 DraftReviewActionLiteral = Literal[
@@ -19,6 +22,9 @@ DraftReviewActionLiteral = Literal[
     "request_changes",
     "approve",
     "finalize",
+    "file",
+    "reject_filing",
+    "serve",
 ]
 
 
@@ -64,6 +70,13 @@ class DraftReviewRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
 
 
+class IpDraftLifecycleRequest(BaseModel):
+    reference: str = Field(min_length=1, max_length=255)
+    occurred_at: datetime | None = None
+    method: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
 class DraftEditRequest(BaseModel):
     body: str = Field(min_length=1, max_length=524_288)
 
@@ -95,6 +108,7 @@ class DraftReviewRecord(BaseModel):
     actor_membership_id: str | None
     action: DraftReviewActionLiteral
     notes: str | None
+    metadata: dict
     created_at: datetime
 
 
@@ -143,3 +157,56 @@ class IpPleadingDraftCreateRequest(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     template_key: str = Field(min_length=3, max_length=60)
     facts: dict | None = None
+
+
+class IpDraftValidationFindingRecord(BaseModel):
+    code: str
+    severity: Literal["warning", "blocker"]
+    message: str
+    references: list[str]
+
+
+class IpDraftValidationReportRecord(BaseModel):
+    draft_id: str
+    version_id: str
+    revision: int
+    evaluated_at: datetime
+    blocker_count: int
+    warning_count: int
+    placeholder_count: int
+    source_count: int
+    source_anchor_count: int
+    exhibit_anchor_count: int
+    can_approve: bool
+    can_file: bool
+    findings: list[IpDraftValidationFindingRecord]
+
+
+class DraftDiffLineRecord(BaseModel):
+    kind: Literal["equal", "insert", "delete", "replace"]
+    prev_line_number: int | None
+    next_line_number: int | None
+    text: str
+
+
+class DraftDiffHunkRecord(BaseModel):
+    prev_start: int
+    prev_length: int
+    next_start: int
+    next_length: int
+    lines: list[DraftDiffLineRecord]
+
+
+class DraftCompareRecord(BaseModel):
+    draft_id: str
+    prev_revision: int
+    next_revision: int
+    prev_version_id: str
+    next_version_id: str
+    hunks: list[DraftDiffHunkRecord]
+    citations_added: list[str]
+    citations_removed: list[str]
+    citations_kept: list[str]
+    lines_added: int
+    lines_removed: int
+    summary: str
