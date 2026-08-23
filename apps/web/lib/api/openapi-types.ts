@@ -5165,6 +5165,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Opposition Workspace */
+        get: operations["get_ip_opposition_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_workspace_get"];
+        /** Put Ip Opposition Workspace */
+        put: operations["put_ip_opposition_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_workspace_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/stage": {
         parameters: {
             query?: never;
@@ -21018,7 +21036,7 @@ export interface components {
              * Event Kind
              * @enum {string}
              */
-            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition";
+            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile";
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Application Version */
@@ -22717,6 +22735,22 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** IpOppositionGround */
+        IpOppositionGround: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "earlier_mark" | "passing_off" | "well_known_mark" | "descriptiveness" | "non_distinctive" | "prohibited_mark" | "bad_faith" | "other";
+            /**
+             * Classification Source
+             * @default manual
+             * @enum {string}
+             */
+            classification_source: "manual" | "ai_assisted";
+            /** Lawyer Detail */
+            lawyer_detail: string;
+        };
         /** IpOppositionNumberCreate */
         IpOppositionNumberCreate: {
             /**
@@ -22733,6 +22767,97 @@ export interface components {
             raw_value: string;
             /** Source */
             source: string;
+        };
+        /** IpOppositionPartyInput */
+        IpOppositionPartyInput: {
+            /** Party Name */
+            party_name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "applicant" | "opponent" | "agent" | "counsel";
+            /** Source */
+            source: string;
+        };
+        /** IpOppositionPartyRecord */
+        IpOppositionPartyRecord: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until: string | null;
+            /** Id */
+            id: string;
+            /** Party Name */
+            party_name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "applicant" | "opponent" | "agent" | "counsel";
+            /** Source */
+            source: string;
+        };
+        /** IpOppositionProfile */
+        IpOppositionProfile: {
+            /** Applicable Rule Version */
+            applicable_rule_version: string;
+            /** Challenged Scope */
+            challenged_scope: components["schemas"]["IpOppositionScopeSegment"][];
+            /** Client Instruction Reference */
+            client_instruction_reference: string | null;
+            /** Client Instruction State */
+            client_instruction_state: string;
+            /** Forum */
+            forum: string;
+            /** Grounds */
+            grounds: components["schemas"]["IpOppositionGround"][];
+            /** Lawyer Confirmed By Membership Id */
+            lawyer_confirmed_by_membership_id: string;
+            /** Limitation Date */
+            limitation_date: string | null;
+            /** Relied On Rights */
+            relied_on_rights: components["schemas"]["IpReliedOnRight"][];
+            service: components["schemas"]["IpOppositionServiceFact"] | null;
+            /** Source Notice Document Ref */
+            source_notice_document_ref: string | null;
+            /** Source Notice Reference */
+            source_notice_reference: string | null;
+        };
+        /** IpOppositionScopeSegment */
+        IpOppositionScopeSegment: {
+            /** Class Number */
+            class_number: number;
+            /** Goods Services Segment */
+            goods_services_segment: string;
+        };
+        /** IpOppositionServiceFact */
+        IpOppositionServiceFact: {
+            /** Acknowledgement */
+            acknowledgement?: string | null;
+            /** Defect */
+            defect?: string | null;
+            /** Destination */
+            destination: string;
+            /** Evidence Refs */
+            evidence_refs: string[];
+            /** Method */
+            method: string;
+            /** Reservice On */
+            reservice_on?: string | null;
+            /**
+             * Served On
+             * Format: date
+             */
+            served_on: string;
+            /**
+             * Starts Response Period
+             * @default false
+             */
+            starts_response_period: boolean;
         };
         /** IpOppositionStageTransitionRequest */
         IpOppositionStageTransitionRequest: {
@@ -22784,6 +22909,84 @@ export interface components {
         IpOppositionStageTransitionResponse: {
             event: components["schemas"]["IpDocketEventResponse"];
             proceeding: components["schemas"]["IpProceedingResponse"];
+        };
+        /** IpOppositionWorkspaceResponse */
+        IpOppositionWorkspaceResponse: {
+            /** Application Identifiers */
+            application_identifiers: components["schemas"]["IpIdentifierResponse"][];
+            /** Linked Matter Id */
+            linked_matter_id: string | null;
+            /** Opposition Identifiers */
+            opposition_identifiers: components["schemas"]["IpIdentifierResponse"][];
+            /** Parties */
+            parties: components["schemas"]["IpOppositionPartyRecord"][];
+            proceeding: components["schemas"]["IpProceedingResponse"];
+            profile: components["schemas"]["IpOppositionProfile"] | null;
+            profile_event: components["schemas"]["IpDocketEventResponse"] | null;
+            /** Profile Revision Count */
+            profile_revision_count: number;
+            /** Readiness Gaps */
+            readiness_gaps: string[];
+            /** Ready For Stage Progression */
+            ready_for_stage_progression: boolean;
+            /** Stage Events */
+            stage_events: components["schemas"]["IpDocketEventResponse"][];
+        };
+        /** IpOppositionWorkspaceUpsertRequest */
+        IpOppositionWorkspaceUpsertRequest: {
+            /** Applicable Rule Version */
+            applicable_rule_version: string;
+            /** Challenged Scope */
+            challenged_scope: components["schemas"]["IpOppositionScopeSegment"][];
+            /** Client Instruction Reference */
+            client_instruction_reference?: string | null;
+            /**
+             * Client Instruction State
+             * @default pending
+             * @enum {string}
+             */
+            client_instruction_state: "pending" | "confirmed" | "not_required";
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            /** Expected Profile Event Id */
+            expected_profile_event_id?: string | null;
+            /** Forum */
+            forum: string;
+            /** Grounds */
+            grounds: components["schemas"]["IpOppositionGround"][];
+            /** Limitation Date */
+            limitation_date?: string | null;
+            /** Parties */
+            parties: components["schemas"]["IpOppositionPartyInput"][];
+            /** Reason */
+            reason: string;
+            /** Relied On Rights */
+            relied_on_rights?: components["schemas"]["IpReliedOnRight"][];
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            service?: components["schemas"]["IpOppositionServiceFact"] | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "registry" | "integration" | "system";
+            /** Source Notice Document Ref */
+            source_notice_document_ref?: string | null;
+            /** Source Notice Reference */
+            source_notice_reference?: string | null;
+            /** Source Reference */
+            source_reference?: string | null;
         };
         /**
          * IpPortfolioCounts
@@ -23400,6 +23603,27 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** IpReliedOnRight */
+        IpReliedOnRight: {
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Goods Services */
+            goods_services: string;
+            /** Identifier */
+            identifier?: string | null;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Mark Or Right */
+            mark_or_right: string;
+            /** Owner */
+            owner: string;
+            /** Reputation Claim */
+            reputation_claim?: string | null;
+            /** Status */
+            status: string;
+            /** Use Claim */
+            use_claim?: string | null;
         };
         /** IpRenewalDeadlineSummary */
         IpRenewalDeadlineSummary: {
@@ -45718,6 +45942,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpProceedingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_opposition_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_ip_opposition_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_workspace_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOppositionWorkspaceUpsertRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionWorkspaceResponse"];
                 };
             };
             /** @description Validation Error */

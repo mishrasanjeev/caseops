@@ -122,6 +122,11 @@ def validate_opposition_stage_event(
             )
         )
         assert_proceeding_can_enter_filed_stage(proceeding, identifiers)
+        from caseops_api.services.ip_opposition_workspace import (
+            assert_opposition_workspace_ready,
+        )
+
+        assert_opposition_workspace_ready(session, proceeding=proceeding)
 
     if transition_kind == "extended":
         valid_transition = to_stage == proceeding.stage

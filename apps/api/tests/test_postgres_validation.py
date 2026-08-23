@@ -7908,7 +7908,9 @@ def test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on
 
 
 @pytest.mark.postgres
-def test_iplf040a_opposition_stage_events_are_append_only_on_postgres(pg_engine):
+def test_iplf040_opposition_stage_and_profile_events_are_append_only_on_postgres(
+    pg_engine,
+):
     from caseops_api.db.models import IpDocketEvent, IpProceeding
 
     now = datetime.now(UTC)
@@ -7951,15 +7953,35 @@ def test_iplf040a_opposition_stage_events_are_append_only_on_postgres(pg_engine)
             },
         )
         session.add(event)
+        profile_event = IpDocketEvent(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            sequence=2,
+            proceeding_id=proceeding.id,
+            event_kind="opposition_profile",
+            source="manual",
+            effective_at=now,
+            responsible_membership_id=fixture["owner_id"],
+            entered_by_membership_id=fixture["owner_id"],
+            reason="PostgreSQL opposition profile evidence.",
+            evidence_refs_json=["postgres:opposition:profile"],
+            document_refs_json=[],
+            resulting_deadline_refs_json=[],
+            before_phase="draft",
+            candidate_status="confirmed",
+            payload_json={"opposition_profile_revision": True},
+        )
+        session.add(profile_event)
         session.commit()
-        event_id = event.id
+        event_ids = (event.id, profile_event.id)
 
-    for statement in (
-        "UPDATE ip_docket_events SET reason = 'rewritten' WHERE id = :id",
-        "DELETE FROM ip_docket_events WHERE id = :id",
-    ):
-        with Session(pg_engine) as session:
-            with pytest.raises(DBAPIError, match="append-only"):
-                session.execute(text(statement), {"id": event_id})
-                session.commit()
-            session.rollback()
+    for event_id in event_ids:
+        for statement in (
+            "UPDATE ip_docket_events SET reason = 'rewritten' WHERE id = :id",
+            "DELETE FROM ip_docket_events WHERE id = :id",
+        ):
+            with Session(pg_engine) as session:
+                with pytest.raises(DBAPIError, match="append-only"):
+                    session.execute(text(statement), {"id": event_id})
+                    session.commit()
+                session.rollback()

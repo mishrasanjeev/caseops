@@ -513,6 +513,8 @@ def preview_ip_docket_event(
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
+    if payload.event_kind == "opposition_profile" and payload.supersedes_event_id:
+        duplicate_ids = []
     latest_effective = max((_as_utc(row.effective_at) for row in rows), default=None)
     backdated = (
         latest_effective is not None
@@ -591,6 +593,8 @@ def _append_locked_event(
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
+    if payload.event_kind == "opposition_profile" and payload.supersedes_event_id:
+        duplicate_ids = []
     unresolved_confirmed_duplicate = (
         duplicate_ids
         and payload.reconciles_event_id is None
@@ -655,7 +659,11 @@ def _append_locked_event(
         event_id=payload.reconciles_event_id,
         label="Reconciled",
     )
-    if payload.source == "registry" and payload.reconciles_event_id is None:
+    if (
+        payload.source == "registry"
+        and payload.event_kind != "opposition_profile"
+        and payload.reconciles_event_id is None
+    ):
         if payload.candidate_status != "candidate":
             raise HTTPException(
                 status_code=422,
@@ -821,6 +829,7 @@ def append_ip_docket_event(
     context: SessionContext,
     docket_id: str,
     payload: IpDocketEventCreateRequest,
+    commit: bool = True,
 ) -> IpDocketEvent:
     docket = _authorized_lifecycle_docket(
         session,
@@ -847,8 +856,9 @@ def append_ip_docket_event(
             "reconciles_event_id": row.reconciles_event_id,
         },
     )
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row
 
 

@@ -15,8 +15,8 @@ Generated; do not edit.
 | UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034A, IPLF-034B | 4 | 3 | implemented | passed | false |
 | UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035A, IPLF-035B | 6 | 2 | implemented | passed | false |
 | UJ-11 | Recover failed or suppressed notification | 3 | IPLF-007A, IPLF-007B, IPLF-007C | 3 | 3 | implemented | not_run | false |
-| UJ-12 | Docket opposition as applicant | 4 | IPLF-040B, IPLF-041B | 4 | 0 | not_started | not_run | false |
-| UJ-13 | Docket opposition as opponent | 4 | IPLF-040B, IPLF-042B | 4 | 0 | not_started | not_run | false |
+| UJ-12 | Docket opposition as applicant | 4 | IPLF-040B, IPLF-041B | 4 | 0 | in_progress | not_run | false |
+| UJ-13 | Docket opposition as opponent | 4 | IPLF-040B, IPLF-042B | 4 | 0 | in_progress | not_run | false |
 | UJ-14 | Classify, name, and file documents | 5 | IPLF-024B, IPLF-036A, IPLF-036B | 10 | 2 | implemented | passed | false |
 | UJ-15 | Browse verified Bare Act | 3 | IPLF-006A, IPLF-006B, IPLF-006C | 3 | 1 | implemented | not_run | false |
 | UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 8 | 2 | implemented | not_run | false |

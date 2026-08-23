@@ -19,6 +19,7 @@ IpEventKind = Literal[
     "abandonment",
     "restoration",
     "lifecycle_transition",
+    "opposition_profile",
 ]
 IpEventSource = Literal["manual", "registry", "integration", "system"]
 IpCandidateStatus = Literal["candidate", "confirmed", "reconciled", "rejected"]

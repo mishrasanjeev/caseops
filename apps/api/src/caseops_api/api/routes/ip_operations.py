@@ -145,6 +145,10 @@ from caseops_api.schemas.ip_operations import (
     ManualTrademarkApplicationCreateRequest,
     ManualTrademarkApplicationCreateResponse,
 )
+from caseops_api.schemas.ip_oppositions import (
+    IpOppositionWorkspaceResponse,
+    IpOppositionWorkspaceUpsertRequest,
+)
 from caseops_api.schemas.ip_portfolio import (
     IpPortfolioExportCreate,
     IpPortfolioExportListResponse,
@@ -323,6 +327,10 @@ from caseops_api.services.ip_operations import (
     save_ip_docket_queue,
     sign_off_ip_control_review,
     verify_ip_deadline_incident,
+)
+from caseops_api.services.ip_opposition_workspace import (
+    get_opposition_workspace,
+    save_opposition_workspace,
 )
 from caseops_api.services.ip_oppositions import transition_opposition_stage
 from caseops_api.services.ip_portfolio import (
@@ -2408,6 +2416,44 @@ async def post_ip_opposition_stage_transition(
     return IpOppositionStageTransitionResponse(
         proceeding=IpProceedingResponse.model_validate(proceeding),
         event=IpDocketEventResponse.model_validate(event),
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace",
+    response_model=IpOppositionWorkspaceResponse,
+)
+async def get_ip_opposition_workspace(
+    docket_id: str,
+    proceeding_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpOppositionWorkspaceResponse:
+    return get_opposition_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+
+
+@router.put(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace",
+    response_model=IpOppositionWorkspaceResponse,
+)
+async def put_ip_opposition_workspace(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionWorkspaceUpsertRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionWorkspaceResponse:
+    return save_opposition_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
     )
 
 

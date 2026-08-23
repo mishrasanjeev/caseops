@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
+import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -1304,6 +1305,12 @@ function DocketWorkspace({
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
         <IdentityCard docket={docket} enabled={canWrite} />
+        <IpOppositionWorkspace
+          docket={docket}
+          canWrite={canWrite}
+          canReview={canReview}
+          currentMembershipId={currentMembershipId}
+        />
         {canManageAccess ? (
           <IpAccessWorkspace docket={docket} onChanged={onChanged} />
         ) : null}

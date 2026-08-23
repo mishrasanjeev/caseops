@@ -189,3 +189,34 @@ trigger. Existing docket lifecycle events retain their established in-transactio
 finalization before commit. Full applicant/opponent workspaces, pleadings,
 service, evidence packages, deadlines, hearings, orders, appeals, reporting,
 and UJ-12/UJ-13 browser proof remain owned by `IPLF-040B` and later M4 slices.
+
+## IPLF-040B opposition workspace extension
+
+`20260823_0002` keeps the same owners and adds one nullable
+`ip_parties_and_roles.proceeding_id` link so two oppositions on one trademark
+application cannot collapse their parties. Docket-level legacy parties remain
+valid. Current proceeding parties are effective-dated; corrections retire the
+prior row and append the new fact.
+
+The baseline applicant/opponent profile is a typed, append-only
+`ip_docket_events.event_kind = opposition_profile` revision. Its payload records
+the applicable rule version, forum, source notice, client-instruction and
+limitation facts, structured lawyer-authored grounds, challenged class segments,
+relied-on rights, and service facts. The latest event ID is the profile's
+optimistic-concurrency fence. PostgreSQL and SQLite reject updates or deletes to
+both marked stage events and profile revisions.
+
+The aggregate workspace reads the existing proceeding, application and
+opposition identifiers, proceeding-scoped parties, Matter link, and stage-event
+history. Leaving `draft` fails closed until both identifiers and the role-specific
+profile facts are confirmed. Profile confirmation requires `ip:approve`; an
+AI-assisted category remains visibly attributed and only becomes operative when
+saved by that reviewer. Stage progression continues through the existing typed
+opposition state machine. Documents, deadlines, hearings, tasks, billing,
+communications, audit, and Matter lifecycle remain with their existing owners.
+
+Specialized TM-O pleadings, Rules 45-47 evidence elections, legal deadline
+calculation, hearing/order/appeal handling, downstream application-disposition
+review, translations, adjournments, security for costs, Madrid designations, and
+complete UJ-12/UJ-13 acceptance remain assigned to the later M4 slices; this
+workspace does not claim or duplicate them.
