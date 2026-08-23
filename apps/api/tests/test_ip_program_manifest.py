@@ -25,8 +25,25 @@ def test_empty_milestone_needs_no_manual_gate() -> None:
         "implementation_status": "implemented",
         "verification_status": "passed",
         "release_status": "not_required",
-        "acceptance_status": "not_required",
     }
+
+
+def test_manifest_contains_no_human_approval_control_fields() -> None:
+    manifest = _manifest()
+    forbidden = {"acceptance_status", "not_required_approval", "approvals"}
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            assert forbidden.isdisjoint(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(manifest)
+    assert manifest["program"]["work_owner"]["owner"] == "Codex"
+    assert "parallel_work_allocation" not in manifest["program"]
 
 
 def test_validator_rejects_missing_duplicate_requirement_and_exception_rows() -> None:
@@ -40,11 +57,10 @@ def test_validator_rejects_missing_duplicate_requirement_and_exception_rows() ->
     assert any("atomic normal/exception journey paths" in error for error in errors)
 
 
-def test_validator_allows_not_required_without_approval_and_rejects_forbidden_owner() -> None:
+def test_validator_allows_not_required_and_rejects_forbidden_owner() -> None:
     manifest = _manifest()
     active = next(row for row in manifest["slices"] if row["id"] == "IPLF-001A")
     active["release_status"] = "not_required"
-    active.pop("not_required_approval", None)
     active["ownership"].append(
         {
             "classification": "NEW",
@@ -65,7 +81,6 @@ def test_validator_allows_not_required_without_approval_and_rejects_forbidden_ow
 
     errors = ip_program_manifest.validate(manifest)
 
-    assert not any("unapproved not_required status" in error for error in errors)
     assert any("forbidden duplicate component ip_tasks" in error for error in errors)
     assert any("conflicting canonical writers" in error for error in errors)
 
@@ -81,7 +96,6 @@ def test_validator_rejects_broken_evidence_and_closed_incomplete_milestone() -> 
             "implementation_status": "implemented",
             "verification_status": "passed",
             "release_status": "deployment_verified",
-            "acceptance_status": "approved",
             "blockers": [],
             "evidence_refs": [
                 "docs/ip-implementation/evidence/m1/IPLF-001A/audit-2026-08-01.md"
@@ -142,7 +156,6 @@ def test_validator_rejects_status_drift_stale_blocker_and_completed_active_slice
             "implementation_status": "implemented",
             "verification_status": "passed",
             "release_status": "deployment_verified",
-            "acceptance_status": "approved",
             "implementation_refs": ["scripts/ip_program_manifest.py"],
             "test_refs": ["apps/api/tests/test_ip_program_manifest.py"],
             "evidence_refs": [

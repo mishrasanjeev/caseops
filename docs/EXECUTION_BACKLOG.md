@@ -9,7 +9,7 @@ Living document — no date in the filename, updated in place.
 
 ## How this works
 
-1. Work through the final list below in order. Each package has one owner.
+1. Codex owns every package and works through the final list below in order.
 2. There are no manual project approvals, sign-offs, or confirmation pauses
    between packages. The owner proceeds when the preceding dependency is done.
 3. Run the required automated checks once after the implementation batch, then
@@ -18,20 +18,16 @@ Living document — no date in the filename, updated in place.
    package or appended to this list.
 5. Status is one word: `queued`, `active`, or `done`.
 
-### Ownership split
+### Ownership
 
-| Owner | Scope | Exclusive paths / collision rule |
-|---|---|---|
-| **Claude** | Non-IP billing/payments, trust predicates, retrieval, notifications, security and observability | Owns the non-IP packages in the final list. |
-| **Codex** | The IP subsystem end to end, IPLF program slices | `apps/api/src/caseops_api/services/ip_*.py`, `apps/api/src/caseops_api/api/routes/ip_operations.py`, `apps/api/src/caseops_api/schemas/ip_*.py`, `apps/web/app/app/ip/**`, `docs/ip-implementation/**`. |
-| **Shared files** | Persistence, migrations, Matter/form files, and generated API artifacts | The active package owner edits them. Migrations remain serialised to prevent revision collisions. |
+Codex is the sole implementation owner across backend, frontend, migrations,
+tests, documentation, release evidence, and production verification.
 
 **The one coordination rule:** only one package may add an Alembic migration at
-a time. This is file coordination, not an approval gate.
+a time to prevent revision collisions.
 
-Frontend files follow their owning subsystem. Where a change spans both scopes,
-the owner of the **backend** side owns the whole item. The ownership rule
-coordinates parallel implementation; it is not a review or confirmation gate.
+There is no agent handoff, ownership split, review assignment, or confirmation
+gate between packages.
 
 ## Final work list
 
@@ -40,18 +36,18 @@ not repeated in the pending list.
 
 | Order | IDs | Required outcome | Owner | Status |
 |---:|---|---|---|---|
-| 1 | `EH-SGR-07`, `FMB-01`, `FMB-02` | Make citations and source links use real production trust checks. | Claude | active |
-| 2 | `FMB-03` | Add indexed full-text candidate selection so search uses the query, not recency. | Claude MIGRATION | queued |
+| 1 | `EH-SGR-07`, `FMB-01`, `FMB-02` | Make citations and source links use real production trust checks. | Codex | active |
+| 2 | `FMB-03` | Add indexed full-text candidate selection so search uses the query, not recency. | Codex MIGRATION | queued |
 | 3 | `FMB-14`, `FMB-13`, `EH-SGR-12` | Seed registry catalogs and use one normalized office/jurisdiction value for duplicate detection. | Codex | queued |
 | 4 | `EH-SGR-13`, `EH-SGR-14` | Use one primary-identifier rule and one terminal-status definition across IP. | Codex MIGRATION | queued |
-| 5 | `EH-SGR-16`, `EH-SGR-15` | Remove unsupported messaging choices and add compliant crawler identity/rate behavior. | Claude | queued |
-| 6 | `EH-SGR-05`, `EH-SGR-06`, `EH-SGR-08` | Finish shared rate limiting, fail-closed security controls, log redaction, and product-claim cleanup. | Claude | queued |
+| 5 | `EH-SGR-16`, `EH-SGR-15` | Remove unsupported messaging choices and add compliant crawler identity/rate behavior. | Codex | queued |
+| 6 | `EH-SGR-05`, `EH-SGR-06`, `EH-SGR-08` | Finish shared rate limiting, fail-closed security controls, log redaction, and product-claim cleanup. | Codex | queued |
 | 7 | `FMB-08`, `FMB-10`, `FMB-12` | Link every IP record to a Matter and make Matter creation/conflict checks IP-aware. | Codex MIGRATION | queued |
 | 8 | `FMB-04`, `EH-SGR-10` | Add IP document filtering and pagination, with batched access checks and no N+1 loading. | Codex | queued |
-| 9 | `EH-SGR-09`, `EH-SGR-17` | Turn on useful observability and enforce legal holds/retention in storage operations. | Claude | queued |
-| 10 | `FMB-05`, `FMB-06`, `FMB-07`, `FMB-09` | Finish contextual help, structured errors, hearing-calendar bridging, and QA test mapping. | Claude | queued |
+| 9 | `EH-SGR-09`, `EH-SGR-17` | Turn on useful observability and enforce legal holds/retention in storage operations. | Codex | queued |
+| 10 | `FMB-05`, `FMB-06`, `FMB-07`, `FMB-09` | Finish contextual help, structured errors, hearing-calendar bridging, and QA test mapping. | Codex | queued |
 | 11 | `FMB-11` | Build provider-neutral clearance search using available public/licensed registries; vendor adapters are optional extensions. | Codex | queued |
-| 12 | `T0-4` | Expand the corpus only from public or already licensed sources; unsupported publishers are skipped. | Claude | queued |
+| 12 | `T0-4` | Expand the corpus only from public or already licensed sources; unsupported publishers are skipped. | Codex | queued |
 
 ---
 
@@ -65,8 +61,7 @@ not repeated in the pending list.
   payments, filings, legal-rule activation, tenant isolation, and terminal Matter
   lifecycle changes. These controls protect live data; they do not pause ordinary
   implementation work.
-- The IP manifest records coverage and evidence. It is not a second queue and its
-  historical human-acceptance fields do not gate this final list.
+- The IP manifest records coverage and evidence. It is not a second queue.
 
 ---
 
@@ -79,8 +74,8 @@ not repeated in the pending list.
 `FEEDBACK_MERGE_BACKLOG_2026-08-16.md` (feedback mapping),
 `OPEN_ITEM_RESOLUTIONS_2026-08-16.md` (decisions of record),
 `STRICT_ENTERPRISE_GAP_TASKLIST.md` (`EH-*` evidence ledger),
-`PRD_CLAUDE_CODE_2026-04-23.md` and `PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md`
-(product contracts), `ip-implementation/PROGRAM_MANIFEST.yaml` (IPLF slices).
+`PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md` (IP product contract), and
+`ip-implementation/PROGRAM_MANIFEST.yaml` (IPLF slices).
 
 **History — do not schedule from these:** everything else in `docs/`, including
 `WORK_TO_BE_DONE.md`, whose corpus and coverage figures are four months stale and

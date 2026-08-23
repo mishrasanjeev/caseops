@@ -86,5 +86,5 @@ def test_render_is_explicit_about_repository_evidence_boundary(tmp_path: Path, m
     assert ip_m2_ownership_audit.render(_manifest()) == target
     rendered = target.read_text(encoding="utf-8")
 
-    assert "does not establish human acceptance" in rendered
+    assert "canonical-writer, test, and evidence references" in rendered
     assert "repository-evidence-recorded-release-blocked" in rendered

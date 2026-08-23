@@ -4,8 +4,8 @@ Last updated: 7 August 2026
 
 Implementation slices: `IPLF-021A`, `IPLF-021B`
 
-Status: repository implementation and local verification complete; serial CI,
-production deployment, and named human acceptance remain pending.
+Status: repository implementation and local verification complete; serial CI
+and exact-release production verification remain pending.
 
 ## Purpose and boundary
 

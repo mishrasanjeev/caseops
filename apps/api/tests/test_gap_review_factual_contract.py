@@ -55,6 +55,8 @@ def test_workflow_activation_is_runtime_state_not_a_project_gate() -> None:
 
     assert "No manual project approval or sign-off gates" in backlog
     assert "Machine-enforced runtime controls remain" in backlog
+    assert "Claude" not in backlog
+    assert backlog.count("| Codex") == 12
     for document in (feedback, resolutions):
         compact = _compact(document)
         assert "No workflow service or route exists today" in compact

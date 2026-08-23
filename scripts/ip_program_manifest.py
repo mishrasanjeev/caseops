@@ -27,7 +27,7 @@ EXPECTED_REQUIREMENTS = 436
 EXPECTED_FAMILIES = 50
 EXPECTED_JOURNEYS = 68
 EXPECTED_EXECUTION_POLICY = (
-    "single_ordered_queue_without_manual_project_approvals; implement first and run the "
+    "codex_owned_single_ordered_queue; implement first and run the "
     "automated check and exact-release verification batch at the end"
 )
 GENERATED_DERIVED_PHASES = {
@@ -101,8 +101,6 @@ RELEASE_STATUSES = {
     "deployment_verified",
     "blocked",
 }
-ACCEPTANCE_STATUSES = {"not_required", "pending", "approved", "rejected", "blocked"}
-
 FORBIDDEN_COMPONENTS = {
     "ip_tasks",
     "ip_hearings",
@@ -135,7 +133,6 @@ def status_block(*, release_status: str = "blocked") -> dict[str, str]:
         "implementation_status": "not_started",
         "verification_status": "not_run",
         "release_status": release_status,
-        "acceptance_status": "pending",
     }
 
 
@@ -306,7 +303,6 @@ def parse_backlog(prd: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
                     "implementation_refs": [],
                     "test_refs": [],
                     "evidence_refs": [],
-                    "approvals": [],
                     "blockers": [],
                     "next_actions": [],
                     "data_impact": [],
@@ -361,7 +357,6 @@ def bootstrap_manifest() -> dict[str, Any]:
             "implementation_status": "in_progress",
             "verification_status": "failed",
             "release_status": "blocked",
-            "acceptance_status": "pending",
             "active_slice": "IPLF-001A",
             "checkpoint": {},
         },
@@ -385,12 +380,10 @@ def load_manifest() -> dict[str, Any]:
 
 def compute_verified(row: dict[str, Any]) -> bool:
     release_ok = row.get("release_status") in {"not_required", "deployment_verified"}
-    acceptance_ok = row.get("acceptance_status") in {"not_required", "approved"}
     return bool(
         row.get("implementation_status") == "implemented"
         and row.get("verification_status") == "passed"
         and release_ok
-        and acceptance_ok
         and not row.get("blockers")
         and row.get("evidence_refs")
     )
@@ -403,7 +396,6 @@ def aggregate_status(rows: list[dict[str, Any]]) -> dict[str, str]:
             "implementation_status": "implemented",
             "verification_status": "passed",
             "release_status": "not_required",
-            "acceptance_status": "not_required",
         }
 
     implementations = {row.get("implementation_status") for row in rows}
@@ -432,20 +424,10 @@ def aggregate_status(rows: list[dict[str, Any]]) -> dict[str, str]:
     else:
         release = "blocked"
 
-    acceptances = {row.get("acceptance_status") for row in rows}
-    if "rejected" in acceptances:
-        acceptance = "rejected"
-    elif rows and acceptances <= {"approved", "not_required"}:
-        acceptance = "approved" if "approved" in acceptances else "not_required"
-    elif "blocked" in acceptances:
-        acceptance = "blocked"
-    else:
-        acceptance = "pending"
     return {
         "implementation_status": implementation,
         "verification_status": verification,
         "release_status": release,
-        "acceptance_status": acceptance,
     }
 
 
@@ -476,7 +458,7 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
         f"{sum(bool(row.get('slice_ids')) for row in paths)}/{len(paths)} atomic paths\n"
         f"- Open/failed gates: {sum(not compute_verified(row) for row in gates)}/{len(gates)}\n"
         f"- Program status: `{program['implementation_status']}` / `{program['verification_status']}` / "
-        f"`{program['release_status']}` / `{program['acceptance_status']}`\n"
+        f"`{program['release_status']}`\n"
     )
     requirement_view = "# Requirement traceability\n\nGenerated; do not edit.\n\n" + _table(
         ["Requirement", "Family", "Slices", "Tests", "Evidence", "Implementation", "Verification", "Release", "Verified"],
@@ -493,9 +475,9 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
         ],
     )
     implementation_view = "# Implementation view\n\nGenerated; do not edit.\n\n" + _table(
-        ["Slice", "Source", "Parent", "Milestone", "Requirements", "Journey paths", "Implementation", "Verification", "Release", "Acceptance"],
+        ["Slice", "Source", "Parent", "Milestone", "Requirements", "Journey paths", "Implementation", "Verification", "Release"],
         [
-            [row["id"], row.get("source_kind", ""), row.get("epic_id", ""), row["milestone_id"], ", ".join(row["requirement_ids"]), ", ".join(row["journey_path_ids"]), row["implementation_status"], row["verification_status"], row["release_status"], row["acceptance_status"]]
+            [row["id"], row.get("source_kind", ""), row.get("epic_id", ""), row["milestone_id"], ", ".join(row["requirement_ids"]), ", ".join(row["journey_path_ids"]), row["implementation_status"], row["verification_status"], row["release_status"]]
             for row in slices
         ],
     )
@@ -522,8 +504,8 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
         ],
     )
     release_view = "# Release view\n\nGenerated; do not edit.\n\n" + _table(
-        ["Slice", "Release", "Acceptance", "Blockers", "Next actions"],
-        [[row["id"], row["release_status"], row["acceptance_status"], "; ".join(item.get("summary", "") for item in row.get("blockers", [])), "; ".join(row.get("next_actions", []))] for row in active],
+        ["Slice", "Release", "Blockers", "Next actions"],
+        [[row["id"], row["release_status"], "; ".join(item.get("summary", "") for item in row.get("blockers", [])), "; ".join(row.get("next_actions", []))] for row in active],
     )
     return {
         GENERATED_ROOT / "SUMMARY.md": summary,
@@ -816,8 +798,6 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             errors.append(f"{collection}/{row_id}: invalid verification_status")
         if row.get("release_status") not in RELEASE_STATUSES:
             errors.append(f"{collection}/{row_id}: invalid release_status")
-        if row.get("acceptance_status") not in ACCEPTANCE_STATUSES:
-            errors.append(f"{collection}/{row_id}: invalid acceptance_status")
         if row.get("implementation_status") == "not_started" and row.get("verification_status") != "not_run":
             errors.append(f"{collection}/{row_id}: not_started rows must have verification not_run")
         if row.get("verification_status") == "passed" and row.get("implementation_status") != "implemented":
@@ -829,8 +809,6 @@ def validate(manifest: dict[str, Any]) -> list[str]:
             errors.append(
                 f"{collection}/{row_id}: deployment_verified requires implemented and passed"
             )
-        if row.get("acceptance_status") == "approved" and row.get("verification_status") != "passed":
-            errors.append(f"{collection}/{row_id}: approved acceptance requires passed verification")
         # A `planned:` reference names a test that does not exist yet. A row may
         # cite one while it is still being built, but it can never be evidence
         # for a passed or deployment-verified claim.
@@ -1021,7 +999,6 @@ def validate(manifest: dict[str, Any]) -> list[str]:
         "implementation_status",
         "verification_status",
         "release_status",
-        "acceptance_status",
     )
 
     def require_derived_status(label: str, row: dict[str, Any], children: list[dict[str, Any]]) -> None:

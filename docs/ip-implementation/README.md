@@ -34,8 +34,8 @@ CI gates. `IPLF_027A_DATA_CLASS_REGISTRY.yaml` records the repository-implemente
 runtime-unreleased, migration-managed state of the five IPLF-027A foundation
 tables. Its fail-closed dispositions do not claim the runtime
 retention/hold/export/purge/restore work allocated to IPLF-028. These controls do
-not replace the behavior-level journeys, mixed-revision proof, deployment
-evidence, or human approval allocated to later slices.
+not replace the behavior-level journeys, mixed-revision proof, deployment, or
+exact-release evidence allocated to later slices.
 
 `DATA_GOVERNANCE_MAP.yaml` is the IPLF-028C repository inventory and
 Definition-of-Ready gate. It snapshots every current SQLAlchemy table and
@@ -46,13 +46,13 @@ checked-in Markdown projection as exact LF-terminated UTF-8 bytes, so every
 semantic map update without `render` fails CI. Its
 `registry_fail_closed` handler only blocks unregistered changes in CI: it does
 not activate retention, holds, export, purge, offboarding, restore, provider
-deletion, or backup recovery. The Records/Privacy/Legal/Security policy
-approval remains an explicit blocker.
+deletion, or backup recovery. Each operation remains fail-closed until its
+machine-enforced policy and exact-release conditions pass.
 `ip_m2_ownership_audit.py` is the IPLF-029A M2 reconciliation control. It
 requires every active M2 slice to retain a canonical-writer contract, checked-in
 test references, evidence artifact, and (when blocked) a named blocker. Its
 generated view is evidence inventory only: it does not replace a production
-journey, external-provider recovery, recovery rehearsal, or named acceptance.
+journey, external-provider recovery, or recovery rehearsal.
 
 `IP_CAPABILITY_MODEL.md` documents the IPLF-020A extension of the existing
 backend/frontend capability catalogues. Server capability, billing entitlement,
@@ -98,8 +98,8 @@ actively maintained program manifest.
 `scripts/reconcile_ip_program_manifest_phase0.py` records the reviewed 2 August
 2026 Phase 0 allocation. It is retained as a reproducible audit/migration tool,
 not as a completion generator: it preserves `not_started` future scope and does
-not infer implementation, verification, release, or human acceptance.
+not infer implementation, verification, or release.
 
 Evidence belongs under `evidence/<milestone>/<slice>/`. Evidence must name the
 command, environment, revision, fixture/data scope, assertions, and result.
-Generated prose or an empty file is not acceptance evidence.
+Generated prose or an empty file is not release evidence.

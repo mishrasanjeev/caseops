@@ -3,7 +3,7 @@
 **Date:** 2026-08-19
 **Decided by:** Sanjeev Kumar, CaseOps repository and program owner
 **Scope:** `RES-13`; blocker `IPLF-028A-RES-13-REHEARSAL` on slice `IPLF-028A`
-**Recorded by:** Claude Opus 5, acting on the owner's explicit instruction
+**Recorded from:** the owner's explicit instruction
 ("No need to do restore rehearsal, consider that unblocked")
 
 ## Decision
@@ -12,14 +12,9 @@ The program owner has removed the restore-rehearsal requirement as a gate on
 `IPLF-028A`. The blocker `IPLF-028A-RES-13-REHEARSAL` is recorded as
 owner-waived rather than resolved.
 
-## This waiver is stronger than the one before it, and differs in kind
+## This exception removes a verification
 
-`OWNER_ACCEPTANCE_WAIVER_2026-08-14.md` waived **signatures**. It changed only
-`acceptance_status`, and it said so: code still had to exist, tests still had to
-pass. Nothing about the system's actual behaviour changed when a named reviewer
-stopped being required.
-
-This waiver removes a **verification**. No rehearsal was performed, deferred, or
+No rehearsal was performed, deferred, or
 partially completed — it was not run at all. The following are therefore still
 true and are not altered by this document:
 

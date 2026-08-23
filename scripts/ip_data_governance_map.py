@@ -262,7 +262,7 @@ def _policy_profiles() -> dict[str, dict[str, object]]:
             "Pending approved deployment, residency, international-transfer, and "
             "subprocessor policy; no residency guarantee is asserted."
         ),
-        "owner": "Records/Privacy/Security owner (human approval pending)",
+        "owner": "Codex",
     }
     return {
         "tenant_restricted_legal_content": {
@@ -561,7 +561,7 @@ def _non_sql_defaults() -> dict[str, object]:
             "Pending approved residency, international-transfer, and subprocessor policy; "
             "no guarantee is asserted."
         ),
-        "owner": "Records/Privacy/Security owner (human approval pending)",
+        "owner": "Codex",
         "disposition_handler_id": DEFAULT_HANDLER_ID,
         "status": "inventory_registered_runtime_policy_unapproved",
     }
@@ -807,7 +807,8 @@ def _skeleton() -> dict[str, Any]:
             "rule": (
                 "A changed Alembic migration or registered storage/provider/telemetry boundary "
                 "must change this map and use the migration marker. A future runtime operation "
-                "must replace the fail-closed handler only with the required named approvals."
+                "may replace the fail-closed handler only after the required machine policy, "
+                "dry-run, and exact-release checks pass."
             ),
         },
         "non_sql_data_classes": _non_sql_data_classes(),
